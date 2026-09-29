@@ -542,7 +542,7 @@ Position: `max(existing positions) + 1`.
 
 **Broadcast:** `channel_created` sent per-user (only to users with VIEW_CHANNEL on the new channel). Each user's event includes their computed `myPermissions`.
 
-**Client reconciliation:** both the create response and the `channel_created` event are applied through the `upsertChannel` store action, which replaces `channels` and `channelPermissions` with fresh references. This is required because the sidebar's `visibleChannels` filter is keyed on `channelPermissions`; mutating that Map in place would set the value without triggering a re-render, leaving a freshly created channel hidden until the space was reopened.
+**Client reconciliation:** both the create response and the `channel_created` event are applied through the `upsertChannel` store action (see client-federation.md, "Channel index and lookup maps").
 
 ### Update Channel
 
@@ -745,7 +745,7 @@ The space layout and folder data are delivered in the WS `ready` event (`handler
 
 `populateFromReady` merges incoming data by origin:
 - Replaces all spaces from the incoming origin, keeps spaces from other origins
-- Populates `channelToSpaceMap`, `channelOriginMap`, `channelPermissions`, `voiceChannelIds`, `categoryOriginMap`
+- Replaces this origin's entries in the space-channel index, `channelPermissions` and `categoryOriginMap` (client-federation.md, "Channel index and lookup maps")
 - DM channels: removes existing DMs from this origin, appends incoming, deduplicates 1-on-1 DMs by canonical member pair (prefers home-origin copy)
 - Applies LWW layout merge as described above
 

@@ -119,7 +119,7 @@ interface ChatState {
   clearTyping: (channelId: string, userId: string) => void;
   getMessages: (channelId: string) => MessageWithUser[];
   getTypingUsers: (channelId: string) => TypingUser[];
-  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => void;
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: ReadonlyMap<string, string>, originChannelIds?: ReadonlySet<string>) => void;
   markChannelUnread: (channelId: string) => void;
   markUnread: (channelId: string, messageId: string) => void;
   ackChannel: (channelId: string) => void;
@@ -688,7 +688,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return users.filter(t => now - t.timestamp < 5000);
   },
 
-  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => {
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: ReadonlyMap<string, string>, originChannelIds?: ReadonlySet<string>) => {
     // 1. Merge server read states into existing local state (preserves optimistic acks)
     const rsMap = new Map(get().readStates);
     for (const rs of readStates) {

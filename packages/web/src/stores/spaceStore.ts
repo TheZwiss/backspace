@@ -8,6 +8,17 @@ import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type PeerDmChannel } from '../utils/dmConversationKey';
 import { applyDmPinMoves } from '../utils/dmOriginFailover';
 import {
+  putChannels,
+  putSpaceListings,
+  dropChannels,
+  replaceSpaceChannels,
+  channelIdsWhere,
+  deriveChannelLookups,
+  deriveChannelOriginMap,
+  type SpaceChannelIndex,
+  type SpaceChannelTables,
+} from './spaceChannels';
+import {
   EMPTY_DM_CONVERSATIONS,
   mergeOriginListing,
   upsertCopy,
@@ -125,23 +136,19 @@ type DmView = Pick<SpaceState, 'dmConversations' | 'dmChannels' | 'dmAlternative
 
 /**
  * The store fields derived from `conversations`. `previousRows` are the DM
- * rows the maps held entries for until now; those entries are replaced, the
- * space-channel entries are kept.
+ * rows `channelLastMessageIds` held entries for until now; those entries are
+ * replaced, the space-channel entries are kept. `channelOriginMap` is derived
+ * whole from the space-channel index and the conversations.
  */
 function deriveDmView(
   conversations: DmConversations,
   previousRows: readonly DmChannel[],
-  channelOriginMap: ReadonlyMap<string, string>,
+  spaceChannelIndex: SpaceChannelIndex,
   channelLastMessageIds: ReadonlyMap<string, string>,
 ): DmView {
-  const origins = new Map(channelOriginMap);
   const lastMessageIds = new Map(channelLastMessageIds);
-  for (const dm of previousRows) {
-    origins.delete(dm.id);
-    lastMessageIds.delete(dm.id);
-  }
+  for (const dm of previousRows) lastMessageIds.delete(dm.id);
   const rows = pinnedDmChannels(conversations);
-  for (const [channelId, origin] of pinnedOriginByChannelId(conversations)) origins.set(channelId, origin);
   for (const dm of rows) {
     if (dm.lastMessage?.id) lastMessageIds.set(dm.id, dm.lastMessage.id);
   }
@@ -150,9 +157,72 @@ function deriveDmView(
     dmConversations: conversations,
     dmChannels: sortDmChannels(rows, unreadChannels, currentChannelId),
     dmAlternatives: conversationCopyIndex(conversations),
-    channelOriginMap: origins,
+    channelOriginMap: deriveChannelOriginMap(spaceChannelIndex, pinnedOriginByChannelId(conversations)),
     channelLastMessageIds: lastMessageIds,
   };
+}
+
+// ─── Space channels: the index and the lookup maps ───────────────────────────
+// `spaceChannelIndex` (stores/spaceChannels.ts) is the one record of which
+// space channels exist, where. `channelToSpaceMap`, `voiceChannelIds` and the
+// space entries of `channelOriginMap` are derived from it after every change,
+// here and in `deriveDmView`, and written nowhere else. `channelPermissions`
+// and the space entries of `channelLastMessageIds` change with it.
+
+type ChannelTableFields = Pick<
+  SpaceState,
+  'spaceChannelIndex' | 'channelPermissions' | 'channelLastMessageIds' | 'channelToSpaceMap' | 'channelOriginMap' | 'voiceChannelIds'
+>;
+
+function channelTablesOf(state: SpaceState): SpaceChannelTables {
+  return { index: state.spaceChannelIndex, permissions: state.channelPermissions, lastMessageIds: state.channelLastMessageIds };
+}
+
+/**
+ * The store fields for `tables`, with the lookup maps derived from its index
+ * and the DM view of `dmConversations`. Empty when nothing changed, so an
+ * event that changes nothing re-renders nothing.
+ */
+function channelTableFields(
+  state: SpaceState,
+  tables: SpaceChannelTables,
+  dmConversations: DmConversations = state.dmConversations,
+): Partial<ChannelTableFields> {
+  if (
+    tables.index === state.spaceChannelIndex
+    && tables.permissions === state.channelPermissions
+    && tables.lastMessageIds === state.channelLastMessageIds
+  ) {
+    return {};
+  }
+  return {
+    spaceChannelIndex: tables.index,
+    channelPermissions: tables.permissions,
+    channelLastMessageIds: tables.lastMessageIds,
+    ...deriveChannelLookups(tables.index, pinnedOriginByChannelId(dmConversations)),
+  };
+}
+
+/** Whether `spaceId`, as `origin` issued it, is the open space (the one `channels` and `categories` hold). */
+function isOpenSpace(state: SpaceState, spaceId: string, origin: string): boolean {
+  if (state.currentSpaceId !== spaceId) return false;
+  return (state.spaces.find((s) => s.id === spaceId)?._instanceOrigin ?? '') === origin;
+}
+
+function byPosition<T extends { position: number }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => a.position - b.position);
+}
+
+/** `categoryOriginMap` with `categories` recorded under `origin`. */
+function withCategoryOrigins(
+  categoryOriginMap: ReadonlyMap<string, string>,
+  categories: readonly ChannelCategory[],
+  origin: string,
+): ReadonlyMap<string, string> {
+  if (categories.length === 0) return categoryOriginMap;
+  const next = new Map(categoryOriginMap);
+  for (const category of categories) next.set(category.id, origin);
+  return next;
 }
 
 /** The pin rule's view of the session: the user's home is `getLayoutHomeOrigin()`. */
@@ -169,7 +239,7 @@ function dmPinContext(): DmPinContext {
 function commitDmOperation(op: DmOperation): void {
   if (op.next !== useSpaceStore.getState().dmConversations) {
     useSpaceStore.setState((state) =>
-      deriveDmView(op.next, state.dmChannels, state.channelOriginMap, state.channelLastMessageIds),
+      deriveDmView(op.next, state.dmChannels, state.spaceChannelIndex, state.channelLastMessageIds),
     );
   }
   if (op.pinMoves.length === 0) return;
@@ -209,19 +279,31 @@ interface SpaceState {
   dmConversations: DmConversations;
   /** Derived: the pinned copy of each conversation, sorted by `sortDmChannels`. The DM list. */
   dmChannels: DmChannel[];
-  channelToSpaceMap: Map<string, string>;
-  channelLastMessageIds: Map<string, string>;
-  spacePermissions: Map<string, string>; // spaceId → myPermissions decimal string
-  channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
-  channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
-  voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
-  categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
+  /**
+   * Every space channel the user can see on every connected instance, open
+   * space or not: channelId → { spaceId, origin, type } (`stores/spaceChannels.ts`).
+   * The only space-channel record actions write; the lookup maps below are
+   * derived from it.
+   */
+  spaceChannelIndex: SpaceChannelIndex;
+  /** Derived: space channelId → spaceId. */
+  channelToSpaceMap: ReadonlyMap<string, string>;
+  /** channelId → last message id a listing reported: space channels by the space actions, DMs derived. */
+  channelLastMessageIds: ReadonlyMap<string, string>;
+  spacePermissions: ReadonlyMap<string, string>; // spaceId → myPermissions decimal string
+  /** Space channelId → myPermissions decimal string. Changes with the index. */
+  channelPermissions: ReadonlyMap<string, string>;
+  /** Derived: channelId → instance origin ('' = home), space channels and pinned DM copies. */
+  channelOriginMap: ReadonlyMap<string, string>;
+  /** Derived: the voice channels (excluded from unread). */
+  voiceChannelIds: ReadonlySet<string>;
+  categoryOriginMap: ReadonlyMap<string, string>; // categoryId → instance origin ('' = home)
   /**
    * Derived: conversation key → (origin → that origin's channel id), for every
    * copy of every keyed conversation, the pinned one included. The index
    * `resolveDmChannelId` reads to place an id another instance sent.
    */
-  dmAlternatives: Map<string, Map<string, string>>;
+  dmAlternatives: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /**
    * canonicalUserKey → best-known view of that user. Populated from every wire
    * surface that delivers a User object (DM members, message authors, friends,
@@ -231,7 +313,7 @@ interface SpaceState {
    * `getCanonicalUserView` / `useCanonicalUserView` to surface the home view
    * even when the carrying channel was deduped away.
    */
-  userViews: Map<string, UserViewEntry>;
+  userViews: ReadonlyMap<string, UserViewEntry>;
   loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
   /**
    * Set of spaceIds whose `loadSpaceDetail` has completed at least once this
@@ -249,7 +331,7 @@ interface SpaceState {
    *
    * Not persisted (ephemeral).
    */
-  loadedSpaceIds: Set<string>;
+  loadedSpaceIds: ReadonlySet<string>;
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
@@ -297,7 +379,22 @@ interface SpaceState {
   joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
   generateInvite: (spaceId: string) => Promise<string>;
   createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => Promise<Channel>;
+  /**
+   * A space channel the user can see, from an event or a response: its index
+   * entry, permissions and, in the open space, its row. Wherever its space is.
+   */
   upsertChannel: (channel: Channel, spaceId: string, origin: string) => void;
+  /** A space channel the user can no longer see (deleted, or hidden by an override): forgotten everywhere. */
+  removeChannel: (channelId: string) => void;
+  /**
+   * The complete visible channel and category set of `spaceId` on `origin`
+   * (`channel_layout_updated`): the space's index entries become exactly these.
+   */
+  applyChannelLayout: (spaceId: string, origin: string, channels: Channel[], categories: ChannelCategory[]) => void;
+  /** A category created or changed on `origin`: recorded, and in the open space added or replaced. */
+  upsertCategory: (category: ChannelCategory, origin: string) => void;
+  /** A category deleted on `origin`: forgotten, and in the open space its channels become uncategorized. */
+  removeCategory: (categoryId: string, spaceId: string, origin: string) => void;
   /** Updates a space channel on its own instance and applies the stored row,
    *  which the server may have normalized (see `normalizeChannelName`). */
   updateChannel: (channelId: string, data: UpdateChannelRequest) => Promise<Channel>;
@@ -379,6 +476,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   spaceLayout: null,
   dmConversations: EMPTY_DM_CONVERSATIONS,
   dmChannels: [],
+  spaceChannelIndex: new Map(),
   channelToSpaceMap: new Map(),
   channelLastMessageIds: new Map(),
   spacePermissions: new Map(),
@@ -406,6 +504,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       spaceLayout: null,
       dmConversations: EMPTY_DM_CONVERSATIONS,
       dmChannels: [],
+      spaceChannelIndex: new Map(),
       channelToSpaceMap: new Map(),
       channelLastMessageIds: new Map(),
       spacePermissions: new Map(),
@@ -613,34 +712,32 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         get().upsertUserView(member.user, origin);
       }
 
-      // Populate permission maps from REST response
-      const spacePermissions = new Map(get().spacePermissions);
-      const channelPermissions = new Map(get().channelPermissions);
-      if (detail.myPermissions) {
-        spacePermissions.set(spaceId, detail.myPermissions);
-      }
-      for (const ch of detail.channels) {
-        if (ch.myPermissions) {
-          channelPermissions.set(ch.id, ch.myPermissions);
-        }
-      }
-
+      // The detail lists every channel of the space the user can see: the
+      // space's index entries become exactly these.
+      let dropped: string[] = [];
       set((state) => {
+        const replaced = replaceSpaceChannels(channelTablesOf(state), spaceId, origin, detail.channels);
+        dropped = replaced.dropped;
+        const spacePermissions = new Map(state.spacePermissions);
+        if (detail.myPermissions) spacePermissions.set(spaceId, detail.myPermissions);
+        const categories = detail.categories ?? [];
         const loadedSpaceIds = new Set(state.loadedSpaceIds);
         loadedSpaceIds.add(spaceId);
         return {
+          ...channelTableFields(state, replaced.tables),
           loadingSpaceId: null,
           currentSpaceId: spaceId,
           lastSelectedSpaceId: spaceId,
-          channels: detail.channels.sort((a, b) => a.position - b.position),
-          categories: (detail.categories || []).sort((a, b) => a.position - b.position),
+          channels: byPosition(detail.channels),
+          categories: byPosition(categories),
+          categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, categories, origin),
           members: rosterChanges.reduce(replayRosterChange, detail.members),
           roles: detail.roles.sort((a, b) => b.position - a.position),
           spacePermissions,
-          channelPermissions,
           loadedSpaceIds,
         };
       });
+      if (dropped.length > 0) useChatStore.getState().removeChannelStates(new Set(dropped));
     } catch {
       set({ loadingSpaceId: null });
     } finally {
@@ -772,35 +869,67 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     return channel;
   },
 
-  // Add or replace a channel and its derived lookup state. channels and
-  // channelPermissions are render inputs for the sidebar's visibleChannels memo,
-  // so they MUST be replaced with fresh references — mutating the existing
-  // channelPermissions Map in place sets the value but never triggers a
-  // re-render, which is why a freshly created channel could stay hidden until
-  // the space was reloaded.
   upsertChannel: (channel: Channel, spaceId: string, origin: string) => {
     set((state) => {
-      // Lookup maps are read imperatively (routing/voice), not render inputs —
-      // in-place mutation matches their usage everywhere else.
-      state.channelToSpaceMap.set(channel.id, spaceId);
-      state.channelOriginMap.set(channel.id, origin);
-      if (channel.type === 'voice') state.voiceChannelIds.add(channel.id);
-
-      const channelPermissions = new Map(state.channelPermissions);
-      if (channel.myPermissions) {
-        channelPermissions.set(channel.id, channel.myPermissions);
-      }
-
-      // channels only holds the currently-open space's list.
-      if (state.currentSpaceId !== spaceId) {
-        return { channelPermissions };
-      }
+      const fields = channelTableFields(state, putChannels(channelTablesOf(state), spaceId, origin, [channel]));
+      // `channels` holds only the open space's list.
+      if (!isOpenSpace(state, spaceId, origin)) return fields;
       const exists = state.channels.some(c => c.id === channel.id);
-      const channels = (exists
+      const channels = byPosition(exists
         ? state.channels.map(c => (c.id === channel.id ? channel : c))
-        : [...state.channels, channel]
-      ).sort((a, b) => a.position - b.position);
-      return { channels, channelPermissions };
+        : [...state.channels, channel]);
+      return { ...fields, channels };
+    });
+  },
+
+  removeChannel: (channelId: string) => {
+    set((state) => {
+      const channels = state.channels.some(c => c.id === channelId)
+        ? state.channels.filter(c => c.id !== channelId)
+        : state.channels;
+      return { ...channelTableFields(state, dropChannels(channelTablesOf(state), [channelId])), channels };
+    });
+    useChatStore.getState().removeChannelStates(new Set([channelId]));
+  },
+
+  applyChannelLayout: (spaceId, origin, channels, categories) => {
+    let dropped: string[] = [];
+    set((state) => {
+      const replaced = replaceSpaceChannels(channelTablesOf(state), spaceId, origin, channels);
+      dropped = replaced.dropped;
+      const fields = {
+        ...channelTableFields(state, replaced.tables),
+        categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, categories, origin),
+      };
+      if (!isOpenSpace(state, spaceId, origin)) return fields;
+      return { ...fields, channels: byPosition(channels), categories: byPosition(categories) };
+    });
+    if (dropped.length > 0) useChatStore.getState().removeChannelStates(new Set(dropped));
+  },
+
+  upsertCategory: (category, origin) => {
+    set((state) => {
+      const categoryOriginMap = withCategoryOrigins(state.categoryOriginMap, [category], origin);
+      if (!isOpenSpace(state, category.spaceId, origin)) return { categoryOriginMap };
+      const exists = state.categories.some(c => c.id === category.id);
+      const categories = byPosition(exists
+        ? state.categories.map(c => (c.id === category.id ? category : c))
+        : [...state.categories, category]);
+      return { categoryOriginMap, categories };
+    });
+  },
+
+  removeCategory: (categoryId, spaceId, origin) => {
+    set((state) => {
+      const categoryOriginMap = new Map(state.categoryOriginMap);
+      categoryOriginMap.delete(categoryId);
+      if (!isOpenSpace(state, spaceId, origin)) return { categoryOriginMap };
+      return {
+        categoryOriginMap,
+        categories: state.categories.filter(c => c.id !== categoryId),
+        // The server uncategorized them too.
+        channels: state.channels.map(ch => (ch.categoryId === categoryId ? { ...ch, categoryId: null } : ch)),
+      };
     });
   },
 
@@ -817,9 +946,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = get().channelOriginMap.get(channelId) ?? '';
     const channelApi = getApiForOrigin(origin);
     await channelApi.channels.delete(channelId);
-    set((state) => ({
-      channels: state.channels.filter(c => c.id !== channelId),
-    }));
+    // The channel_deleted WS event does the same; removing is idempotent.
+    get().removeChannel(channelId);
   },
 
   createCategory: async (spaceId: string, name: string) => {
@@ -827,11 +955,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const category = await client.categories.create(spaceId, name);
-    // Will be added via WS event, but add optimistically
-    set((state) => {
-      if (state.categories.some(c => c.id === category.id)) return state;
-      return { categories: [...state.categories, category].sort((a, b) => a.position - b.position) };
-    });
+    // The category_created WS event carries the same row; applying the
+    // response too means the caller sees it without waiting.
+    get().upsertCategory(category, origin);
     return category;
   },
 
@@ -842,11 +968,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const category = await getApiForOrigin(origin).categories.update(categoryId, data);
     // The category_updated WS event carries the same row; applying the
     // response too means the caller sees the stored value without waiting.
-    set((state) => ({
-      categories: state.categories
-        .map(c => (c.id === category.id ? category : c))
-        .sort((a, b) => a.position - b.position),
-    }));
+    get().upsertCategory(category, origin);
     return category;
   },
 
@@ -877,39 +999,21 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
   removeSpace: (spaceId: string) => {
     // Collect channel IDs before set() so we can clean up chatStore after
-    const currentState = get();
-    const channelIdsToRemove = new Set<string>();
-    for (const [channelId, sid] of currentState.channelToSpaceMap) {
-      if (sid === spaceId) channelIdsToRemove.add(channelId);
-    }
+    const channelIdsToRemove = new Set(channelIdsWhere(get().spaceChannelIndex, (e) => e.spaceId === spaceId));
 
     set((state) => {
-      const channelToSpaceMap = new Map(state.channelToSpaceMap);
-      const channelPermissions = new Map(state.channelPermissions);
-      const channelOriginMap = new Map(state.channelOriginMap);
-      const channelLastMessageIds = new Map(state.channelLastMessageIds);
       const spacePermissions = new Map(state.spacePermissions);
-
-      for (const channelId of channelIdsToRemove) {
-        channelToSpaceMap.delete(channelId);
-        channelPermissions.delete(channelId);
-        channelOriginMap.delete(channelId);
-        channelLastMessageIds.delete(channelId);
-      }
       spacePermissions.delete(spaceId);
 
       const loadedSpaceIds = new Set(state.loadedSpaceIds);
       loadedSpaceIds.delete(spaceId);
 
       return {
+        ...channelTableFields(state, dropChannels(channelTablesOf(state), channelIdsToRemove)),
         spaces: state.spaces.filter(s => s.id !== spaceId),
         currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
         lastSelectedSpaceId:
           state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
-        channelToSpaceMap,
-        channelPermissions,
-        channelOriginMap,
-        channelLastMessageIds,
         spacePermissions,
         loadedSpaceIds,
       };
@@ -929,12 +1033,13 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       // useCanonicalUserView (e.g. the FriendItem avatar dot) re-renders with
       // fresh status — not just spaceStore.members which only feeds space UIs.
       // Each entry is keyed as the origin that delivered it saw the user.
-      let nextUserViews = state.userViews;
+      let changedViews: Map<string, UserViewEntry> | null = null;
       for (const [viewKey, entry] of state.userViews) {
         if (activityKey(entry.user, entry.deliveredBy) !== key) continue;
-        if (nextUserViews === state.userViews) nextUserViews = new Map(state.userViews);
-        nextUserViews.set(viewKey, { ...entry, user: { ...entry.user, status: typedStatus } });
+        changedViews ??= new Map(state.userViews);
+        changedViews.set(viewKey, { ...entry, user: { ...entry.user, status: typedStatus } });
       }
+      const nextUserViews = changedViews ?? state.userViews;
 
       // A roster row is keyed as its space's origin issued it.
       const spaceOrigins = new Map<string, string>();
@@ -1021,8 +1126,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => {
-    const isHome = !origin;
-
     // Tag all incoming servers with their instance origin
     const taggedSpaces: TaggedSpace[] = spaces.map(s => ({
       id: s.id,
@@ -1043,75 +1146,28 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const existingFromOtherOrigins = get().spaces.filter(s => s._instanceOrigin !== origin);
     const mergedSpaces = [...existingFromOtherOrigins, ...taggedSpaces];
 
-    // Build/merge maps for incoming channels
-    const channelToSpaceMap = new Map(get().channelToSpaceMap);
-    const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const spacePermissions = new Map(get().spacePermissions);
-    const channelPermissions = new Map(get().channelPermissions);
-    const channelOriginMap = new Map(get().channelOriginMap);
-    const voiceChannelIds = new Set(get().voiceChannelIds);
-    const categoryOriginMap = new Map(get().categoryOriginMap);
+    // This origin's listing replaces every space channel it listed before.
+    const current = get();
+    const originChannelIds = channelIdsWhere(current.spaceChannelIndex, (e) => e.origin === origin);
+    const channelTables = putSpaceListings(dropChannels(channelTablesOf(current), originChannelIds), origin, spaces);
 
-    // If home, clear home-origin entries first to avoid stale data
-    if (isHome) {
-      for (const [key, val] of get().channelOriginMap) {
-        if (val === origin) {
-          channelToSpaceMap.delete(key);
-          channelLastMessageIds.delete(key);
-          channelPermissions.delete(key);
-          channelOriginMap.delete(key);
-          voiceChannelIds.delete(key);
-        }
-      }
-      // Also clear server permissions for this origin
-      for (const s of get().spaces) {
-        if (s._instanceOrigin === origin) {
-          spacePermissions.delete(s.id);
-        }
-      }
-    } else {
-      // Remote: clear entries that belonged to this origin
-      for (const [key, val] of get().channelOriginMap) {
-        if (val === origin) {
-          channelToSpaceMap.delete(key);
-          channelLastMessageIds.delete(key);
-          channelPermissions.delete(key);
-          channelOriginMap.delete(key);
-          voiceChannelIds.delete(key);
-        }
-      }
-      for (const s of get().spaces) {
-        if (s._instanceOrigin === origin) {
-          spacePermissions.delete(s.id);
-        }
-      }
+    const spacePermissions = new Map(current.spacePermissions);
+    for (const s of current.spaces) {
+      if (s._instanceOrigin === origin) spacePermissions.delete(s.id);
     }
-
-    // Populate maps from incoming servers
     for (const srv of spaces) {
-      if (srv.myPermissions) {
-        spacePermissions.set(srv.id, srv.myPermissions);
-      }
-      for (const ch of srv.channels) {
-        channelToSpaceMap.set(ch.id, srv.id);
-        channelOriginMap.set(ch.id, origin);
-        if (ch.type === 'voice') {
-          voiceChannelIds.add(ch.id);
-        } else if (ch.lastMessageId) {
-          channelLastMessageIds.set(ch.id, ch.lastMessageId);
-        }
-        if (ch.myPermissions) {
-          channelPermissions.set(ch.id, ch.myPermissions);
-        }
-      }
-      if (srv.categories) {
-        for (const cat of srv.categories) {
-          categoryOriginMap.set(cat.id, origin);
-        }
-      }
-      // Upsert every space member into the userViews cache. Assets for remote
-      // origins were normalized by the ready handler in useWebSocket before
-      // populateFromReady was called, so the user objects are already clean here.
+      if (srv.myPermissions) spacePermissions.set(srv.id, srv.myPermissions);
+    }
+    const categoryOriginMap = withCategoryOrigins(
+      current.categoryOriginMap,
+      spaces.flatMap((srv) => srv.categories ?? []),
+      origin,
+    );
+
+    // Upsert every space member into the userViews cache. Assets for remote
+    // origins were normalized by the ready handler in useWebSocket before
+    // populateFromReady was called, so the user objects are already clean here.
+    for (const srv of spaces) {
       if (srv.members) {
         const { upsertUserView } = get();
         for (const member of srv.members) {
@@ -1149,15 +1205,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     // module dedups them against the other origins' copies and pins one copy
     // per conversation. The DM fields of the store are derived from the result.
     const dmOperation = mergeOriginListing(get().dmConversations, origin, incomingDms, new Map(), dmPinContext());
-    const dmView = deriveDmView(dmOperation.next, get().dmChannels, channelOriginMap, channelLastMessageIds);
+    const dmView = deriveDmView(dmOperation.next, get().dmChannels, channelTables.index, channelTables.lastMessageIds);
 
     const update: Partial<SpaceState> = {
+      ...channelTableFields(get(), channelTables, dmOperation.next),
+      // After the channel fields: the DM view adds its entries to both shared maps.
       ...dmView,
       spaces: mergedSpaces,
-      channelToSpaceMap,
       spacePermissions,
-      channelPermissions,
-      voiceChannelIds,
       categoryOriginMap,
     };
 
@@ -1170,13 +1225,13 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       if (spaceLayout !== undefined) {
         update.spaceLayout = spaceLayout ?? null;
       }
-      (update as any)._layoutUpdatedAt = incomingTs;
+      update._layoutUpdatedAt = incomingTs;
     } else {
       // Our layout is newer — push back to this instance
       pushLayoutToOrigin(origin, get().spaceLayout, get().folders, currentTs);
     }
 
-    set(update as any);
+    set(update);
     if (dmOperation.pinMoves.length > 0) {
       applyDmPinMoves(dmOperation.pinMoves);
       get().resortDmChannels();
@@ -1205,34 +1260,20 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       _instanceOrigin: origin,
     };
 
-    const channelToSpaceMap = new Map(get().channelToSpaceMap);
-    const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const spacePermissions = new Map(get().spacePermissions);
-    const channelPermissions = new Map(get().channelPermissions);
-    const channelOriginMap = new Map(get().channelOriginMap);
-
-    if (space.myPermissions) {
-      spacePermissions.set(space.id, space.myPermissions);
-    }
-    for (const ch of space.channels) {
-      channelToSpaceMap.set(ch.id, space.id);
-      channelOriginMap.set(ch.id, origin);
-      if (ch.lastMessageId) {
-        channelLastMessageIds.set(ch.id, ch.lastMessageId);
-      }
-      if (ch.myPermissions) {
-        channelPermissions.set(ch.id, ch.myPermissions);
-      }
-    }
-
-    set((state) => ({
-      spaces: [...state.spaces.filter(s => s.id !== space.id), tagged],
-      channelToSpaceMap,
-      channelLastMessageIds,
-      spacePermissions,
-      channelPermissions,
-      channelOriginMap,
-    }));
+    let dropped: string[] = [];
+    set((state) => {
+      const replaced = replaceSpaceChannels(channelTablesOf(state), space.id, origin, space.channels);
+      dropped = replaced.dropped;
+      const spacePermissions = new Map(state.spacePermissions);
+      if (space.myPermissions) spacePermissions.set(space.id, space.myPermissions);
+      return {
+        ...channelTableFields(state, replaced.tables),
+        spaces: [...state.spaces.filter(s => s.id !== space.id), tagged],
+        spacePermissions,
+        categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, space.categories ?? [], origin),
+      };
+    });
+    if (dropped.length > 0) useChatStore.getState().removeChannelStates(new Set(dropped));
   },
 
   transferOwnership: async (spaceId: string, newOwnerId: string) => {
@@ -1283,24 +1324,17 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set((state) => {
       const remainingSpaces = state.spaces.filter(s => s._instanceOrigin !== origin);
 
-      // Clean up maps for channels that belonged to this origin
-      const channelToSpaceMap = new Map(state.channelToSpaceMap);
-      const channelLastMessageIds = new Map(state.channelLastMessageIds);
-      const channelPermissions = new Map(state.channelPermissions);
-      const channelOriginMap = new Map(state.channelOriginMap);
       const spacePermissions = new Map(state.spacePermissions);
-
-      for (const channelId of channelIdsToRemove) {
-        channelToSpaceMap.delete(channelId);
-        channelLastMessageIds.delete(channelId);
-        channelPermissions.delete(channelId);
-        channelOriginMap.delete(channelId);
-      }
       for (const s of state.spaces) {
         if (s._instanceOrigin === origin) {
           spacePermissions.delete(s.id);
         }
       }
+      const categoryOriginMap = new Map<string, string>();
+      for (const [categoryId, categoryOrigin] of state.categoryOriginMap) {
+        if (categoryOrigin !== origin) categoryOriginMap.set(categoryId, categoryOrigin);
+      }
+      const spaceChannelIds = channelIdsWhere(state.spaceChannelIndex, (e) => e.origin === origin);
 
       // Prune userViews: drop entries delivered by this origin. Symmetrical
       // with the DM copies — full removal evicts; transient disconnect leaves
@@ -1322,12 +1356,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
 
       return {
+        ...channelTableFields(state, dropChannels(channelTablesOf(state), spaceChannelIds)),
         spaces: remainingSpaces,
-        channelToSpaceMap,
-        channelLastMessageIds,
-        channelPermissions,
-        channelOriginMap,
         spacePermissions,
+        categoryOriginMap,
         userViews,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
@@ -1352,20 +1384,41 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 }));
 
 /**
- * Data-driven DM channel detection. Returns true if the given channelId
- * belongs to a DM channel. Authoritative because dmChannels is populated
- * from the WS ready event and DM/server channel IDs never overlap.
+ * What the client knows a channel id to be. `unknown` until a listing or an
+ * event names it: before the `ready` of the instance that holds it, or after
+ * it was deleted or hidden. Space channel ids and DM channel ids never
+ * overlap, so the answer comes from the data alone, never from the URL.
  */
+export type ChannelKind = 'space' | 'dm' | 'unknown';
+
+function channelKindIn(
+  state: Pick<SpaceState, 'spaceChannelIndex' | 'dmChannels' | 'dmAlternatives'>,
+  channelId: string,
+): ChannelKind {
+  if (state.spaceChannelIndex.has(channelId)) return 'space';
+  // A DM is a listed row or another instance's copy of one (ADR 0002).
+  if (locateDmChannel(state.dmChannels, state.dmAlternatives, channelId)) return 'dm';
+  return 'unknown';
+}
+
+/** `ChannelKind` of `channelId` now. For event-time code; render reads `useIsDmChannel`. */
+export function getChannelKind(channelId: string): ChannelKind {
+  return channelKindIn(useSpaceStore.getState(), channelId);
+}
+
+/** Whether `channelId` is a known DM now. An unknown channel is not one. */
 export function isDmChannel(channelId: string): boolean {
-  const dmChannels = useSpaceStore.getState().dmChannels;
-  if (dmChannels.length > 0) {
-    return dmChannels.some(dm => dm.id === channelId);
-  }
-  // Before WS ready populates dmChannels, fall back to URL path
-  if (typeof window !== 'undefined') {
-    return window.location.pathname.startsWith('/channels/@me/');
-  }
-  return false;
+  return getChannelKind(channelId) === 'dm';
+}
+
+/**
+ * Reactive `isDmChannel` for render: true for a DM, false for a space
+ * channel, undefined while the channel is unknown (see `ChannelKind`). Each
+ * caller decides what unknown means for it.
+ */
+export function useIsDmChannel(channelId: string): boolean | undefined {
+  const kind = useSpaceStore((s) => channelKindIn(s, channelId));
+  return kind === 'unknown' ? undefined : kind === 'dm';
 }
 
 /**

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Message } from './Message';
 import { useChatStore, type LoadAroundResult } from '../../stores/chatStore';
-import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
+import { useSpaceStore, useIsDmChannel } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import {
@@ -278,8 +278,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
 
   // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
-  const isDm = isDmChannel(channelId);
-  const canReadHistory = isDm || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
+  // Undefined until the ready that lists the channel: not refused, and loadMessages waits for that ready.
+  const isDm = useIsDmChannel(channelId);
+  const canReadHistory = isDm !== false || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
 
   // Channel-specific DM record (if applicable). Passed to SystemMessage so it
   // can resolve actor display names from the channel roster — needed for
@@ -307,7 +308,6 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     if (!currentUser || pendingBubbles.length === 0) return messages;
     // Synthesized DM messages keep the chatStore convention of channelId === ''
     // (real DM messages have empty channelId — DM identity lives on dmChannelId).
-    const isDm = isDmChannel(channelId);
     const synthChannelId = isDm ? '' : channelId;
     const synthesized: PendingMessageView[] = pendingBubbles.map((b) => {
       const synth: PendingMessageView = {
@@ -343,7 +343,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       return synth;
     });
     return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
-  }, [messages, pendingBubbles, messagesById, channelId, currentUser]);
+  }, [messages, pendingBubbles, messagesById, channelId, currentUser, isDm]);
 
   useEffect(() => {
     if (canReadHistory) {
@@ -994,7 +994,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
   const friends = useSocialStore((s) => s.friends);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const openModal = useUIStore((s) => s.openModal);
-  const isDm = isDmChannel(channelId);
+  const isDm = useIsDmChannel(channelId);
   const navigate = useNavigate();
 
   if (isDm) {

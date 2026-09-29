@@ -196,19 +196,30 @@ This allows S2S federation to know which peers to relay to.
 - `''` (empty string) = home instance
 - `'https://domain.com'` = remote instance (full URL with protocol)
 
-### channelOriginMap
+### Channel index and lookup maps
 
-Every channel (space channels and DM channels) is tagged with its origin instance:
+Every channel (space channels and DM channels) is tagged with its origin instance. One record holds the space channels; the maps readers use are derived from it and from the DM view, and are never written in place.
 
 ```typescript
 // In spaceStore:
-channelOriginMap: Map<string, string>  // channelId → origin
+spaceChannelIndex: ReadonlyMap<string, { spaceId, origin, type }>  // every visible space channel, open space or not
+
+// Derived after every change (stores/spaceChannels.ts, deriveChannelLookups):
+channelToSpaceMap: ReadonlyMap<string, string>   // space channelId → spaceId
+channelOriginMap:  ReadonlyMap<string, string>   // channelId → origin: space channels + pinned DM copies
+voiceChannelIds:   ReadonlySet<string>
 
 // Usage:
 getChannelOrigin(channelId): string    // Returns '' for home, origin URL for remote
 ```
 
-Built during `populateFromReady()` when WS ready events arrive from each instance.
+- **Writers.** Only `spaceStore` actions change the index, each through the pure operations of `stores/spaceChannels.ts`: `populateFromReady` (an origin's listing replaces that origin's entries), `addSpaceFromReady`, `loadSpaceDetail` and `applyChannelLayout` (the space's complete visible set: entries it no longer lists are dropped, with their chat state), `upsertChannel` (`channel_created`, `channel_updated`, create/update responses), `removeChannel` (`channel_deleted`, `deleteChannel`), `removeSpace`, `removeInstanceSpaces`. `channelPermissions` and the space entries of `channelLastMessageIds` change in the same step. The WS `channel_*` and `category_*` handlers only call these actions.
+- **Every change replaces the maps**, so a component that selects a map, or uses it as a memo input, re-renders on every change. Every map and set field of the store is typed `ReadonlyMap`/`ReadonlySet`; an in-place write does not compile.
+- **A channel leaving and re-entering view.** An override change sends a user who loses `VIEW_CHANNEL` `channel_deleted` and one who regains it `channel_updated` (`routes/channels.ts` `broadcastOverrideChange`). `upsertChannel` writes the index entry whatever space is open, so a remote channel that comes back routes to its instance again.
+- **DM entries** of `channelOriginMap` and `channelLastMessageIds` come only from the DM merge module (see "DM Origin Failover").
+- **`categoryOriginMap`** (categoryId → origin) is replaced by the same actions and by `upsertCategory` / `removeCategory`.
+
+**Channel kind.** `getChannelKind(channelId)` answers `'space'` (in the index), `'dm'` (a listed DM or another instance's copy of one, `locateDmChannel`) or `'unknown'` (no listing or event has named it: before the `ready` of the instance that holds it, or after it was deleted or hidden). The answer never comes from the URL. `isDmChannel` is `kind === 'dm'`; render code reads the reactive `useIsDmChannel`, which is `undefined` while unknown. What unknown means per caller: `loadMessages`/`loadMessagesAround` return without fetching (the `ready` handler reloads the open channel); `MessageList` does not show the missing-permission text and waits; `MessageInput` stays locked, since nothing can be routed yet; a pending bubble restored at boot is dispatched only once its channel is known (`pendingMessageRehydrate`); an alert treats it as not a DM.
 
 > **DM channels** are mapped to the origin of the instance that delivered them in the `ready` event. For 1-on-1 DMs created locally this is typically `''` (home), but federated DMs may arrive from any connected instance. DM read/write operations are routed to the channel's origin via `getApiForOrigin(getChannelOrigin(channelId))`. S2S relay then propagates changes to all other instances that have the same channel.
 
@@ -367,7 +378,7 @@ When a WS connection opens and authenticates, the server sends a `ready` event c
 
 1. Tag all spaces with `_instanceOrigin`
 2. Merge into the unified space list (replacing stale data from same origin)
-3. Build/update `channelOriginMap`, `channelToSpaceMap`
+3. Replace this origin's entries in the space-channel index (the lookup maps follow, see "Channel index and lookup maps")
 4. Normalize remote asset URLs to absolute paths
 5. Merge DM channels from all origins: the `ready` payload's DMs replace that origin's copies in the DM merge module (`mergeOriginListing`), which groups copies by conversation key and pins one per conversation (see "DM Origin Failover").
 6. Last-write-wins layout merge for sidebar order

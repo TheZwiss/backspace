@@ -302,6 +302,7 @@ function seedStores(state: PreviewState): void {
     channelOriginMap: new Map([
       [DM_ID, ''], [GROUP_ID, ''], [REMOTE_DM_ID, ORBIT], [CHANNEL, ''], [NAMES_DM_ID, ''], [NAMES_DISPLAY_DM_ID, ''], [PICKER_GROUP_ID, ''],
     ]),
+    spaceChannelIndex: new Map([[CHANNEL, { spaceId: SPACE, origin: '', type: 'text' as const }]]),
     channelToSpaceMap: new Map([[CHANNEL, SPACE]]),
     channelPermissions: new Map([[CHANNEL, permissions]]),
     spaces: state === 'space-picker'

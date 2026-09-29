@@ -1297,7 +1297,7 @@ function ChannelItem({
     isDragOver: boolean;
     isValidTarget: boolean;
   };
-  channelPermissions: Map<string, string>;
+  channelPermissions: ReadonlyMap<string, string>;
   handleVoiceJoin: (channelId: string) => void;
 }) {
   const chPerms = channelPermissions.get(channel.id);

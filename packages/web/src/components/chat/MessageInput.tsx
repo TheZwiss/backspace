@@ -2,7 +2,7 @@ import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
-import { isDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
+import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
@@ -112,9 +112,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
-  const isDm = isDmChannel(channelId);
-  const canSendMessages = isDm || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
-  const canAttachFiles = isDm || hasPermissionBit(channelPerms, PermissionBits.ATTACH_FILES);
+  // Undefined until the ready that lists the channel: nothing can be routed yet, so the composer stays locked.
+  const isDm = useIsDmChannel(channelId);
+  const canSendMessages = isDm === true || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
+  const canAttachFiles = isDm === true || hasPermissionBit(channelPerms, PermissionBits.ATTACH_FILES);
 
   // Derive staged transfers from composerStore staged ids + transferStore map
   const stagedTransfers: Transfer[] = useMemo(() => {
