@@ -161,9 +161,10 @@ function OverridesBench({ overrides }: { overrides: Override[] }) {
       spaceId={SPACE_ID}
       permDefs={TEXT_PERMS}
       unhideNote=""
-      getOverrides={async () => overrides}
+      overrides={overrides}
       putOverride={async () => ({ success: true })}
       deleteOverride={async () => ({ success: true })}
+      onSaved={() => undefined}
     />
   );
 }

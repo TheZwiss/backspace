@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
-import { PermissionBits, permissionsToString, stringToPermissions, hasPermissionBit } from '../../utils/permissions';
-import { Toggle } from '../ui/Toggle';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { PermissionBits, hasPermissionBit } from '../../utils/permissions';
 import { InlineNameEditor } from '../ui/InlineNameEditor';
 import { PermissionsEditor } from '../ui/PermissionsEditor';
 import type { PermissionDef } from '../ui/OverrideEntry';
 import { describeError } from '../../i18n/errors';
+import { useEntityOverrides } from '../../hooks/useEntityOverrides';
+import { isHiddenFromEveryone } from '../../utils/overrideBits';
+import { PrivacySetting } from './PrivacySetting';
 import { CATEGORY_NAME_MAX_LENGTH, normalizeCategoryName } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Category Overrides ──────────────────────────────
@@ -89,30 +91,14 @@ function OverviewTab({
       {/* Privacy is an @everyone override: reading and writing it both need
           MANAGE_ROLES, so without it the row would only show a guess. */}
       {canManageRoles && (
-        <div className="pt-2 border-t border-border-soft">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">{t('spaces:category.settings.private.label')}</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">
-                {t('spaces:category.settings.private.description')}
-              </div>
-            </div>
-            <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching) ? 'opacity-50 pointer-events-none' : ''}`}>
-              <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {canManageRoles && isPrivate && !isFetching && (
-        <div className="flex items-start gap-2 p-2 bg-surface-input/50 rounded text-xs text-txt-tertiary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 mt-0.5 text-txt-secondary">
-            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-          </svg>
-          <span>
-            {t('spaces:category.settings.private.note')}
-          </span>
-        </div>
+        <PrivacySetting
+          label={t('spaces:category.settings.private.label')}
+          description={t('spaces:category.settings.private.description')}
+          note={t('spaces:category.settings.private.note')}
+          isPrivate={isPrivate}
+          busy={isLoading || isFetching}
+          onToggle={onTogglePrivate}
+        />
       )}
 
       {canManageChannels && (
@@ -143,9 +129,7 @@ export function CategorySettingsModal() {
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
   const [tab, setTab] = useState<'overview' | 'permissions'>('overview');
-  const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -167,72 +151,24 @@ export function CategorySettingsModal() {
     }
   }, [isOpen]);
 
-  // Fetch overrides for the private toggle (overview tab)
-  const fetchPrivateState = useCallback(() => {
-    if (!categoryId || !currentSpaceId) return;
-
-    setIsFetching(true);
-    setError('');
-
-    const space = spaces.find(s => s.id === currentSpaceId);
-    const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
-
-    catApi.categories.getOverrides(categoryId)
-      .then((data: { targetType: string; targetId: string; allow: string; deny: string }[]) => {
-        // Check if @everyone role (id === spaceId) has VIEW_CHANNEL denied
-        const everyoneOverride = data.find(
-          o => o.targetType === 'role' && o.targetId === currentSpaceId
-        );
-        if (everyoneOverride) {
-          const denyBits = stringToPermissions(everyoneOverride.deny);
-          setIsPrivate((denyBits & PermissionBits.VIEW_CHANNEL) !== 0n);
-        } else {
-          setIsPrivate(false);
-        }
-      })
-      .catch((err: Error) => {
-        setError(describeError(err));
-      })
-      .finally(() => {
-        setIsFetching(false);
-      });
-  }, [categoryId, currentSpaceId, spaces]);
-
-  useEffect(() => {
-    if (isOpen && categoryId && currentSpaceId && canManageRoles) {
-      fetchPrivateState();
-    } else {
-      setIsFetching(false);
-    }
-  }, [isOpen, categoryId, currentSpaceId, canManageRoles, fetchPrivateState]);
+  // One list of this category's overrides for the whole dialog: the Overview
+  // derives privacy from it and the Permissions tab edits it, so neither
+  // shows a copy the other has made stale.
+  const space = spaces.find(s => s.id === currentSpaceId);
+  const entityOverrides = useEntityOverrides('category', isOpen ? categoryId : undefined, space, canManageRoles);
+  const isPrivate = currentSpaceId ? isHiddenFromEveryone(entityOverrides.overrides, currentSpaceId) : false;
+  const isFetching = !entityOverrides.loaded;
+  const shownError = error || entityOverrides.error;
 
   if (!isOpen || !category || !categoryId || !currentSpaceId) return null;
-
-  const space = spaces.find(s => s.id === currentSpaceId);
 
   const handleToggle = async () => {
     setError('');
     setIsLoading(true);
-
-    const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
-
     try {
-      if (!isPrivate) {
-        // Make private: deny VIEW_CHANNEL for @everyone role
-        await catApi.categories.putOverride(categoryId, {
-          targetType: 'role',
-          targetId: currentSpaceId,
-          allow: '0',
-          deny: permissionsToString(PermissionBits.VIEW_CHANNEL),
-        });
-        setIsPrivate(true);
-      } else {
-        // Make public: remove the @everyone VIEW_CHANNEL deny override
-        await catApi.categories.deleteOverride(categoryId, 'role', currentSpaceId);
-        setIsPrivate(false);
-      }
-      // Re-fetch to keep in sync
-      fetchPrivateState();
+      // Only the View Channels bit of the @everyone override changes; any
+      // other @everyone bit on this category stays (#327, #365).
+      await entityOverrides.setBits('role', currentSpaceId, PermissionBits.VIEW_CHANNEL, isPrivate ? 'neutral' : 'deny');
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -295,7 +231,7 @@ export function CategorySettingsModal() {
                   isPrivate={isPrivate}
                   isFetching={isFetching}
                   isLoading={isLoading}
-                  error={error}
+                  error={shownError}
                   canManageChannels={canManageChannels}
                   canManageRoles={canManageRoles}
                   onTogglePrivate={handleToggle}
@@ -307,21 +243,13 @@ export function CategorySettingsModal() {
                 <PermissionsEditor
                   entityId={categoryId}
                   spaceId={currentSpaceId}
-                  instanceOrigin={space?._instanceOrigin}
                   permDefs={CATEGORY_PERMISSIONS}
-                  getOverrides={() => {
-                    const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return catApi.categories.getOverrides(categoryId);
-                  }}
-                  putOverride={(data) => {
-                    const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return catApi.categories.putOverride(categoryId, data);
-                  }}
+                  overrides={entityOverrides.overrides}
+                  loadError={entityOverrides.error}
+                  putOverride={entityOverrides.put}
+                  deleteOverride={entityOverrides.remove}
+                  onSaved={entityOverrides.reload}
                   unhideNote={t('spaces:category.settings.private.unhideOnSave')}
-                  deleteOverride={(targetType, targetId) => {
-                    const catApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return catApi.categories.deleteOverride(categoryId, targetType, targetId);
-                  }}
                 />
               )}
             </div>
@@ -333,7 +261,7 @@ export function CategorySettingsModal() {
             isPrivate={isPrivate}
             isFetching={isFetching}
             isLoading={isLoading}
-            error={error}
+            error={shownError}
             canManageChannels={canManageChannels}
             canManageRoles={canManageRoles}
             onTogglePrivate={handleToggle}

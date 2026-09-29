@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { PermissionBits, permissionsToString, stringToPermissions } from '../../utils/permissions';
 import { OverrideEntry, type PermissionDef } from './OverrideEntry';
+import { LOCK_ICON } from './LockNote';
 import { describeError } from '../../i18n/errors';
+import { userDisplayName } from '../../utils/identity';
+import { isHiddenFromEveryone, type StoredOverride } from '../../utils/overrideBits';
 import {
   useViewerHeldPermissions,
   unswitchableBits,
@@ -13,24 +16,23 @@ import {
 } from '../../utils/roleHierarchy';
 import type { Role, MemberWithUser } from '@backspace/shared';
 
-// The padlock the Overview privacy note uses; this note sits beside the same subject.
-const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
-
-export interface Override {
-  targetType: string;
-  targetId: string;
-  allow: string;
-  deny: string;
-}
+export type Override = StoredOverride;
 
 export interface PermissionsEditorProps {
   entityId: string;
   spaceId: string;
-  instanceOrigin?: string;
   permDefs: PermissionDef[];
-  getOverrides: () => Promise<Override[]>;
-  putOverride: (data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<unknown>;
+  /**
+   * The saved overrides. The dialog owns the list (`useEntityOverrides`) so
+   * every tab reads the same one; this editor stages changes on top of it.
+   */
+  overrides: Override[];
+  /** Why the list could not be loaded; empty when it could. */
+  loadError?: string;
+  putOverride: (data: Override) => Promise<unknown>;
   deleteOverride: (targetType: string, targetId: string) => Promise<unknown>;
+  /** Called after a save, landed or partly refused, so the owner lists the overrides again. */
+  onSaved: () => Promise<void> | void;
   /** Shown above Save while the staged edit would stop hiding this channel or category from @everyone. */
   unhideNote: string;
 }
@@ -38,11 +40,12 @@ export interface PermissionsEditorProps {
 export function PermissionsEditor({
   entityId,
   spaceId,
-  instanceOrigin,
   permDefs,
-  getOverrides,
+  overrides,
+  loadError = '',
   putOverride,
   deleteOverride,
+  onSaved,
   unhideNote,
 }: PermissionsEditorProps) {
   const { t } = useTranslation(['spaces', 'common']);
@@ -66,10 +69,6 @@ export function PermissionsEditor({
     return !!member && !viewerCanActOn(space, members, member);
   }, [space, roles, members]);
 
-  // Fetched overrides
-  const [overrides, setOverrides] = useState<Override[]>([]);
-  const [fetchError, setFetchError] = useState('');
-
   // Draft state: keyed by "role:id" or "member:id"
   const [draftOverrides, setDraftOverrides] = useState<Map<string, { allow: bigint; deny: bigint }>>(new Map());
   const [pendingRemovals, setPendingRemovals] = useState<Set<string>>(new Set());
@@ -85,26 +84,6 @@ export function PermissionsEditor({
   // Refs + click-outside/Escape for dropdown menus
   const roleDropdownRef = useRef<HTMLDivElement>(null);
   const memberDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Stable ref for the getOverrides callback to avoid re-fetch loops
-  const getOverridesRef = useRef(getOverrides);
-  getOverridesRef.current = getOverrides;
-
-  // Fetch overrides on mount and when entityId changes
-  const fetchOverrides = useCallback(() => {
-    setFetchError('');
-    getOverridesRef.current()
-      .then((data: Override[]) => {
-        setOverrides(data);
-      })
-      .catch((err: Error) => {
-        setFetchError(describeError(err));
-      });
-  }, []);
-
-  useEffect(() => {
-    fetchOverrides();
-  }, [entityId, fetchOverrides]);
 
   // Reset draft state when entityId changes
   useEffect(() => {
@@ -318,17 +297,17 @@ export function PermissionsEditor({
         );
       }
 
-      // Reset draft state and re-fetch overrides
+      // Reset draft state; the owner lists the overrides again
       setDraftOverrides(new Map());
       setNewOverrides(new Map());
       setPendingRemovals(new Set());
-      fetchOverrides();
+      await onSaved();
     } catch (err) {
       setSaveError(describeError(err));
     } finally {
       setSaving(false);
     }
-  }, [draftOverrides, newOverrides, pendingRemovals, deleteOverride, putOverride, fetchOverrides, t]);
+  }, [draftOverrides, newOverrides, pendingRemovals, deleteOverride, putOverride, onSaved, t]);
 
   // Build ordered lists of role and member overrides
   const roleOverrides = useMemo(() => {
@@ -353,11 +332,11 @@ export function PermissionsEditor({
       items.push({ key, role, isNew: true });
     }
 
-    // Sort: @everyone first, then by position
+    // Rank order, as the Roles list shows it: highest first, @everyone last.
     items.sort((a, b) => {
-      if (a.role.id === spaceId) return -1;
-      if (b.role.id === spaceId) return 1;
-      return (a.role.position ?? 0) - (b.role.position ?? 0);
+      if (a.role.id === spaceId) return 1;
+      if (b.role.id === spaceId) return -1;
+      return (b.role.position ?? 0) - (a.role.position ?? 0);
     });
 
     return items;
@@ -399,12 +378,11 @@ export function PermissionsEditor({
   // render, no longer do: the row is staged for removal, or the bit cleared.
   const everyoneKey = `role:${spaceId}`;
   const unhides = useMemo(() => {
-    const saved = existingOverrideMap.get(everyoneKey);
-    if (!saved || (stringToPermissions(saved.deny) & PermissionBits.VIEW_CHANNEL) === 0n) return false;
+    if (!isHiddenFromEveryone(overrides, spaceId)) return false;
     const stagedHides = stagedKeys.has(everyoneKey)
       && (getEffective(everyoneKey).deny & PermissionBits.VIEW_CHANNEL) !== 0n;
     return !stagedHides;
-  }, [existingOverrideMap, everyoneKey, stagedKeys, getEffective]);
+  }, [overrides, spaceId, everyoneKey, stagedKeys, getEffective]);
 
   const availableRoles = useMemo(() =>
     roles.filter(r => !stagedKeys.has(`role:${r.id}`) && !isAboveViewer(`role:${r.id}`)),
@@ -441,10 +419,10 @@ export function PermissionsEditor({
 
   return (
     <div className="space-y-4 relative pb-14">
-      {/* Fetch error */}
-      {fetchError && (
+      {/* Load error */}
+      {loadError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
-          {fetchError}
+          {loadError}
         </div>
       )}
 
@@ -537,7 +515,7 @@ export function PermissionsEditor({
             return (
               <OverrideEntry
                 key={key}
-                label={member.user.displayName ?? member.user.username}
+                label={userDisplayName(member.user)}
                 permDefs={permDefs}
                 allow={eff.allow}
                 deny={eff.deny}
@@ -585,7 +563,7 @@ export function PermissionsEditor({
                       onClick={() => handleAddMember(member.userId)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover rounded transition-colors"
                     >
-                      <span className="truncate">{member.user.displayName ?? member.user.username}</span>
+                      <span className="truncate">{userDisplayName(member.user)}</span>
                       {member.user.displayName && (
                         <span className="text-txt-tertiary text-xs truncate">@{member.user.username}</span>
                       )}
