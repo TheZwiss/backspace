@@ -16,7 +16,7 @@ import { ProjectHubPage } from '../projectHub/ProjectHubPage';
 import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { wsSend } from '../../hooks/useWebSocket';
+import { canStartDmCall, startDmCall, cancelOutgoingDmCall } from '../../utils/voiceActions';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isSelf, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
@@ -27,7 +27,7 @@ import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
-import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
+import { isDmChannel } from '../../stores/spaceStore';
 import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 /**
@@ -73,6 +73,7 @@ export function MainContent() {
   const isProjectHubPage = location.pathname === '/backspace';
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
+  const canStartCall = useVoiceStore(canStartDmCall);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
   const openModal = useUIStore((s) => s.openModal);
@@ -225,17 +226,11 @@ export function MainContent() {
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
 
     const handleStartVoiceCall = () => {
-      if (!currentChannelId) return;
-      useVoiceStore.getState().setOutgoingCall({ dmChannelId: currentChannelId });
-      wsSend({ type: 'dm_call_start', dmChannelId: currentChannelId }, getChannelOrigin(currentChannelId));
+      if (currentChannelId) startDmCall(currentChannelId);
     };
 
     const handleCancelCall = () => {
-      if (!currentChannelId) return;
-      useVoiceStore.getState().setOutgoingCall(null);
-      const { federatedCallId, callOrigin } = useVoiceStore.getState();
-      const origin = callOrigin || getChannelOrigin(currentChannelId);
-      wsSend({ type: 'dm_call_end', dmChannelId: currentChannelId, federatedCallId }, origin);
+      if (currentChannelId) cancelOutgoingDmCall(currentChannelId);
     };
 
     if (isInDmCall) {
@@ -368,7 +363,7 @@ export function MainContent() {
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={handleStartVoiceCall}
-              disabled={!!outgoingCall || !!activeDmCall}
+              disabled={!canStartCall}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('spaces:main.dm.startVoiceCall')}
             >
@@ -378,7 +373,7 @@ export function MainContent() {
             </button>
             <button
               onClick={handleStartVoiceCall}
-              disabled={!!outgoingCall || !!activeDmCall}
+              disabled={!canStartCall}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('spaces:main.dm.startVideoCall')}
             >
