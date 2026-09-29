@@ -135,9 +135,9 @@ function getBackoffMs(attempt: number): number {
 }
 
 /**
- * A retry wait from the schedules above, as this instance uses it: divided by
- * `config.federation.backoffDivisor` (1 in production; the two-instance test
- * harness shortens the waits so a retried relay lands inside a test's wait).
+ * A retry wait from the schedules above, divided by
+ * `config.federation.backoffDivisor`. See docs/systems/federation.md,
+ * "Retry backoff divisor (test only)".
  */
 function retryWait(ms: number): number {
   return Math.ceil(ms / config.federation.backoffDivisor);
@@ -358,11 +358,15 @@ export async function processOutboxTick(): Promise<void> {
         // failure callback for the eventType so the originator can roll back local
         // state (e.g., friend_request_create deletes the local friend_requests row).
         const terminalEntityIds = new Set<string>(result.accepted);
+        // What the peer took: accepted, or already had (`duplicate`). Any other
+        // terminal reason is a refusal, which matters for a superseded row.
+        const takenEntityIds = new Set<string>(result.accepted);
         const terminalForRollback: Array<{ messageId: string; reason: string; eventType: string | null }> = [];
 
         for (const rejection of result.rejected) {
           if (TERMINAL_REJECTION_REASONS.has(rejection.reason)) {
             terminalEntityIds.add(rejection.messageId);
+            if (rejection.reason === 'duplicate') takenEntityIds.add(rejection.messageId);
             if (rejection.reason !== 'duplicate') {
               const entry = peerEntries.find(e => e.entityId === rejection.messageId);
               terminalForRollback.push({
@@ -374,8 +378,18 @@ export async function processOutboxTick(): Promise<void> {
           }
         }
 
+        // A superseded row whose sent event the peer refused for good is merged
+        // with it now, as if that event had never been sent (a create refused
+        // with an edit queued behind it is still a create, and is refused
+        // again; with a delete behind it, both go).
+        setAsideSuperseded(
+          peerEntries.filter((e) => terminalEntityIds.has(e.entityId) && !takenEntityIds.has(e.entityId)),
+          superseded,
+        );
+
         if (terminalEntityIds.size > 0) {
-          // A superseded row now holds the newer event, which is next to send.
+          // A superseded row now holds the newer event: if the peer took the
+          // sent one, that is next to send; if not, it was merged just above.
           const terminalOutboxIds = peerEntries
             .filter((e) => terminalEntityIds.has(e.entityId) && !superseded.has(e.outboxId))
             .map((e) => e.outboxId);
@@ -554,12 +568,13 @@ export async function processOutboxTick(): Promise<void> {
  */
 function setAsideSuperseded<T extends { outboxId: string; eventType: string }>(
   entries: T[],
-  superseded: ReadonlySet<string>,
+  superseded: ReadonlyMap<string, number>,
 ): T[] {
   if (superseded.size === 0) return entries;
   const unchanged: T[] = [];
   for (const entry of entries) {
-    if (superseded.has(entry.outboxId)) requeueAfterUndeliveredSend(entry.outboxId, entry.eventType);
+    const sentCreatedAt = superseded.get(entry.outboxId);
+    if (sentCreatedAt !== undefined) requeueAfterUndeliveredSend(entry.outboxId, entry.eventType, sentCreatedAt);
     else unchanged.push(entry);
   }
   return unchanged;

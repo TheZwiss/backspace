@@ -42,7 +42,7 @@ vi.mock('../utils/federationOutbox.js', () => ({
   appendMutationLog: vi.fn(),
   // Nothing in these suites queues during a send, so no row is ever superseded.
   beginOutboxDelivery: vi.fn(),
-  finishOutboxDelivery: () => new Set<string>(),
+  finishOutboxDelivery: () => new Map<string, number>(),
   requeueAfterUndeliveredSend: vi.fn(),
 }));
 

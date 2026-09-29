@@ -143,8 +143,9 @@ function mergeUndeliveredEvent(olderType: string, newerType: string): string | n
 
 /**
  * Outbox rows the delivery worker has put on the wire and not yet settled,
- * keyed by outbox id. `superseded` is set when `queueOutboxEvent` writes a
- * newer event into the row meanwhile.
+ * keyed by outbox id. When `queueOutboxEvent` first writes a newer event into
+ * one meanwhile, the row is superseded and `sentCreatedAt` records the
+ * `createdAt` it was sent with (null until then).
  *
  * While a row is on the wire nobody knows whether the peer will take its event,
  * so the merge rule above cannot be applied yet: its create-then-delete and
@@ -158,35 +159,40 @@ function mergeUndeliveredEvent(olderType: string, newerType: string): string | n
  * superseded row keeps the newer event as written and goes out as that after
  * the restart.
  */
-const rowsOnTheWire = new Map<string, { superseded: boolean }>();
+const rowsOnTheWire = new Map<string, { sentCreatedAt: number | null }>();
 
 /** The worker is about to send these rows, as it has just read them. */
 export function beginOutboxDelivery(outboxIds: readonly string[]): void {
-  for (const id of outboxIds) rowsOnTheWire.set(id, { superseded: false });
+  for (const id of outboxIds) rowsOnTheWire.set(id, { sentCreatedAt: null });
 }
 
 /**
  * The answer for these rows is in (or will never come). Clears them and
- * returns the ids a newer event was written into meanwhile. A superseded row
- * holds that newer event and must not be deleted or backed off as the one
- * that was sent: if the peer took the sent event, the row is simply the next
- * one to send; if not, pass it to `requeueAfterUndeliveredSend`.
+ * returns the ids a newer event was written into meanwhile, each with the
+ * `createdAt` the row had when it was sent. A superseded row holds that newer
+ * event and must not be deleted or backed off as the one that was sent: if the
+ * peer took the sent event, the row is simply the next one to send; if not,
+ * pass it to `requeueAfterUndeliveredSend`.
  */
-export function finishOutboxDelivery(outboxIds: readonly string[]): Set<string> {
-  const superseded = new Set<string>();
+export function finishOutboxDelivery(outboxIds: readonly string[]): Map<string, number> {
+  const superseded = new Map<string, number>();
   for (const id of outboxIds) {
-    if (rowsOnTheWire.get(id)?.superseded) superseded.add(id);
+    const sentCreatedAt = rowsOnTheWire.get(id)?.sentCreatedAt;
+    if (sentCreatedAt !== undefined && sentCreatedAt !== null) superseded.set(id, sentCreatedAt);
     rowsOnTheWire.delete(id);
   }
   return superseded;
 }
 
 /**
- * A superseded row whose sent event (`sentEventType`) the peer did not take:
- * merge the two now, as `queueOutboxEvent` would have had the send never
- * happened. The row stays due immediately.
+ * A superseded row whose sent event (`sentEventType`, created at
+ * `sentCreatedAt`) the peer did not take: merge the two now, as
+ * `queueOutboxEvent` would have had the send never happened. That includes the
+ * row's original `createdAt`, so it keeps its place ahead of rows queued after
+ * it (a reaction on the message it creates, say). The row stays due
+ * immediately.
  */
-export function requeueAfterUndeliveredSend(outboxId: string, sentEventType: string): void {
+export function requeueAfterUndeliveredSend(outboxId: string, sentEventType: string, sentCreatedAt: number): void {
   const db = getDb();
   const row = db
     .select({ eventType: schema.federationOutbox.eventType })
@@ -197,9 +203,9 @@ export function requeueAfterUndeliveredSend(outboxId: string, sentEventType: str
   const merged = mergeUndeliveredEvent(sentEventType, row.eventType);
   if (merged === null) {
     db.delete(schema.federationOutbox).where(eq(schema.federationOutbox.id, outboxId)).run();
-  } else if (merged !== row.eventType) {
+  } else {
     db.update(schema.federationOutbox)
-      .set({ eventType: merged })
+      .set({ eventType: merged, createdAt: sentCreatedAt })
       .where(eq(schema.federationOutbox.id, outboxId))
       .run();
   }
@@ -376,11 +382,22 @@ export function queueOutboxEvent(
 
         const onTheWire = existing ? rowsOnTheWire.get(existing.id) : undefined;
         if (existing && onTheWire) {
+          // A fresh createdAt, as a row inserted after the delivery would
+          // have: the worker stamps each event with its row's createdAt, and
+          // a receiver that orders by it (read state is last-writer-wins on a
+          // strictly greater timestamp) must see this event as newer than the
+          // one on the wire.
           tx.update(schema.federationOutbox)
-            .set({ eventType, payload, attempts: 0, nextRetryAt: now })
+            .set({
+              eventType,
+              payload,
+              attempts: 0,
+              nextRetryAt: now,
+              createdAt: Math.max(now, existing.createdAt + 1),
+            })
             .where(eq(schema.federationOutbox.id, existing.id))
             .run();
-          onTheWire.superseded = true;
+          onTheWire.sentCreatedAt ??= existing.createdAt;
         } else if (existing) {
           const merged = mergeUndeliveredEvent(existing.eventType, eventType);
           if (merged === null) {

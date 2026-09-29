@@ -232,16 +232,8 @@ const version = readPackageVersion();
 const passwordHashCost = process.env.NODE_ENV === 'test' ? 4 : 12;
 
 /**
- * `FEDERATION_BACKOFF_DIVISOR`: every federation retry wait is divided by it
- * (the outbox backoff schedule, and the pacing of recovery probes and pending
- * handshakes in `utils/federationWorker.ts`). Unset or 1 keeps the production
- * schedule, which starts at 30 s.
- *
- * It exists for the two-instance test harness, which sets it so that a relay
- * whose first attempt fails is retried within seconds, inside its tests' waits,
- * instead of 30 s later. It is not an operator setting: a larger divisor only
- * makes an instance retry a struggling peer harder. A whole number of at least
- * 1, so it can shorten the waits and never lengthen them.
+ * `FEDERATION_BACKOFF_DIVISOR`, test only. What it divides and why the harness
+ * sets it: docs/systems/federation.md, "Retry backoff divisor (test only)".
  */
 const federationBackoffDivisor = envCount('FEDERATION_BACKOFF_DIVISOR', 1);
 if (federationBackoffDivisor < 1) {
@@ -283,7 +275,7 @@ export const config = {
      * test harness sets it for the same reason.
      */
     allowPrivatePeers: envBool('FEDERATION_ALLOW_PRIVATE_PEERS', false),
-    /** Divides every federation retry wait; 1 in production. See above. */
+    /** `FEDERATION_BACKOFF_DIVISOR`, see above. */
     backoffDivisor: federationBackoffDivisor,
   },
 

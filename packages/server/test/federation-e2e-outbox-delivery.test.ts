@@ -20,7 +20,7 @@ import type { SpawnedInstance } from './helpers/twoInstanceHarness.js';
 vi.setConfig({ testTimeout: 45_000 });
 
 /**
- * ── e2e gate for #367 — relays that meet a busy link ─────────────────────────
+ * ── e2e gate for #367: relays that meet a busy link ──────────────────────────
  *
  * 1. An event queued while the previous one for the same entity is in flight.
  *

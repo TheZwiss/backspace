@@ -999,8 +999,10 @@ Trigger (API/WS handler)
 
 The table (`mergeUndeliveredEvent` in `federationOutbox.ts`) assumes the peer has not received the existing entry. That is not known while the worker has the entry **on the wire**: read for a POST whose answer has not come back. `federationOutbox.ts` keeps those outbox ids in memory (`rowsOnTheWire`, set by `beginOutboxDelivery`, cleared by `finishOutboxDelivery`), and an event queued for one of them is stored as itself and marks the entry superseded. When the answer comes:
 
-- **Accepted, or terminally rejected:** a superseded entry is kept (not deleted with the batch) and goes out on the next tick as the newer event. An edit or delete of a message whose create was on the wire is therefore sent as an `update` / `delete`, and a status change made while the previous one was on the wire is not lost.
-- **Not taken** (retryable rejection, not mentioned, auth failure, HTTP error, network error or timeout, worker stopping): a superseded entry is merged now by the table with the sent event as the existing one (`requeueAfterUndeliveredSend`): a create and delete cancel out, a create with a later edit stays a create. It stays due and is not backed off; only entries nobody touched move to their next backoff step.
+- **Taken** (accepted, or rejected as `duplicate`): a superseded entry is kept (not deleted with the batch) and goes out on the next tick as the newer event. An edit or delete of a message whose create was on the wire is therefore sent as an `update` / `delete`, and a status change made while the previous one was on the wire is not lost.
+- **Not taken** (any other terminal rejection, a retryable rejection, not mentioned, auth failure, HTTP error, network error or timeout, worker stopping): a superseded entry is merged now by the table with the sent event as the existing one (`requeueAfterUndeliveredSend`): a create and delete cancel out, a create with a later edit stays a create (and is refused again if the refusal was terminal). It stays due and is not backed off; only entries nobody touched move to their next backoff step.
+
+Superseding an entry also gives it `createdAt = now` (at least one more than before), because the worker stamps each event's `timestamp` with its entry's `createdAt` and receivers that order by it (read state applies only a strictly greater timestamp) must see the newer event as newer. The original `createdAt` is kept in `rowsOnTheWire` and restored when the entry is merged as not taken, so it keeps its place ahead of entries queued after it.
 
 Before #367 the worker settled entries by id whatever had been merged into them meanwhile, so an accepted batch deleted the newer event with it, and the create-then-delete rule dropped a delete whose create had already reached the peer.
 
@@ -1062,7 +1064,7 @@ Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from 
 | 6 | 6 hours |
 | 7+ | 24 hours (cap) |
 
-Every wait in this schedule and in `RECOVERY_BACKOFF_MS` is divided by `config.federation.backoffDivisor` (`FEDERATION_BACKOFF_DIVISOR`, a whole number ≥ 1, default 1). Production leaves it at 1. The two-instance test harness sets 30 (first retry after 1 s), see [Retry backoff divisor (test only)](#retry-backoff-divisor-test-only).
+Test instances divide these waits, see [Retry backoff divisor (test only)](#retry-backoff-divisor-test-only).
 
 The schedule above (`BACKOFF_SCHEDULE_MS`) paces per-entry retries. Peer-level recovery from `unreachable` is separate and demand-driven: `processRecoveryTick` probes unreachable peers on `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` while they have queued mail (15-min backstop when silent), paced by the per-peer `last_probe_at` / `probe_attempts` columns and the `probePeerReachable` helper in `utils/federationRecovery.ts`. See [PEER_UNREACHABLE_THRESHOLD](#peer_unreachable_threshold).
 
@@ -2067,7 +2069,9 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 
 ### Retry backoff divisor (test only)
 
-`FEDERATION_BACKOFF_DIVISOR` (`config.federation.backoffDivisor`, read once in `config.ts`) divides every federation retry wait: `BACKOFF_SCHEDULE_MS` for outbox entries and file downloads, and `RECOVERY_BACKOFF_MS` for unreachable-peer probes and pending-peer handshakes (`retryWait` in `federationWorker.ts`). Unset or 1 is the production schedule. It must be a whole number ≥ 1, so it can only shorten waits; 0 and fractions refuse to boot. The health-check interval and the 15-minute silent-peer backstop are not retry waits and are not divided. The two-instance harness sets 30 in every spawned instance (`HARNESS_BACKOFF_DIVISOR` in `twoInstanceHarness.ts`): a relay whose first attempt fails on a loaded runner is retried after 1 s instead of 30 s, inside the suites' relay waits. Not an operator setting.
+`FEDERATION_BACKOFF_DIVISOR` (`config.federation.backoffDivisor`, read once in `config.ts`) divides every federation retry wait: `BACKOFF_SCHEDULE_MS` for outbox entries and file downloads, and `RECOVERY_BACKOFF_MS` for unreachable-peer probes and pending-peer handshakes (`retryWait` in `federationWorker.ts`). Unset or 1 is the production schedule. It must be a whole number ≥ 1, so it can only shorten waits; 0 and fractions refuse to boot. The health-check interval and the 15-minute silent-peer backstop are not retry waits and are not divided.
+
+The two-instance harness sets 30 in every spawned instance (`HARNESS_BACKOFF_DIVISOR` in `twoInstanceHarness.ts`), so the retries come after 1 s, 2 s, 10 s. Production's first retry is 30 s, longer than any relay wait in the e2e suites, so without it a relay whose first attempt failed on a loaded runner (a busy peer, a timed-out request) would fail its test while the instance behaved as designed. Not an operator setting: a larger divisor only makes an instance retry a struggling peer harder.
 
 ### Rate-limit bypass (test only)
 

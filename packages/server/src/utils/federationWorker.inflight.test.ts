@@ -115,7 +115,7 @@ function queueDm(messageId: string, eventType: 'create' | 'update' | 'delete', c
   queueOutboxEvent(messageId, 'dm-1', eventType, JSON.stringify(payload), [PEER_1]);
 }
 
-interface Row { eventType: string; payload: string; attempts: number | null; nextRetryAt: number }
+interface Row { eventType: string; payload: string; attempts: number | null; nextRetryAt: number; createdAt: number }
 
 function rowFor(peerId: string, entityId: string): Row | undefined {
   return testDb.select({
@@ -123,6 +123,7 @@ function rowFor(peerId: string, entityId: string): Row | undefined {
     payload: schema.federationOutbox.payload,
     attempts: schema.federationOutbox.attempts,
     nextRetryAt: schema.federationOutbox.nextRetryAt,
+    createdAt: schema.federationOutbox.createdAt,
   }).from(schema.federationOutbox)
     .where(and(
       eq(schema.federationOutbox.peerId, peerId),
@@ -163,7 +164,20 @@ const acceptAll = (sent: Sent): Response => new Response(JSON.stringify({
 
 const serverError = (): Response => new Response('boom', { status: 500 });
 
-describe('outbox worker — an event queued while the previous one is in flight (#367)', () => {
+/** The first POST's events are all rejected with `reason`; later ones are accepted. */
+function rejectFirstWith(reason: string): (sent: Sent) => Response {
+  let calls = 0;
+  return (sent) => {
+    calls++;
+    if (calls > 1) return acceptAll(sent);
+    return new Response(JSON.stringify({
+      accepted: [],
+      rejected: sent.body.events.map(e => ({ messageId: e.messageId, reason })),
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+}
+
+describe('outbox worker: an event queued while the previous one is in flight (#367)', () => {
   beforeEach(() => {
     const sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
@@ -261,6 +275,70 @@ describe('outbox worker — an event queued while the previous one is in flight 
     expect(JSON.parse(row!.payload).message.content).toBe('hello, edited');
     expect(row!.attempts).toBe(0);
     expect(row!.nextRetryAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('stamps the newer event later than the one it superseded, so last-writer-wins receivers apply it', async () => {
+    // Read state is applied only when its timestamp is strictly greater than
+    // the stored one (routes/federation/events/dmState.ts). The event queued
+    // while the older one was on the wire must not carry the older stamp.
+    queuePresence('dana', 'dnd');
+    const sent = mockRelay(acceptAll, (s, i) => {
+      if (i === 0 && s.origin === PEER_1) queuePresence('dana', 'idle');
+    });
+
+    await processOutboxTick();
+    await processOutboxTick();
+    const stamps = sent.filter(s => s.origin === PEER_1).flatMap(s => s.body.events).map(e => e.timestamp);
+    expect(stamps).toHaveLength(2);
+    expect(stamps[1]!).toBeGreaterThan(stamps[0]!);
+  });
+
+  it('gives a superseded row back its original createdAt when the sent event was not taken', async () => {
+    queueDm('m1', 'create', 'hello');
+    const createdAt = rowFor('peer-1', 'm1')!.createdAt;
+    mockRelay(serverError, (_s, i) => {
+      if (i === 0) queueDm('m1', 'update', 'hello, edited');
+    });
+
+    await processOutboxTick();
+    const row = rowFor('peer-1', 'm1');
+    expect(row?.eventType).toBe('create');
+    expect(row!.createdAt).toBe(createdAt);
+  });
+
+  it('treats a create refused for good as not taken: an edit queued behind it stays a create', async () => {
+    queueDm('m1', 'create', 'hello');
+    const sent = mockRelay(rejectFirstWith('invalid_target'), (_s, i) => {
+      if (i === 0) queueDm('m1', 'update', 'hello, edited');
+    });
+
+    await processOutboxTick();
+    const row = rowFor('peer-1', 'm1');
+    expect(row?.eventType).toBe('create');
+    expect(JSON.parse(row!.payload).message.content).toBe('hello, edited');
+
+    await processOutboxTick();
+    expect(sent.flatMap(s => s.body.events).map(e => e.eventType)).toEqual(['create', 'create']);
+  });
+
+  it('treats a create refused for good as not taken: a delete queued behind it cancels both', async () => {
+    queueDm('m1', 'create', 'hello');
+    mockRelay(rejectFirstWith('recipient_not_found'), (_s, i) => {
+      if (i === 0) queueDm('m1', 'delete', '');
+    });
+
+    await processOutboxTick();
+    expect(rowFor('peer-1', 'm1')).toBeUndefined();
+  });
+
+  it('treats a duplicate as taken: the edit queued behind the create goes out as an update', async () => {
+    queueDm('m1', 'create', 'hello');
+    mockRelay(rejectFirstWith('duplicate'), (_s, i) => {
+      if (i === 0) queueDm('m1', 'update', 'hello, edited');
+    });
+
+    await processOutboxTick();
+    expect(rowFor('peer-1', 'm1')?.eventType).toBe('update');
   });
 
   it('still backs off a row nobody touched while its delivery failed', async () => {
