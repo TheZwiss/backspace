@@ -53,26 +53,15 @@ Backspace federation is peer-to-peer with no central authority. Each instance ma
 - Auth: JWT + admin role required
 - Validates `remoteOrigin` is a well-formed HTTP(S) URL via `validateOrigin()`
 - Prevents self-peering (`localOrigin === remoteOrigin`)
-- Handles existing peers: active -> return 200, pending -> return 409, revoked -> delete and re-initiate
-- Generates HMAC secret: `generateHmacSecret()` -> `randomBytes(32).toString('hex')` (256-bit)
-- Generates challenge: `randomBytes(16).toString('hex')` (128-bit, currently unused by acceptor)
-- Creates local peer record with `status='pending'`
-- POSTs to `{remoteOrigin}/api/federation/peer/accept` with `{ sourceOrigin, challenge, hmacSecret }`
-- Timeout: 10 seconds (`AbortSignal.timeout`)
-- On remote 200 (accepted): **verifies before activating** — performs a signed `fetchPeerEpoch` (`POST /api/federation/epoch`) round-trip with the just-negotiated secret to PROVE the responder actually adopted it (a responder that returns 200 without adopting the secret is otherwise indistinguishable from a healthy fresh peering — this is the split-brain the honest contract prevents). If `fetchPeerEpoch` succeeds, updates local peer to `status='active'`, stores the **cryptographically-verified** epoch as `peer_instance_id` (authoritative over the unverified handshake-response body), sets `lastSeenAt`, broadcasts `federation_peers_changed`, and returns 200 with `{ peer, verified: true }`. If it returns null (secret doesn't authenticate / `/epoch` absent / unreachable), parks the peer in `status='needs_attention'` with `needs_attention_reason='repeer_incomplete'` and returns 200 with `{ peer, verified: false }` — never a silent false-active. See "Trust re-establishment contract" below.
-- On remote 409 `PEER_EXISTS_RESET_REQUIRED` (responder already holds peering for us and honestly refuses to rekey): **deletes** its own pending row — keeping the local slot clean so the remote's own later Re-peer can land on a fresh responder slot — and returns 409 `{ code: 'PEER_EXISTS_RESET_REQUIRED', error }`. See "Trust re-establishment contract" below.
-- On remote 202 (queued for remote admin approval): transitions local peer to `status='awaiting_approval'` (does **not** activate), broadcasts `federation_peers_changed`, returns 202 with `{ peer }`. Without this branch `response.ok` would be true and the local peer would flip to `active` while the remote had us pending — a transient local-active / remote-pending split that only self-healed when the remote admin approved. Mirrors the auto-peer 202 branch in `federationPeering.ts:performHandshake`.
-- On remote 403 / other non-2xx: deletes pending peer, returns 502 with the remote's error message
-- On network error / timeout: deletes pending peer, returns 502 (network) or 504 (timeout)
+- Claims the origin (`claimAdminHandshake`) and prepares the row with `prepareAdminHandshakeRow`: an `active` or `unreachable` row returns 200 with the peer; a `pending` row local traffic created (`initiated_by = 'auto'`) is claimed for the admin, keeping its secret and queued entries; any other `pending` row or an `awaiting_approval` row answers 409; a `revoked`, `rejected` or `needs_attention` row is replaced by a fresh `pending` row with a new 256-bit secret (`generateHmacSecret()`)
+- POSTs to `{remoteOrigin}/api/federation/peer/accept` with `{ sourceOrigin, hmacSecret, instanceName, instanceId }` (10-second timeout) and settles the row from the answer as every sender does: see [Sending a handshake](#peer-state). Replies: 200 `{ peer, verified: true }` when this handshake activated a verified peering; 200 `{ peer }` when the row was already active; 200 `{ peer, verified: false }` for `needs_attention` / `repeer_incomplete`; 202 `{ peer }` for `awaiting_approval`; 409 `{ code: 'PEER_EXISTS_RESET_REQUIRED', peer }` when the row is parked on the remote's older peering; 502 for a refusal or another failure; 504 on a timeout. On a failure a row this request created is removed unless entries were queued on it, and a claimed row goes back to local traffic with the attempt counted.
 
 **Phase 2 -- Accept** (`POST /api/federation/peer/accept`)
 - Auth: **none** (first contact -- no JWT, no HMAC)
 - Rate-limited: 10 requests per minute per IP (in-memory sliding window, buckets cleaned every 60s)
 - Validates `sourceOrigin`, `challenge`, `hmacSecret`, and (optional) `instanceName` from body
-- Handles existing peers: **active or needs_attention -> return 409 `PEER_EXISTS_RESET_REQUIRED`** (honest refusal — the anti-hijack guard still does NOT adopt the caller's `hmac_secret`; only the reported status/body changed from the old false `200 {accepted:true}`), revoked -> return 403, pending -> update with new secret and activate
-- Epoch-mismatch reset detection (`markPeerReset`) still fires on the active/needs_attention path **before** the 409 is returned — detection is layered on top of the unchanged anti-hijack guard
-- New peer: creates record with provided `hmacSecret`, sets `status='active'`
-- Returns `{ accepted: true, instanceName: <ourName | null>, instanceId: <ourEpoch> }` on true activation; on the existing-active/needs_attention refusal returns 409 `{ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error, instanceName, instanceId }` — see "Instance name & epoch exchange" and "Trust re-establishment contract" below
+- Answers from our row's state, provenance and the auto-accept setting (`decideInboundHandshake`): see [Answering a handshake](#peer-state). An established peering (`active`, `unreachable`, `needs_attention`) is never re-keyed here; its answer is `409 PEER_EXISTS_RESET_REQUIRED`, and epoch-mismatch reset detection (`markPeerReset`) runs before it
+- Returns `{ accepted: true, instanceName: <ourName | null>, instanceId: <ourEpoch> }` on activation; the refusal is 409 `{ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error, instanceName, instanceId }`. See "Instance name & epoch exchange" and "Trust re-establishment contract" below
 
 ### Instance name & epoch exchange
 
@@ -101,55 +90,126 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 
 **Schema columns:** `pending_hmac_secret` (TEXT NULL), `secret_rotation_at` (INTEGER NULL), `secret_rotated_at` (INTEGER NULL), `auto_rotate_interval_days` (INTEGER NOT NULL DEFAULT 90).
 
-### Peer Status Lifecycle
+### Peer state
 
-```
-                     ensurePeered
-  (none) ──────────► pending ──────────► active ──────► needs_attention
-      ▲                │                   │ ▲              │
-      │                │  remote 202       │ │              │ admin Reset
-      │                ▼                   │ │              ▼
-      │          awaiting_approval         │ │           (deleted)
-      │                │                   │ │
-      │    ┌───────────┼──────────┐        │ │ N consecutive
-      │    │           │          │        │ │ auth failures (401/403)
-      │  accept     denied     expired     │ │
-      │  (fresh)    (admin)   (janitor)    │ │ delivery failures
-      │    │           │          │        ▼ │
-      │    ▼           ▼          ▼     unreachable
-      │  active    rejected   rejected     │
-      │                                    │ health check OK
-      │  auto-peer rejected                ▼
-      │  (403 approval-required/revoked) active
-      └──────────────────────────── rejected
-                                      │ admin revoke (active)
-                                      ▼
-                                   revoked
-```
+A `federation_peers` row's state is its `status` plus `status_reason`. One module writes them: `utils/federationPeerState.ts` is the only writer of `status`, `status_reason`, `initiated_by`, `probe_attempts` and `last_probe_at`, and of peer-row inserts and deletes (the janitor's guarded delete of unused auto `pending` rows is the one exception). Other code calls it; nothing else writes these columns.
 
-| Status | Outbox delivery | Health check | Relay accepts | Re-initiation | Admin clear |
-|--------|----------------|--------------|---------------|---------------|-------------|
-| `active` | Yes | No | Yes | No (returns existing) | N/A |
-| `pending` | No (handshake retried on the recovery backoff while entries are queued) | No | No | `'auto'` row: taken over by `/peer/initiate`; `'admin'`/`'remote'` row or a handshake in flight: 409 | `'auto'` row with nothing but presence queued: janitor removes it after 1h |
-| `awaiting_approval` | No | No | No | Returns pending; no re-handshake | Yes (admin deletes) |
-| `unreachable` | No (entries wait) | Yes — demand-driven probe (backoff while mail queued; 15-min backstop when silent) | Yes (resets to active) | No | N/A |
-| `needs_attention` | No (entries bounded by TTL) | No | Yes (200 no-update, same as active) | No (admin must Reset first) | Yes (admin Reset deletes record) |
-| `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) | N/A |
-| `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) | N/A |
+- **`transitionPeer(peerId, { from, to, reason?, cause, fields?, expectSecret? })`**: a compare-and-set. It applies only while the row is still in one of `from` (and, with `expectSecret`, still holds that secret). When it does not apply it returns the row as it is now, and that state is the caller's outcome. A write decided before an await can therefore never overwrite a row something else changed meanwhile (the remote's own handshake, an admin's revoke, a reset detection).
+- **`status_reason`** is set for `needs_attention` and `rejected` and cleared on every other transition, so it never goes stale.
+- **Pacing** (`probe_attempts`, `last_probe_at`) starts afresh on entering `pending`, `unreachable` or `active`. `recordPeerAttempt(peerId, { from, startedAt })` counts a failed attempt.
+- **Side effects run once, after commit, from the old and new state**, never at call sites:
+
+| Transition | Effect |
+|---|---|
+| any | `federation_peers_changed` to admins |
+| into `active` | `federation_peer_active` to every online user; `onPeerActivated(peerId, cause)` |
+| out of `active` | `onPeerDeactivated(peerId, cause)` |
+| into `rejected` | outbox entries purged (the conversation replays from `federation_mutation_log` if the peering comes back); `federation_peer_rejected` with `reasonCode` to the local users who had something queued |
+| into `revoked` | outbox entries purged |
+| into `needs_attention` / `auth_failures` | `federation_peer_rejected` with `reasonCode: 'auth_failures'` to the users with queued entries; the entries stay (bounded by the outbox TTL) |
+
+**States.**
+
+| Status | Reason (`status_reason`) | Meaning | Outbox | `ensurePeered` answers | Relay (`authenticateS2SPeer`) |
+|---|---|---|---|---|---|
+| `pending` | none | No handshake of ours has completed yet | queued, not delivered | runs a handshake (or the outbound gate) | 403 |
+| `awaiting_approval` | none | The remote queued our handshake for its admin (202) | dropped at enqueue | `pending` | 403 |
+| `active` | none | Peered | delivered | `active` | accepted |
+| `unreachable` | none | Was active; 10 consecutive delivery failures | queued, delivered after recovery | `active` | 403 |
+| `needs_attention` | `auth_failures` | Was active; 5 consecutive 401/403 on delivery | kept until TTL | `rejected` | 403 |
+| `needs_attention` | `peer_reset_detected` | The remote advertises a new instance epoch (reinstalled) | kept until TTL | `rejected` | 403 |
+| `needs_attention` | `repeer_incomplete` | A 200 whose secret the signed `/epoch` round-trip did not verify | kept until TTL | `rejected` | 403 |
+| `rejected` | `denied_by_local_admin` | Our admin denied the remote's request | purged | `rejected` | 403 |
+| `rejected` | `denied_by_remote` | The remote's admin denied us (`403 PEERING_REQUIRES_APPROVAL`, or `/peer/denied`) | purged | `rejected` | 403 |
+| `rejected` | `revoked_by_remote` | The remote's row for us is revoked (`403 PEER_REVOKED`) | purged | `rejected` | 403 |
+| `rejected` | `expired_on_remote` | Our request expired unanswered on the remote (`/peer/denied`, reason `expired`) | purged | `rejected` | 403 |
+| `rejected` | `stale_peering_on_remote` | The remote holds an older peering with us (`409 PEER_EXISTS_RESET_REQUIRED`); its admin has to reset it | purged | `rejected` | 403 |
+| `rejected` | NULL | A row from before migration `0023`: which side refused is unknown | purged | `rejected` | 403 |
+| `revoked` | none | Our admin revoked the peering | purged | `rejected` | 403 |
+
+`/api/federation/epoch` answers any row that is not `revoked`, signed with that row's secret; `/peer/rotate` and the relay require `active`.
+
+**Transitions.**
+
+| From | To | Trigger |
+|---|---|---|
+| (none) | `pending` | `createAutoPlaceholderPeer` (outbox placeholder), `performHandshake`, `prepareAdminHandshakeRow` (`/peer/initiate`, approvals) |
+| (none) | `active` | `/peer/accept` on a new origin with auto-accept on |
+| (none) | `rejected` / `denied_by_local_admin` | inbound deny with no row |
+| `pending` | `pending` (`initiated_by` changes) | an admin handshake claims a traffic row (`'auto'` → `'admin'`); a failed one hands it back |
+| `pending` | `awaiting_approval` | our handshake answered 202 |
+| `pending` | `active` | our handshake answered 200 and `/epoch` verified the secret we sent; or the remote's `/peer/accept` |
+| `pending` | `needs_attention` / `repeer_incomplete` | our handshake answered 200 and `/epoch` did not verify |
+| `pending` | `rejected` / `denied_by_remote`, `revoked_by_remote` | our handshake answered one of the remote's two 403 refusals |
+| `pending` | `rejected` / `stale_peering_on_remote` | our handshake answered `409 PEER_EXISTS_RESET_REQUIRED` and `/epoch` did not verify our secret |
+| `pending`, `awaiting_approval`, `rejected` | `rejected` / `denied_by_local_admin` | inbound deny |
+| `awaiting_approval` | `active` | the remote's `/peer/accept` with the approval token (or auto-accept on) |
+| `awaiting_approval` | `rejected` / `denied_by_remote`, `expired_on_remote` | `/peer/denied` |
+| `active` | `unreachable` | 10 consecutive delivery failures (outbox worker, cause `network_threshold`) |
+| `active` | `needs_attention` / `auth_failures` | 5 consecutive 401/403 on delivery (cause `auth_threshold`) |
+| `active`, `unreachable`, `needs_attention` | `needs_attention` / `peer_reset_detected` | `markPeerReset` (a handshake or probe shows a new epoch) |
+| `unreachable` | `active` | the reachability probe succeeds with an unchanged epoch (`markPeerRecovered`) |
+| `rejected` (remote-side reason, or NULL with auto-accept on) | `active` | the remote's `/peer/accept` (see "Answering a handshake") |
+| `rejected` / `stale_peering_on_remote` | `active` | the backstop's signed `/epoch` verifies our secret |
+| `rejected` / `stale_peering_on_remote` | `pending` | the backstop's `/epoch` answers 403 (the remote dropped its row); one handshake follows, and a transient failure parks the row again |
+| any but `revoked` | `revoked` | admin revoke |
+| `needs_attention` | (deleted) | admin Reset |
+| `revoked`, `rejected`, `needs_attention` | (deleted, then a fresh `pending` row) | `/peer/initiate`; an approval replaces `awaiting_approval`, `rejected` and `revoked` rows the same way |
+| `pending` (auto, nothing queued) | (deleted) | the janitor after 1h, or a transient failure of the handshake that created it |
+
+**Answering a handshake** (`POST /api/federation/peer/accept`). `decideInboundHandshake` (a pure function of our row, its provenance and the setting) decides; the route applies it.
+
+| Our row | Auto-accept on | Auto-accept off |
+|---|---|---|
+| none | create `active` (`initiated_by = 'remote'`) | 202, queued for our admin |
+| `pending` | activate with the caller's secret | activate if `initiated_by = 'admin'`, else 202 queued |
+| `rejected` with a remote-side reason | activate | activate if `initiated_by = 'admin'`, else 202 queued |
+| `awaiting_approval` | activate (token or not) | valid approval token and an admin row: activate; else 202 queued |
+| `active`, `unreachable`, `needs_attention` | `409 PEER_EXISTS_RESET_REQUIRED`; reset detection on a changed epoch | same |
+| `revoked` | `403 PEER_REVOKED` (error text unchanged for older initiators) | same |
+| `rejected` / `denied_by_local_admin` | `403 PEERING_REQUIRES_APPROVAL` | same |
+| `rejected`, NULL reason (legacy) | activate | `403 PEERING_REQUIRES_APPROVAL` |
+
+An established peering (`active`, `unreachable`, `needs_attention`) is never re-keyed by this unauthenticated endpoint: an unreachable peer's handshake is answered like an active one's (409), and a changed epoch runs reset detection. Our admin's own refusals (`revoked`, `denied_by_local_admin`) hold whatever the auto-accept setting.
+
+**Two handshakes at once.** When both instances start a handshake with each other at the same time, each would take the other's secret and end up holding a different one. The rule: on a `pending` (or remote-side `rejected`) row with our own handshake to that origin in flight, the handshake started by the lower origin (plain string order of the normalized origins) wins. The lower side answers the other's `/peer/accept` with `409 PEER_HANDSHAKE_IN_PROGRESS`; the higher side takes the lower side's handshake. Both sides apply the same rule, so one secret survives. A sender that gets `PEER_HANDSHAKE_IN_PROGRESS` leaves its row for the winning handshake to settle and counts the attempt. A release without the rule takes both handshakes; the sender then finds its row active under the other's secret after a 200, checks with the signed `/epoch` which secret the remote holds (the remote keeps ours), and adopts it.
+
+**Sending a handshake.** The four senders (`performHandshake` for auto-peering, `/peer/initiate`, and both approval handlers) share `utils/federationHandshake.ts`: `prepareAdminHandshakeRow` for the admin paths (under `claimAdminHandshake`), `requestPeerAccept` and `interpretAcceptAnswer` for the request, and `runOutboundHandshake` to settle the row from the answer. Every settle is a compare-and-set on the row still being `pending` with the secret we sent; when the row changed in flight, its current state is the outcome (so a transient failure after the remote activated the row reports `active`).
+
+| Answer | Row |
+|---|---|
+| 200 | activate only after a signed `/epoch` round-trip with the secret we sent verifies; the verified epoch is the baseline. Unverified: `needs_attention` / `repeer_incomplete` |
+| 202 | `awaiting_approval`, storing the approval token |
+| `403 PEERING_REQUIRES_APPROVAL` | `rejected` / `denied_by_remote` |
+| `403 PEER_REVOKED`, or a 403 with the revoked error text | `rejected` / `revoked_by_remote` |
+| `409 PEER_EXISTS_RESET_REQUIRED` | signed `/epoch` with our secret: verified → activate (an earlier attempt went through and its answer was lost); else `rejected` / `stale_peering_on_remote` |
+| `409 PEER_HANDSHAKE_IN_PROGRESS` | left `pending` for the remote's handshake; attempt counted |
+| other status, network error, timeout | attempt counted; a row this attempt created is removed unless entries were queued on it; a row an admin claimed goes back to `'auto'` |
+
+Every released Backspace version serves `/api/federation/epoch` (it shipped on 2026-07-01, before v1.0.0), so verify-before-activate parks no released peer. Only a build from before that date, or a server that is not Backspace, answers the verification with 404 and parks in `needs_attention` / `repeer_incomplete`.
+
+**A remote that holds an older peering with us (#309).** A `409 PEER_EXISTS_RESET_REQUIRED` means the remote keeps a row for us under another secret, which only its admin can clear. Retrying the handshake only repeated the refusal, and each retry re-ran reset detection on the remote. So the row is parked as `rejected` / `stale_peering_on_remote` and never retried by a handshake. The recovery keeps working:
+
+1. **The remote admin's Re-peer (the one-click reset recovery).** Instance L was reinstalled; S still holds S's old row for L. L's traffic handshakes S; S detects the new epoch (`needs_attention` / `peer_reset_detected`) and answers 409. L probes `S/api/federation/epoch` with its secret, gets 401, and parks. S's admin clicks Re-peer: Reset deletes S's row, `/peer/initiate` sends `L/peer/accept`. L's parked row is "`rejected` with a remote-side reason", so L activates with S's secret and answers 200 with its epoch; S verifies through `/epoch`, activates, and heals. With auto-accept off on L, a row L's admin started (`initiated_by = 'admin'`) is taken the same way; a traffic row is queued for L's admin.
+2. **The remote admin only resets.** The health-check tick sends one signed `/epoch` per parked row, no handshake: verified → the row activates; `403` (the remote holds no row for us now) → one handshake, which lands on the remote's fresh slot; `401` or anything else → the row stays parked.
+
+A 1.7.0 remote sees, at step 1, one handshake and then only `/epoch` requests it answers 401 (no side effects: no reset detection, no approval request). A 1.7.0 instance in L's place keeps retrying its handshake as before; the survivor no longer re-arms the admin's dismissal on each retry, because `markPeerReset` treats the same observed epoch as the same detection (no new snapshot, journal update or `federation_peer_reset_detected`).
+
+**Pacing.** Paced attempts use `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]`: after n failed attempts the wait is entry n - 1 (clamped), so retries follow 30 s, 1 m, 5 m, then every 15 m. The first attempt is immediate (`last_probe_at IS NULL`). A failed handshake counts on the row whoever started it (worker, DM send, typing warm-up, friend add, `/peer/ensure`), so the worker does not retry right after a user-triggered failure.
 
 ### PEER_UNREACHABLE_THRESHOLD
 
-Defined in `federationWorker.ts` as `10`. After 10 consecutive delivery failures for a peer, `handleOutboxDeliveryFailure` sets `status = 'unreachable'` and, on entry, resets the recovery pacing fields (`probe_attempts = 0`, `last_probe_at = NULL`) so the first probe fires immediately.
+Defined in `federationWorker.ts` as `10`. After 10 consecutive delivery failures for a peer, `handleOutboxDeliveryFailure` moves it to `unreachable`; entering `unreachable` starts the recovery pacing afresh (`probe_attempts = 0`, `last_probe_at = NULL`) so the first probe fires immediately.
 
 **Demand-driven recovery (`processRecoveryTick`)** — A dedicated recovery loop runs on a 5-second tick (`RECOVERY_TICK_INTERVAL_MS`). On each tick it scans `unreachable` peers and, for each, decides whether a probe is due:
 
-- If the peer has ≥1 queued outbox row, the probe interval is `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` indexed (clamped) by `probe_attempts` — fast retries while mail is actually waiting.
+- If the peer has ≥1 queued outbox row, the probe interval follows `RECOVERY_BACKOFF_MS` (see [Pacing](#peer-state)): 30 s after the first failed probe, then 1 m, 5 m and every 15 m, fast while mail is actually waiting.
 - If the peer has no queued mail, it falls back to the `HEALTH_CHECK_INTERVAL_MS` (15-minute) backstop — there is nothing to deliver, so there is no urgency.
 - A probe is due when `last_probe_at IS NULL` (immediate first probe on the unreachable transition) or `now - last_probe_at >= interval`.
 
-When due, it calls `probePeerReachable(origin)` (`utils/federationRecovery.ts`) — an unauthenticated `GET /api/instance/info` with a 10-second timeout (no HMAC; reachability is not trust). On success it calls `markPeerRecovered(peerId)`, which reverts the peer to `active`, zeroes `consecutive_failures`, refreshes `last_seen_at`, resets `probe_attempts`/`last_probe_at`, and broadcasts `federation_peers_changed` (via `onPeerActivated`). On failure it increments `probe_attempts` and stamps `last_probe_at = now` to advance the backoff.
+When due, it calls `probePeerReachable(origin)` (`utils/federationRecovery.ts`) — an unauthenticated `GET /api/instance/info` with a 10-second timeout (no HMAC; reachability is not trust). On success it calls `markPeerRecovered(peerId)`, a transition from `unreachable` to `active` that zeroes `consecutive_failures` and refreshes `last_seen_at` (the transition resets the pacing and runs `onPeerActivated`). A row that left `unreachable` while the probe ran (revoked, reset detected) is left as it is. On failure `recordPeerAttempt` counts the probe.
 
-`processHealthCheckTick` (15-minute interval, matching `ROTATION_GRACE_PERIOD_MS`) no longer owns recovery — it now handles **secret-rotation grace-period finalization and auto-rotation only**.
+`processHealthCheckTick` (15-minute interval, matching `ROTATION_GRACE_PERIOD_MS`) does not own recovery. It finalizes secret rotations, starts auto-rotations, refreshes missing epoch baselines, probes `needs_attention` peers for a reset, and checks rows parked on the remote's older peering (see [Peer state](#peer-state)).
 
 ### Auto-Peering
 
@@ -159,13 +219,13 @@ When the server needs to relay events to an instance it has not yet peered with,
 - **Outbox worker** (`federationWorker.ts:resolvePendingPeers`) — at the start of each outbox tick, starts an `ensurePeered()` handshake for every `pending` peer that has queued outbox entries and whose next attempt is due. The placeholders themselves are created by `createAutoPlaceholderPeer`, subject to the outbound gate — see [Peer-row provenance](#peer-row-provenance). See **Pending-peer handshake pacing** below.
 - **Connection flow** (`POST /api/federation/peer/ensure`) — called by the client when establishing a cross-instance connection, ensuring the two instances are peered before any relay traffic is sent.
 
-**Pending-peer handshake pacing.** The worker's handshake attempts for `pending` rows run detached from the outbox tick: the tick does not wait for them, so an origin that never answers (10-second handshake timeout) does not hold up delivery to active peers or the next tick. `pendingPeerHandshakes` (origin → attempt) keeps a second attempt for the same origin from starting while one is outstanding, and an origin whose handshake `ensurePeered` already has in flight for another caller (`isHandshakeInFlight`) is skipped without counting as an attempt. Attempts are paced by the same mechanism as [unreachable-peer recovery](#peer_unreachable_threshold): `isPeerAttemptDue` over `RECOVERY_BACKOFF_MS` and the row's `last_probe_at` / `probe_attempts`. The first attempt is immediate (`last_probe_at IS NULL`); a `failed` result sets `last_probe_at` to the attempt's start and increments `probe_attempts`, so with the shared indexing the retries follow 1m, 5m, then every 15m. `active`, `rejected`, `pending` (now `awaiting_approval`) and `admin_required` (row removed by the outbound gate) leave nothing to pace. Before this, every pending row with entries was retried on every tick with each handshake awaited in turn, so one unreachable origin cost every tick up to 10 seconds.
+**Pending-peer handshake pacing.** The worker's handshake attempts for `pending` rows run detached from the outbox tick: the tick does not wait for them, so an origin that never answers (10-second handshake timeout) does not hold up delivery to active peers or the next tick. `pendingPeerHandshakes` (origin → attempt) keeps a second attempt for the same origin from starting while one is outstanding, and an origin whose handshake `ensurePeered` already has in flight for another caller (`isHandshakeInFlight`) is skipped without counting as an attempt. Attempts are paced by the same mechanism as [unreachable-peer recovery](#peer_unreachable_threshold): `isPeerAttemptDue` over `RECOVERY_BACKOFF_MS` and the row's `last_probe_at` / `probe_attempts` (schedule under [Pacing](#peer-state)). The handshake counts its own failed attempt on the row, whoever started it. A row whose origin has an inbound approval request waiting for our admin is skipped: that decision settles it. `active`, `rejected`, `pending` (now `awaiting_approval`) and `admin_required` (row removed by the outbound gate) leave nothing to pace. Before this, every pending row with entries was retried on every tick with each handshake awaited in turn, so one unreachable origin cost every tick up to 10 seconds.
 
-**Transient handshake failure.** `performHandshake` inserts its `pending` row (`initiatedBy: 'auto'`) before the request goes out, so traffic queued while the request is in flight lands on that row. In the DM send path this is the usual order: the typing-stop relay's warm-up (`sendCallRelay` with `peeringTimeoutMs: 0`) starts the handshake, then `queueDmRelay` queues the message against the row it finds. On a network error, timeout or non-2xx answer other than the remote's two `403` refusals (see `rejected` below) the row is removed only when it is still `pending` and no `federation_outbox` entry references it (`discardCreatedPendingPeer`, one `DELETE ... WHERE status = 'pending' AND NOT EXISTS`). The status term matters because the remote's own `/peer/accept` can promote the same row to `active` while our request is in flight; a failure of our request afterwards must not delete that peering. A row with entries stays `pending`, the same shape `createAutoPlaceholderPeer` produces, and `resolvePendingPeers` retries it on the pending-peer handshake pacing above. Before this, the delete cascaded the queued messages away and nothing retried the peering until some later event.
+**Transient handshake failure.** `performHandshake` inserts its `pending` row (`initiatedBy: 'auto'`) before the request goes out, so traffic queued while the request is in flight lands on that row. In the DM send path this is the usual order: the typing-stop relay's warm-up (`sendCallRelay` with `peeringTimeoutMs: 0`) starts the handshake, then `queueDmRelay` queues the message against the row it finds. On a network error, timeout or a non-2xx answer that is not one of the remote's settled answers (see [Sending a handshake](#peer-state)) the row is removed only when it is still `pending` and no `federation_outbox` entry references it (`removePeer` with `unlessQueued`, one `DELETE ... WHERE status = 'pending' AND NOT EXISTS`). The status term matters because the remote's own `/peer/accept` can promote the same row to `active` while our request is in flight; a failure of our request afterwards must not delete that peering, and `ensurePeered` then answers `active`. A row with entries stays `pending`, the same shape `createAutoPlaceholderPeer` produces, and `resolvePendingPeers` retries it on the pending-peer handshake pacing above. Before this, the delete cascaded the queued messages away and nothing retried the peering until some later event.
 
-**`rejected` status** — Added to the peer lifecycle. Set when a remote instance refuses auto-peering with one of the two `403` answers a Backspace `/peer/accept` sends: `code: 'PEERING_REQUIRES_APPROVAL'` (its admin denied us) or `error: 'Peering with this instance has been revoked'` with no code (its row for us is `revoked`; matched by the exact string, `REMOTE_REVOKED_ERROR` in `federationPeering.ts`). Both are permanent answers, so neither is retried. Any other `403` (HTML or foreign-shaped JSON from a WAF, an IP block, a proxy deny rule or a default vhost) is not the remote's answer and goes to the transient branch. A revoked remote recovers the peering by re-initiating, which our `/peer/accept` turns from `rejected` into `active`. If the remote instead deletes its revoked row without re-initiating, nothing reaches us: our admin must initiate to recover. The update is conditional on the row still being `pending`: if the remote's own `/peer/accept` promoted the row to `active` while our request was in flight, that row stands and `ensurePeered` answers `active`. This status is sticky: no automatic retry occurs. An admin can clear it by deleting the peer record (then re-initiating), or by manually initiating via `peer/initiate`. An incoming `peer/accept` from a remote admin can also override `rejected` → `active` (treated the same as a `pending` record).
+**`rejected` status.** Set when the remote refuses us or holds an older peering with us, and when our admin denies a remote's request; `status_reason` says which (see [Peer state](#peer-state)). Only the remote's own answers settle a row: `403 PEERING_REQUIRES_APPROVAL`, `403 PEER_REVOKED` (or, from releases before that code, a 403 with the exact error `Peering with this instance has been revoked`, `REMOTE_REVOKED_ERROR` in `federationHandshake.ts`), and `409 PEER_EXISTS_RESET_REQUIRED`. Any other `403` (HTML or foreign-shaped JSON from a WAF, an IP block, a proxy deny rule or a default vhost) is not the remote's answer and stays transient. A `rejected` row is never retried by a handshake. When the remote acts (its admin approves, re-initiates after a revoke, or resets its older row and re-peers), its handshake reaches our `/peer/accept`, which activates a row with a remote-side reason. Our admin can also re-initiate, which replaces the row.
 
-**`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, a request with no matching **admin-initiated** local `pending`/`awaiting_approval` record is queued for review and answered `202` (see [Peer Approval Queue](#peer-approval-queue)); `403 PEERING_REQUIRES_APPROVAL` is reserved for an origin the admin previously denied (a `rejected` row). The determination is made from the local peer table — the row's status *and* its `initiated_by` provenance — never from a client-provided flag.
+**`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, a handshake is taken only on a row our admin started (`initiated_by = 'admin'`); anything else is queued for review and answered `202` (see [Peer Approval Queue](#peer-approval-queue)). `403 PEERING_REQUIRES_APPROVAL` is reserved for an origin our admin denied (`rejected` / `denied_by_local_admin`), with either setting. The full table is under [Answering a handshake](#peer-state). The determination is made from the local peer table — the row's status *and* its `initiated_by` provenance — never from a client-provided flag.
 
 ### Peer Approval Queue
 
@@ -179,27 +239,27 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 - `requested_at` / `expires_at` — Epoch ms; expiry is `requested_at + 30 days`
 - `approval_token` — Single-use 64-hex-char random token issued in the 202 response and forwarded by `/approve`. See [Approval Token Verification](#approval-token-verification).
 
-**Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`. The handler dispatches on `peer_approval_requests.direction`:
+**Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`. Both directions claim the origin (`claimAdminHandshake`; 409 while another handshake with it is in flight), prepare the row with `prepareAdminHandshakeRow` (an existing `active`/`unreachable` row is the result as it stands; a `needs_attention` row answers 409 until an admin resets it; `awaiting_approval`, `rejected` and `revoked` rows are replaced), and settle it with the shared outbound handshake ([Sending a handshake](#peer-state)), so a 200 activates only after the signed `/epoch` round-trip verifies. The handler then dispatches on `peer_approval_requests.direction`:
 
 *Inbound* (remote asked to peer with us):
-1. A fresh `federationPeer` record is created (or existing `rejected`/`awaiting_approval` record is upserted) with status `pending`
+1. The prepared row is `pending` with `initiated_by = 'admin'`
 2. A standard `peer/accept` handshake is sent to the requesting origin (forwarding the stored `approvalToken` per [Approval Token Verification](#approval-token-verification))
-3. On 200 the local peer becomes `active`; on 202 the peer transitions to `awaiting_approval` (mutual-gate); the `peer_approval_requests` row is deleted in both cases
+3. On 200 the local peer becomes `active`; on 202 the peer transitions to `awaiting_approval` (mutual-gate); the `peer_approval_requests` row is deleted in both cases. On a failure the request row stays so the admin can retry (502, or 504 on a timeout)
 
 *Outbound* (local users asked us to peer with a remote — created by the gate in `ensurePeered`):
-1. A fresh `federationPeer` row is created with status `pending` (HMAC generated at this moment — outbound queue rows store `hmac_secret = NULL`)
+1. The prepared row is `pending` (a fresh row gets its secret at this moment; outbound queue rows store `hmac_secret = NULL`)
 2. `peer/accept` is sent to the remote with no `approvalToken` (we are the initiator with no prior token from this remote)
 3. On 200 the peer is promoted to `active`. `onPeerActivated` then fires `fanoutOutboundSubscribers` (see [Outbound peering gate](#outbound-peering-gate)) which writes `kind='approved'` notifications for each subscriber and cascade-deletes the parent `peer_approval_requests` row. The handler does NOT duplicate this cleanup.
 4. On 202 the peer transitions to `awaiting_approval`, captures the returned `approvalToken`, and the queue row + subscribers are LEFT INTACT — they wait for the eventual remote-admin approval. `onPeerActivated` is NOT called on this path.
-5. On 4xx/5xx/network error the peer row is deleted; the queue row is left intact so the admin can retry. Response status is `502`/`503`/`504` accordingly.
+5. On a failure the peer row is removed unless entries were queued on it; the queue row is left intact so the admin can retry. Response status is `503` (unreachable), `504` (timeout) or `502` (the remote answered; `remoteStatus` carries its status).
 6. Response body shape: `{ success, peerStatus: 'active' | 'awaiting_approval', peer? }`. The `peerStatus` field is the outbound-only signal.
 
 **Denial flow** — Admin denies via `POST /api/federation/approval-requests/:id/deny`. The handler dispatches on direction:
 
 *Inbound*:
 1. Server sends `POST {origin}/api/federation/peer/denied` signed with the requester's `hmac_secret` (from the approval request row)
-2. Receiving instance transitions its local peer record from `awaiting_approval` → `rejected`
-3. A local `federationPeer` record is upserted with status `rejected` to block future unsolicited requests from the same origin
+2. Receiving instance transitions its local peer record from `awaiting_approval` to `rejected` / `denied_by_remote` (or `expired_on_remote` for the janitor's `expired` notice)
+3. Our row for the origin becomes `rejected` / `denied_by_local_admin` (inserted when there is none; an `active`, `unreachable`, `needs_attention` or `revoked` row is left as it is). That reason keeps the origin's handshakes refused with `403 PEERING_REQUIRES_APPROVAL` until an admin clears it, whatever the auto-accept setting
 4. The `peer_approval_requests` row is deleted
 
 *Outbound*:
@@ -298,9 +358,9 @@ The other lifecycle exits write notifications and cascade-delete the parent at t
 
 Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`. They issue their own `fetch` and run their own activation logic. The gate does not affect admin power; admins retain full ability to pre-peer or approve outbound regardless of the setting.
 
-**`/peer/initiate` and an existing `pending` row.** A row with `initiated_by = 'auto'` is taken over instead of refused: the route keeps the row, its `hmac_secret` and its queued outbox entries, sets `initiated_by = 'admin'` and runs its handshake with that secret. On `202` the row becomes the admin-initiated `awaiting_approval` row; on `200` it activates (or parks in `needs_attention` if `/epoch` does not verify) as a fresh row would. On a failure (network error, timeout, non-2xx, `409 PEER_EXISTS_RESET_REQUIRED`) the row is handed back unchanged apart from the attempt: `initiated_by = 'auto'`, `probe_attempts + 1`, `last_probe_at` = the attempt's start, so the outbox worker resumes its paced retries; a row the request created itself is still deleted. A `pending` row an admin or the remote created still answers `409`.
+**`/peer/initiate` and an existing `pending` row.** A row with `initiated_by = 'auto'` is claimed for the admin instead of refused: `prepareAdminHandshakeRow` keeps the row, its `hmac_secret` and its queued outbox entries, sets `initiated_by = 'admin'`, and the handshake runs with that secret. It then settles like any other ([Sending a handshake](#peer-state)); on a transient failure the row goes back to `initiated_by = 'auto'` with the attempt counted, so the outbox worker resumes its paced retries. A `pending` row an admin or the remote created still answers `409`.
 
-**One handshake per origin.** `/peer/initiate` claims the origin with `claimAdminHandshake` (`utils/federationPeering.ts`) before it touches any row, and releases it when the request settles. The claim fails, and the route answers `409 "already in progress"`, while `ensurePeered` has a handshake with the origin in flight; while the claim is held, `ensurePeered` returns `failed` for the origin without sending anything, and the outbox worker and the janitor leave the row alone (`isHandshakeInFlight`). Without it, two `/peer/accept` requests for one origin raced on the remote, and the loser's `409 PEER_EXISTS_RESET_REQUIRED` made `/peer/initiate` delete the row the winner had just activated.
+**One handshake per origin.** `/peer/initiate` and both approval handlers claim the origin with `claimAdminHandshake` (`utils/federationPeering.ts`) before it touches any row, and releases it when the request settles. The claim fails, and the route answers `409 "already in progress"`, while `ensurePeered` has a handshake with the origin in flight; while the claim is held, `ensurePeered` returns `failed` for the origin without sending anything, and the outbox worker and the janitor leave the row alone (`isHandshakeInFlight`). Without it, two `/peer/accept` requests for one origin raced on the remote, and the loser's `409 PEER_EXISTS_RESET_REQUIRED` made `/peer/initiate` delete the row the winner had just activated.
 
 ### Peer-row provenance
 
@@ -308,7 +368,7 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 
 | Value | Written by | Meaning |
 |-------|-----------|---------|
-| `'admin'` | `POST /peer/initiate` (a fresh row, or an `'auto'` pending row it takes over; a takeover whose handshake fails goes back to `'auto'`); the inbound, outbound, and deny handlers in `routes/federation/handlers/approvals.ts` | A local admin explicitly authorized (or refused) peering with this origin. |
+| `'admin'` | `prepareAdminHandshakeRow` for `POST /peer/initiate` and both approval handlers (a fresh row, or an `'auto'` pending row it claims; a claimed row whose handshake fails transiently goes back to `'auto'`); the inbound deny handler when it inserts the refusal row | A local admin explicitly authorized (or refused) peering with this origin. |
 | `'auto'` | `createAutoPlaceholderPeer` (the outbox placeholder), `performHandshake` inside `ensurePeered` | Local traffic brought the origin up. No admin ruled on it. |
 | `'remote'` | the new-peer branch of `POST /peer/accept` | The remote instance introduced itself and we accepted (only reachable with `autoAcceptPeering=1`). |
 
@@ -333,7 +393,7 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/peers` | GET | JWT + admin | List all peers (secret excluded) |
 | `/api/federation/peers/:id` | PATCH | JWT + admin | Update peer settings (auto-rotation interval) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
-| `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
+| `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete a revoked or rejected peer record (400 otherwise) |
 | `/api/federation/peers/:id/reset` | POST | JWT + admin | Delete peer record (cascade-deletes outbox). Only admissible in `needs_attention` state. |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
 | `/api/federation/peers/:id/recheck` | POST | JWT + admin | Run an immediate reachability probe on an unreachable peer; 400 unless status='unreachable'; 200 `{ recovered, status }` |
@@ -400,20 +460,22 @@ HMAC-authenticated in **both directions**: the request is signed (only a peer ho
 The epoch is a **detection signal only, never an authorization signal.** When a peer behind a known origin advertises an epoch that differs from the trusted baseline (`peer_instance_id`), the instance was wiped and a new incarnation stood up on the same domain. `markPeerReset(peerId, origin, deadEpoch, observedEpoch)` routes the peer for admin attention and snapshots the dead incarnation — but performs **NO rekey, NO tombstone, NO handle change, NO content deletion.** The actual data heal fires only later, from `onPeerActivated` after an admin-authenticated re-peer (design §6). Because detection grants no capability and destroys nothing, it is safe to fire on an unauthenticated signal: the worst a spoofed detection can do is flag a peer for admin review (admin-reversible nuisance).
 
 In a single transaction, `markPeerReset`:
-1. Sets the peer `status='needs_attention'`, `needs_attention_reason='peer_reset_detected'`, and `observed_peer_instance_id=observedEpoch`. **`peer_instance_id` (the trusted baseline) and `hmac_secret` are left untouched** — an unauthenticated observation never rekeys trust; the observed-but-untrusted epoch lives only in `observed_peer_instance_id`.
+1. Moves the peer from `active`, `unreachable` or `needs_attention` to `needs_attention` / `peer_reset_detected` (a `transitionPeer`, so a revoked or deleted row is left alone and nothing else in this list happens) and records `observed_peer_instance_id=observedEpoch`. **`peer_instance_id` (the trusted baseline) and `hmac_secret` are left untouched** — an unauthenticated observation never rekeys trust; the observed-but-untrusted epoch lives only in `observed_peer_instance_id`.
 2. **Snapshots the dead incarnation:** sets `users.federation_heal_pending = 1` for every non-deleted user whose `home_instance` matches the origin. The match keys on `extractDomain(origin)` (bare domain, the canonical `home_instance` form) and defensively also matches the `https://`/`http://`-prefixed forms so any legacy full-URL straggler is caught (`homeInstanceMatch()`). Any stub created *after* detection (e.g. a friend-add reaching the new incarnation directly) is un-flagged and survives the heal.
 3. **Journals the dead incarnation durably** by upserting a `federation_reset_events` row keyed by origin: `{ dead_epoch=deadEpoch, new_epoch=NULL, detected_at, resolved_at=NULL, stub_count, orphaned_account_count }`. `stub_count` counts flagged pure S2S stubs (`password_hash = '!federation-replicated'`); `orphaned_account_count` counts flagged real accounts. This row survives the peer-row deletion that Re-peer performs, preserving `dead_epoch` for the false-positive guard (design §6.1) and the admin surface.
-4. After the transaction, broadcasts `federation_peers_changed` and `federation_peer_reset_detected {origin}` to admins.
+4. After the transaction, runs the transition's effects (`federation_peers_changed`; `onPeerDeactivated` when the peer was active) and sends `federation_peer_reset_detected {origin}` to admins.
+
+**Seeing the same incarnation again is not a new detection.** When the row is already `needs_attention` / `peer_reset_detected` with the same `observed_peer_instance_id` (the reset instance handshakes or is probed once more), `markPeerReset` does nothing: no new snapshot (which would flag stubs created since, which must survive the heal), no journal update (which would clear the admin's dismissal) and no new event.
 
 **Idempotent / double-reset:** if an *unresolved* `federation_reset_events` row already exists for the origin (the peer reset again before an admin resolved the first), the original `dead_epoch` and `detected_at` are **preserved** (that is the incarnation whose users are already snapshotted) — only the summary counts are refreshed. `dead_epoch` is never overwritten on an unresolved row. A prior *resolved* reset starts a fresh journal entry.
 
 **Detection sources (all three wired in this feature):**
-- **Inbound handshake** — `/peer/accept` landing on an `active`/`needs_attention` row (`routes/federation.ts`): before the idempotent-200 return, `if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) markPeerReset(...)`. The guard still returns 200 and **still does not rekey** — the anti-hijack property is preserved verbatim; detection is layered on top.
+- **Inbound handshake** — `/peer/accept` landing on an `active`, `unreachable` or `needs_attention` row (`routes/federation/handlers/peerHandshake.ts`): before the 409 refusal, `if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) markPeerReset(...)`. The refusal never re-keys; detection is layered on top.
 - **Reachability probe (`unreachable` peers)** — `probePeerReachable()` (`utils/federationRecovery.ts`) now parses `instanceId` from the `/api/instance/info` response (returning `{ reachable, instanceId }`; a missing/unparseable epoch is `null`, never an error). The shared decision helper `recoverOrDetectReset(peer, result)` — used by both the background recovery tick (`processRecoveryTick`) and the manual recheck endpoint — routes to `markPeerReset` (returning `'reset_detected'`) when the peer has a non-null `peer_instance_id` and the probed epoch differs, and **does NOT call `markPeerRecovered`**. Rationale: a genuinely reset peer's HMAC secret is desynced, so flipping it back to `active` via a reachability probe would resume relay against a dead secret. Only when the probed epoch matches the baseline (or the baseline is null / epoch unknown) does the normal recovery-to-active path run. The manual recheck endpoint returns `{ recovered: false, status: 'needs_attention' }` on `'reset_detected'`.
 - **`needs_attention`-peer reset probe** — closes design §4.1's remaining sub-case. A reset peer can reach `needs_attention` via the **auth-failure path** — its HTTP is up but returns 401/403 because the new incarnation has no peer row for us, so `consecutive_auth_failures` crosses `AUTH_FAILURE_THRESHOLD` — **without ever transitioning through `unreachable`**. The `unreachable`-only 5-second recovery probe therefore never observes its epoch change, so no journal is created; a later manual Re-peer would then run `healResetIncarnation` with no journal row → no heal → the split-brain persists. The shared per-peer unit is **`detectResetForPeer(peer)`** (`utils/federationRecovery.ts`): for a peer with a non-null baseline it runs one `probePeerReachable` (`/instance/info` GET) and calls `markPeerReset` on an observed epoch mismatch. It is invoked from **three** places, so detection latency is near-zero rather than up to a full health-check cycle:
   1. **Event-driven, at the transition** — the instant the outbox worker moves a peer to `needs_attention` on the auth-failure threshold (`federationWorker.ts`), it fires `detectResetForPeer` for that peer (fire-and-forget). This is the common live case: the moment the connection is declared broken, the epoch is checked and "Re-peer & heal" surfaces immediately.
   2. **Worker-startup sweep** — `startFederationWorkers()` runs `detectResetOnNeedsAttentionPeers()` once on boot, catching any peer already parked in `needs_attention` (reset while this instance was down, or transitioned before this probe shipped).
-  3. **15-minute health-tick backstop** — `detectResetOnNeedsAttentionPeers()` also still runs at the end of `processHealthCheckTick` as the periodic safety net. It selects peers with `status='needs_attention'` AND `peer_instance_id IS NOT NULL` AND `needs_attention_reason` not already `peer_reset_detected` (those already carry a journal) and calls `detectResetForPeer` on each.
+  3. **15-minute health-tick backstop** — `detectResetOnNeedsAttentionPeers()` also still runs at the end of `processHealthCheckTick` as the periodic safety net. It selects peers with `status='needs_attention'` AND `peer_instance_id IS NOT NULL` AND `status_reason` not already `peer_reset_detected` (those already carry a journal) and calls `detectResetForPeer` on each.
   **Detection only:** unlike `recoverOrDetectReset`, none of these ever flips a `needs_attention` peer to `active` (a match / unknown / unreachable result is a pure no-op) — that peer's secret is desynced and only an admin-authenticated re-peer restores trust. Neither `peer_instance_id` nor `hmac_secret` is touched.
 
 Legacy peers advertise no epoch (`instanceId` null), so detection requires a non-null observed epoch differing from a non-null stored baseline — legacy peers never trigger it, and the existing `auth_failures → needs_attention → manual Reset` path continues unchanged for them.
@@ -433,7 +495,7 @@ Detection (`markPeerReset`) only snapshots + journals + notifies; it destroys no
 
 **Two mandatory guards, in order:**
 
-1. **Reason gate.** `onPeerActivated` fires on non-handshake paths too. Only genuine re-handshake reasons carry a freshly-exchanged, trustworthy epoch. `healResetIncarnation` returns immediately unless `reason` is in the allow-list `HANDSHAKE_ACTIVATION_REASONS` (typed `ReadonlySet<PeerActivationReason>`): `initiate_accepted`, `accept_new`, `accept_pending`, `accept_rejected_override`, `accept_awaiting_approval`, `accept_awaiting_approval_fallback`, `approval_handshake`, `ensure_peered`. The two EXCLUDED reasons — `health_check_recovery` (reachability flip in `markPeerRecovered`) and `startup_bootstrap` (boot re-scan) — flip a peer to `active` **without** a handshake, so their baseline is stale (still equals the journaled `dead_epoch`). Without the gate they would hit the `deadEpoch === newEpoch` false-alarm branch and silently resolve the journal + clear the flags WITHOUT healing, permanently burying the bug. Gated out, they leave the journal fully intact for a later genuine re-handshake to heal.
+1. **Reason gate.** `onPeerActivated` fires on non-handshake paths too. Only genuine re-handshake reasons carry a freshly-exchanged, trustworthy epoch. `healResetIncarnation` returns immediately unless `reason` is in the allow-list `HANDSHAKE_ACTIVATION_REASONS` (typed `ReadonlySet<PeerActivationReason>`): `initiate_accepted`, `accept_new`, `accept_pending`, `accept_rejected_override`, `accept_awaiting_approval`, `accept_awaiting_approval_fallback`, `approval_handshake`, `ensure_peered`, `stale_peering_verified` (a parked row activated by a signed `/epoch` round-trip, whose epoch is authenticated). The two EXCLUDED reasons — `health_check_recovery` (reachability flip in `markPeerRecovered`) and `startup_bootstrap` (boot re-scan) — flip a peer to `active` **without** a handshake, so their baseline is stale (still equals the journaled `dead_epoch`). Without the gate they would hit the `deadEpoch === newEpoch` false-alarm branch and silently resolve the journal + clear the flags WITHOUT healing, permanently burying the bug. Gated out, they leave the journal fully intact for a later genuine re-handshake to heal.
 
 2. **Epoch comparison (false-positive guard).** For a gated-in reason, look up the UNRESOLVED `federation_reset_events` row for the origin (none → return):
    - **`journal.dead_epoch === newEpoch`** — the re-peer confirmed the SAME incarnation (spurious/spoofed detection, or an admin re-peer to a never-reset live peer). **NO tombstone** — the user-level snapshot flags alone must never authorize destruction; only a confirmed epoch change does. Clears `federation_heal_pending` for the origin and resolves the journal (`new_epoch`, `resolved_at`).
@@ -455,23 +517,21 @@ Detection (`markPeerReset`) only snapshots + journals + notifies; it destroys no
 
 **Reset-events admin surface (`GET /api/federation/reset-events`).** Admin-only. Returns the durable `federation_reset_events` journal (each event carrying a nullable `acknowledgedAt`) joined with each origin's current detached real accounts (`federation_home_orphaned = 1`, `homeInstanceMatch`), each with `ownedSpaces`, `spaceMemberCount`, and authored-`messageCount` for disposition. Response type `FederationResetEventsResponse` (`{ events: FederationResetEvent[] }`, each event carrying `orphanedAccounts: FederationOrphanedAccount[]`). The endpoint returns **all** events (including acknowledged ones, for audit); the client filters to `acknowledgedAt === null`. Disposition actions — one-click Re-peer (`/peers/:id/reset` → `/peer/initiate`), full-purge Remove (`DELETE /api/admin/users/:id`, owns-spaces → transfer first) for genuinely-abandoned detached accounts, and a non-destructive **Dismiss** (`POST /api/federation/reset-events/acknowledge` with `{ origin }`, idempotent — sets `acknowledged_at`) that hides the card without touching the accounts (detached accounts keep working locally). See `admin.md` "FederationPanel" and `client-federation.md` §8.
 
-**`needsAttentionReason` on the peer API.** `GET /api/federation/peers` returns `needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null` per peer, so the admin UI distinguishes a reset-detected peer (persistent Reset-cleanup banner + one-click Re-peer) from a generic auth-failure peer (plain "Reset Peering") and from a peer whose Re-peer could not be cryptographically verified (`repeer_incomplete` — see "Trust re-establishment contract"). `repeer_incomplete` is a nullable-TEXT value only; no schema migration.
+**`statusReason` on the peer API.** `GET /api/federation/peers` returns `statusReason` per peer (`FederationPeerStatusReason | null`, see [Peer state](#peer-state)), so the admin UI tells a reset-detected peer (persistent Reset-cleanup banner and one-click Re-peer) from a generic auth-failure peer (plain "Reset Peering"), from a peer whose Re-peer could not be verified (`repeer_incomplete`), and each kind of rejected peer apart. The panel shows the reason on the peer row.
 
 ### Trust re-establishment contract
 
-The peering handshake must never report success when trust was not actually re-established — a false success re-creates the permanent HMAC desync ("split-brain") the epoch feature exists to prevent. Two changes make the recovery handshake honest end-to-end, and the **anti-hijack guard is unchanged** (an unauthenticated `/peer/accept` never adopts a caller's secret over an existing `active`/`needs_attention` row; no path auto-rekeys).
+The peering handshake must never report success when trust was not actually re-established: a false success re-creates the permanent HMAC desync ("split-brain") the epoch feature exists to prevent. Two rules make it honest end to end, and an unauthenticated `/peer/accept` never adopts a caller's secret over an established (`active`, `unreachable` or `needs_attention`) row; no path re-keys one automatically.
 
-**1. Responder honest refusal (`POST /api/federation/peer/accept`).** When a peer row already exists in `active` OR `needs_attention`, the endpoint returns `409 { accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error, instanceName, instanceId }` instead of the old false `200 { accepted: true }`. It still does not adopt the caller's `hmac_secret` (identical guard behavior — only the reported status/body changed), and the epoch-mismatch `markPeerReset` detection still fires before the return. Legacy initiators that only read `response.ok` now fail loudly instead of silently desyncing; new initiators special-case the code.
+**1. Responder honest refusal (`POST /api/federation/peer/accept`).** When a peer row already exists in `active`, `unreachable` or `needs_attention`, the endpoint returns `409 { accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error, instanceName, instanceId }` instead of the old false `200 { accepted: true }`. It still does not adopt the caller's `hmac_secret` (identical guard behavior — only the reported status/body changed), and the epoch-mismatch `markPeerReset` detection still fires before the return. Legacy initiators that only read `response.ok` now fail loudly instead of silently desyncing; new initiators special-case the code.
 
-**2. Initiator verify-before-activate (`POST /api/federation/peer/initiate`).**
-- On remote `409 PEER_EXISTS_RESET_REQUIRED`: the initiator DELETES its own pending row (keeping its slot clean so the remote's own Re-peer can later land on a fresh responder slot) and returns `409 { code: 'PEER_EXISTS_RESET_REQUIRED', error }`.
-- On remote 200: the initiator performs a signed `fetchPeerEpoch` (`POST /api/federation/epoch`) round-trip **before** activating. Null (secret doesn't authenticate / `/epoch` absent / unreachable) → the peer is parked in `needs_attention` with `needs_attention_reason='repeer_incomplete'` and the response is `200 { peer, verified: false }`. Success → the peer activates (storing the cryptographically-**verified** epoch as `peer_instance_id`) and the response is `200 { peer, verified: true }`.
+**2. Initiator verify-before-activate (every sender).** All four senders of `/peer/accept` (auto-peering, `/peer/initiate`, both approval handlers) settle through `runOutboundHandshake` ([Sending a handshake](#peer-state)). On a 200 the sender runs a signed `/epoch` round-trip with the secret it sent before activating; the verified epoch becomes `peer_instance_id` (the 200 body's epoch is not signed and is not used as the baseline). Unverified: `needs_attention` / `repeer_incomplete` (`/peer/initiate` answers `200 { peer, verified: false }`). On `409 PEER_EXISTS_RESET_REQUIRED` the row is parked as `rejected` / `stale_peering_on_remote` rather than retried or deleted; the remote's own Re-peer is accepted on it ([Peer state](#peer-state), "A remote that holds an older peering with us").
 
 **Recovery flows.**
-- **Common reset case (one click from the survivor).** When the reset box makes contact, the survivor's detection (`markPeerReset`) moves the survivor's row to `needs_attention`. The survivor's **Re-peer** (reset local row → `/peer/initiate`) then lands on the reset box's clean responder slot → both sides re-key and the initiator verifies via `fetchPeerEpoch` → both active with a matching secret. If the reset box initiated first, the responder's new 409 refusal (change 1) means the reset box deletes its pending row rather than false-activating, so the survivor's subsequent Re-peer still finds a clean slot.
+- **Common reset case (one click from the survivor).** When the reset box makes contact, the survivor's detection (`markPeerReset`) moves the survivor's row to `needs_attention`. The survivor's **Re-peer** (reset local row → `/peer/initiate`) then lands on the reset box's clean responder slot → both sides re-key and the initiator verifies via `fetchPeerEpoch` → both active with a matching secret. If the reset box initiated first, the survivor's 409 refusal (rule 1) parks the reset box's row as `rejected` / `stale_peering_on_remote` rather than activating it, and the survivor's later Re-peer is accepted on that row. The exact sequence on both instances is under [Peer state](#peer-state).
 - **Bidirectional-stale case.** If both sides still hold a conflicting row, each side that holds one must reset once — the honest `409` / `verified:false` reporting tells the admin exactly that ("the remote still holds stale peering for you; its admin must reset their side, then Re-peer again"), instead of falsely reporting success on a dead peering.
 
-**Backward-compat honesty (limitation, stated explicitly).** A genuinely pre-Phase-1 peer whose `/api/federation/epoch` returns 404 cannot be cryptographically verified, so `/peer/initiate` parks it in `needs_attention` (`repeer_incomplete`) rather than activating. This is intentional fail-safe: a legacy responder that returns 200 without adopting the secret is indistinguishable from a healthy fresh peering, so we refuse to trust it blind. All current Backspace instances ship `/epoch` (Phase 1), so this only affects truly pre-Phase-1 peers — it is an honest limitation, not a silent behavior change for healthy peers.
+**Backward compatibility.** A server whose `/api/federation/epoch` answers 404 cannot be verified, so any sender parks it in `needs_attention` (`repeer_incomplete`) rather than activating: a responder that returns 200 without adopting the secret is otherwise indistinguishable from a healthy fresh peering. `/epoch` shipped on 2026-07-01, before v1.0.0, so no released Backspace version is affected; only a build from before that date or a server that is not Backspace is.
 
 **Handshake `sourceOrigin` honors `PUBLIC_ORIGIN`.** `resolveLocalOrigin()` (`routes/federation.ts`) now delegates to `getOurOrigin()`, so the origin advertised in the handshake `sourceOrigin` is byte-identical to the `X-Federation-Origin` used for all authenticated S2S requests. Previously it used `https://${DOMAIN}` and ignored `PUBLIC_ORIGIN`, which silently desynced the responder's peer-row key from the auth origin on any instance where `PUBLIC_ORIGIN != https://DOMAIN` — producing permanent `403 Not peered`. See "Public Origin Override" below.
 
@@ -535,8 +595,8 @@ These S→C events are pushed to the acting user's connected clients by the fede
 
 | Event | Pushed when | Payload |
 |-------|-------------|---------|
-| `federation_peer_rejected` | Outbox worker's auto-peering gets one of the remote's two refusals: `403 PEERING_REQUIRES_APPROVAL`, or the codeless `403` revoked answer. Any other `403` is transient | `{ peerId: string, origin: string }` |
-| `federation_peer_active` | A previously `rejected` peer transitions to `active` (e.g., via manual `peer/initiate` or incoming `peer/accept`) | `{ peerId: string, origin: string }` |
+| `federation_peer_rejected` | A peer enters `rejected` (any reason) or `needs_attention` / `auth_failures`, sent to the local users who had something queued for it | `{ peerOrigin, peerLabel?, reason, reasonCode?: FederationPeerStatusReason, affectedContexts }`. `reason` is English fallback text; clients show localized text for `reasonCode` |
+| `federation_peer_active` | A peer enters `active`, from any state, sent to every online user | `{ peerOrigin: string }` |
 | `federation_peer_reset_detected` | A peer's advertised instance epoch differs from the trusted baseline (wipe-and-reinstall on the same domain) — emitted by `markPeerReset` after routing the peer to `needs_attention` | `{ origin: string }` (admin-only, via `sendToAdmins`) |
 
 ---
@@ -1040,7 +1100,7 @@ Before #372 the outbox kept one row per (peer, entity id) and merged newer event
 
    After the transaction, and unable to change the rows: rollback callbacks for the refusals, logging, and the peer's bookkeeping (`lastSeenAt`, `consecutiveFailures = 0`, `consecutiveAuthFailures = 0`, `remoteMaxUploadSize`). A failure there is logged and the batch stays settled
 6. **Auth refused** (401/403): every row moves to its next backoff step, and `handleRelayAuthRefusal` counts the failure (see [Authentication-failure handling](#authentication-failure-handling-401--403))
-7. **Failed** (network error, timeout, a non-2xx, an unreadable answer): the peer may have applied the batch. `handleOutboxDeliveryFailure` moves every row to its next backoff step, increments the peer's `consecutiveFailures` and sets `lastFailureAt`; at `PEER_UNREACHABLE_THRESHOLD (10)` `markPeerUnreachable` (the outbox's one peer-status write) sets `unreachable` and resets recovery pacing
+7. **Failed** (network error, timeout, a non-2xx, an unreadable answer): the peer may have applied the batch. `handleOutboxDeliveryFailure` moves every row to its next backoff step, increments the peer's `consecutiveFailures` and sets `lastFailureAt`; at `PEER_UNREACHABLE_THRESHOLD (10)` `markPeerUnreachable` moves an `active` peer to `unreachable` through `transitionPeer` (cause `network_threshold`), which resets recovery pacing and runs the deactivation hook
 8. **Aborted** (the worker is stopping): nothing changes; the rows stay offered and due
 
 **Expiry.** The janitor's TTL sweep (`expireOutboxQueues`) expires each row by its own `expiresAt`. In a DM message's queue an expired row also takes the rows behind it, since an edit or delete of a message the peer may never have got means nothing on its own. Behind an expired state or event row nothing else goes: a state row carries its entity's whole state, and an event (a group's ownership transfer behind a `member_add` the peer kept refusing) is a fact of its own, released when the row ahead of it expires. Rows ahead of an expired row stay.
@@ -1086,7 +1146,7 @@ Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from 
 
 Test instances divide these waits, see [Retry backoff divisor (test only)](#retry-backoff-divisor-test-only).
 
-The schedule above (`BACKOFF_SCHEDULE_MS`) paces per-entry retries. Peer-level recovery from `unreachable` is separate and demand-driven: `processRecoveryTick` probes unreachable peers on `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` while they have queued mail (15-min backstop when silent), paced by the per-peer `last_probe_at` / `probe_attempts` columns and the `probePeerReachable` helper in `utils/federationRecovery.ts`. See [PEER_UNREACHABLE_THRESHOLD](#peer_unreachable_threshold).
+The schedule above (`BACKOFF_SCHEDULE_MS`) paces per-entry retries. Peer-level recovery from `unreachable` is separate and demand-driven: see [PEER_UNREACHABLE_THRESHOLD](#peer_unreachable_threshold) and [Pacing](#peer-state).
 
 ### Authentication-failure handling (401 / 403)
 
@@ -1094,7 +1154,8 @@ When a relay response is 401 (HMAC rejected) or 403 (remote's peer row is non-ac
 
 - Outbox delivery halts (the existing `status = 'active'` filter on the delivery query excludes `needs_attention`).
 - `hmac_secret` is preserved (admin can inspect; no silent rotation).
-- Affected local users receive `federation_peer_rejected` WS events with reason "Federation trust broken — admin must reset peering".
+- The transition is a compare-and-set from `active` with `status_reason = 'auth_failures'`: a peer an admin revoked or reset while the delivery was in flight is left as it is.
+- Affected local users receive `federation_peer_rejected` with `reasonCode: 'auth_failures'`.
 - Admins receive `federation_peers_changed`.
 
 The worker NEVER re-handshakes via unauthenticated `/peer/accept` in response to a 401/403. The safeguard at `/peer/accept` (idempotent-200-no-update on `active` OR `needs_attention` peers) is what prevents silent HMAC rotation; the worker's job is to respect that signal and surface it to admins rather than loop. Recovery is via the admin "Reset peering" action, which deletes the local peer row and requires out-of-band re-peering.
@@ -1889,34 +1950,17 @@ Every transition of `federation_peers.status` to `active` invokes `onPeerActivat
 1. **`resetOutboxBackoff`** — sets `nextRetryAt = now` and `attempts = 0` for every outbox entry belonging to the peer. Entries that accumulated exponential backoff before the peer went unreachable are immediately eligible again. Attempts counter is also reset so a freshly-healthy peer's next failure starts at `BACKOFF_SCHEDULE_MS[0]` (30s), not wherever the counter left off.
 2. **`syncPeerMutationLog`** (`utils/federationSync.ts`) — pulls the peer's mutation log from this instance's cursors for it, every context: DM, friend, profile, in that order, each paginated. See [Pull sync](#pull-sync).
 
-#### Call sites (must remain exhaustive)
+#### Where it is called
 
-| File | Context | Reason |
-|---|---|---|
-| `routes/federation.ts` | `/peer/initiate` 200 activation | `initiate_accepted` |
-| `routes/federation.ts` | `/peer/accept` existing-rejected override | `accept_rejected_override` |
-| `routes/federation.ts` | `/peer/accept` existing-awaiting_approval | `accept_awaiting_approval` |
-| `routes/federation.ts` | `/peer/accept` existing-pending | `accept_pending` |
-| `routes/federation.ts` | `/peer/accept` new-peer | `accept_new` |
-| `routes/federation.ts` | `/approval-requests/:id/approve` success | `approval_handshake` |
-| `utils/federationWorker.ts` | Health check unreachable → active | `health_check_recovery` |
-| `utils/federationPeering.ts` | `ensurePeered/performHandshake` 200 | `ensure_peered` |
-| `utils/federationWorker.ts` | Startup scan (status=active, lastSyncedAt=0) | `startup_bootstrap` |
-
-HTTP handler sites dispatch fire-and-forget (`.catch(log)`) so the response is not blocked by sync-pull pagination. Worker-internal sites `await` since the worker tick is already async.
+The peer state machine (`utils/federationPeerState.ts`) calls it on every transition into `active`, with the transition's activation reason: `initiate_accepted`, `accept_new`, `accept_pending`, `accept_rejected_override`, `accept_awaiting_approval`, `accept_awaiting_approval_fallback`, `approval_handshake`, `ensure_peered`, `stale_peering_verified` (a parked row whose `/epoch` now verifies) and `health_check_recovery`. `startupBootstrapSync` calls it with `startup_bootstrap`. Nothing else calls it; see [Peer state](#peer-state). The effects run after the write commits and are not awaited by HTTP handlers.
 
 Concurrent activations for the same peer are deduplicated via an in-flight promise map keyed by `peerId`.
 
 ### onPeerDeactivated
 
-Mirror of `onPeerActivated` for the transition *out* of `active`. Invoked wherever `federation_peers.status` is written to `unreachable`, `needs_attention`, `rejected`, or `revoked`. Responsibility: sweep `ConnectionManager.federatedCalls` for entries whose `federatedCallHost` matches the deactivated peer and evict them — emitting `dm_call_undeliverable { phase: 'host_unreachable', terminal: true }` to each entry's `ringedUserIds`. See `docs/systems/voice.md` for the client teardown contract.
+Mirror of `onPeerActivated` for the transition *out* of `active`. Responsibility: sweep `ConnectionManager.federatedCalls` for entries whose `federatedCallHost` matches the deactivated peer and evict them — emitting `dm_call_undeliverable { phase: 'host_unreachable', terminal: true }` to each entry's `ringedUserIds`. See `docs/systems/voice.md` for the client teardown contract.
 
-**Call sites (exhaustive — grep `onPeerDeactivated(` to audit):**
-- `utils/federationWorker.ts` handleOutboxDeliveryFailure when status flips to `unreachable`
-- `utils/federationWorker.ts` auth-failure path when status flips to `needs_attention`
-- `utils/federationWorker.ts` resolvePendingPeers case `'rejected'`
-- `routes/federation.ts` admin revoke endpoint
-- `utils/federationPeering.ts` performHandshake 403 path (`settleRejectedHandshake`, only when the row was still `pending`)
+**Where it is called:** the peer state machine calls it on every transition out of `active`, with the transition's cause (`auth_threshold`, `admin_revoked`, `reset_detected`, ...). That includes the outbox worker's unreachable threshold (`markPeerUnreachable`, cause `network_threshold`). No other code calls it.
 
 Deduplicated by peerId using a **separate** `inFlightDeactivation` map (not shared with activation) so flapping peers retain clean activate-then-deactivate ordering.
 

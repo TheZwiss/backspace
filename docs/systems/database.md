@@ -419,21 +419,21 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | origin | text NOT NULL UNIQUE | | `https://domain.tld` |
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
-| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention |
-| initiatedBy | text NOT NULL | `'auto'` | Provenance — who caused this row to exist. `'admin'` = `POST /peer/initiate` or an approve/deny decision in `routes/federation/handlers/approvals.ts`; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
+| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention. Written only by `utils/federationPeerState.ts`; states and transitions in [federation.md → Peer state](federation.md#peer-state). |
+| initiatedBy | text NOT NULL | `'auto'` | Provenance — who caused this row to exist. `'admin'` = `POST /peer/initiate`, an approval, or an inbound deny that inserted the row; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |
 | consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
-| lastProbeAt | integer | | Epoch ms of the last reachability probe in the current `unreachable` episode. `NULL` = probe immediately due (set on entry into `unreachable` and on recovery). Paces `processRecoveryTick`. |
-| probeAttempts | integer NOT NULL | 0 | Consecutive failed recovery probes; indexes `RECOVERY_BACKOFF_MS`. Reset to 0 on recovery and on entry into `unreachable`. Counter — never null. Migration `0006_spicy_scourge`. |
+| lastProbeAt | integer | | Epoch ms when the last paced attempt started: a reachability probe for an `unreachable` row, a handshake for a `pending` one. `NULL` = next attempt immediately due (set on entry into `pending`, `unreachable` and `active`). |
+| probeAttempts | integer NOT NULL | 0 | Failed paced attempts since the pacing began; after n failures the wait is `RECOVERY_BACKOFF_MS[n - 1]`. Reset to 0 on entry into `pending`, `unreachable` and `active`. Counter — never null. Migration `0006_spicy_scourge`. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
 | approvalToken | text | | Single-use 64-hex-char token stored when this row is in `awaiting_approval` (received from remote's 202 response). Verified against the inbound `/peer/accept` `approvalToken` field before promoting to `active`. Cleared (`NULL`) on promotion. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
 | peerInstanceId | text | | Instance-epoch self-healing: the peer's persistent instance epoch (UUID) as last confirmed. `NULL` until first observed. Compared against `observedPeerInstanceId` to detect a factory-reset peer on the same origin. |
 | observedPeerInstanceId | text | | Instance-epoch self-healing: the instance epoch most recently reported by the peer. A mismatch with `peerInstanceId` signals the peer was reset. |
-| needsAttentionReason | text | | Instance-epoch self-healing: machine-readable reason a peer was moved to `needs_attention` (e.g. epoch reset detected), for admin surfacing. `NULL` when healthy. |
+| statusReason | text | | Why the row is in its status: for `needs_attention` one of `auth_failures`, `peer_reset_detected`, `repeer_incomplete`; for `rejected` one of `denied_by_local_admin`, `denied_by_remote`, `revoked_by_remote`, `expired_on_remote`, `stale_peering_on_remote`. `NULL` for every other status, and for `rejected` rows from before the column was renamed (which keep their old behaviour). Renamed from `needs_attention_reason` by migration `0023_peer_status_reason`, which also sets `auth_failures` on `needs_attention` rows without a reason (the auth-failure threshold was the only path that wrote none). |
 
 ### federation_reset_events
 Instance-epoch self-healing ledger. One row per origin recording a detected federated-peer reset (same origin, new instance epoch). Upserted when a live epoch change is observed; `resolvedAt` is stamped once stale replicated identities from the dead epoch are healed.
