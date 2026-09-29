@@ -16,17 +16,17 @@
   },
   "system": {
     "spaceInviteNamed": "📨 发送了 {{spaceName}} 的空间邀请",
-    "spaceInvite": "📨 发送了空间邀请",
     "memberAdded": "{{actor}} 添加了 {{target}}",
+    "memberAddedToGroup": "{{actor}} 将 {{target}} 添加到了群组",
     "memberLeft": "{{target}} 退出了群组",
     "memberRemoved": "{{actor}} 移除了 {{target}}",
+    "memberRemovedFromGroup": "{{actor}} 将 {{target}} 移出了群组",
     "ownerChanged": "{{newOwner}} 现已成为群主",
     "renamed": "{{actor}} 重命名了群组",
+    "renamedTo": "{{actor}} 将群组重命名为“{{name}}”",
     "nameCleared": "{{actor}} 清除了群组名称",
     "iconChanged": "{{actor}} 更新了群组头像",
-    "generic": "系统消息",
-    "someone": "有人",
-    "aMember": "一位成员"
+    "generic": "系统消息"
   },
   "deletedNotice": {
     "accountDeleted": "该用户的账号已被注销"

@@ -17,17 +17,17 @@
   },
   "system": {
     "spaceInviteNamed": "📨 Sent invite to {{spaceName}}",
-    "spaceInvite": "📨 Sent a space invite",
     "memberAdded": "{{actor}} added {{target}}",
+    "memberAddedToGroup": "{{actor}} added {{target}} to the group",
     "memberLeft": "{{target}} left the group",
     "memberRemoved": "{{actor}} removed {{target}}",
+    "memberRemovedFromGroup": "{{actor}} removed {{target}} from the group",
     "ownerChanged": "{{newOwner}} is now the group owner",
     "renamed": "{{actor}} renamed the group",
+    "renamedTo": "{{actor}} renamed the group to \"{{name}}\"",
     "nameCleared": "{{actor}} cleared the group name",
     "iconChanged": "{{actor}} updated the group icon",
-    "generic": "System message",
-    "someone": "someone",
-    "aMember": "A member"
+    "generic": "System message"
   },
   "deletedNotice": {
     "accountDeleted": "This user’s account was deleted"

@@ -19,17 +19,17 @@
   },
   "system": {
     "spaceInviteNamed": "📨 Приглашение в {{spaceName}}",
-    "spaceInvite": "📨 Приглашение в пространство",
     "memberAdded": "{{actor}} добавляет в группу: {{target}}",
+    "memberAddedToGroup": "{{actor}} добавляет в группу: {{target}}",
     "memberLeft": "{{target}} выходит из группы",
     "memberRemoved": "{{actor}} удаляет из группы: {{target}}",
+    "memberRemovedFromGroup": "{{actor}} удаляет из группы: {{target}}",
     "ownerChanged": "{{newOwner}} теперь владелец группы",
     "renamed": "{{actor}} меняет название группы",
+    "renamedTo": "{{actor}} меняет название группы на «{{name}}»",
     "nameCleared": "{{actor}} удаляет название группы",
     "iconChanged": "{{actor}} меняет значок группы",
-    "generic": "Системное сообщение",
-    "someone": "кого-то",
-    "aMember": "Участник"
+    "generic": "Системное сообщение"
   },
   "deletedNotice": {
     "accountDeleted": "Аккаунт этого пользователя был удалён"

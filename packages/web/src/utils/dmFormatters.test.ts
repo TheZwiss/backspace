@@ -255,6 +255,18 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
   });
 });
 
+describe('formatDmSidebarPreview — system content it does not know', () => {
+  it('an unknown event → the generic label', () => {
+    const dm = makeGroupDm({ type: 'system', userId: 'U1', content: JSON.stringify({ event: 'call_started' }), createdAt: 1 });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('System message');
+  });
+
+  it('an event with missing fields → the generic label', () => {
+    const dm = makeGroupDm({ type: 'system', userId: 'U1', content: JSON.stringify({ event: 'member_added', targetUserId: 'U2' }), createdAt: 1 });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('System message');
+  });
+});
+
 // ─── formatDmHeaderName / formatDmInputLabel ──────────────────────────────────
 
 function makeMember(id: string, fields: Partial<User> = {}): User {
