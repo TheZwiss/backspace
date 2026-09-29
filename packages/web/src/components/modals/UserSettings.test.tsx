@@ -101,13 +101,13 @@ vi.mock('../../api/client', () => ({
 
 // Every sibling panel is stubbed, so this test renders only the modal chrome and
 // whichever of the two Desktop panels the wiring picks.
-vi.mock('./settingsPanels/AccountPanel', () => ({ AccountPanel: () => null }));
-vi.mock('./settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => null }));
-vi.mock('./settingsPanels/VoicePanel', () => ({ VoicePanel: () => null }));
-vi.mock('./settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => null }));
-vi.mock('./settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => null }));
-vi.mock('./settingsPanels/KeybindsPanel', () => ({ KeybindsPanel: () => null }));
-vi.mock('./settingsPanels/InstancePanel', () => ({ InstancePanel: () => null }));
+vi.mock('./settingsPanels/AccountPanel', () => ({ AccountPanel: () => <p>AccountPanel stub</p> }));
+vi.mock('./settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => <p>AppearancePanel stub</p> }));
+vi.mock('./settingsPanels/VoicePanel', () => ({ VoicePanel: () => <p>VoicePanel stub</p> }));
+vi.mock('./settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => <p>PrivacyPanel stub</p> }));
+vi.mock('./settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => <p>ConnectionsPanel stub</p> }));
+vi.mock('./settingsPanels/KeybindsPanel', () => ({ KeybindsPanel: () => <p>KeybindsPanel stub</p> }));
+vi.mock('./settingsPanels/InstancePanel', () => ({ InstancePanel: () => <p>InstancePanel stub</p> }));
 
 import { UserSettingsModal } from './UserSettings';
 
@@ -190,5 +190,48 @@ describe('UserSettingsModal Desktop tab', () => {
     expect(await screen.findByRole('heading', { name: 'Desktop' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Change Instance' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'All releases on GitHub' })).not.toBeInTheDocument();
+  });
+});
+
+describe('UserSettingsModal deep links (#330)', () => {
+  afterEach(() => {
+    mocks.ui.modalData = {};
+    mocks.auth.user = { ...mocks.auth.user, isAdmin: false };
+  });
+
+  it.each([
+    ['appearance', 'AppearancePanel stub'],
+    ['voice', 'VoicePanel stub'],
+    ['keybinds', 'KeybindsPanel stub'],
+  ])('opens on the %s tab a caller names', async (tab, marker) => {
+    mocks.ui.modalData = { tab };
+    await openSettings();
+    expect(screen.getByText(marker)).toBeInTheDocument();
+    expect(screen.queryByText('AccountPanel stub')).not.toBeInTheDocument();
+  });
+
+  it('opens on the desktop tab a caller names', async () => {
+    mocks.ui.modalData = { tab: 'desktop' };
+    await openSettings();
+    expect(await screen.findByRole('link', { name: 'All releases on GitHub' })).toBeInTheDocument();
+  });
+
+  it('falls back to Account for the instance tab when the user is not an admin', async () => {
+    mocks.ui.modalData = { tab: 'instance' };
+    await openSettings();
+    expect(screen.getByText('AccountPanel stub')).toBeInTheDocument();
+  });
+
+  it('opens the instance tab for an admin', async () => {
+    mocks.auth.user = { ...mocks.auth.user, isAdmin: true };
+    mocks.ui.modalData = { tab: 'instance' };
+    await openSettings();
+    expect(screen.getByText('InstancePanel stub')).toBeInTheDocument();
+  });
+
+  it('falls back to Account for a tab that does not exist', async () => {
+    mocks.ui.modalData = { tab: 'nonsense' };
+    await openSettings();
+    expect(screen.getByText('AccountPanel stub')).toBeInTheDocument();
   });
 });
