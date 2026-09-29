@@ -15,6 +15,7 @@ import {
   TrackEvent,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
+import { homeIdentityOf } from '../utils/identity';
 import { refreshStreamHostLimits, useStreamHostLimits } from '../utils/streamHostLimits';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore, type VoiceConnectionQuality } from '../stores/voiceStore';
@@ -183,7 +184,9 @@ function resolveParticipantUserId(identity: string): string {
   const activeDmCall = useVoiceStore.getState().activeDmCall;
   if (!activeDmCall) return rawId;
   const dmChannel = useSpaceStore.getState().dmChannels.find((d) => d.id === activeDmCall.dmChannelId);
-  const match = dmChannel?.members.find((m) => m.homeUserId === rawId || m.id === rawId);
+  // The identity names the member by their row id here or by their home id.
+  const origin = getChannelOrigin(activeDmCall.dmChannelId);
+  const match = dmChannel?.members.find((m) => m.id === rawId || homeIdentityOf(m, origin)?.userId === rawId);
   return match?.id ?? rawId;
 }
 

@@ -12,7 +12,6 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 
 function loopSource() {
   return { stop: vi.fn() } as unknown as AudioBufferSourceNode;
@@ -52,7 +51,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
   vi.useRealTimers();
 });
 
@@ -88,7 +87,7 @@ describe('SoundController message sound on a remote instance\'s channels', () =>
       dmChannels: [{ id: 'dm' } as DmChannel, { id: 'remote-dm' } as DmChannel],
       channelOriginMap: new Map([['remote-chat', 'https://remote.example'], ['remote-dm', 'https://remote.example']]),
     });
-    setMyUserIdForOrigin('https://remote.example', 'remote-me');
+    useAuthStore.getState().recordMyRow('https://remote.example', 'remote-me');
   });
 
   it('plays for a mention by the id the user has on that instance', () => {

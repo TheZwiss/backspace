@@ -350,7 +350,7 @@ describe('federated DM call: the stream is keyed by the local id of the sharer',
   // updateParticipants resolves a federated member's LiveKit identity (their
   // home id) to the DM member's local id, and StreamTile watches by that id.
   beforeEach(() => {
-    mocks.space.dmChannels = [{ id: 'dm', members: [{ id: 'local-bob', homeUserId: 'bob' }] }];
+    mocks.space.dmChannels = [{ id: 'dm', members: [{ id: 'local-bob', homeUserId: 'bob', homeInstance: 'b.example' }] }];
     useVoiceStore.setState({ activeDmCall: { dmChannelId: 'dm' } as never });
   });
 
