@@ -524,9 +524,10 @@ dir` and the committed offline source list for that generated one, so both
 x86_64 and aarch64 jobs compile the actual checkout against its own
 dependencies. The committed `flatpak/node-sources.json` stays paired with the
 pinned release commit and is regenerated only by
-`flatpak-release-metadata.yml`, so ordinary pull requests must not regenerate
-it from their working-tree lockfile, and a contributor changing dependencies
-needs no Flatpak installation on any platform.
+`flatpak-release-metadata.yml`, and a contributor changing dependencies needs
+no Flatpak installation on any platform. The pairing rule and the pull-request
+check that enforces it are in `flatpak/README.md` under "Release-paired offline
+sources".
 
 **Flatpak release metadata.** Publishing a GitHub release starts
 `.github/workflows/flatpak-release-metadata.yml` (`release: released`, which
