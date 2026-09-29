@@ -134,8 +134,8 @@
     "systemAudioNote": {
       "excluded": "Viewers hear your computer's sound, but not the voice chat or other Backspace audio.",
       "excludedMac": "Viewers hear your Mac's sound, but not the voice chat or other Backspace audio. macOS asks for Screen & System Audio Recording permission.",
-      "includedWindows": "This Windows version shares all sound, the voice chat included: viewers will hear their own voices. Windows 11 leaves Backspace out.",
-      "includedMac": "This macOS version shares all sound, the voice chat included: viewers will hear their own voices. macOS 14.2 and later leave Backspace out.",
+      "includedWindows": "This Windows version shares all sound, the voice chat included: viewers will hear their own voices. On Windows 11, Backspace's own audio is left out.",
+      "includedMac": "This macOS version shares all sound, the voice chat included: viewers will hear their own voices. On macOS 14.2 and later, Backspace's own audio is left out. macOS asks for Screen & System Audio Recording permission.",
       "includedLinux": "Linux shares all sound, the voice chat included: viewers will hear their own voices. Needs PulseAudio, or PipeWire with pipewire-pulse.",
       "unavailableMac": "System audio needs macOS 13 or later."
     },

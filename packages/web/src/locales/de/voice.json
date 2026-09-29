@@ -134,8 +134,8 @@
     "systemAudioNote": {
       "excluded": "Zuschauer hören den Ton deines Computers, aber nicht den Sprachchat und kein anderes Backspace-Audio.",
       "excludedMac": "Zuschauer hören den Ton deines Macs, aber nicht den Sprachchat und kein anderes Backspace-Audio. macOS fragt nach der Berechtigung für Bildschirm- und Systemaudioaufnahmen.",
-      "includedWindows": "Diese Windows-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Unter Windows 11 bleibt Backspace außen vor.",
-      "includedMac": "Diese macOS-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Ab macOS 14.2 bleibt Backspace außen vor.",
+      "includedWindows": "Diese Windows-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Unter Windows 11 wird das eigene Audio von Backspace ausgelassen.",
+      "includedMac": "Diese macOS-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Ab macOS 14.2 wird das eigene Audio von Backspace ausgelassen. macOS fragt nach der Berechtigung für Bildschirm- und Systemaudioaufnahmen.",
       "includedLinux": "Linux teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Benötigt PulseAudio oder PipeWire mit pipewire-pulse.",
       "unavailableMac": "Systemaudio benötigt macOS 13 oder neuer."
     },
