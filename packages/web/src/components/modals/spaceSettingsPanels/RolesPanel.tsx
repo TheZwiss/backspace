@@ -357,7 +357,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                     style={{ backgroundColor: c }}
                   />
                 ))}
-                <label className="relative w-7 h-7 rounded-full border-2 border-border-subtle hover:border-accent-primary transition-colors cursor-pointer overflow-hidden">
+                <label className="relative w-7 h-7 rounded-full border-2 border-border-soft hover:border-accent-primary transition-colors cursor-pointer overflow-hidden">
                   <input
                     type="color"
                     value={draftColor}

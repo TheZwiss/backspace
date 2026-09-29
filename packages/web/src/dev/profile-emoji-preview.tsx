@@ -109,7 +109,7 @@ function Rows({ user }: { user: User }) {
   const displayName = user.displayName ?? user.username;
   return (
     <div className="flex gap-6 p-4">
-      <div className="w-[240px] bg-surface-sidebar rounded-lg p-2">
+      <div className="w-[240px] bg-surface-channel rounded-lg p-2">
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px]">
           <Avatar src={null} name={displayName} size={32} status="online" user={user} />
           <div className="flex-1 min-w-0">
