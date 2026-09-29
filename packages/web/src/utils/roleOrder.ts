@@ -64,3 +64,16 @@ export function moveRoleInRankOrder(ranked: readonly Role[], fromIndex: number, 
   next.splice(toIndex, 0, moving);
   return next.map((r, index) => ({ ...r, position: next.length - index }));
 }
+
+/**
+ * `roles` with the role a successful `PATCH /roles/:rid` answered put in
+ * place of its old copy, so an editor shows what was saved at once; the
+ * `space_access_changed` refresh that follows brings the rest of the space.
+ * Only the role's own fields change here: a move renumbers other roles too,
+ * which is `moveRoleInRankOrder`'s job, so `position` is kept.
+ */
+export function withSavedRole(roles: readonly Role[], saved: Role): Role[] {
+  return roles.map((r) => (r.id === saved.id
+    ? { ...r, name: saved.name, color: saved.color ?? r.color, permissions: saved.permissions ?? r.permissions }
+    : r));
+}

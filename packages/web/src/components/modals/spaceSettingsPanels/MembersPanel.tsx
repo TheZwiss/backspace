@@ -237,6 +237,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const members = useSpaceStore((s) => s.members);
   const roles = useSpaceStore((s) => s.roles);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const setMembers = useSpaceStore((s) => s.setMembers);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const heldPermissions = useViewerHeldPermissions(spaceId);
 
@@ -285,14 +286,16 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
     const roleIds = pendingRoleChanges.get(userId);
     if (!roleIds) return;
     try {
-      await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      const updated = await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      // The row shows the saved roles at once; space_access_changed
+      // refreshes the rest of the space for every member.
+      setMembers(useSpaceStore.getState().members.map((m) => (m.userId === userId ? { ...m, roles: updated.roles } : m)));
       setPendingRoleChanges((prev) => {
         const next = new Map(prev);
         next.delete(userId);
         return next;
       });
       setExpandedMemberId(null);
-      await loadSpaceDetail(spaceId);
     } catch (err) {
       setError(describeError(err));
     }

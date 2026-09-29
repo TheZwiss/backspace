@@ -369,7 +369,15 @@ interface SpaceState {
   closeDm: (id: string) => Promise<void>;
   leaveDm: (id: string) => Promise<void>;
   loadSpaces: () => Promise<void>;
-  loadSpaceDetail: (spaceId: string) => Promise<void>;
+  /**
+   * Fetch a space's detail from its own instance and make it the open space:
+   * channels, categories, members, roles and the viewer's permissions there.
+   * `quiet` is the refresh after `space_access_changed`: no loading state (so
+   * no skeleton), and for a space that is not the open one it only updates
+   * that space's permission entries instead of opening it. Resolves to the
+   * channels the viewer can see there, or undefined when nothing was fetched.
+   */
+  loadSpaceDetail: (spaceId: string, options?: { quiet?: boolean }) => Promise<Channel[] | undefined>;
   createSpace: (data: CreateSpaceRequest) => Promise<Space>;
   updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
   deleteSpace: (spaceId: string) => Promise<void>;
@@ -682,14 +690,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }
   },
 
-  loadSpaceDetail: async (spaceId: string) => {
+  loadSpaceDetail: async (spaceId: string, options?: { quiet?: boolean }) => {
+    const quiet = options?.quiet === true;
     // Joins and leaves that arrive during the fetch, replayed onto its roster.
     const rosterChanges: RosterChange[] = [];
     try {
       // Resolve the correct API client based on the server's instance origin
       const space =get().spaces.find(s => s.id === spaceId);
-      if (!space) return; // Not populated yet — remote WS ready will trigger reload
-      set({ loadingSpaceId: spaceId });
+      if (!space) return undefined; // Not populated yet — remote WS ready will trigger reload
+      if (!quiet) set({ loadingSpaceId: spaceId });
       const origin = space._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
 
@@ -712,7 +721,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
 
       // The detail lists every channel of the space the user can see: the
-      // space's index entries become exactly these.
+      // space's index entries become exactly these, whether or not it is open.
+      // A quiet refresh of a space that is not open (any more) must not open
+      // it: `channels`, `categories`, `members` and `roles` belong to the open
+      // space, so it only gets the index and its permission entries.
+      const openIt = !quiet || get().currentSpaceId === spaceId;
       let dropped: string[] = [];
       set((state) => {
         const replaced = replaceSpaceChannels(channelTablesOf(state), spaceId, origin, detail.channels);
@@ -720,25 +733,32 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         const spacePermissions = new Map(state.spacePermissions);
         if (detail.myPermissions) spacePermissions.set(spaceId, detail.myPermissions);
         const categories = detail.categories ?? [];
+        const fields = {
+          ...channelTableFields(state, replaced.tables),
+          categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, categories, origin),
+          spacePermissions,
+        };
+        if (!openIt) return fields;
         const loadedSpaceIds = new Set(state.loadedSpaceIds);
         loadedSpaceIds.add(spaceId);
         return {
-          ...channelTableFields(state, replaced.tables),
-          loadingSpaceId: null,
+          ...fields,
+          // A quiet refresh leaves a load of another space in flight alone.
+          loadingSpaceId: quiet ? state.loadingSpaceId : null,
           currentSpaceId: spaceId,
           lastSelectedSpaceId: spaceId,
           channels: byPosition(detail.channels),
           categories: byPosition(categories),
-          categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, categories, origin),
           members: rosterChanges.reduce(replayRosterChange, detail.members),
           roles: detail.roles.sort((a, b) => b.position - a.position),
-          spacePermissions,
           loadedSpaceIds,
         };
       });
       if (dropped.length > 0) useChatStore.getState().removeChannelStates(new Set(dropped));
+      return detail.channels;
     } catch {
-      set({ loadingSpaceId: null });
+      if (!quiet) set({ loadingSpaceId: null });
+      return undefined;
     } finally {
       const logs = inFlightRosterLogs.get(spaceId);
       logs?.delete(rosterChanges);

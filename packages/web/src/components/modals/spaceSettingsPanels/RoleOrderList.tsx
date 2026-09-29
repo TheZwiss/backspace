@@ -10,11 +10,12 @@ import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder } f
 
 // The role list of Space Settings > Roles, in rank order, with the controls
 // that set the order (docs/systems/permissions.md, "Role hierarchy", "Setting
-// the order"). On desktop each role the viewer may move has a drag handle that
-// also moves it with the arrow keys; every such role has up and down buttons,
-// shown on hover or focus on desktop and always on a phone, so a move never
-// needs a drag. Roles at or above the viewer's top role show a lock instead.
-// @everyone stays at the bottom and never moves.
+// the order"). On desktop the row of each role the viewer may move is what a
+// drag picks up; its handle shows that and moves the role with the arrow keys.
+// Every such role has up and down buttons, shown on hover or focus on desktop
+// and always on a phone, so a move never needs a drag. A drag, a key and a
+// button all go through `move`. Roles at or above the viewer's top role show
+// a lock instead. @everyone stays at the bottom and never moves.
 //
 // A move shows at once, goes to the space's own instance, and is put back
 // if it is refused, with the server's reason right under the role that moved
@@ -110,13 +111,14 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
     try {
       // The server moves the role to the position the slot's role holds and
       // renumbers the rest, which is the order already shown.
+      // The order shown is already the one stored; space_access_changed
+      // brings the space's refreshed detail to every member, this list included.
       await getApiForOrigin(space._instanceOrigin ?? '').roles.update(spaceId, role.id, { position: slot.position });
-      await loadSpaceDetail(spaceId);
     } catch (err) {
       // Put the order back unless something else has replaced the roles
       // since; then the space's own state is the one to show.
       if (useSpaceStore.getState().roles === optimistic) setRoles(before);
-      else void loadSpaceDetail(spaceId);
+      else void loadSpaceDetail(spaceId, { quiet: true });
       setAnnouncement('');
       setMoveError({ roleId: role.id, message: describeError(err) });
     } finally {
@@ -191,10 +193,23 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
     const canUp = index !== null && canMove(index, index - 1);
     const canDown = index !== null && canMove(index, index + 1);
     const marker = index !== null && dropMarker?.index === index ? dropMarker.edge : null;
+    const draggable = movable && !isMobile && index !== null;
 
     return (
       <div
         key={role.id}
+        data-role-row=""
+        draggable={draggable || undefined}
+        onDragStart={draggable ? (e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', role.id);
+          // A drag that starts on the name or the handle (see below) still
+          // shows the whole row under the pointer.
+          const rect = e.currentTarget.getBoundingClientRect();
+          e.dataTransfer.setDragImage?.(e.currentTarget, e.clientX - rect.left, e.clientY - rect.top);
+          setDragIndex(index);
+        } : undefined}
+        onDragEnd={draggable ? endDrag : undefined}
         onClick={() => onOpen(role.id)}
         onDragOver={index !== null ? handleDragOver(index) : undefined}
         onDrop={index !== null ? handleDrop(index) : undefined}
@@ -210,17 +225,14 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
               <button
                 ref={registerControl(role.id, 'handle')}
                 type="button"
+                // Chrome starts no drag of the row from inside a button, so
+                // the row's buttons that a drag may start on are draggable
+                // themselves; their dragstart reaches the row's handler.
                 draggable
                 aria-label={t('roles.reorder.handle', { name: role.name })}
                 title={t('roles.reorder.handleHint')}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={handleKeyDown(index)}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', role.id);
-                  setDragIndex(index);
-                }}
-                onDragEnd={endDrag}
                 className={`w-6 h-6 flex items-center justify-center rounded text-txt-tertiary hover:text-txt-secondary cursor-grab active:cursor-grabbing transition-colors ${FOCUS_RING}`}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -239,6 +251,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
 
         <button
           type="button"
+          draggable={draggable || undefined}
           className={`flex-1 min-w-0 flex items-center gap-2.5 py-2 rounded text-left ${FOCUS_RING}`}
         >
           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: role.color }} />

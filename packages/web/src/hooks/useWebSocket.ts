@@ -14,6 +14,7 @@ import { registerSelfId } from '../utils/identity';
 import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
+import { describeErrorCode } from '../i18n/errors';
 import { useActivityStore } from '../stores/activityStore';
 import { presenceSubjectOf, readyActivityEntries, readyRowIndex } from '../utils/presenceSubject';
 import { useDiscoverStore } from '../stores/discoverStore';
@@ -1300,9 +1301,45 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
     case 'pong':
       break;
 
+    case 'space_access_changed':
+      void refreshSpaceAccess(origin, event.spaceId);
+      break;
+
     case 'error':
       console.error(`WebSocket error (${origin || 'home'}):`, event.message);
+      // A coded error is the refusal of something the user just did (a voice
+      // moderation action the role hierarchy refuses, for one); say so. Older
+      // servers send no code, and those errors stay in the log.
+      if (event.code) {
+        useUIStore.getState().addToast(describeErrorCode(event.code, event.message), 'warning');
+      }
       break;
+  }
+}
+
+/**
+ * `space_access_changed` (websocket.md): the space's roles or a member's roles
+ * changed, so what the viewer may see or do there may have changed too. The
+ * space's detail is fetched again without the loading state, so nothing
+ * flashes and no message cache is touched. Every channel it lists goes
+ * through `upsertChannel`, so one the viewer can now see is known wherever
+ * channels are looked up; one it no longer lists is gone for this viewer and
+ * goes through the same path as a deleted channel.
+ */
+async function refreshSpaceAccess(origin: string, spaceId: string): Promise<void> {
+  const { spaces, loadSpaceDetail } = useSpaceStore.getState();
+  if (!spaces.some(s => s.id === spaceId && (s._instanceOrigin ?? '') === origin)) return;
+  const { channelToSpaceMap, channelOriginMap } = useSpaceStore.getState();
+  const known = [...channelToSpaceMap]
+    .filter(([channelId, sId]) => sId === spaceId && (channelOriginMap.get(channelId) ?? '') === origin)
+    .map(([channelId]) => channelId);
+  const visible = await loadSpaceDetail(spaceId, { quiet: true });
+  if (!visible) return;
+  const { upsertChannel } = useSpaceStore.getState();
+  for (const channel of visible) upsertChannel(channel, spaceId, origin);
+  const visibleIds = new Set(visible.map(c => c.id));
+  for (const channelId of known) {
+    if (!visibleIds.has(channelId)) handleEvent(origin, { type: 'channel_deleted', channelId, spaceId });
   }
 }
 

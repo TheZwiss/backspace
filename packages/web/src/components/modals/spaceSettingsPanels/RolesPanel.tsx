@@ -16,6 +16,7 @@ import {
   viewerHoldsEveryBit,
 } from '../../../utils/roleHierarchy';
 import { RoleOrderList } from './RoleOrderList';
+import { withSavedRole } from '../../../utils/roleOrder';
 import { LockNote, LOCK_ICON } from '../../ui/LockNote';
 
 const ALL_PERMISSION_DEFS: PermDef[] = PERMISSION_GROUPS.flatMap((group) => group.perms);
@@ -65,7 +66,9 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       const uniqueName = getUniqueRoleName(t('spaces:roles.defaultName'), roles);
       // Roles live on the space's own instance (client-federation.md).
       const newRole = await getApiForOrigin(space?._instanceOrigin ?? '').roles.create(spaceId, { name: uniqueName });
-      await loadSpaceDetail(spaceId);
+      // The editor opens on the new role, so it has to be in the list now;
+      // the space_access_changed refresh would arrive a moment later.
+      await loadSpaceDetail(spaceId, { quiet: true });
       setIsNewRole(true);
       setEditingRoleId(newRole.id);
     } catch (err) {
@@ -145,6 +148,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const { t } = useTranslation(['spaces', 'common']);
   const permissionNames = usePermissionNames();
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const setRoles = useSpaceStore((s) => s.setRoles);
   const roles = useSpaceStore((s) => s.roles);
   const space = useSpaceStore((s) => s.spaces.find((sp) => sp.id === spaceId));
   const members = useSpaceStore((s) => s.members);
@@ -213,8 +217,9 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       if (hasNameChange) data.name = draftName.trim();
       if (hasColorChange) data.color = draftColor;
       if (hasPermChange) data.permissions = permissionsToString(draftPermissions);
-      await roleApi().update(spaceId, role.id, data);
-      await loadSpaceDetail(spaceId);
+      const saved = await roleApi().update(spaceId, role.id, data);
+      // Show what was saved at once; space_access_changed refreshes the rest.
+      setRoles(withSavedRole(useSpaceStore.getState().roles, saved));
       addToast(t('spaces:roles.saved'), 'success', 2000);
     } catch (err) {
       // A duplicate name belongs on the name field, not in the save banner.
@@ -247,7 +252,9 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
     setSaveError('');
     try {
       await roleApi().delete(spaceId, role.id);
-      await loadSpaceDetail(spaceId);
+      // Gone from the list at once; space_access_changed brings the
+      // renumbered positions.
+      setRoles(useSpaceStore.getState().roles.filter((r) => r.id !== role.id));
       onDeleted();
     } catch (err) {
       setSaveError(describeError(err));
@@ -269,7 +276,8 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
         color: role.color,
         permissions: role.permissions ?? undefined,
       });
-      await loadSpaceDetail(spaceId);
+      // The editor moves to the copy, so it has to be in the list now.
+      await loadSpaceDetail(spaceId, { quiet: true });
       onCopied(newRole.id);
     } catch (err) {
       setSaveError(describeError(err));
