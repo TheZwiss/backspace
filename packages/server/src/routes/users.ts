@@ -488,7 +488,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         for (const uid of clearTargets) connectionManager.sendToUser(uid, clearPayload);
         connectionManager.sendToUser(request.userId, clearPayload);
 
-        // S2S: project the cleared-activities snapshot to all active peers.
+        // S2S: broadcast the cleared-activities snapshot to peers (see queueOutboxEvent).
         void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
           try {
             queuePresenceRelay(

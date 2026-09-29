@@ -390,7 +390,7 @@ export function relayTargetOrigins(members: ReadonlyArray<{ homeInstance: string
 }
 
 /**
- * Queue a DM message for federation relay to all active peers.
+ * Queue a DM message for federation relay to the peers hosting its participants.
  * Builds the complete relay payload including attachments with sourceUrl
  * and participant identities. Single source of truth for relay payload
  * construction — all create/update relay hooks call this function.

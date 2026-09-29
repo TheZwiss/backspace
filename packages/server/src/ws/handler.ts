@@ -286,7 +286,7 @@ class ConnectionManager {
     const offlineTargets = collectProfileBroadcastTargetIds(userId);
     for (const uid of offlineTargets) this.sendToUser(uid, offlinePayload);
 
-    // S2S: project offline to all active peers (mirrors profile_update fanout).
+    // S2S: project offline to peers, as the profile_update broadcast (see queueOutboxEvent).
     // Imported lazily to avoid circular import (federationPresence → db → ws/handler).
     void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
       try { queuePresenceRelay(userId, 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(offline) failed', e); }
@@ -1761,7 +1761,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           const connectTargets = collectProfileBroadcastTargetIds(userId);
           for (const uid of connectTargets) connectionManager.sendToUser(uid, connectPayload);
 
-          // S2S: project it to all active peers (mirrors profile_update fanout).
+          // S2S: project it to peers, as the profile_update broadcast (see queueOutboxEvent).
           // No-op for a replicated row: its home instance owns the projection.
           // The relay is a full snapshot, so it carries the activities another
           // session of this user already reported (none on a first connection).

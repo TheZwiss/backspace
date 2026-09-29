@@ -180,9 +180,12 @@ export function refusalEndsOutboxQueue(eventType: string): boolean {
   return isOutboxEventType(eventType) && OUTBOX_EVENT_RULES[eventType].refusalEndsQueue;
 }
 
-/** The event types whose rows each set the whole state of their entity. */
-const STATE_EVENT_TYPES = (Object.keys(OUTBOX_EVENT_RULES) as OutboxEventType[])
-  .filter((eventType) => OUTBOX_EVENT_RULES[eventType].family === 'state');
+/**
+ * The event types whose rows mean nothing without the rows ahead of them in
+ * their queue: a DM message's update and delete (and a create behind one).
+ */
+const MESSAGE_EVENT_TYPES = (Object.keys(OUTBOX_EVENT_RULES) as OutboxEventType[])
+  .filter((eventType) => OUTBOX_EVENT_RULES[eventType].family === 'message');
 
 // ─── Writing an event into its queue ────────────────────────────────────────
 
@@ -356,6 +359,9 @@ export function isOutboxQueueHead(): SQL {
         .where(and(
           eq(earlier.peerId, row.peerId),
           eq(earlier.queueKey, row.queueKey),
+          // Implied by the disjunction below; stated on its own so SQLite
+          // reads idx_outbox_queue as a range instead of the whole queue.
+          lte(earlier.createdAt, row.createdAt),
           or(
             lt(earlier.createdAt, row.createdAt),
             and(eq(earlier.createdAt, row.createdAt), lt(earlier.id, row.id)),
@@ -366,13 +372,15 @@ export function isOutboxQueueHead(): SQL {
 }
 
 /**
- * Delete rows past their relay TTL, by queue: an expired row takes every row
- * queued behind it in its queue with it, since those change something the peer
- * may never have got. A state row behind it is kept: it carries the entity's
- * whole state on its own. Returns the number of rows removed.
+ * Delete rows past their relay TTL. Each row expires by its own TTL, and an
+ * expired row of a DM message's queue also takes the rows behind it: an edit
+ * or delete of a message the peer may never have got means nothing on its
+ * own. A state row carries its entity's whole state, and an event row is a
+ * fact of its own, so the rows behind an expired one of those are released,
+ * not expired. Returns the number of rows removed.
  */
 export function expireOutboxQueues(now: number): number {
-  const stateTypes = sql.join(STATE_EVENT_TYPES.map((eventType) => sql`${eventType}`), sql`, `);
+  const messageTypes = sql.join(MESSAGE_EVENT_TYPES.map((eventType) => sql`${eventType}`), sql`, `);
   const result = getDb().run(sql`
     DELETE FROM federation_outbox WHERE id IN (
       SELECT o.id FROM federation_outbox o
@@ -384,7 +392,7 @@ export function expireOutboxQueues(now: number): number {
             e.id = o.id
             OR (
               e.queue_key = o.queue_key
-              AND o.event_type NOT IN (${stateTypes})
+              AND o.event_type IN (${messageTypes})
               AND (e.created_at < o.created_at OR (e.created_at = o.created_at AND e.id < o.id))
             )
           )

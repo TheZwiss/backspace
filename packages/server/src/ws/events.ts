@@ -459,7 +459,7 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
   for (const uid of targets) connectionManager.sendToUser(uid, payload);
   connectionManager.sendToUser(userId, payload);
 
-  // S2S: project to all active peers (activities + current status).
+  // S2S: broadcast to peers (activities + current status); see queueOutboxEvent.
   void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
     try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(activity) failed', e); }
   });

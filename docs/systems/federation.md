@@ -984,7 +984,7 @@ Trigger (API/WS handler)
        -> TTL: now + (relayTtlDays * 86400000)
 ```
 
-**Who gets a broadcast.** An `unreachable` peer is an established peering with a backlog: it may still consider us active and never pull our log, and our recovery does not re-send profiles, so its queue is how a change made during the outage reaches it. A `pending` peer is not sent broadcasts: its activation already delivers what they carry (it pulls our `profile` mutation log, and our `onPeerActivated` pushes a presence snapshot). Before #321 the broadcast used the targeted status list, which had been widened for placeholders, so every profile edit landed on every auto-created pending row and kept it from being swept.
+**Who gets a broadcast.** An untargeted event goes to `active` and `unreachable` peers, never to `pending` ones. An `unreachable` peer is an established peering with a backlog: it may still consider us active and never pull our log, and our recovery does not re-send profiles, so its queue is how a change made during the outage reaches it. A `pending` peer is not sent broadcasts: its activation already delivers what they carry (it pulls our `profile` mutation log, and our `onPeerActivated` pushes a presence snapshot). Before #321 the broadcast used the targeted status list, which had been widened for placeholders, so every profile edit landed on every auto-created pending row and kept it from being swept.
 
 ### Outbox queues (`federationOutboxQueue.ts`)
 
@@ -1042,7 +1042,7 @@ Before #372 the outbox kept one row per (peer, entity id) and merged newer event
 7. **Failed** (network error, timeout, a non-2xx, an unreadable answer): the peer may have applied the batch. `handleOutboxDeliveryFailure` moves every row to its next backoff step, increments the peer's `consecutiveFailures` and sets `lastFailureAt`; at `PEER_UNREACHABLE_THRESHOLD (10)` `markPeerUnreachable` (the outbox's one peer-status write) sets `unreachable` and resets recovery pacing
 8. **Aborted** (the worker is stopping): nothing changes; the rows stay offered and due
 
-**Expiry.** The janitor's TTL sweep expires queues, not rows (`expireOutboxQueues`): a row past its `expiresAt` takes every row queued behind it in its queue with it, because those change something the peer may never have got (an edit behind a create, a cancel behind a friend request). A state row behind it is kept, since it carries the entity's whole state. Rows ahead of it stay.
+**Expiry.** The janitor's TTL sweep (`expireOutboxQueues`) expires each row by its own `expiresAt`. In a DM message's queue an expired row also takes the rows behind it, since an edit or delete of a message the peer may never have got means nothing on its own. Behind an expired state or event row nothing else goes: a state row carries its entity's whole state, and an event (a group's ownership transfer behind a `member_add` the peer kept refusing) is a fact of its own, released when the row ahead of it expires. Rows ahead of an expired row stay.
 
 **Rows queued before queue keys.** Migration 0021 marks every existing row offered (whether it had reached the peer was never recorded) and drops `presence_update` rows on auto-created pending peers. `backfillOutboxQueueKeys` (run at boot from `db/index.ts`) gives each row without a key the key its event gets today.
 
@@ -1650,7 +1650,7 @@ When the function does fill an empty avatar/banner, it calls `downloadProfileAss
 
 #### Profile Sync (S2S)
 
-Profile data is synced server-to-server. The home instance is authoritative — when a user updates their profile, the home server queues a `profile_update` relay event to all active peers via the outbox.
+Profile data is synced server-to-server. The home instance is authoritative — when a user updates their profile, the home server broadcasts a `profile_update` relay event via the outbox; see [Who gets a broadcast](#event-queuing-federationoutboxtsqueueoutboxevent) for which peers that reaches.
 
 **Event:** `profile_update` (contextType: `profile`)
 
@@ -1660,7 +1660,7 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 - `displayName`, `avatar` (absolute URL or null), `banner` (absolute URL or null)
 - `accentColor`, `avatarColor`, `bio`
 
-**Targeting:** Broadcast to all active peers. Peers silently accept if they have no replica.
+**Targeting:** Broadcast; see [Who gets a broadcast](#event-queuing-federationoutboxtsqueueoutboxevent). Peers silently accept if they have no replica.
 
 **Queueing:** `entityId = homeUserId`, queue `profile:<homeUserId>`; a newer edit replaces a queued one. See [Outbox queues](#outbox-queues-federationoutboxqueuets).
 
@@ -1723,7 +1723,7 @@ No-op for replicated users (we don't own their presence).
 
 **Detached accounts have no status on other instances.** `queuePresenceRelay` and `snapshotPresenceForPeer` skip every row with `home_instance` set, detached ones included, although a detached account owns its chosen status locally (`ownsChosenStatus`). This is deliberate: a detached account's outbound identity is still its old home identity (`relayActorOfUser`, the DM message builder and client registration on other instances all send `homeUserId` + the reset `homeInstance`), and the receiver below only accepts a `presence_update` from the identity's home instance. A relay under the old identity would be rejected by every peer as `attribution_mismatch`; one under this instance's own id would match no row anywhere. Changing that means giving detached accounts a new outbound identity or a new attribution rule (#310).
 
-**Targeting:** broadcast to all active peers (mirrors `profile_update`). Peers without a stub silently no-op. Privacy: status is already public to anyone authorized to see the user via friend/DM/space relationships, so broadcast-fanout adds no new disclosure surface.
+**Targeting:** broadcast, as `profile_update`; see [Who gets a broadcast](#event-queuing-federationoutboxtsqueueoutboxevent). Peers without a stub silently no-op. Privacy: status is already public to anyone authorized to see the user via friend/DM/space relationships, so broadcast-fanout adds no new disclosure surface.
 
 **Queueing:** `entityId = userId`, `contextId = userId`, queue `presence:<userId>` (separate from the user's profile queue); a newer status replaces a queued one. See [Outbox queues](#outbox-queues-federationoutboxqueuets).
 
@@ -2052,7 +2052,7 @@ The 1-on-1 key sweep that used to run here (`reconcileDriftedDmFederatedIds`) is
 
 | Target | Condition | Retention |
 |--------|-----------|-----------|
-| `federation_outbox` | `expiresAt < now`, by queue: the rows queued behind an expired row go with it, except state rows (see [Outbox Delivery Worker](#outbox-delivery-worker-federationworkertsprocessoutboxtick), **Expiry**) | Configurable via `federationRelayTtlDays` (default 30) |
+| `federation_outbox` | `expiresAt < now`; in a DM message's queue the rows behind an expired row go with it (see [Outbox Delivery Worker](#outbox-delivery-worker-federationworkertsprocessoutboxtick), **Expiry**) | Configurable via `federationRelayTtlDays` (default 30) |
 | `federation_mutation_log` | `mutatedAt < (now - 90 days)` | 90 days |
 | `federation_file_queue` (completed) | `createdAt < (now - 7 days)` | 7 days |
 | `federation_file_queue` (any) | `expiresAt < now` | 30 days (set at queue time) |

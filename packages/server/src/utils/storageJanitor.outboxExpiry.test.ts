@@ -7,10 +7,9 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 
 /**
- * The relay TTL sweep expires a queue, not a row: an event queued behind one
- * that expired undelivered changes something the peer may never have got
- * (an edit behind a create, a cancel behind a friend request), so it goes
- * with it.
+ * The relay TTL sweep and a message's queue: an edit or delete queued behind
+ * a message event that expired undelivered changes a message the peer may
+ * never have got, so it goes with it. Every other row expires by its own TTL.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,9 +105,9 @@ describe('cleanupFederationOutbox: expiry by queue', () => {
   it('keeps what is queued ahead of an expired row, and removes what is behind it', async () => {
     // A row can expire before the one ahead of it when the relay TTL was
     // shortened between the two.
-    seedRow('ahead', { queueKey: 'friendship:a:b', createdAt: 1, expiresAt: ALIVE });
-    seedRow('expired', { queueKey: 'friendship:a:b', createdAt: 2, expiresAt: EXPIRED });
-    seedRow('behind', { queueKey: 'friendship:a:b', createdAt: 3, expiresAt: ALIVE });
+    seedRow('ahead', { queueKey: 'message:m1', createdAt: 1, expiresAt: ALIVE, eventType: 'create' });
+    seedRow('expired', { queueKey: 'message:m1', createdAt: 2, expiresAt: EXPIRED, eventType: 'update' });
+    seedRow('behind', { queueKey: 'message:m1', createdAt: 3, expiresAt: ALIVE, eventType: 'delete' });
     const { cleanupFederationOutbox } = await import('./storageJanitor.js');
 
     expect(cleanupFederationOutbox(NOW)).toBe(2);
@@ -123,6 +122,19 @@ describe('cleanupFederationOutbox: expiry by queue', () => {
 
     expect(cleanupFederationOutbox(NOW)).toBe(1);
     expect(outboxIds()).toEqual(['other-key', 'other-peer']);
+  });
+
+  it('releases the events queued behind an expired group event instead of expiring them', async () => {
+    // A member_add the peer keeps refusing (say max_members_exceeded) holds
+    // the group's queue until its TTL. The ownership transfer and rename
+    // behind it are facts of their own and go out once it expires.
+    seedRow('member-add', { queueKey: 'group:fed-1', createdAt: 1, expiresAt: EXPIRED, eventType: 'member_add' });
+    seedRow('transfer', { queueKey: 'group:fed-1', createdAt: 2, expiresAt: ALIVE, eventType: 'ownership_transfer' });
+    seedRow('rename', { queueKey: 'group:fed-1', createdAt: 3, expiresAt: ALIVE, eventType: 'group_metadata_update' });
+    const { cleanupFederationOutbox } = await import('./storageJanitor.js');
+
+    expect(cleanupFederationOutbox(NOW)).toBe(1);
+    expect(outboxIds()).toEqual(['rename', 'transfer']);
   });
 
   it('keeps a state event behind an expired row: it carries the whole state on its own', async () => {
