@@ -591,7 +591,7 @@ row ran as `asserted`.
 
 | Trust | Sites |
 |-------|-------|
-| `approved` | `federationEpoch` (`/epoch`), `federationLookup` (`/users/lookup`, `/users/by-home-id`), `federationAttach` (`/verify-attach-proof`, `/users/by-home-id`), `federationOutbox` (`/relay`), `federationWorker` (`/relay`, `/peer/rotate`), `federationPeerActivation` (`/sync`), `federationRecovery` (`/api/instance/info` reachability probe), `routes/users.ts` (`/identity`), `handlers/peerAdmin.ts` (`/peer/rotate`), `handlers/peerHandshake.ts` (`/peer/accept`) |
+| `approved` | `federationEpoch` (`/epoch`), `federationLookup` (`/users/lookup`, `/users/by-home-id`), `federationAttach` (`/verify-attach-proof`, `/users/by-home-id`), `federationOutbox` (`/relay`), `federationWorker` (`/relay`, `/peer/rotate`), `federationSync` (`/sync`), `federationRecovery` (`/api/instance/info` reachability probe), `routes/users.ts` (`/identity`), `handlers/peerAdmin.ts` (`/peer/rotate`), `handlers/peerHandshake.ts` (`/peer/accept`) |
 | `asserted` | `handlers/approvals.ts` (`/peer/accept` from the inbound and outbound approve branches, `/peer/denied` from the deny branch), `federationPeering.ts:performHandshake` (`/peer/accept`), `storageJanitor.ts` (`/peer/denied` on request expiry) |
 
 **Trust is a property of the caller, not of the function.** `performHandshake`
@@ -1035,8 +1035,8 @@ Before #372 the outbox kept one row per (peer, entity id) and merged newer event
 3. For each peer, `takeOutboxBatch`: read its rows again (an earlier peer's POST in the same tick may have taken up to the timeout; a row replaced meanwhile is gone and its replacement goes on a later tick), keep one row per wire id (the answer names events by it), and mark them offered. Then reconstruct `FederationRelayEvent[]` from the stored payloads (`buildRelayEvents`)
 4. Build `FederationRelayRequest` with `version: 1`, `sourceInstance: ourOrigin`, sign it, POST to `{peerOrigin}/api/federation/relay` (`sendOutboxBatch`, which never throws and reports one of four outcomes)
 5. **Answered** (a 2xx with a readable body): `settleAnsweredBatch`, one transaction:
-   - accepted, or rejected as `duplicate`: the row is deleted
-   - rejected for good (`classifyRelayRejection`, the one reader of `TERMINAL_REJECTION_REASONS`): the row is deleted; for a `create`, the rest of its queue too (`refusalEndsOutboxQueue`), since the peer will never hold the message
+   - accepted, or rejected as `taken` (`classifyRejection`, see [Rejection reasons](#rejection-reasons)): the row is deleted
+   - rejected as `refused`: the row is deleted; for a `create`, the rest of its queue too (`refusalEndsOutboxQueue`), since the peer will never hold the message
    - any other rejection, or a row the answer does not mention: next backoff step (`attempts + 1`, `nextRetryAt = now + backoff`)
 
    After the transaction, and unable to change the rows: rollback callbacks for the refusals, logging, and the peer's bookkeeping (`lastSeenAt`, `consecutiveFailures = 0`, `consecutiveAuthFailures = 0`, `remoteMaxUploadSize`). A failure there is logged and the batch stays settled
@@ -1048,18 +1048,24 @@ Before #372 the outbox kept one row per (peer, entity id) and merged newer event
 
 **Rows queued before queue keys.** Migration 0021 rebuilds `federation_outbox` (create, copy, drop, rename) to remove the old `(peer_id, entity_id)` uniqueness, which exists in two forms: the named index `federation_outbox_peer_id_entity_id_unique` on installs from the squashed history, and an inline `UNIQUE(peer_id, entity_id)` constraint (an `sqlite_autoindex` no `DROP INDEX` can remove) on databases created before the squash. The copy marks every row offered (whether it had reached the peer was never recorded) and leaves out rows whose peer no longer exists, which could never be delivered and would fail the foreign key check; the migration then drops `presence_update` rows on auto-created pending peers. `backfillOutboxQueueKeys` (run at boot from `db/index.ts`) gives each row without a key the key its event gets today.
 
-#### Terminal rejection reasons
+#### Rejection reasons
 
-`processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `system_message_immutable`, `invalid_system_message`, `invalid_target`. Outbox entries with these reasons are deleted with no retry. Every other reason is retryable and follows the [retry backoff schedule](#retry-backoff-schedule) until the entry's `expiresAt` (relay TTL, 30 days by default), when the storage janitor deletes it. No rollback callback runs at TTL expiry.
+Every rejection is classified by `classifyRejection(eventType, reason)` in `utils/federationRejections.ts`, the one list the outbox worker (reading a peer's answer) and the pull (reading this instance's own answer to a pulled event, see [Pull sync](#pull-sync)) both use. It returns one of three outcomes:
 
-- `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
-- `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
-- `not_message_author`, `invalid_target` — a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed 1-on-1 `create` whose author is not one of the pair or whose sender is not a relay target of it (`dm-system.md` "Relayed message creates"; the group case is the retried `unauthorized_source`), a `member_add` into a 1-on-1 or a bootstrap without an owner, with the owner outside the roster, or from a sender none of the roster lives on (`dm-system.md` "Relayed member adds"), a kick or `ownership_transfer` aimed at a 1-on-1, a `reaction_add`/`reaction_remove` on a message in a conversation the sender is not a peer of, or by a reactor outside a 1-on-1 (`dm-system.md` "Inbound: Reaction Add/Remove"), and a `friend_add` refused by the rule in `social.md` "End-to-End Relay Flow: Friend Add".
+| Outcome | Reasons | Outbox worker | Pull |
+|---|---|---|---|
+| `taken` | `duplicate`; `unknown_message` answering a `delete` or `reaction_remove` | Row deleted, no rollback | Counted as applied |
+| `refused` | `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `system_message_immutable`, `invalid_system_message`, `invalid_target`, `source_peer_mismatch`; a malformed payload (`invalid_payload`, `invalid_status`, `missing_participants`, `missing_federated_id`, every `missing_*_payload`); a `file_rejected` whose message or attachment is gone (`message_not_found`, `attachment_not_found`) | Row deleted, rollback callback runs | Dropped with a warning |
+| `retry` | everything else, including `attribution_unproven`, `channel_not_found`, `participant_not_found`, `author_not_found`, `user_not_found`, `sender_not_found`, `actor_not_found`, `unauthorized_source`, `max_members_exceeded`, `processing_error`, `unknown_message` for any other event type, and any reason this build does not know | Row stays on the [retry backoff schedule](#retry-backoff-schedule) until its `expiresAt` (relay TTL, 30 days by default), when the janitor deletes it; no rollback at TTL expiry | Kept in `federation_sync_retry` |
+
+- `duplicate`: the receiver already has the event. `unknown_message` for a `delete` or `reaction_remove` is the same answer from an older receiver: the effect is already in place (a receiver of this build accepts those outright, see [Receiver guarantees](#receiver-guarantees-applying-an-event-twice)).
+- `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `source_peer_mismatch` and the malformed-payload reasons: structural mismatches that sending the same payload again cannot resolve.
+- `not_message_author`, `invalid_target`: a relayed `update`/`delete` whose `target` names a message the actor did not write, is malformed, or comes from a peer that is neither a relay target of the message's conversation nor the instance the message came from. See `dm-system.md` "Relayed edits and deletes" for the rule. `invalid_target` is also a relayed 1-on-1 `create` whose author is not one of the pair or whose sender is not a relay target of it (`dm-system.md` "Relayed message creates"; the group case is the retried `unauthorized_source`), a `member_add` into a 1-on-1 or a bootstrap without an owner, with the owner outside the roster, or from a sender none of the roster lives on (`dm-system.md` "Relayed member adds"), a kick or `ownership_transfer` aimed at a 1-on-1, a `reaction_add`/`reaction_remove` on a message in a conversation the sender is not a peer of, or by a reactor outside a 1-on-1 (`dm-system.md` "Inbound: Reaction Add/Remove"), and a `friend_add` refused by the rule in `social.md` "End-to-End Relay Flow: Friend Add".
 - `system_message_immutable`, `invalid_system_message`: a relayed `update` naming a system message, and a relayed system message that is not a well-formed relayable event (`dm-system.md` "System messages"). Terminal for senders from 1.7.1; a 1.7.0 sender does not list them, so it retries such an entry on the backoff until the relay TTL.
-- `attribution_unproven` is **not** terminal: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
-- `self_target_invalid` — emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. Retrying will not change the payload. The friend-create rollback callback maps this to client-facing `peer_rejected`.
+- `attribution_unproven` is `retry`: the receiver lacks the proof that one of its users holds an account here, and that proof arrives from the user's client. See [the two refusal reasons](#3-identity-resolution).
+- `self_target_invalid`: emitted by `processFriendRequestCreateEvent` when an inbound `friend_request_create`'s `from`-identity equals its `to`-identity (after origin normalization). Defense-in-depth: the sender's local `cannot_friend_self` check should catch this, but the receiver does not trust upstream validation. The friend-create rollback callback maps this to client-facing `peer_rejected`.
 
-For non-`duplicate` terminals, the worker invokes a registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. Currently registered: `friend_request_create` → `rollbackFriendRequestCreate` (deletes the local `friend_requests` row by `relay_message_id` and emits WS `friend_request_relay_failed` to the sender). Other event types may register their own callbacks. See `social.md` §6 "Failure Handling" for the friend-specific rollback contract.
+For `refused` rejections, the worker invokes a registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. Currently registered: `friend_request_create` → `rollbackFriendRequestCreate` (deletes the local `friend_requests` row by `relay_message_id` and emits WS `friend_request_relay_failed` to the sender). Other event types may register their own callbacks. See `social.md` §6 "Failure Handling" for the friend-specific rollback contract.
 
 **Ghost-row failure mode.** Rollback callbacks are best-effort: the registry catches and logs callback errors but does NOT re-throw. A botched rollback (e.g., DB write fails mid-rollback due to disk full or FK violation) can leave a ghost row that no longer corresponds to any in-flight relay. Acceptable vs. retry-forever blocking the outbox, but worth knowing when debugging stuck pending states.
 
@@ -1155,7 +1161,7 @@ non-overlapping: each messageId appears in exactly one of the three arrays.
 | Bucket | Meaning | Retry? |
 |---|---|---|
 | `accepted` | Processed cleanly, ≥1 recipient reached. | No |
-| `rejected` | Refused at data/protocol layer (schema, attribution, channel-not-found, etc.). | Per reason: terminal reasons are dropped, the rest retried on backoff (see [Terminal rejection reasons](#terminal-rejection-reasons)). |
+| `rejected` | Refused at data/protocol layer (schema, attribution, channel-not-found, etc.). | Per reason: `taken` and `refused` are dropped, `retry` is retried on backoff (see [Rejection reasons](#rejection-reasons)). |
 | `undeliverable` | Processed cleanly, zero recipients reachable. | No — call-signaling specific. |
 
 Currently used only for `dm_call_start`:
@@ -1416,17 +1422,17 @@ When a file exceeds the local instance's size limit:
 1. Mark file queue entry as `rejected` with `reason = 'size_limit_exceeded'`
 2. Update local attachment: `federationStatus = 'remote'`, `federationMeta` = source info JSON
 3. Determine affected local users (native to this instance -- `!user.homeInstance || user.homeInstance === ourOrigin`)
-4. Queue `file_rejected` reverse relay event to the sender's instance (`sourceInstance`)
+4. Queue `file_rejected` reverse relay event to the sender's instance (`sourceInstance`). It names the affected users twice: `affectedUserIds` (bare home user ids, for older receivers) and `affectedUsers` (each `{ homeUserId, homeInstance }`, `homeInstance` being this instance's origin)
 5. Broadcast `dm_message_updated` locally so clients see the 'remote' badge
 
-### Inbound file_rejected (`processFileRejectedEvent` -- `federation.ts:2458`)
+### Inbound file_rejected (`processFileRejectedEvent` -- `routes/federation/events/dmState.ts`)
 
 When the origin instance receives a `file_rejected` event:
 
 1. Find local message by `event.messageId` (the original local message ID)
 2. Match attachment by `sourceFilename` or fallback to single attachment
-3. Resolve `affectedUserIds` (homeUserIds) to local replicated user stubs
-4. Merge rejection info into `federationMeta` (accumulates from multiple peers)
+3. Resolve the affected users (`resolveFileRejectedUsers`): with `affectedUsers`, each is the user that IS that identity (`resolveRelayActor`, homeUserId + homeInstance). From an older sender with only `affectedUserIds`, a bare id is used only when exactly one live local user carries it as `home_user_id`, since a home user id is unique only on its home
+4. Merge rejection info into `federationMeta` (accumulates from multiple peers). When no affected user is new (the same rejection delivered again), nothing changes and nothing is sent
 5. Set `federationStatus = 'remote_partial'`
 6. Broadcast `dm_message_updated` + targeted `federation_file_rejected` toast to message author
 
@@ -1538,29 +1544,17 @@ Called from `dm.ts` after the local close or reopen is committed.
 
 ### Inbound
 
-**`processDmCloseEvent` (`federation.ts`):**
+The member's `closed` flag is last-writer-wins on `dm_members.closed_changed_at`, written only through `utils/dmMemberClosed.ts` (the rule is in `dm-system.md` "Closed state is last-writer-wins"). A pull replays a peer's close and reopen events, usually after the member's state here moved on, so a replayed or late event must not undo a newer state.
+
+**`processDmCloseEvent` / `processDmReopenEvent` (`routes/federation/events/dmState.ts`):**
 1. Look up channel by `federatedId` — if not found, accept silently (idempotent)
 2. Resolve acting user via `resolveRelayActor` (lookup-only; no stub creation for close/reopen): if unknown, accept silently
-3. If the user has no `dm_members` row in this channel, accept silently
-4. Set `dm_members.closed = 1` for the resolved local user
-5. Broadcast `dm_channel_closed` to the user's local WebSocket connections
+3. `applyRelayedDmMemberClosed(channel, user, closed, event.timestamp)`: no member row, or a row whose state is newer than the event, changes nothing; otherwise the row takes the event's state and timestamp
+4. Only when the state actually changed: `dm_channel_closed` (close), or the full `DmChannel` as `dm_channel_created` (reopen, mirroring the automatic reopen in `broadcastDmMessage`), to the user's local WebSocket connections. Accepted in every case
 
-**`processDmReopenEvent` (`federation.ts`):**
-1. Look up channel by `federatedId` — if not found, accept silently
-2. Resolve acting user via `resolveRelayActor`: if unknown, accept silently
-3. If the user has no `dm_members` row, accept silently
-4. Set `dm_members.closed = 0`
-5. Build full `DmChannel` payload and broadcast `dm_channel_created` to the user's local WebSocket connections (mirrors the automatic reopen path in `broadcastDmMessage`)
+### Closed-State Reopen on Message Relay
 
-### Closed-State Reopen on Message Relay (Bug Fix)
-
-`processCreateEvent` (inbound message relay) now mirrors the local `broadcastDmMessage` logic: before broadcasting `dm_message_created`, it checks each recipient's `dm_members.closed` flag. For any recipient with `closed = 1`:
-
-1. Set `closed = 0`
-2. Broadcast `dm_channel_created` (with the new message as `lastMessage`) to resurface the DM in the recipient's sidebar
-3. Then broadcast `dm_message_created`
-
-This fixes a gap where relayed messages bypassed the closed-state reopen logic, leaving the DM hidden for recipients whose `closed` flag was set on the receiving instance.
+`processCreateEvent` (inbound message relay) mirrors the local `broadcastDmMessage` logic: a member who closed the conversation before the message was written (`closed_changed_at < message.createdAt`) gets it back (`reopenClosedDmMembers`) and a `dm_channel_created` that resurfaces it; a close made after the message was written stands, because a pull can deliver an old message long after it was sent. A live create then broadcasts `dm_message_created`; a pulled one does not (see [Pull sync](#pull-sync)).
 
 ---
 
@@ -1792,11 +1786,11 @@ Payload includes `userId`, `homeUserId`, `emoji`, `createdAt`, plus `messageId` 
 
 The WS reaction handlers accept a federated account (a user whose `homeInstance` is another instance) like any DM member. Until #295 they silently dropped its DM reactions: a leftover of the `isFederated` gate that `662143bf` lifted for every other DM operation, so a client whose DM was pinned to a remote origin could not react at all.
 
-The mutation log entry for reactions stores a simpler payload (no `messageId`/`messageHomeInstance`), while the outbox entry carries the full reaction payload including those fields. The sync endpoint (`POST /api/federation/sync`) fills them when it replays a reaction: it reads the reacted-to row (the log's `entity_id`) and names it with the same `dmMessageFederationRef`, so a replayed reaction resolves on the receiver exactly like a live one. A reaction whose message row is gone by the time of the sync is not replayed.
+The mutation log entry for reactions stores a simpler payload (no `messageId`/`messageHomeInstance`), while the outbox entry carries the full reaction payload including those fields. The sync endpoint (`POST /api/federation/sync`) fills them when it replays a reaction: it reads the reacted-to row (the log's `entity_id`) and names it with the same `dmMessageFederationRef`, so a replayed reaction resolves on the receiver exactly like a live one. A reaction whose message row is gone by the time of the sync is not replayed, and a reaction row is served only when the reaction's current state agrees with it (an add while the reaction exists, a remove while it does not), so a replay converges on the state now.
 
 ### Inbound
 
-**`processReactionAddEvent` (`federation.ts:1480`):**
+**`processReactionAddEvent` (`routes/federation/events/dmMessages.ts`):**
 1. Resolve message via `resolveLocalDmMessage(canonicalMessageId, messageHomeInstance, sourceInstance, db)`:
    - If `messageHomeInstance === getOurOrigin()` -> find by local ID (the message originated here)
    - Otherwise -> find by `(messageHomeInstance || sourceInstance, canonicalMessageId)` tracking -- uses `messageHomeInstance` when available (correct origin in 3-instance relay), falls back to `sourceInstance`
@@ -1804,24 +1798,66 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
 3. Dedup: check existing reaction by `(dmMessageId, userId, emoji)`
 4. Insert `dm_reactions`, broadcast `reaction_added` to local clients
 
-**`processReactionRemoveEvent` (`federation.ts:1561`):**
+**`processReactionRemoveEvent` (`routes/federation/events/dmMessages.ts`):**
 - Same resolution logic
 - Delete matching reaction, broadcast `reaction_removed` if changes > 0
 
 ---
 
-## 12. Initial Sync
+## 12. Pull Sync and Initial Sync
 
-### `startupBootstrapSync()` (`federationWorker.ts`)
+### Pull sync
 
-Triggered once at server startup (async, non-blocking). Finds peers with `status = 'active'` and `lastSyncedAt = 0` and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each. This preserves the original startup-sync semantics while unifying the code path with all other activation sites (see "Peer Activation Recovery" below).
+An instance pulls each active peer's mutation log through the peer's `POST /api/federation/sync` and applies what it finds, so an event the live relay lost reaches it anyway: a refusal that later resolves, an outbox row that expired while the peer was down, a restart, or a restore from backup (its cursors go back with the database, so the next pull re-reads what the backup lacks). Before #255 this ran only when a peering became active, so a gap that opened after peering was permanent. Source: `utils/federationSync.ts`.
+
+**When.** On every activation (`onPeerActivated`, all three contexts), and periodically: `processResyncTick` runs a minute after boot and every 15 minutes after, over every `active` peer one at a time, pulling the `dm` and `profile` contexts. A retry tick every 5 minutes replays kept events (below). Each peer is pulled by one caller at a time: activation, the periodic tick and the retry tick queue behind each other (`runForPeer`).
+
+**Cursor.** One row per (peer, context) in `federation_sync_cursors`, in the **peer's** clock: the `(mutated_at, id)` of the last log row consumed (the page's `checkpoint` / `checkpointId`), saved after every page, so a long catch-up resumes where it stopped. It never moves back. Each pass starts `FIRST_PAGE_OVERLAP_MS` (2 min) before the cursor, which absorbs a backward clock step on the peer (the rows it re-reads apply as no-ops); later pages continue by keyset (`afterId = checkpointId`). Against a server without keyset pagination the next page starts at `checkpoint - 1`, re-reading the checkpoint's millisecond instead of skipping the rows of it that fell past the page; a full page within one millisecond can only move on by skipping the rest of it, which is logged. A cursor with no row starts at 0 for `dm` and `profile` (processors safe to apply twice, see below), and at `last_synced_at` for `friend`. `peer_epoch` is the peer's instance id the cursor was taken against: a new incarnation restarts every cursor of that peer at 0 and drops its kept events. `federation_peers.last_synced_at` is only the local time of the last pull that completed every context asked for, shown to admins.
+
+**Outcomes.** Every pulled event is applied through `processRelayEvents` with `delivery: 'catch_up'` and its answer classified by [`classifyRejection`](#rejection-reasons):
+
+- accepted, or `taken`: applied (counted as already held for `taken`);
+- `refused`: dropped with a warning;
+- `retry`: kept in `federation_sync_retry` with the whole event. The cursor moves on regardless; stopping it would leave the peer stuck behind one event for ever.
+
+**Order.** Events are ordered within a unit, `syncContextKey`: a conversation (the peer's `dmChannelId`), a friend pair, or a profile's user. A unit with a kept event holds its later pulled events behind it (kept with reason `held_behind_earlier_event`), so a retried `member_add` can never land after the `member_remove` that followed it. Different units never wait for each other.
+
+**Retry.** `processSyncRetryTick` replays, per peer and unit in `(event_ts, id)` order, the kept events whose unit head is due: an applied, `taken` or `refused` answer removes the row and the next row of the unit goes at once; a `retry` answer reschedules the head (1 min, 5 min, 30 min, 2 h, 6 h, then 24 h) and stops the unit. A row kept for more than 7 days is dropped with a warning. Rows of a peer that is not `active` wait. Replay is local: it needs no network and does not depend on the 90-day log retention.
+
+**Catch-up is not news.** A pulled event raises no sound or notification on a client. `processCreateEvent` stores a pulled message and sends no `dm_message_created`; clients see it when they next load the conversation. Unread state follows the read pointer as always: the conversation's newest message decides it, so a healed old message below the reader's pointer counts as read. Edits, deletes and reactions still broadcast their updates, which correct what an open client shows.
+
+**401 / 403.** A refused `/sync` only skips that context for this pull. Peer state belongs to the outbox and recovery workers; the pull never writes `federation_peers.status` or the auth-failure counter. `/sync` requires the requester's row to be `active` on the serving side, so a peer that currently marks this instance `unreachable` answers 403 until its own recovery.
+
+**Mixed versions.** Nothing requires the peer to upgrade: `/sync` exists on every version, an older server ignores `afterId` and omits `checkpointId` (handled above). An older peer never pulls periodically from this instance, as before.
+
+### Receiver guarantees: applying an event twice
+
+The pull re-delivers events the live relay already delivered, often after local actions that reacted to them, and the outbox may send a delete for a create whose delivery it could not confirm. Every relay processor is therefore safe to apply twice and to apply late:
+
+| Event | Applied again | Arriving after a newer state |
+|---|---|---|
+| `create` | `duplicate` (dedup on `(source_instance, source_message_id)`), no side effects | a `delete` for it arrived first: `duplicate`, the message never appears (tombstone below). Reopens only members who closed the conversation before the message was written |
+| `update` | no-op, no broadcast (the copy already holds that `editedAt`) | an older `editedAt` is ignored; an older sender without `editedAt` applies only when the content differs |
+| `delete` of a held message | deletes it, records a tombstone | n/a |
+| `delete` of a message not held | accepted as a no-op on both paths, live and pull. When the message is homed on the signing peer, records the tombstone `dm_delete:<messageId>` for that peer in `federation_applied_events`, so a create of it arriving later is answered `duplicate`. A delete naming a message homed elsewhere records nothing: no peer can block another's messages | n/a |
+| `reaction_add` / `reaction_remove` | set semantics, broadcast only on change | the sync endpoint serves a reaction row only when the reaction's current state agrees with it. Known limit: a stale add can undo a removal made on the receiver through client federation, when a pull runs between the removal and its relay to the reaction's home |
+| `member_add` / `member_remove` / `ownership_transfer` | accepted no-op (system-message marker on `(source_instance, source_message_id)`) | pull order within the conversation is kept (above); the live outbox's order is its own |
+| `group_metadata_update` / `read_state_update` / `profile_update` | last-writer-wins on `metadataUpdatedAt` / `timestamp` / `profileUpdatedAt` | same |
+| `dm_close` / `dm_reopen` | no change, no broadcast | last-writer-wins on `dm_members.closed_changed_at` |
+| `file_rejected` | no broadcast unless a new affected user is added | n/a |
+
+`federation_applied_events` rows live 100 days (janitor), longer than the 90-day mutation log a pull reads.
+
+### `startupBootstrapSync()` (`federationPeerActivation.ts`)
+
+Triggered once at server startup (async, non-blocking). Finds peers with `status = 'active'` and `lastSyncedAt = 0` and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each, for the rest of what activation does (outbound subscriber fan-out, stub backfill, presence snapshot). Peers that have synced before are covered by the periodic pull's first run a minute after boot.
 
 ### Peer Activation Recovery
 
 Every transition of `federation_peers.status` to `active` invokes `onPeerActivated(peerId, reason)` — one handler wired at all transition sites. Two independent invariants, both unconditional:
 
 1. **`resetOutboxBackoff`** — sets `nextRetryAt = now` and `attempts = 0` for every outbox entry belonging to the peer. Entries that accumulated exponential backoff before the peer went unreachable are immediately eligible again. Attempts counter is also reset so a freshly-healthy peer's next failure starts at `BACKOFF_SCHEDULE_MS[0]` (30s), not wherever the counter left off.
-2. **`syncPeerMutationLog`** — pulls missed events from the peer's `/api/federation/sync` endpoint since `peer.lastSyncedAt`. Three passes: DM, friend, profile (in that order, each paginated). `lastSyncedAt` advances to `Date.now()` on full success; stays put on transient failure so the next activation retries the same window.
+2. **`syncPeerMutationLog`** (`utils/federationSync.ts`) — pulls the peer's mutation log from this instance's cursors for it, every context: DM, friend, profile, in that order, each paginated. See [Pull sync](#pull-sync).
 
 #### Call sites (must remain exhaustive)
 
@@ -1884,58 +1920,47 @@ Event types covered by `appendMutationLog` (replayed on sync-pull):
 | `dm_close` / `dm_reopen` | `dm` | `federationOutbox.queueDmCloseRelay` |
 | `read_state_update` | `dm` | `federationOutbox.queueReadStateRelay` |
 | `file_rejected` | `dm` | `federationWorker.handleSizeRejection` |
+| `group_metadata_update` | `dm` | `federationOutbox.queueGroupMetadataRelay` |
 | `friend_request_*` / `friend_add` / `friend_remove` | `friend` | `social.ts` |
 | `profile_update` | `profile` | `routes/users.ts` (PATCH `/api/users/@me`) |
 
 Ephemeral events (`dm_typing_*`, `dm_call_*`) are fire-and-forget by design and are NOT captured — missed typing/call-signaling packets are acceptable and carry no durable state.
 
-#### `/api/federation/sync` contextType filter values
-
-| Filter | Returns |
-|---|---|
-| (none) / omitted | DM events (including `dm_close`, `dm_reopen`, `read_state_update`, `file_rejected`) |
-| `'friend'` | Friend events |
-| `'profile'` | Profile update events |
-
-#### Poison-Pill Event Handling
-
-`syncPeerMutationLog` replays incoming events one at a time. If an event's inbound processor throws (e.g., UNIQUE conflict from a malformed payload, unexpected schema drift, a processor bug), the error is caught per-event, logged via `console.error` with the event's `eventType`, `messageId`, `timestamp`, peer origin, and error message, and the loop continues with the next event. `lastSyncedAt` is advanced past the failed event (using the event's own `timestamp`), so subsequent activations do not retry the poison pill.
-
-The final `Sync-pull from <origin> replayed <N> events` log line is suffixed with `(<K> skipped due to errors)` when `K > 0`, surfacing the count to operators watching logs. Individual event failures are in the same logs under `Skipping poison-pill event` — grep `console.error` / `stderr` to recover them.
-
-Trade-off: this policy prioritizes forward progress of the sync pipeline over strict at-least-once delivery of every mutation. An event that fails to process is silently lost to the receiving instance unless operators manually replay it (e.g., by resetting `lastSyncedAt` on the peer row or by reissuing the originating mutation on the sender). The alternative — refusing to advance on any error — caused the "stuck forever" state described in the pre-fix version of this section.
-
 ### Sync Endpoint (`POST /api/federation/sync`)
 
-HMAC-authenticated. Returns events from the `federation_mutation_log`.
+HMAC-authenticated (`authenticateS2SPeer`, active requester only). Serves one page of this instance's `federation_mutation_log`, read and serialized by `routes/federation/handlers/syncPage.ts`. The log only holds mutations made on this instance (a receiver never appends to it), so everything served is this instance's own word, including messages its users wrote as federated accounts of another instance and its reactions to relayed copies.
 
 **Request:**
 ```typescript
-{ sinceTimestamp: number, dmChannelId?: string, federatedId?: string, contextType?: 'dm'|'friend'|'profile', limit?: 1-500 }
+{ sinceTimestamp: number, afterId?: string, dmChannelId?: string, federatedId?: string, contextType?: 'dm'|'friend'|'profile', limit?: 1-500 }
 ```
 
 **Response:**
 ```typescript
-{ events: FederationRelayEvent[], hasMore: boolean, checkpoint: number }
+{ events: FederationRelayEvent[], hasMore: boolean, checkpoint: number, checkpointId?: string }
 ```
 
-**DM sync:**
-- Queries `dm_channels` with non-null `federated_id` (not soft-deleted) that have ≥1 relevant member for the requesting peer (see relevance scoping below)
-- Joins `federation_mutation_log` with `dm_messages` to reconstruct events
-- Only returns locally-created messages (`source_instance IS NULL` via the LEFT JOIN)
-- Handles delete mutations separately (message rows don't exist for deletes)
-- For create/update: fetches current message state from DB and builds the message part with `buildRelayPayload`, the live relay's builder, so a replayed message carries the same `type`, author identity (`getOurOrigin()` for a native author), `replyTo` and `mentions` as a live one; adds attachments (`sourceUrl` on `getOurOrigin()`) and participants
-- Membership/friend mutations store the full event payload in the mutation log, so they are returned directly
+**Pagination.** Rows are read in `(mutated_at, id)` order, strictly after `(sinceTimestamp, afterId)`, or after `sinceTimestamp` when `afterId` is absent. `checkpoint` / `checkpointId` are the last row READ, and `hasMore` is whether the page read `limit` rows: a row filtered out or not serializable still moves the requester past it. `checkpointId` is absent when the page read nothing (`checkpoint` is then `sinceTimestamp`). Before #255 the next page asked for `> checkpoint`, which skipped the rows of that millisecond that fell past the page.
 
-**Friend sync:**
-- Queries `federation_mutation_log WHERE context_type = 'friend'`
-- Returns stored payloads directly (friend events carry their complete data)
+| `contextType` | Rows |
+|---|---|
+| `'dm'` / omitted | DM events of conversations shared with the requester, optionally one (`dmChannelId`, or `federatedId`) |
+| `'friend'` | Friend events one of whose sides is the requester's (relevance below) |
+| `'profile'` | Profile update events |
 
-**Relevance scoping (dead-incarnation filtering):** the DM branch only offers channels having ≥1 member whose local row is homed at the requesting peer's domain with `is_deleted = 0` AND `federation_home_orphaned = 0`. A freshly reset peer therefore receives an empty DM sync — its pre-reset history stays with the detached accounts on this side. The friend branch filters analogously in JS (an event qualifies iff one side is homed at the requester and does not resolve to a detached/tombstoned local row); `checkpoint`/`hasMore` are computed from pre-filter rows so filtered events still advance the cursor.
+**DM rows.** Shared conversations are those with a non-null `federated_id`, not soft-deleted, with at least one live member (`is_deleted = 0`, `federation_home_orphaned = 0`) homed at the requester's host. What each row becomes:
+- `create` / `update`: the message as it is now, built with `buildRelayPayload`, the live relay's builder (same `type`, author identity, `replyTo`, `mentions`), plus attachments (`sourceUrl` on `getOurOrigin()`), participants, the group `federatedId`, and an update's `target`. Not served once the message is deleted; its `delete` row follows.
+- `delete`: the target the delete path logged (the row is gone).
+- `reaction_add` / `reaction_remove`: see §11. Served only while the reaction's current state agrees with the row.
+- `member_add` / `member_remove` / `ownership_transfer`: the stored event.
+- `dm_close` / `dm_reopen`, `read_state_update`, `group_metadata_update`: the stored payload with the conversation's `federatedId`.
+- `file_rejected`: served only to the instance the rejected message came from (the requester must be the `source_instance` of this instance's copy): it is a reverse relay naming the message by that instance's id.
+
+**Relevance scoping.** Conversations and friend events are the requester's by host, compared the way attribution compares (`identityHost`: lowercase hostname, no scheme or port), so a member stored as `https://host:port` or `host` is the requester's either way. A freshly reset peer receives an empty DM page: its pre-reset history stays with the detached accounts on this side. A friend event qualifies when one side is homed at the requester and that side, when it has a row here, is live and not detached.
 
 ### Relay Event Processing
 
-The event processing logic is extracted into `processRelayEvents()` (exported from `federation.ts`), shared by both the HTTP relay endpoint and the initial sync worker. This avoids a DNS hairpin issue where the server would HTTP-request itself through public DNS, which fails on networks without hairpin NAT.
+The event processing logic is extracted into `processRelayEvents()` (exported from `federation.ts`), shared by the HTTP relay endpoint (`delivery: 'live'`) and the pull (`delivery: 'catch_up'`, see [Pull sync](#pull-sync)). This avoids a DNS hairpin issue where the server would HTTP-request itself through public DNS, which fails on networks without hairpin NAT.
 
 ---
 
@@ -2066,6 +2091,8 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | Epoch-refresh baseline | Startup + 15min (end of health tick) | active peers w/ `peer_instance_id IS NULL` | 10s per peer | `refreshPeerEpochs` (populate-if-null, self-terminating) |
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
 | Startup bootstrap sync | Once at startup | -- | 30s per page | `startupBootstrapSync` → `onPeerActivated` |
+| Periodic pull | 1 min after startup, then 15min | all active peers, one at a time, `dm` + `profile` | 30s per page | `processResyncTick` (`utils/federationSync.ts`, started by `startPeerSyncWorkers`) |
+| Pull retry | 5min | kept events whose unit head is due | -- | `processSyncRetryTick` |
 | Dead-incarnation sweep | Once at startup | -- | -- | `sweepDeadIncarnationArtifacts` (sync, idempotent) |
 
 `sweepDeadIncarnationArtifacts` — startup, idempotent: deletes DM channels with no native member (with explicit child-row cleanup) and unreferenced replicated stubs homed at this instance's own domain; still-referenced stubs are skipped and logged. It does not rely on FK cascade (must not assume `PRAGMA foreign_keys` is ON): the channel delete explicitly clears its `dm_reactions`/`attachments`/`dm_messages`/`dm_members`/`read_states` rows, and the stub delete explicitly clears its `dm_reactions`/`reactions`/`read_states` rows — and the stub's deletable guard mirrors the non-cascading FKs to `users.id` by hand (a future non-cascading FK to `users.id` needs a matching NOT-EXISTS clause).
@@ -2078,6 +2105,7 @@ The 1-on-1 key sweep that used to run here (`reconcileDriftedDmFederatedIds`) is
 |--------|-----------|-----------|
 | `federation_outbox` | `expiresAt < now`; in a DM message's queue the rows behind an expired row go with it (see [Outbox Delivery Worker](#outbox-delivery-worker-federationworkertsprocessoutboxtick), **Expiry**) | Configurable via `federationRelayTtlDays` (default 30) |
 | `federation_mutation_log` | `mutatedAt < (now - 90 days)` | 90 days |
+| `federation_applied_events` | `appliedAt < (now - 100 days)` | 100 days (`sweepAppliedEvents`), longer than the mutation log a pull reads |
 | `federation_file_queue` (completed) | `createdAt < (now - 7 days)` | 7 days |
 | `federation_file_queue` (any) | `expiresAt < now` | 30 days (set at queue time) |
 | `dm_channels` (soft-deleted) | `deletedAt < (now - 24h)` | 24-hour grace period |
@@ -2100,6 +2128,8 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 **Handshake `sourceOrigin` honors this override.** `resolveLocalOrigin()` (`routes/federation.ts`) delegates to `getOurOrigin()`, so the origin advertised in the `/peer/accept` handshake body is identical to the `X-Federation-Origin` used for authenticated S2S requests. Using `https://${DOMAIN}` directly (the prior behavior) desynced the responder's peer-row key from the auth origin whenever `PUBLIC_ORIGIN != https://DOMAIN`, causing permanent `403 Not peered`. See "Trust re-establishment contract" (§1).
 
 ### Test-Only Routes
+
+`POST /api/admin/test/federation/resync { peerOrigin, contexts?, retryAt? }` runs one pull from that peer now (`syncPeerMutationLog(peerId, 'manual', contexts)`, all contexts by default) and then `processSyncRetryTick(retryAt ?? now)`, and answers `{ result, retried }`. Same gate as seed-peer below. The two-instance e2e suites use it so a pull happens when the test says, not on the periodic timer.
 
 `POST /api/admin/test/seed-peer` directly inserts a `federation_peers` row, skipping the multi-step peer handshake. Strictly gated: `NODE_ENV='test'` AND `ENABLE_TEST_ROUTES='1'` together; returns 404 in any other configuration. Used exclusively by the two-instance integration harness in `packages/server/test/`. Validates `origin` (must be http(s) URL), `hmacSecret` (≥32 chars), and `status` (must be one of `'active'`, `'pending'`, `'awaiting_approval'`, `'rejected'`, `'revoked'`, `'needs_attention'`, `'unreachable'`, `'accepted'`).
 

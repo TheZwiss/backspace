@@ -32,6 +32,12 @@ import { buildHeadersForOrigin } from './hmacSign.js';
  *     signature) — see `dumpPeerRows` output in the suites. Inbound relay is
  *     therefore fully real, and attribution can actually tell three instances
  *     apart. Used by the attribution and stub-claiming suites.
+ *     The home's only row for a remote is transport-keyed, so the remote's
+ *     signed requests to the home (relay, `/sync`) find no row and are refused.
+ *     A suite that needs signed traffic INTO the home passes `{ reverse: true }`:
+ *     the remote then runs the same real handshake back to the home, which
+ *     leaves the home an ACTIVE row keyed by the remote's identity origin (and
+ *     the remote a transport-keyed row to dial the home by).
  *     Because the initiator's row is keyed by the transport origin, a remote
  *     identity domain (`remote0.test.local`) maps to no peer there
  *     (`resolveOriginFromHostname`), so the initiator never asks the identity's
@@ -86,6 +92,14 @@ export interface PeeringOptions {
    * the instance's own origin is only known once it has bound its port.
    */
   beforePeering?: (home: SpawnedInstance, remotes: SpawnedInstance[]) => void | Promise<void>;
+  /**
+   * After each home -> remote handshake, also run the remote -> home one. Only
+   * the IDENTITY profile needs it, and only a suite that sends signed requests
+   * INTO the home: there the home's row for a remote is keyed by the remote's
+   * transport origin, while the remote signs as its identity origin. See the
+   * header comment.
+   */
+  reverse?: boolean;
 }
 
 async function bootAndPeer(
@@ -93,7 +107,7 @@ async function bootAndPeer(
   options: BootOptions,
   peering: PeeringOptions = {},
 ): Promise<PeeredHarness> {
-  const { dialOrigins, beforePeering } = peering;
+  const { dialOrigins, beforePeering, reverse } = peering;
   const m = await bootHomePlusRemotes(remoteCount, options);
   const harness: PeeredHarness = {
     home: m.home,
@@ -117,6 +131,14 @@ async function bootAndPeer(
           `real handshake home -> ${dial} failed: ${res.status} ${JSON.stringify(res.body)}`,
         );
       }
+      if (reverse) {
+        const back = await initiatePeering(remote, harness.remoteAdminTokens[i]!, m.home);
+        if (back.status !== 200 || back.body.verified !== true) {
+          throw new Error(
+            `real handshake ${remote.origin} -> home failed: ${back.status} ${JSON.stringify(back.body)}`,
+          );
+        }
+      }
     }
   } catch (err) {
     // Never leak spawned processes or temp dirs when setup throws.
@@ -130,8 +152,11 @@ async function bootAndPeer(
  * IDENTITY profile: distinct federated identity domains, real inbound relay.
  * See the header comment for why this is not the same rig as the transport one.
  */
-export async function bootIdentityPeered(remoteCount = 1): Promise<PeeredHarness> {
-  return bootAndPeer(remoteCount, { publicOriginAsTransport: false });
+export async function bootIdentityPeered(
+  remoteCount = 1,
+  peering: Pick<PeeringOptions, 'reverse'> = {},
+): Promise<PeeredHarness> {
+  return bootAndPeer(remoteCount, { publicOriginAsTransport: false }, peering);
 }
 
 /**
