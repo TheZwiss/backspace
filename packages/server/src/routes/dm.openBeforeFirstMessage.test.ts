@@ -251,3 +251,58 @@ describe('#360: a 1-on-1 reaches the recipient with its first message', () => {
     }
   });
 });
+
+describe('opening a 1-on-1 that re-keys another row tells that row\'s members', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    const now = Date.now();
+    testDb.insert(schema.users).values([
+      { id: 'alice', username: 'alice', passwordHash: 'x', createdAt: now },
+      { id: 'carol', username: 'carol', passwordHash: 'x', createdAt: now },
+      { id: 'dave', username: 'dave', passwordHash: 'x', createdAt: now },
+    ]).run();
+    const { oneOnOneKey } = await import('../utils/dmConversation.js');
+    const key = (a: string, b: string) => oneOnOneKey({ id: a, homeUserId: null }, { id: b, homeUserId: null });
+    // 'drifted' carries the alice-dave key but holds alice and carol; 'aliceCarol'
+    // holds the alice-carol key, so opening alice-dave merges 'drifted' into it.
+    testDb.insert(schema.dmChannels).values([
+      { id: 'drifted', federatedId: key('alice', 'dave'), createdAt: 1 },
+      { id: 'aliceCarol', federatedId: key('alice', 'carol'), createdAt: 2 },
+    ]).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'drifted', userId: 'alice', closed: 1 },
+      { dmChannelId: 'drifted', userId: 'carol', closed: 1 },
+      { dmChannelId: 'aliceCarol', userId: 'alice', closed: 1 },
+      { dmChannelId: 'aliceCarol', userId: 'carol', closed: 0 },
+    ]).run();
+    sockets.clear();
+    await connect('alice');
+    await connect('carol');
+    app = Fastify({ logger: false });
+    const { dmRoutes } = await import('./dm.js');
+    await app.register(dmRoutes);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    const { connectionManager } = await import('../ws/handler.js');
+    for (const ws of sockets.values()) connectionManager.removeConnection(ws as never);
+    await app.close();
+    vi.restoreAllMocks();
+  });
+
+  it('closes the merged-away row for its members and sends the survivor only where it is open', async () => {
+    const opened = await open(app, 'alice', 'dave');
+    expect(opened.status).toBe(201);
+    const closedIds = (userId: string) => eventsOf(userId).filter(e => e.type === 'dm_channel_closed').map(e => e.dmChannelId);
+    expect(closedIds('carol')).toEqual(['drifted']);
+    expect(createdFor('carol').map(d => d.id)).toEqual(['aliceCarol']);
+    expect(closedIds('alice')).toEqual(['drifted']);
+    // alice closed alice-carol; it stays out of her list.
+    expect(createdFor('alice').map(d => d.id)).not.toContain('aliceCarol');
+  });
+});

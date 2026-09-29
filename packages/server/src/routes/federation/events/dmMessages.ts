@@ -4,6 +4,7 @@ import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { findOrCreateOneOnOne, oneOnOneKey } from '../../../utils/dmConversation.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
+import { announceDmReconcile } from '../../../utils/dmConversationEvents.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -151,7 +152,9 @@ export async function processCreateEvent(
     }
     // Both members open: the message that creates a copy here is delivered
     // with it.
-    localDmChannelId = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' }).channelId;
+    const opened = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' });
+    announceDmReconcile(opened.reconciled);
+    localDmChannelId = opened.channelId;
     // A call that rang here before this copy existed is bound to it now.
     connectionManager.lateBindFederatedCall(oneOnOneKey(pair[0]!, pair[1]!), localDmChannelId);
   }

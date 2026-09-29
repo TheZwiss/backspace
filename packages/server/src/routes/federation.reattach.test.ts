@@ -314,6 +314,54 @@ describe('POST /api/users/@me/reattach — stub merge', () => {
     expect(row.username).toBe('hans@orbit.test');
   });
 
+  it('keeps the newer read pointer when the stub\'s and the account\'s meet', async () => {
+    testDb.insert(schema.readStates).values([
+      { userId: 'detached-1', channelId: 'ch-1', lastReadMessageId: '900', updatedAt: 1 },
+      { userId: 'stub-new', channelId: 'ch-1', lastReadMessageId: '1000', updatedAt: 2 },
+    ]).run();
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(200);
+    const pointers = testDb.select().from(schema.readStates).all();
+    expect(pointers.map(p => [p.userId, p.channelId, p.lastReadMessageId])).toEqual([['detached-1', 'ch-1', '1000']]);
+  });
+
+  it('a held handle rolls back the read pointer move and the DM reconcile, and announces neither', async () => {
+    const { connectionManager } = await import('../ws/handler.js');
+    const send = vi.spyOn(connectionManager, 'sendToUser');
+    verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'hans' });
+    testDb.insert(schema.users).values({
+      id: 'hans-account', username: 'hans@orbit.test', passwordHash: 'real-hash',
+      homeInstance: 'orbit.test', homeUserId: 'other', createdAt: 1,
+    }).run();
+    testDb.insert(schema.readStates).values([
+      { userId: 'detached-1', channelId: 'ch-1', lastReadMessageId: '900', updatedAt: 1 },
+      { userId: 'stub-new', channelId: 'ch-1', lastReadMessageId: '1000', updatedAt: 2 },
+    ]).run();
+    // A 1-on-1 under the old identity's key, which a completed re-attach re-keys.
+    const oldFed = pairKey('alice', 'dead-home-1');
+    testDb.insert(schema.dmChannels).values({ id: 'ch-old', federatedId: oldFed, createdAt: 1 }).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'ch-old', userId: 'alice', closed: 0 },
+      { dmChannelId: 'ch-old', userId: 'detached-1', closed: 0 },
+    ]).run();
+
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('reattach_handle_taken');
+    const pointers = testDb.select().from(schema.readStates).all()
+      .map(p => [p.userId, p.channelId, p.lastReadMessageId])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    expect(pointers).toEqual([['detached-1', 'ch-1', '900'], ['stub-new', 'ch-1', '1000']]);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-new')).get()).toBeDefined();
+    expect(testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'ch-old')).get()!.federatedId).toBe(oldFed);
+    const dmEvents = send.mock.calls.filter(([, event]) => {
+      const type = (event as { type: string }).type;
+      return type === 'dm_channel_created' || type === 'dm_channel_closed';
+    });
+    expect(dmEvents).toEqual([]);
+    send.mockRestore();
+  });
+
   it('409 when the new identity is held by a REAL account (not a stub)', async () => {
     testDb.update(schema.users).set({ passwordHash: 'real-hash' }).where(eq(schema.users.id, 'stub-new')).run();
     const res = await reattach('detached-1', 'youruser@orbit.test');
@@ -359,6 +407,38 @@ describe('POST /api/users/@me/reattach — 1-on-1 DM channel reconciliation', ()
     expect(testDb.select().from(schema.dmChannels).all().some(c => c.id === 'ch-old')).toBe(false);
     const msgs = testDb.select().from(schema.dmMessages).all().filter(m => m.dmChannelId === 'ch-new').sort((a, b) => a.createdAt - b.createdAt);
     expect(msgs.map(m => m.id)).toEqual(['mo1', 'mo2', 'mn1']);
+  });
+
+  it('sends the surviving channel only to members who have it open', async () => {
+    const { connectionManager } = await import('../ws/handler.js');
+    const send = vi.spyOn(connectionManager, 'sendToUser');
+    const oldFed = pairKey('alice', 'dead-home-1');
+    const newFed = pairKey('alice', 'new-home-1');
+    testDb.insert(schema.dmChannels).values([
+      { id: 'ch-old', federatedId: oldFed, createdAt: 1 },
+      { id: 'ch-new', federatedId: newFed, createdAt: 2 },
+    ]).run();
+    // alice closed the conversation on both rows; the re-attaching account has it open.
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'ch-old', userId: 'alice', closed: 1 },
+      { dmChannelId: 'ch-old', userId: 'detached-1', closed: 0 },
+      { dmChannelId: 'ch-new', userId: 'alice', closed: 1 },
+      { dmChannelId: 'ch-new', userId: 'detached-1', closed: 0 },
+    ]).run();
+
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(200);
+    const dmEvents = send.mock.calls
+      .map(([userId, event]) => [userId, event as { type: string; dmChannelId?: string; dmChannel?: { id: string } }] as const)
+      .filter(([, e]) => e.type === 'dm_channel_created' || e.type === 'dm_channel_closed')
+      .map(([userId, e]) => `${userId} ${e.type} ${e.dmChannelId ?? e.dmChannel?.id}`)
+      .sort();
+    expect(dmEvents).toEqual([
+      'alice dm_channel_closed ch-old',
+      'detached-1 dm_channel_closed ch-old',
+      'detached-1 dm_channel_created ch-new',
+    ]);
+    send.mockRestore();
   });
 
   it('re-keys the history channel in place when no new-identity channel exists yet', async () => {

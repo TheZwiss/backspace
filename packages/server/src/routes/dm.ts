@@ -58,6 +58,7 @@ import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser } from './federation.js';
 import { resolveRemoteIdentityForClient } from '../utils/federationClientIdentity.js';
 import { dmMessageEditRefusal, dmSystemContent, dmSystemName } from '../utils/dmSystemMessages.js';
+import { announceDmReconcile } from '../utils/dmConversationEvents.js';
 import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents.js';
 
 /**
@@ -344,6 +345,7 @@ function openOneOnOne(
     targetUser,
     { open: 'first' },
   );
+  announceDmReconcile(opened.reconciled);
   if (opened.created) return opened;
 
   const reopened = db.update(schema.dmMembers)

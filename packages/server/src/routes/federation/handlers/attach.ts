@@ -11,12 +11,12 @@ import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { DmChannel } from '@backspace/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { extractDomain } from '../identity.js';
 import { applyHomeProfile, homeProfileFromAnswer } from '../profile.js';
 import { isLookupRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
-import { reconcileDmChannelFederatedId, type DmReconcileResult } from '../../../utils/dmConversation.js';
+import { keepNewerReadPointer, reconcileDmChannelFederatedId, type DmReconcileResult } from '../../../utils/dmConversation.js';
+import { announceDmReconcile } from '../../../utils/dmConversationEvents.js';
 import { sendError } from '../../../utils/httpErrors.js';
 import { announceUserUpdated, claimHandleName, handleFromHint } from '../stubName.js';
 
@@ -211,9 +211,12 @@ export function registerAttachRoutes(app: FastifyInstance): void {
         rawDb.prepare(`UPDATE friend_requests SET from_id = ? WHERE from_id = ?`).run(targetId, stubId);
         rawDb.prepare(`UPDATE friend_requests SET to_id = ? WHERE to_id = ?`).run(targetId, stubId);
         rawDb.prepare(`DELETE FROM friend_requests WHERE from_id = to_id`).run();
-        // read_states (composite PK user_id+channel_id → dedupe).
-        rawDb.prepare(`DELETE FROM read_states WHERE user_id = ? AND channel_id IN (SELECT channel_id FROM read_states WHERE user_id = ?)`).run(stubId, targetId);
-        rawDb.prepare(`UPDATE read_states SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // read_states (composite PK user_id+channel_id): each of the stub's
+        // pointers moves to the detached row, the newer kept where both have one.
+        const stubPointers = rawDb.prepare(`SELECT channel_id FROM read_states WHERE user_id = ?`).all(stubId) as Array<{ channel_id: string }>;
+        for (const { channel_id: channelId } of stubPointers) {
+          keepNewerReadPointer(rawDb, { userId: stubId, channelId }, { userId: targetId, channelId });
+        }
         // dm_channels.owner_id (plain text column, NO FK → straight repoint).
         rawDb.prepare(`UPDATE dm_channels SET owner_id = ? WHERE owner_id = ?`).run(targetId, stubId);
         rawDb.prepare(`DELETE FROM users WHERE id = ?`).run(stubId);
@@ -286,26 +289,9 @@ export function registerAttachRoutes(app: FastifyInstance): void {
       connectionManager.sendToUser(uid, { type: 'user_updated' as const, user: sanitizeUser(updated, uid === updated.id) });
     }
 
-    // Push DM-list refresh for reconciled channels to affected local members so
-    // the merged/re-keyed conversation replaces the split without a reload
-    // (reattach-dm-reconcile spec §3.4). Reuses existing events, no new type:
-    //  - merged: dm_channel_closed removes the stale source entry; dm_channel_created
-    //    (full DmChannel payload — the client handler reads dmChannel.members) resurfaces
-    //    the surviving target with its merged history.
-    //  - rekeyed: dm_channel_created upserts the channel's copy (the client's DM merge
-    //    module, web/src/stores/dmConversations.ts), refreshing the now-stale federatedId in place. dm_channel_updated
-    //    would only patch name/icon, not federatedId, so it cannot heal the client here.
-    for (const r of dmReconcileResults) {
-      const targetPayload = loadDmChannelWire(db, r.targetChannelId);
-      for (const uid of r.affectedUserIds) {
-        if (r.action === 'merged') {
-          connectionManager.sendToUser(uid, { type: 'dm_channel_closed' as const, dmChannelId: r.channelId });
-        }
-        if (targetPayload) {
-          connectionManager.sendToUser(uid, { type: 'dm_channel_created' as const, dmChannel: targetPayload });
-        }
-      }
-    }
+    // The merged or re-keyed conversations replace the split in the affected
+    // members' DM lists without a reload (reattach-dm-reconcile spec §3.4).
+    announceDmReconcile(dmReconcileResults);
 
     return reply.code(200).send({ success: true, user: sanitizeUser(updated, true) });
   });
