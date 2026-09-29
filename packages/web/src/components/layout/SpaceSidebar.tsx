@@ -648,7 +648,8 @@ export function SpaceSidebar() {
           try {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
             const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
-            const url = `${origin}/invite/${code}`;
+            // Match the public join route used by the invite modal.
+            const url = `${origin}/join/${code}`;
             await navigator.clipboard.writeText(url);
             useUIStore.getState().addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
           } catch {
