@@ -4,11 +4,13 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { devCspPreamble } from './src/build/devCsp';
+import { preloadStartupChunks } from './src/build/startupChunks';
 import { PRECACHE_GLOB_PATTERNS, PRECACHE_MAX_FILE_BYTES } from './src/build/precache';
 
 export default defineConfig({
   plugins: [
     devCspPreamble(),
+    preloadStartupChunks(),
     react(),
     VitePWA({
       // 'prompt' keeps a new build waiting until SwAutoUpdate applies it, so an

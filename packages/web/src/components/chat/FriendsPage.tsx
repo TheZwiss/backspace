@@ -23,7 +23,7 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { presenceLabel } from '../../i18n/presence';
 
@@ -685,6 +685,7 @@ function UserDiscoverCard({
   onOpenDm: (userId: string, homeUserId?: string, homeInstance?: string | null) => void;
   onRelationshipChange: (userId: string, origin: string, relationship: TaggedDiscoverUser['relationship'], requestId?: string) => void;
 }) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['social', 'common']);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);

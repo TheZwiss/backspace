@@ -1,5 +1,5 @@
 import { MentionBadge } from './MentionBadge';
-import { replaceEmojiShortcodesInMarkdownSource } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodesInMarkdownSource, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { splitMentionTokens } from '../../utils/mentionTokens';
 
 interface InlineMessageTextProps {
@@ -17,6 +17,7 @@ interface InlineMessageTextProps {
  * else is plain text.
  */
 export function InlineMessageText({ content, channelId }: InlineMessageTextProps) {
+  useEmojiShortcodeNames();
   return (
     <>
       {splitMentionTokens(content).map((segment, i) =>

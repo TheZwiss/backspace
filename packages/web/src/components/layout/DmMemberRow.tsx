@@ -5,7 +5,7 @@ import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import {
   useContextMenuStore,
   type ContextMenuItem,
@@ -87,6 +87,7 @@ export function DmMemberRow({
   alwaysShowKebab = false,
   onMenuAction,
 }: DmMemberRowProps) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['dm', 'common']);
   const canonical = useCanonicalUserView(member);
   const openContextMenu = useContextMenuStore((s) => s.open);

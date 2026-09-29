@@ -2,7 +2,7 @@ import type { Activity } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 
 interface ActivityCardProps {
   activities: Activity[];
@@ -41,6 +41,7 @@ export function hasRichActivity(activities: Activity[]): boolean {
  * The glass card wrapper is applied by the parent row container.
  */
 export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardProps) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation('common');
   const primary = getPrimaryActivity(activities);
 

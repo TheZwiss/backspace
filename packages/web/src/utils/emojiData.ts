@@ -6,6 +6,23 @@ import type { EmojiMartData } from '@emoji-mart/data';
 // importer, and from either user that is the startup bundle.
 
 let load: Promise<EmojiMartData> | null = null;
+let loaded: EmojiMartData | null = null;
+const listeners = new Set<(data: EmojiMartData) => void>();
+
+/** The data set if it has arrived, else null. */
+export function getLoadedEmojiData(): EmojiMartData | null {
+  return loaded;
+}
+
+/**
+ * Calls `listener` once when the data set arrives, whoever loaded it: the
+ * shortcode names fill in from a load the picker started just as from their
+ * own. Returns the unsubscribe function.
+ */
+export function onEmojiDataLoaded(listener: (data: EmojiMartData) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
 
 /**
  * The data set, downloaded once. A failed download is forgotten so the next
@@ -17,6 +34,8 @@ export function loadEmojiData(): Promise<EmojiMartData> {
     .then((module) => {
       const data = module.default as EmojiMartData | undefined;
       if (!data?.emojis) throw new Error('the emoji data chunk has no emojis');
+      loaded = data;
+      for (const listener of [...listeners]) listener(data);
       return data;
     })
     .catch((error: unknown) => {

@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { useHubUpdateState } from '../../hooks/useHubUpdateState';
 import { BackspaceMark } from '../projectHub/BackspaceMark';
@@ -24,6 +24,7 @@ interface ActionRow {
 }
 
 export function MobileYouScreen() {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const user = useAuthStore((s) => s.user);
