@@ -39,15 +39,12 @@ function optionalText(value: unknown): string | null | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+/** An http(s) origin: scheme, host and optional port, nothing after. */
+const HTTP_ORIGIN = /^https?:\/\/[a-z0-9.-]+(?::\d{1,5})?$/i;
+
 function httpOrigin(value: unknown): string | null {
   const raw = text(value);
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? raw : null;
-  } catch {
-    return null;
-  }
+  return raw && HTTP_ORIGIN.test(raw) ? raw : null;
 }
 
 function avatarColor(value: unknown): AvatarColor | null {
