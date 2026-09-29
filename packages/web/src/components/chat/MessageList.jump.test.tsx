@@ -86,11 +86,13 @@ beforeEach(() => {
     dmChannels: [],
   });
   useUIStore.setState({ toasts: [] });
+  // An unmount saves the list's anchor; each test opens the channel fresh.
+  useChatStore.setState({ scrollPositions: new Map() });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set() });
+  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set(), scrollPositions: new Map() });
   useSpaceStore.setState({ members: [], currentSpaceId: null, channelToSpaceMap: new Map() });
 });
 

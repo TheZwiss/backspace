@@ -6,6 +6,7 @@ import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from '.
 import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { usePendingMessageStore } from './pendingMessageStore';
+import type { ScrollAnchor } from '../components/chat/scrollAnchor';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 
@@ -83,7 +84,11 @@ interface ChatState {
   unreadChannels: Set<string>;
   realtimeMessageEvents: RealtimeMessageEvent[];
   channelAccessTimes: Map<string, number>;
-  scrollPositions: Map<string, string>;
+  /**
+   * Where each channel's view was held when it was last closed this session
+   * (docs/systems/message-list.md, "Anchoring model"). In memory only.
+   */
+  scrollPositions: Map<string, ScrollAnchor>;
   /**
    * Channels whose cached messages are a window loaded by `loadMessagesAround`
    * that stops short of the newest message. Real-time messages still append,
@@ -92,7 +97,7 @@ interface ChatState {
    */
   detachedChannels: Set<string>;
   setCurrentChannel: (channelId: string | null) => void;
-  saveScrollPosition: (channelId: string, messageId: string) => void;
+  saveScrollPosition: (channelId: string, anchor: ScrollAnchor) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
   setEditingMessage: (messageId: string | null) => void;
   /**
@@ -157,10 +162,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   scrollPositions: new Map(),
   detachedChannels: new Set(),
 
-  saveScrollPosition: (channelId, messageId) => {
+  saveScrollPosition: (channelId, anchor) => {
     set((state) => {
       const newPositions = new Map(state.scrollPositions);
-      newPositions.set(channelId, messageId);
+      newPositions.set(channelId, anchor);
       return { scrollPositions: newPositions };
     });
   },
