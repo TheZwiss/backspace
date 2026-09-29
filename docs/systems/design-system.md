@@ -379,6 +379,8 @@ Two components, one deliberate split:
 
 Use `ProfileAvatar` when the avatar is the primary way to reach that person's profile and nothing else owns the click. Use `Avatar` when an enclosing row, button or list item already handles clicks, or when the avatar depicts the surface it already sits on.
 
+**Spaces through `Avatar`.** A space drawn with `Avatar` (the space settings header, the join page, the invite card in chat) passes `palette="space"`, the space id as `userId` and the space's `avatarColor`. The initials fallback then comes from `getSpaceGradient`, the function the space sidebar and every other space icon use, so a space has one colour everywhere. The default `palette="user"` uses `getAvatarGradient`, whose presets and hash order differ (`rose` and `coral` are other gradients, and a space with no stored colour hashes to a different preset).
+
 **Escalation chain.** Clicking a face always moves one step deeper, never sideways and never nowhere:
 
 | Surface | Picture click |
