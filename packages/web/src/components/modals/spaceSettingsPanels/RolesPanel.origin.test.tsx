@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import userEvent, { type UserEvent } from '@testing-library/user-event';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
 
 // Reached transitively via spaceStore -> chatStore -> useWebSocket -> voiceStore.
@@ -83,37 +83,58 @@ afterEach(() => {
 });
 
 describe('RolesPanel on a space of another instance', () => {
-  it('creates, saves, copies and deletes roles on that instance, never at home', async () => {
-    const { client, roles } = remoteClient();
-    setApiForOriginResolver((origin) => (origin === ORBIT ? client : api));
-    const home = [
+  let roles: ReturnType<typeof remoteClient>['roles'];
+  let homeSpies: MockInstance[];
+  let actor: UserEvent;
+
+  beforeEach(() => {
+    const remote = remoteClient();
+    roles = remote.roles;
+    setApiForOriginResolver((origin) => (origin === ORBIT ? remote.client : api));
+    homeSpies = [
       vi.spyOn(api.roles, 'create'),
       vi.spyOn(api.roles, 'update'),
       vi.spyOn(api.roles, 'delete'),
     ];
-
+    // No real-timer wait between simulated keystrokes and clicks.
+    actor = userEvent.setup({ delay: null });
     render(<RolesPanel spaceId={SPACE_ID} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Create Role' }));
+  });
+
+  function expectNothingSentHome() {
+    for (const spy of homeSpies) expect(spy).not.toHaveBeenCalled();
+  }
+
+  it('creates a role on that instance, never at home', async () => {
+    await actor.click(screen.getByRole('button', { name: 'Create Role' }));
     expect(roles.create).toHaveBeenCalledWith(SPACE_ID, { name: 'new role' });
+    expect(screen.getByRole('button', { name: 'Back to roles' })).toBeInTheDocument();
+    expectNothingSentHome();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Back to roles' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Helpers' }));
+  it('saves a role on that instance, never at home', async () => {
+    await actor.click(screen.getByRole('button', { name: 'Helpers' }));
     const name = screen.getByDisplayValue('Helpers');
-    await userEvent.clear(name);
-    await userEvent.type(name, 'Greeters');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await actor.clear(name);
+    await actor.type(name, 'Greeters');
+    await actor.click(screen.getByRole('button', { name: 'Save' }));
     expect(roles.update).toHaveBeenCalledWith(SPACE_ID, 'r-helper', { name: 'Greeters' });
+    expectNothingSentHome();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Copy Role' }));
+  it('copies a role on that instance, never at home', async () => {
+    await actor.click(screen.getByRole('button', { name: 'Helpers' }));
+    await actor.click(screen.getByRole('button', { name: 'Copy Role' }));
     expect(roles.create).toHaveBeenCalledWith(SPACE_ID, expect.objectContaining({ name: 'Copy of Helpers' }));
     expect(screen.getByDisplayValue('Copy of Helpers')).toBeInTheDocument();
+    expectNothingSentHome();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Back to roles' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Helpers' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete Role' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm?' }));
+  it('deletes a role on that instance, never at home', async () => {
+    await actor.click(screen.getByRole('button', { name: 'Helpers' }));
+    await actor.click(screen.getByRole('button', { name: 'Delete Role' }));
+    await actor.click(screen.getByRole('button', { name: 'Confirm?' }));
     expect(roles.delete).toHaveBeenCalledWith(SPACE_ID, 'r-helper');
-
-    for (const spy of home) expect(spy).not.toHaveBeenCalled();
+    expectNothingSentHome();
   });
 });
