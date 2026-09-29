@@ -405,17 +405,30 @@ Both control bars close the menu whenever `isScreenSharing` drops to `false`, so
 
 The "System audio" toggle in the quality panel adds an audio track to the screen-share publication. `stageScreenCapture` calls `navigator.mediaDevices.getDisplayMedia` directly (not through LiveKit) with constraints from `buildCaptureConstraints`, which include `restrictOwnAudio: true` when the toggle is on and `audio: false` when it is off. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
 
-Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path and selects loopback excluding the app's own playback on macOS and Windows. Linux keeps its existing loopback path; this Electron fix does not add own-audio exclusion there. Older Electron versions ignored the constraint ([electron/electron#52427](https://github.com/electron/electron/issues/52427), fixed by [#52455](https://github.com/electron/electron/pull/52455), with the 43.4.0 backport in [#52533](https://github.com/electron/electron/pull/52533)). The existing stereo capture and disabled voice processing remain unchanged; both display and window selections use the same request.
+Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path: when the renderer sent it, the handler's `'loopback'` becomes Chromium's `loopbackWithoutChrome`, which leaves Backspace's own playback out ([electron/electron#52427](https://github.com/electron/electron/issues/52427), fixed by [#52455](https://github.com/electron/electron/pull/52455), backported to 43.4.0 in [#52533](https://github.com/electron/electron/pull/52533)). Blink only sends the constraint where `media::IsRestrictOwnAudioSupported()` holds (`media/base/media_switches.cc` and `third_party/blink/renderer/modules/mediastream/user_media_request.cc`, Chromium 150). Elsewhere it is dropped without an error and the capture is the whole output mix, the voice chat included, so viewers hear themselves:
 
-Own-audio exclusion applies to all audio played by Backspace, including remote voices, notification sounds, and in-app YouTube, Vimeo, or Spotify embeds. On macOS and Windows, viewers no longer hear those embeds through a system-audio share, unlike in Backspace 1.1.2; play the media in a separate application when its audio needs to be shared.
+| OS build | Backspace's own playback in System Audio | Why |
+|---|---|---|
+| Windows 11 (build 22000+) | left out (`excluded`) | WASAPI process loopback excluding the audio-service process tree. Chromium gates it on `base::win::Version::WIN11` |
+| Windows 10, any build (22H2 is 19045), and Server 2022 (20348) | included (`included`) | below the WIN11 gate. The OS API is documented from build 20348, but Chromium does not use it there, and no feature flag lifts the gate |
+| macOS 14.2+ | left out (`excluded`) | CoreAudio Tap excluding the audio-service process |
+| macOS 13.0 to 14.1 | included (`included`) | ScreenCaptureKit loopback; the constraint needs CoreAudio Tap and is dropped |
+| macOS 12 and earlier | no system audio (`unavailable`) | no loopback source |
+| Linux | included (`included`) | monitor of the default PulseAudio sink, no exclusion |
+
+`loopbackWithMute` is no alternative: it mutes the sharer's own output for the duration and still captures the whole mix. Forcing `'loopbackWithoutChrome'` from the handler on Windows 10 is not done: the id is undocumented, Windows 10 is below Microsoft's documented minimum for exclude-mode process loopback, and a failed activation could break System Audio for every Windows 10 user.
+
+The desktop app's main process classifies the machine with `ownAudioInSystemAudio(platform, systemVersion)` (`packages/desktop/src/systemAudioCapability.ts`, the table above as code) and the renderer reads it through `getSystemAudioCapability()` (desktop.md, "System audio and Backspace's own playback"). `StreamQualityControls` shows the result under the System Audio switch through `systemAudioNote(platform, capability, checked)` (`utils/systemAudioNote.ts`): `included` and `unavailable` are an amber warning shown whether the switch is on or off, so it is read before System Audio is turned on; `excluded` is a quiet line shown once it is on. A desktop build without the method, an unreadable version (`unknown`) and a browser keep the earlier per-platform notes, shown once the switch is on.
+
+Own-audio exclusion applies to all audio played by Backspace, including remote voices, notification sounds, and in-app YouTube, Vimeo, or Spotify embeds. Where it applies (Windows 11, macOS 14.2+), viewers no longer hear those embeds through a system-audio share, unlike in Backspace 1.1.2; play the media in a separate application when its audio needs to be shared.
 
 **External audio routing.** A third-party audio router can replay call audio through a different process, outside Backspace's own-audio exclusion. If viewers still hear themselves, check this route as well as the capture settings. On macOS with SoundSource, add Backspace to **Settings → Audio → Excluded Applications** to bypass SoundSource processing of Backspace; see the [SoundSource manual](https://rogueamoeba.com/support/manuals/soundsource/?page=settings). Own-audio exclusion does not guarantee removal of copies replayed by external audio routers.
 
 | Platform | Mechanism | Notes |
 |----------|-----------|-------|
 | Browser (Chrome/Edge) | `getDisplayMedia({ audio: true })` | Tab/window/system audio per the user's pick |
-| Electron / Windows | Chromium native loopback | Works out of the box |
-| Electron / macOS 13+ | CoreAudio Tap (Catap) | Requires `NSAudioCaptureUsageDescription` (set by `packages/desktop/electron-builder.yml#mac.extendInfo`) |
+| Electron / Windows | Chromium WASAPI loopback | Works out of the box; Backspace left out only on Windows 11 (table above) |
+| Electron / macOS 13+ | ScreenCaptureKit, CoreAudio Tap (Catap) from 14.2 | Requires `NSAudioCaptureUsageDescription` (set by `packages/desktop/electron-builder.yml#mac.extendInfo`) |
 | Electron / Linux | PulseAudio loopback | **Requires** the `PulseaudioLoopbackForScreenShare` Chromium feature flag — enabled at startup in `main.ts` for Linux. Works on PulseAudio and on PipeWire systems with the `pipewire-pulse` compat layer. PipeWire-only systems without pulse compat will fail. |
 
 **Changing the toggle mid-stream.** `syncScreenShareAudio(room)` (`utils/screenShare.ts`) makes the `ScreenShareAudio` publication follow `screenShareConfig.shareAudio`. The `screenShareConfig` effect in `useLiveKit` calls it first on every config change while sharing, on the same serialized chain as the other live updates. The video publication is never touched, so the stream does not restart. Its state is `voiceStore.screenShareAudio` (not persisted, null while not sharing):

@@ -131,6 +131,14 @@
     "electronWindowsAudioNote": "Windows-Loopback kann Anrufaudio erfassen, wenn restrictOwnAudio nicht unterstützt wird",
     "electronMacAudioNote": "macOS 13+ benötigt die Berechtigung für Bildschirm- und Systemaudioaufnahmen",
     "electronLinuxAudioNote": "Linux benötigt PulseAudio-Kompatibilität; Backspace-Audio kann ebenfalls aufgenommen werden",
+    "systemAudioNote": {
+      "excluded": "Zuschauer hören den Ton deines Computers, aber nicht den Sprachchat und kein anderes Backspace-Audio.",
+      "excludedMac": "Zuschauer hören den Ton deines Macs, aber nicht den Sprachchat und kein anderes Backspace-Audio. macOS fragt nach der Berechtigung für Bildschirm- und Systemaudioaufnahmen.",
+      "includedWindows": "Diese Windows-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Unter Windows 11 bleibt Backspace außen vor.",
+      "includedMac": "Diese macOS-Version teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Ab macOS 14.2 bleibt Backspace außen vor.",
+      "includedLinux": "Linux teilt den gesamten Ton, auch den Sprachchat: Zuschauer hören ihre eigene Stimme. Benötigt PulseAudio oder PipeWire mit pipewire-pulse.",
+      "unavailableMac": "Systemaudio benötigt macOS 13 oder neuer."
+    },
     "systemAudioStartFailed": "Der Stream konnte nicht mit Systemaudio gestartet werden. Deaktiviere Systemaudio, wenn die Plattform es nicht unterstützt.",
     "systemAudioAddFailed": "Systemaudio konnte dem Stream nicht hinzugefügt werden.",
     "systemAudioAdding": "Systemaudio wird hinzugefügt…",

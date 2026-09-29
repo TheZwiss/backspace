@@ -839,6 +839,10 @@ There is no persistent grant: the portal asks per share by design, and one scree
 3. Renderer sends `screen-share-selected` with `sourceId` (or `null` to cancel) and `shareAudio`
 4. Main calls `callback({ video: selectedSource, audio: 'loopback' })`
 
+### System audio and Backspace's own playback
+
+Whether a System Audio share also carries Backspace's own playback (the voice chat, so viewers hear themselves) is decided by the OS build, and only main can read it. `systemAudioCapability.ts` answers from `process.platform` and `process.getSystemVersion()`; the rule and its Chromium sources are stated once in `voice.md` ("System Audio Loopback"). The renderer asks through `getSystemAudioCapability()` (IPC `get-system-audio-capability`) and words the note under the System Audio switch from the answer. The method is optional: a renderer on an older desktop build gets no answer and keeps the generic per-platform note, so no existing `window.backspace` method changed.
+
 The prompted flow stays because the desktop app loads whatever web client its instance serves: an older instance still calls `getDisplayMedia()` first, and a newer instance on an older desktop build lacks `getScreenSources` and falls back to this path (`preselectScreenSource` / `getScreenSources` are optional in `electron.d.ts` for that reason).
 
 No sources (0 results) typically means Screen Recording permission not granted on macOS.
@@ -909,6 +913,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
 | `get-update-status` | R->M | `UpdateSnapshot` | Renderer reads the current snapshot on mount |
 | `is-sandboxed` | R->M | `boolean` | Detect package sandbox restrictions independently of update capability |
+| `get-system-audio-capability` | R->M | `'excluded' \| 'included' \| 'unavailable' \| 'unknown'` | Whether a System Audio share on this OS build carries Backspace's own playback: `ownAudioInSystemAudio(process.platform, process.getSystemVersion())` (`systemAudioCapability.ts`). Same sender guard as the screen-share handlers; anything else gets `'unknown'` |
 
 ### Main -> Renderer Events
 
@@ -956,6 +961,7 @@ Detection: `typeof window.backspace !== 'undefined'` (see `platform.ts:isElectro
 | `onDeepLink(cb)` | listen | M->R | |
 | `onScreenShareSources(cb)` | listen | M->R | |
 | `selectScreenSource(id, audio?)` | fire | R->M | |
+| `getSystemAudioCapability()` | invoke | R->M | Optional (older builds lack it). Returns `Promise<'excluded' \| 'included' \| 'unavailable' \| 'unknown'>`; see "System audio and Backspace's own playback" |
 | `getInstanceUrl()` | invoke | R->M | Returns `Promise<string \| null>` |
 | `setInstanceUrl(url)` | invoke | R->M | Returns `Promise<void>` |
 | `clearInstanceUrl()` | invoke | R->M | Returns `Promise<void>` |
