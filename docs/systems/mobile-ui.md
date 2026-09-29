@@ -425,7 +425,17 @@ Params: `{ channelId, spaceId }`
 
 - Loads messages and sets current channel on mount via `useChatStore`
 - Resolves channel name: DM names from member list (group: comma-separated), space channels by `#name`
-- Custom header with back button + channel name + members/group-info button
+- Custom header with back button + channel name + DM call button (DMs only) + members/group-info button
+- DM call button shows for 1-on-1 and group DMs, and is hidden for space channels and deleted-partner DMs (they are read-only). It is a 44px tap target that draws a 32px round chip, so it keeps the header's icon rhythm. Its states, first match wins:
+
+  | State | When | Looks | Tap |
+  |-------|------|-------|-----|
+  | In call | `activeDmCall` is this DM | `bg-accent-mint/20 text-accent-mint` chip, upright phone | pushes `voice-full` (as the voice mini bar does) |
+  | Ringing | `outgoingCall` is this DM | `bg-accent-rose/20 text-accent-rose` chip (the mini bar's hang-up), phone turned 135° | `cancelOutgoingDmCall` |
+  | Idle | `canStartDmCall` allows | bare `text-txt-secondary` phone, no chip | `startDmCall` |
+  | Busy | otherwise (a call rings in either direction or runs in another DM) | bare `text-txt-tertiary/60` phone, disabled | none |
+
+  `canStartDmCall`, `startDmCall` and `cancelOutgoingDmCall` live in `utils/voiceActions.ts` and are the same functions the desktop DM header calls, so the two headers cannot disagree about when a call may start or where the start and cancel are sent.
 - Members button shows for space channels AND group DMs; hidden for 1-on-1 DMs (no roster). Space channels push the `members` screen; group DMs push the `group-dm-info` screen so the user lands on the full info + management surface (`MobileGroupDmInfo`).
 - Renders `MessageList`, `TypingIndicator`, `MessageInput`
 

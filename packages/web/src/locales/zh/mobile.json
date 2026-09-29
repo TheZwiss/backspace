@@ -3,5 +3,10 @@
     "editProfile": "编辑个人资料",
     "homeInstance": "主实例：{{domain}}",
     "logOutConfirm": "确定要退出登录吗？"
+  },
+  "chat": {
+    "openCall": "打开通话",
+    "cancelCall": "取消呼叫",
+    "unknownChannel": "频道"
   }
 }
