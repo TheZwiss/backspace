@@ -113,8 +113,10 @@ The `Check release pairing` job in `.github/workflows/flatpak.yml` enforces
 this on pull requests with `flatpak/sources-pairing.mjs`: it fails when
 `flatpak/node-sources.json` changes while the pinned `commit:` in
 `io.github.TheZwiss.backspace.yml` stays the same, and passes any change that
-moves the pin. Pushes and manual runs have no base to compare against, so that
-step skips there. If main ever ends up off this rule, the next release's
+moves the pin. The step skips on pushes and manual runs: a push to main has
+already landed, and a deliberate hand restore of the release-paired file (as in
+#147), merged over this check on its pull request, must be able to land without
+turning main red. If main ever ends up off this rule, the next release's
 metadata pull request regenerates the file and pairs it again.
 
 The same job runs `flatpak/node-sdk-version.mjs` on every run: each reference
