@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { MessageWithUser, User } from '@backspace/shared';
@@ -130,6 +130,80 @@ function stubLayout(layout: Layout): void {
 function followedToBottom(): boolean {
   return scrollIntoView.mock.contexts.some((el) => el instanceof HTMLElement && el.id === '');
 }
+
+describe('message viewport resizing', () => {
+  let observers: TestResizeObserver[];
+
+  class TestResizeObserver {
+    targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) { this.targets.add(target); }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  }
+
+  function resize(target: Element) {
+    act(() => {
+      for (const observer of observers) {
+        if (observer.targets.has(target)) {
+          observer.callback([{ target } as ResizeObserverEntry], observer as unknown as ResizeObserver);
+        }
+      }
+    });
+  }
+
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [msg('10', 'latest message')]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+      scrollPositions: new Map(),
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the latest message visible through keyboard open/close without content growth', async () => {
+    const layout: Layout = { scrollHeight: 2000, clientHeight: 800, scrollTop: 0, rowTop: {} };
+    stubLayout(layout);
+    const { container } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    await waitFor(() => expect(layout.scrollTop).toBe(1200));
+
+    for (const height of [600, 400, 550, 800]) {
+      layout.clientHeight = height;
+      // Only the viewport changes: no message, embed or composer resize.
+      resize(viewport);
+      expect(layout.scrollTop).toBe(layout.scrollHeight - height);
+      fireEvent.scroll(viewport);
+    }
+  });
+
+  it('preserves the reading position when the user has scrolled up', async () => {
+    const layout: Layout = { scrollHeight: 2000, clientHeight: 800, scrollTop: 0, rowTop: {} };
+    stubLayout(layout);
+    const { container } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    await waitFor(() => expect(layout.scrollTop).toBe(1200));
+    layout.scrollTop = 500;
+    fireEvent.scroll(viewport);
+
+    for (const height of [400, 800]) {
+      layout.clientHeight = height;
+      resize(viewport);
+      expect(layout.scrollTop).toBe(500);
+    }
+  });
+
+  it('disconnects viewport observation on unmount', () => {
+    const { container, unmount } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    expect(observers.some((observer) => observer.targets.has(viewport))).toBe(true);
+    unmount();
+    expect(observers.every((observer) => observer.targets.size === 0)).toBe(true);
+  });
+});
 
 describe('reply preview jump', () => {
   it('is a button that scrolls to and highlights a loaded original', async () => {
