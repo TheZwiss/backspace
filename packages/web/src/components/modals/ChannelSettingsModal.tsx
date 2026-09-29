@@ -19,6 +19,7 @@ const TEXT_CHANNEL_PERMISSIONS: PermissionDef[] = [
   { key: 'SEND_MESSAGES', bit: PermissionBits.SEND_MESSAGES },
   { key: 'MANAGE_MESSAGES', bit: PermissionBits.MANAGE_MESSAGES },
   { key: 'ATTACH_FILES', bit: PermissionBits.ATTACH_FILES },
+  { key: 'MENTION_EVERYONE', bit: PermissionBits.MENTION_EVERYONE },
   { key: 'READ_MESSAGE_HISTORY', bit: PermissionBits.READ_MESSAGE_HISTORY },
   { key: 'ADD_REACTIONS', bit: PermissionBits.ADD_REACTIONS },
 ];

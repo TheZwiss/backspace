@@ -510,7 +510,8 @@
         "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin."
       },
       "left": "Left space",
-      "leaveFailed": "Failed to leave space"
+      "leaveFailed": "Failed to leave space",
+      "unreadMessages": "Unread messages: {{quantity}}"
     },
     "dmList": {
       "explore": "Explore",
@@ -541,7 +542,8 @@
       "spaceMuted": "Space Muted",
       "spaceDeafened": "Space Deafened",
       "permissionMuted": "Muted (No Speak Permission)"
-    }
+    },
+    "dmUnreadMessages": "{{quantity}} unread direct messages"
   },
   "channels": {
     "loading": "Loading channels",
@@ -620,5 +622,35 @@
     "loading": "Loading members…",
     "success": "Ownership transferred to {{name}}",
     "failed": "Failed to transfer ownership"
+  },
+  "notifications": {
+    "title": "Notification settings",
+    "description": "Mute silences sounds and system notifications. Messages and unread badges are unchanged. Space mute also silences channel overrides.",
+    "level": "Notify me about",
+    "inherit": "Use default / inherit space",
+    "all": "All messages",
+    "mentions": "Only mentions",
+    "nothing": "Nothing",
+    "mute": "Mute",
+    "off": "Not muted",
+    "minutes15": "15 minutes",
+    "hour1": "1 hour",
+    "hours8": "8 hours",
+    "forever": "Until I turn it back on",
+    "existing": "Keep current mute",
+    "suppressEveryone": "Suppress @everyone and @here",
+    "suppressRoles": "Suppress role mentions",
+    "save": "Save",
+    "saving": "Saving…",
+    "permission": "Mention @everyone, @here and roles",
+    "unmute": "Unmute",
+    "muted": "Muted",
+    "active": "Notifications enabled",
+    "expiringNow": "expiring now",
+    "remainingMinutes_one": "{{count}} min left",
+    "remainingMinutes_other": "{{count}} min left",
+    "remainingHours_one": "{{count}} hour left",
+    "remainingHours_other": "{{count}} hours left",
+    "remainingHoursMinutes": "{{hours}}h {{minutes}}m left"
   }
 }

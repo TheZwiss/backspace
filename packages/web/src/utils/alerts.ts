@@ -1,7 +1,8 @@
 import type { ChosenUserStatus } from '@backspace/shared';
 import { selectMyChosenStatus, useAuthStore } from '../stores/authStore';
 import type { RealtimeMessageEvent } from '../stores/chatStore';
-import { getChannelOrigin, getMyUserIdForOrigin, isDmChannel } from '../stores/spaceStore';
+import { useNotificationStore, notificationKey } from '../stores/notificationStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, isDmChannel } from '../stores/spaceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { sendNotification, type NotificationOptions } from '../platform/notifications';
 import { isAlertAllowed, isMessageAlert, type AlertKind } from './notificationFilters';
@@ -49,7 +50,8 @@ export function alertsAllowed(kind: AlertKind): boolean {
  * message under, which is authoritative for space and DM messages alike.
  *
  * `everyMessage` is the "Play sound for every message" preference. Only the
- * sound passes it; the notification stays on DMs and mentions.
+ * sound passes it. Explicit space/channel levels override this default for
+ * both outputs.
  */
 export function messageAlertsUser(
   event: RealtimeMessageEvent,
@@ -62,7 +64,14 @@ export function messageAlertsUser(
   if (user?.homeUserId) myIds.add(user.homeUserId);
   const originId = getMyUserIdForOrigin(getChannelOrigin(event.channelId));
   if (originId) myIds.add(originId);
+  const origin = getChannelOrigin(event.channelId);
+  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(event.channelId);
+  const { settings, roleIds } = useNotificationStore.getState();
+  const spaceKey = notificationKey({ origin, targetType: 'space', targetId: spaceId ?? '' });
   return isMessageAlert({
+    spaceSetting: settings[spaceKey],
+    channelSetting: settings[notificationKey({ origin, targetType: 'channel', targetId: event.channelId })],
+    roleIds: new Set([...(roleIds[spaceKey] ?? []), ...(spaceId ? [spaceId] : [])]),
     authorUserId: event.message.userId,
     myIds,
     isDmChannel: isDmChannel(event.channelId),

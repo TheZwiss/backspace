@@ -1,3 +1,4 @@
+import { channelUnreadCounts, dmUnreadCounts, unreadCountEvent } from './channelUnreadCounts.js';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
@@ -29,6 +30,7 @@ import { statusOnConnect } from '../utils/presenceStatus.js';
 import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { utcDay } from '../telemetry/day.js';
+import { listNotificationSettings } from '../routes/notificationSettings.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
@@ -860,41 +862,32 @@ class ConnectionManager {
   sendToUser(userId: string, event: ServerEvent): void {
     const connections = this.getUserConnections(userId);
     const message = JSON.stringify(event);
+    const unread = connections.size ? unreadCountEvent(userId, event) : null;
+    const unreadMessage = unread ? JSON.stringify(unread) : null;
     for (const ws of connections) {
       if (ws.readyState === 1) { // WebSocket.OPEN
         ws.send(message);
+        if (unreadMessage) ws.send(unreadMessage);
       }
     }
   }
 
   /** Send to all members of a space. */
   sendToSpace(spaceId: string, event: ServerEvent, excludeUserId?: string): void {
-    const message = JSON.stringify(event);
     for (const [userId, spaceIds] of this.userSpaces) {
       if (spaceIds.has(spaceId) && userId !== excludeUserId) {
-        const connections = this.getUserConnections(userId);
-        for (const ws of connections) {
-          if (ws.readyState === 1) {
-            ws.send(message);
-          }
-        }
+        this.sendToUser(userId, event);
       }
     }
   }
 
   /** Send to space members who have VIEW_CHANNEL on the given channel. */
   sendToChannel(spaceId: string, channelId: string, event: ServerEvent, excludeUserId?: string): void {
-    const message = JSON.stringify(event);
     for (const [userId, spaceIds] of this.userSpaces) {
       if (spaceIds.has(spaceId) && userId !== excludeUserId) {
         const perms = computePermissions(userId, spaceId, channelId);
         if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
-          const connections = this.getUserConnections(userId);
-          for (const ws of connections) {
-            if (ws.readyState === 1) {
-              ws.send(message);
-            }
-          }
+          this.sendToUser(userId, event);
         }
       }
     }
@@ -1182,6 +1175,8 @@ function buildReadyPayload(userId: string): {
   voiceChannelElapsedSeconds: Record<string, number>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
+  notificationSettings: import("@backspace/shared").NotificationSetting[];
+  unreadCounts: Record<string, number>;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
   userActivities: Record<string, Activity[]>;
@@ -1659,7 +1654,7 @@ function buildReadyPayload(userId: string): {
     pendingApprovalCount = countResult?.count ?? 0;
   }
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, userActivityIdentities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, unreadCounts: { ...channelUnreadCounts(userId, spaces.flatMap(space => space.channels.map(channel => channel.id))), ...dmUnreadCounts(userId, dmChannels.map(dm => dm.id)) }, readStates, notificationSettings: listNotificationSettings(userId), activeCalls, userActivities, userActivityIdentities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

@@ -18,6 +18,7 @@ import { dmRoutes } from './routes/dm.js';
 import { livekitRoutes } from './routes/livekit.js';
 import { socialRoutes } from './routes/social.js';
 import { settingsRoutes } from './routes/settings.js';
+import { notificationSettingsRoutes } from './routes/notificationSettings.js';
 import { utilRoutes } from './routes/utils.js';
 import { instanceRoutes } from './routes/instance.js';
 import { invitesRoutes } from './routes/invites.js';
@@ -215,6 +216,7 @@ async function main(): Promise<void> {
   await app.register(livekitRoutes);
   await app.register(socialRoutes);
   await app.register(settingsRoutes);
+  await app.register(notificationSettingsRoutes);
   await app.register(utilRoutes);
   await app.register(instanceRoutes);
   await app.register(invitesRoutes);
