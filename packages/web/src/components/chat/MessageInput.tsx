@@ -1,5 +1,5 @@
 import { layoutRect } from '../../platform/interfaceScale';
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -711,25 +711,44 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // the full composer once permissions resolve — we need to (re-)attach the
   // ResizeObserver at that moment.
   const [composerEl, setComposerEl] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
+  // The clearance for the live composer element. The variable is written on
+  // every change and removed only when the composer element goes away: the
+  // message list holds its view against it, and a removal, even one undone in
+  // the same task, lets the browser lay the list out at the 80 px fallback and
+  // clamp its scroll offset, which leaves the newest messages under the
+  // composer (issue #361, docs/systems/message-list.md "Bottom clearance").
+  const syncClearance = useCallback((el: HTMLDivElement) => {
+    const target = el.parentElement;
+    if (!target) return;
+    // Total clearance = composer height + bottom offset + 12 px gap.
+    // We measure the bubble's visual height (including replyTo banner +
+    // staged-attachment tiles + textarea autosize) plus the distance from
+    // the parent's bottom edge to the bubble's bottom edge (which folds
+    // in `var(--safe-bottom) + 6` on mobile or `12 px` on
+    // desktop, whichever the composer's `bottom` resolves to).
+    const composerRect = layoutRect(el.getBoundingClientRect());
+    const parentRect = layoutRect(target.getBoundingClientRect());
+    const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
+    const clearance = `${Math.round(composerRect.height + bottomOffset + 12)}px`;
+    if (target.style.getPropertyValue('--composer-clearance') !== clearance) {
+      target.style.setProperty('--composer-clearance', clearance);
+    }
+  }, []);
+
+  // The region the variable was last written to. It is cleared only when the
+  // composer leaves that region (another region, or unmount), never between
+  // two elements of the same composer (the permission-denied bubble and the
+  // full one swap when channel permissions resolve).
+  const clearanceTargetRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
     if (!composerEl) return;
     const target = composerEl.parentElement;
     if (!target) return;
+    const previousTarget = clearanceTargetRef.current;
+    if (previousTarget && previousTarget !== target) previousTarget.style.removeProperty('--composer-clearance');
+    clearanceTargetRef.current = target;
     const el = composerEl;
-
-    const sync = () => {
-      // Total clearance = composer height + bottom offset + 12 px gap.
-      // We measure the bubble's visual height (including replyTo banner +
-      // staged-attachment tiles + textarea autosize) plus the distance from
-      // the parent's bottom edge to the bubble's bottom edge (which folds
-      // in `var(--safe-bottom) + 6` on mobile or `12 px` on
-      // desktop, whichever the composer's `bottom` resolves to).
-      const composerRect = layoutRect(el.getBoundingClientRect());
-      const parentRect = layoutRect(target.getBoundingClientRect());
-      const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
-      const clearance = Math.round(composerRect.height + bottomOffset + 12);
-      target.style.setProperty('--composer-clearance', `${clearance}px`);
-    };
+    const sync = () => syncClearance(el);
 
     sync();
     const ro = new ResizeObserver(sync);
@@ -743,27 +762,32 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     // updates with the layout, but if `MobileShell`'s height attribute
     // updates between paints, we want a same-frame re-measure.
     const vv = window.visualViewport;
-    const onVv = () => sync();
     if (vv) {
-      vv.addEventListener('resize', onVv);
-      vv.addEventListener('scroll', onVv);
+      vv.addEventListener('resize', sync);
+      vv.addEventListener('scroll', sync);
     }
 
     return () => {
       ro.disconnect();
       if (vv) {
-        vv.removeEventListener('resize', onVv);
-        vv.removeEventListener('scroll', onVv);
+        vv.removeEventListener('resize', sync);
+        vv.removeEventListener('scroll', sync);
       }
-      target.style.removeProperty('--composer-clearance');
     };
-    // Re-arm the observer / listeners when keyboard transitions or the
-    // composer's content materially changes — the dependency list is the
-    // set of inputs that can change the bubble's height or its bottom
-    // offset between renders. The ResizeObserver itself is what catches
-    // continuous textarea-autosize growth; these deps just ensure we're
-    // attached to the live element after a remount.
-  }, [composerEl, isMobile, keyboardOpen, textInputFocused, chatReplyTo, stagedTransfers.length]);
+  }, [composerEl, syncClearance]);
+
+  useLayoutEffect(() => () => {
+    clearanceTargetRef.current?.style.removeProperty('--composer-clearance');
+    clearanceTargetRef.current = null;
+  }, []);
+
+  // The composer's `bottom` style and its content (reply banner, staged
+  // files) change between renders without necessarily resizing the element
+  // or its parent, so the observers above may not fire. Re-measure after
+  // each such render, before paint, without touching the observers.
+  useLayoutEffect(() => {
+    if (composerEl) syncClearance(composerEl);
+  }, [composerEl, syncClearance, isMobile, keyboardOpen, textInputFocused, chatReplyTo, stagedTransfers.length]);
 
   // Combined ref: keep `popoverAnchorRef` populated (InputPopover / mention
   // popover anchor + scroll-into-view targets) AND notify the
