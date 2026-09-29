@@ -242,9 +242,11 @@ export async function processCreateEvent(
     }
   }
 
-  // Broadcast to local WebSocket clients, but skip members whose home instance
-  // is the source instance — they already have the original message via their
-  // home instance's WebSocket connection.
+  // Broadcast to every local member, members homed on the source instance
+  // included. Federated DMs are mirrored: a client connected here and to the
+  // source holds both copies of the conversation, and its DM merge module
+  // (web `stores/dmConversations.ts`) decides which copy it shows, so each
+  // copy gets its own messages.
   const fullMessage = getDmMessageWithUser(localMessageId);
   if (fullMessage) {
     const dmMembers = db.select()
