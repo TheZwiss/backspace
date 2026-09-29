@@ -420,13 +420,13 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
 | status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention. Written only by `utils/federationPeerState.ts`; states and transitions in [federation.md → Peer state](federation.md#peer-state). |
-| initiatedBy | text NOT NULL | `'auto'` | Provenance — who caused this row to exist. `'admin'` = `POST /peer/initiate`, an approval, or an inbound deny that inserted the row; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
+| initiatedBy | text NOT NULL | `'auto'` | Provenance: who caused this row to exist. `'admin'` = `POST /peer/initiate`, an approval, or an inbound deny that inserted the row; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |
 | consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
 | lastProbeAt | integer | | Epoch ms when the last paced attempt started: a reachability probe for an `unreachable` row, a handshake for a `pending` one. `NULL` = next attempt immediately due (set on entry into `pending`, `unreachable` and `active`). |
-| probeAttempts | integer NOT NULL | 0 | Failed paced attempts since the pacing began; after n failures the wait is `RECOVERY_BACKOFF_MS[n - 1]`. Reset to 0 on entry into `pending`, `unreachable` and `active`. Counter — never null. Migration `0006_spicy_scourge`. |
+| probeAttempts | integer NOT NULL | 0 | Failed paced attempts since the pacing began; after n failures the wait is `RECOVERY_BACKOFF_MS[n - 1]`. Reset to 0 on entry into `pending`, `unreachable` and `active`. Counter, never null. Migration `0006_spicy_scourge`. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
