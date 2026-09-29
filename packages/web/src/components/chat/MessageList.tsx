@@ -1048,6 +1048,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
             const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
             const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
+            const isUnreadStart = unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id;
 
             // Walk back to find the nearest non-pending neighbor for "Mark Unread".
             // A `pending-${clientId}` ID would be rejected by the server, so we skip
@@ -1063,7 +1064,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
 
             return (
               <React.Fragment key={msg.id}>
-                {showDate && (
+                {showDate && !isUnreadStart && (
                   <div className="flex items-center px-5 my-2 select-none pointer-events-none">
                     <div className="flex-1 h-[1px] bg-border-hard" />
                     <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
@@ -1072,8 +1073,12 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
                 )}
-                {unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id && (
-                  <UnreadDivider label={t('chat:list.unread.label')} description={t('chat:list.unread.divider')} />
+                {isUnreadStart && (
+                  <UnreadDivider
+                    label={t('chat:list.unread.label')}
+                    description={t('chat:list.unread.divider')}
+                    dateLabel={showDate ? formatDateDivider(msg.createdAt) : null}
+                  />
                 )}
                 {msg.type === 'system' ? (
                   <SystemMessage message={msg} dm={currentDm ?? null} />
@@ -1170,16 +1175,24 @@ function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
 /**
  * Where the unread messages start. A separator with its own name, so a
  * screen reader moving through the list hears it; the visible label is short.
+ * When the first unread message also starts a new day, the date sits in the
+ * same rule instead of a second divider right above it.
  */
-function UnreadDivider({ label, description }: { label: string; description: string }) {
+function UnreadDivider({ label, description, dateLabel }: { label: string; description: string; dateLabel: string | null }) {
   return (
     <div
       role="separator"
-      aria-label={description}
-      className="flex items-center gap-2 pl-5 pr-4 my-2 select-none pointer-events-none"
+      aria-label={dateLabel ? `${description}, ${dateLabel}` : description}
+      className="flex items-center pl-5 pr-4 my-2 select-none pointer-events-none"
     >
       <div className="flex-1 h-px bg-accent-rose/50" />
-      <span className="rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
+      {dateLabel && (
+        <>
+          <span className="px-[14px] text-[11px] font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
+          <div className="flex-1 h-px bg-accent-rose/50" />
+        </>
+      )}
+      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
         {label}
       </span>
     </div>

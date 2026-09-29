@@ -281,7 +281,7 @@
   },
   "packages/web/src/components/chat/MessageList.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/web/src/components/chat/OuterSpaceSection.test.tsx": {
