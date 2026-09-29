@@ -203,7 +203,7 @@ describe('POST /api/federation/peers/:id/reset', () => {
       origin: 'https://reinstalled.example',
       hmacSecret: 'b'.repeat(64),
       status: 'needs_attention',
-      needsAttentionReason: 'peer_reset_detected',
+      statusReason: 'peer_reset_detected',
       createdAt: now,
     }).run();
 
@@ -234,5 +234,43 @@ describe('POST /api/federation/peers/:id/reset', () => {
     // Its outbox entries cascade-removed
     const outbox = testDb.select().from(schema.federationOutbox).all();
     expect(outbox).toHaveLength(0);
+  });
+});
+
+describe('DELETE /api/federation/peers/:id/permanent', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+    currentUserId = 'admin-user';
+    currentUserIsAdmin = true;
+    app = await buildApp();
+  });
+
+  it('removes a rejected peer (the panel lists rejected rows with Re-initiate and Delete)', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-rejected', origin: 'https://example.com', hmacSecret: 'a'.repeat(64),
+      status: 'rejected', statusReason: 'stale_peering_on_remote', createdAt: Date.now(),
+    }).run();
+
+    const res = await app.inject({ method: 'DELETE', url: '/api/federation/peers/peer-rejected/permanent' });
+
+    expect(res.statusCode).toBe(200);
+    expect(testDb.select().from(schema.federationPeers).all()).toHaveLength(0);
+  });
+
+  it('still refuses an active peer', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active', origin: 'https://example.com', hmacSecret: 'a'.repeat(64),
+      status: 'active', createdAt: Date.now(),
+    }).run();
+
+    const res = await app.inject({ method: 'DELETE', url: '/api/federation/peers/peer-active/permanent' });
+
+    expect(res.statusCode).toBe(400);
+    expect(testDb.select().from(schema.federationPeers).all()).toHaveLength(1);
   });
 });

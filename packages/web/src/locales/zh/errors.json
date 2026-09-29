@@ -37,6 +37,8 @@
   "peer_pending_local_admin": "您的管理员需要先批准与该实例的联邦互联。您的申请已列在“连接”中。",
   "peer_unreachable": "目前无法连接到对方实例。",
   "PEER_EXISTS_RESET_REQUIRED": "与该实例的连接已存在。重新连接前请先重置。",
+  "PEER_REVOKED": "该实例已撤销与本实例的联邦互联。",
+  "PEER_HANDSHAKE_IN_PROGRESS": "该实例正在与本实例建立联邦互联，请稍后重试。",
   "recipient_deleted": "该账号已被注销。",
   "username_length_invalid": "用户名长度必须在 {{min}} 到 {{max}} 个字符之间。",
   "username_characters_invalid": "用户名只能包含小写字母、数字和下划线。",

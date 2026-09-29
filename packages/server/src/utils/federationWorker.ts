@@ -1,6 +1,6 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq, and, lte, asc, inArray, sql } from 'drizzle-orm';
+import { eq, and, lte, asc, inArray, notExists, sql } from 'drizzle-orm';
 import { config } from '../config.js';
 import {
   isFederationRelayEnabled,
@@ -18,8 +18,9 @@ import { generateThumbnail } from './thumbnail.js';
 import { safeFetch } from './ssrf.js';
 import { federationFetch } from './federationFetch.js';
 import type { FederationRelayCapability, FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
-import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { ensurePeered, isHandshakeInFlight } from './federationPeering.js';
+import { startupBootstrapSync } from './federationPeerActivation.js';
+import { ensurePeered, isHandshakeInFlight, resolveStaleParkedPeers } from './federationPeering.js';
+import { recordPeerAttempt, transitionPeer } from './federationPeerState.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
@@ -42,7 +43,8 @@ const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
 const HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const RECOVERY_TICK_INTERVAL_MS = 5_000;   // 5 seconds — demand-driven recovery scan
 /**
- * Per-peer attempt backoff (ms), indexed by probe_attempts (0-based). Paces both
+ * Per-peer attempt backoff (ms): the wait after the nth failed attempt is entry
+ * n - 1 (clamped). Paces both
  * the recovery probe of an `unreachable` peer and the handshake retry of a
  * `pending` peer; see isPeerAttemptDue.
  */
@@ -129,8 +131,9 @@ function retryWait(ms: number): number {
  * Whether a peer's next attempt is due on the per-peer pacing shared by
  * unreachable-peer recovery and pending-peer handshakes. `last_probe_at` is when
  * the last attempt started and `probe_attempts` counts the failed attempts since
- * the pacing was last reset. A peer with queued outbox mail is paced on
- * RECOVERY_BACKOFF_MS; a silent one falls back to the health-check interval.
+ * the pacing was last reset (recordPeerAttempt). After n failed attempts the
+ * wait is RECOVERY_BACKOFF_MS[n - 1], so the first retry waits 30 s. A peer
+ * with no queued outbox mail falls back to the health-check interval.
  */
 function isPeerAttemptDue(
   peer: { probeAttempts: number; lastProbeAt: number | null },
@@ -138,9 +141,8 @@ function isPeerAttemptDue(
   now: number,
 ): boolean {
   if (peer.lastProbeAt === null) return true;
-  const interval = hasQueuedMail
-    ? retryWait(RECOVERY_BACKOFF_MS[Math.min(peer.probeAttempts, RECOVERY_BACKOFF_MS.length - 1)]!)
-    : HEALTH_CHECK_INTERVAL_MS;
+  const step = Math.min(Math.max(peer.probeAttempts - 1, 0), RECOVERY_BACKOFF_MS.length - 1);
+  const interval = hasQueuedMail ? retryWait(RECOVERY_BACKOFF_MS[step]!) : HEALTH_CHECK_INTERVAL_MS;
   return now - peer.lastProbeAt >= interval;
 }
 
@@ -552,47 +554,41 @@ function handleRelayAuthRefusal(
   const decision = evaluateAuthFailure(currentRow?.consecutiveAuthFailures ?? 0);
 
   if (decision.kind === 'transition_to_needs_attention') {
-    db.update(schema.federationPeers)
-      .set({
-        status: 'needs_attention',
-        consecutiveAuthFailures: decision.newAuthFailures,
-        lastFailureAt: now,
-      })
-      .where(eq(schema.federationPeers.id, peerId))
-      .run();
-    onPeerDeactivated(peerId, 'auth_threshold').catch(err =>
-      console.error('[federation-worker] onPeerDeactivated from auth threshold failed:', err)
-    );
-    console.warn(
-      `[federation-worker] Peer ${peerOrigin} transitioned to needs_attention after ${decision.newAuthFailures} consecutive ${status} responses`,
-    );
-
-    // Event-driven reset detection: a genuinely reset peer reaches
-    // needs_attention via THIS auth-failure path (HMAC desynced by the new
-    // incarnation) without ever passing through `unreachable`, so the
-    // 5-second unreachable-only recovery probe never sees it. Probe its
-    // epoch NOW — the instant the connection is declared broken — instead of
-    // waiting up to a full 15-minute health-check cycle for the backstop
-    // sweep. Detection-only (markPeerReset); never flips back to active.
-    // Fire-and-forget: a probe failure is a benign no-op the 15-min tick
-    // retries, and it must not stall the outbox loop.
-    detectResetForPeer({
-      id: peerId,
-      origin: peerOrigin,
-      peerInstanceId: currentRow?.peerInstanceId ?? null,
-    }).catch(err =>
-      console.error('[federation-worker] reset probe on auth-threshold transition failed:', err)
-    );
-
-    const contextMap = buildContextMapForPeer(db, peerId);
-    if (contextMap.size > 0) {
-      pushPeerRejectedEvent(
+    // Only an active row moves: an admin may have revoked or reset the peer
+    // while this delivery was in flight. The transition notifies the users
+    // with queued mail and runs the deactivation hook.
+    const moved = transitionPeer(peerId, {
+      from: ['active'],
+      to: 'needs_attention',
+      reason: 'auth_failures',
+      cause: 'auth_threshold',
+      fields: { consecutiveAuthFailures: decision.newAuthFailures, lastFailureAt: now },
+    });
+    if (moved.applied) {
+      console.warn(
+        '[federation-worker] Peer %s transitioned to needs_attention after %s consecutive %s responses',
         peerOrigin,
-        contextMap,
-        'Federation trust broken — admin must reset peering',
+        decision.newAuthFailures,
+        status,
+      );
+
+      // Event-driven reset detection: a genuinely reset peer reaches
+      // needs_attention via THIS auth-failure path (HMAC desynced by the new
+      // incarnation) without ever passing through `unreachable`, so the
+      // 5-second unreachable-only recovery probe never sees it. Probe its
+      // epoch NOW, the instant the connection is declared broken, instead of
+      // waiting up to a full 15-minute health-check cycle for the backstop
+      // sweep. Detection-only (markPeerReset); never flips back to active.
+      // Fire-and-forget: a probe failure is a benign no-op the 15-min tick
+      // retries, and it must not stall the outbox loop.
+      detectResetForPeer({
+        id: peerId,
+        origin: peerOrigin,
+        peerInstanceId: currentRow?.peerInstanceId ?? null,
+      }).catch(err =>
+        console.error('[federation-worker] reset probe on auth-threshold transition failed:', err)
       );
     }
-    connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
   } else {
     console.warn(
       `[federation-worker] Peer ${peerOrigin} returned ${status} (auth failure ${decision.newAuthFailures}/${AUTH_FAILURE_THRESHOLD})`,
@@ -656,28 +652,24 @@ function handleOutboxDeliveryFailure(
     .run();
 
   if (newFailures >= PEER_UNREACHABLE_THRESHOLD) {
-    markPeerUnreachable(db, peerId, newFailures);
+    markPeerUnreachable(peerId, newFailures);
   }
 }
 
 /**
- * The outbox's one peer-status write: a peer that failed
- * PEER_UNREACHABLE_THRESHOLD deliveries in a row becomes `unreachable`. On
- * entry, recovery pacing is reset so processRecoveryTick fires an immediate
- * first probe (lastProbeAt = null) with a fresh backoff.
+ * The outbox's one peer-status change: a peer that failed
+ * PEER_UNREACHABLE_THRESHOLD deliveries in a row becomes `unreachable`, through
+ * the peer state machine (utils/federationPeerState.ts). Only an active row
+ * moves: an admin may have revoked or reset the peer while the delivery was in
+ * flight. Entering `unreachable` starts the recovery pacing afresh, so
+ * processRecoveryTick fires an immediate first probe, and the transition runs
+ * the deactivation hook.
  */
-function markPeerUnreachable(db: ReturnType<typeof getDb>, peerId: string, failures: number): void {
-  db.update(schema.federationPeers)
-    .set({ status: 'unreachable', probeAttempts: 0, lastProbeAt: null })
-    .where(eq(schema.federationPeers.id, peerId))
-    .run();
-
-  console.warn(
-    `[federation-worker] Peer ${peerId} marked unreachable after ${failures} consecutive failures`,
-  );
-  onPeerDeactivated(peerId, 'network_threshold').catch(err =>
-    console.error('[federation-worker] onPeerDeactivated from unreachable threshold failed:', err)
-  );
+function markPeerUnreachable(peerId: string, failures: number): void {
+  const moved = transitionPeer(peerId, { from: ['active'], to: 'unreachable', cause: 'network_threshold' });
+  if (moved.applied) {
+    console.warn('[federation-worker] Peer %s marked unreachable after %s consecutive failures', peerId, failures);
+  }
 }
 
 // ─── Pending Peer Resolution ───────────────────────────────────────────────
@@ -708,14 +700,26 @@ function resolvePendingPeers(now: number): void {
       schema.federationOutbox,
       eq(schema.federationOutbox.peerId, schema.federationPeers.id),
     )
-    .where(eq(schema.federationPeers.status, 'pending'))
+    .where(and(
+      eq(schema.federationPeers.status, 'pending'),
+      // An inbound request from the origin is waiting for our admin, whose
+      // decision settles the row; ensurePeered sends nothing until then.
+      notExists(
+        db.select({ id: schema.peerApprovalRequests.id })
+          .from(schema.peerApprovalRequests)
+          .where(and(
+            eq(schema.peerApprovalRequests.origin, schema.federationPeers.origin),
+            eq(schema.peerApprovalRequests.direction, 'inbound'),
+          )),
+      ),
+    ))
     .all();
 
   for (const peer of pendingWithEntries) {
     if (pendingPeerHandshakes.has(peer.peerOrigin)) continue;
     if (!isPeerAttemptDue(peer, true, now)) continue;
 
-    const attempt = resolvePendingPeer(peer.peerId, peer.peerOrigin, now)
+    const attempt = resolvePendingPeer(peer.peerOrigin)
       .catch((err) => {
         console.error('[federation-worker] Auto-peer attempt with %s failed:', peer.peerOrigin, err);
       })
@@ -727,13 +731,12 @@ function resolvePendingPeers(now: number): void {
 }
 
 /**
- * One handshake attempt for a pending peer, via ensurePeered(). A transient
- * failure advances the peer's pacing; `startedAt` is recorded as the attempt's
- * time, as the recovery probe records its tick time.
+ * One handshake attempt for a pending peer, via ensurePeered(). The handshake
+ * settles the row itself: its transitions purge and notify on a refusal, and a
+ * failed attempt is counted on the row's pacing by the handshake, whoever
+ * started it.
  */
-async function resolvePendingPeer(peerId: string, peerOrigin: string, startedAt: number): Promise<void> {
-  const db = getDb();
-
+async function resolvePendingPeer(peerOrigin: string): Promise<void> {
   // Another caller (a DM send, a friend add, an admin's /peer/initiate) is
   // already handshaking with this origin. Its outcome settles the row; starting
   // a second exchange would only race it. Not an attempt, so pacing is untouched.
@@ -745,166 +748,19 @@ async function resolvePendingPeer(peerId: string, peerOrigin: string, startedAt:
 
   switch (result.status) {
     case 'active':
-      console.log(`[federation-worker] Auto-peered with ${peerOrigin} — entries will deliver next tick`);
-      // Notify admins of peer state change
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      console.log(`[federation-worker] Auto-peered with ${peerOrigin}; entries will deliver next tick`);
       break;
-
-    case 'rejected': {
-      console.warn(`[federation-worker] Auto-peering rejected by ${peerOrigin}: ${result.error}`);
-
-      const contextMap = buildContextMapForPeer(db, peerId);
-
-      // Purge outbox entries (NOT mutation log)
-      db.delete(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, peerId))
-        .run();
-
-      onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
-        console.error('[federation-worker] onPeerDeactivated from resolvePendingPeers rejected failed:', err)
-      );
-
-      // Push federation_peer_rejected WS event to affected users
-      pushPeerRejectedEvent(peerOrigin, contextMap);
-      // Notify admins of peer state change
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+    case 'rejected':
+      console.warn(`[federation-worker] Auto-peering with ${peerOrigin} settled as refused: ${result.error}`);
       break;
-    }
-
     case 'failed':
       console.warn(`[federation-worker] Auto-peer with ${peerOrigin} failed (transient): ${result.error}`);
-      // Leave the entries and advance the pacing; the next attempt waits out
-      // the next step of RECOVERY_BACKOFF_MS.
-      db.update(schema.federationPeers)
-        .set({
-          probeAttempts: sql`${schema.federationPeers.probeAttempts} + 1`,
-          lastProbeAt: startedAt,
-        })
-        .where(and(
-          eq(schema.federationPeers.id, peerId),
-          eq(schema.federationPeers.status, 'pending'),
-        ))
-        .run();
       break;
-
     case 'pending':
     case 'admin_required':
       // The row left `pending` (now awaiting_approval) or the outbound gate
       // removed it; either way this worker has nothing further to retry.
       break;
-  }
-}
-
-/**
- * Build a map of contextId → contextType for all outbox entries targeting
- * a specific peer. Used for surfacing "delivery impossible" via
- * pushPeerRejectedEvent when a peer is rejected or transitioned to
- * needs_attention.
- */
-function buildContextMapForPeer(
-  db: ReturnType<typeof getDb>,
-  peerId: string,
-): Map<string, string> {
-  const entries = db
-    .select({
-      contextId: schema.federationOutbox.contextId,
-      contextType: schema.federationOutbox.contextType,
-    })
-    .from(schema.federationOutbox)
-    .where(eq(schema.federationOutbox.peerId, peerId))
-    .all();
-
-  const contextMap = new Map<string, string>();
-  for (const e of entries) {
-    if (!contextMap.has(e.contextId)) {
-      contextMap.set(e.contextId, e.contextType);
-    }
-  }
-  return contextMap;
-}
-
-/**
- * Push a federation_peer_rejected WS event to all local users affected by
- * the rejection. Resolves contextLabel from the database for each context.
- */
-export function pushPeerRejectedEvent(
-  peerOrigin: string,
-  contextMap: Map<string, string>,
-  reasonOverride?: string,
-): void {
-  const db = getDb();
-
-  // Build affected contexts with human-readable labels
-  const affectedContexts: Array<{
-    contextType: 'dm' | 'friend';
-    contextId: string;
-    contextLabel: string;
-  }> = [];
-
-  const affectedUserIds = new Set<string>();
-
-  for (const [contextId, contextType] of contextMap) {
-    if (contextType === 'dm') {
-      // Resolve DM member names for the label
-      const members = db
-        .select({
-          userId: schema.dmMembers.userId,
-          username: schema.users.username,
-          displayName: schema.users.displayName,
-          homeInstance: schema.users.homeInstance,
-        })
-        .from(schema.dmMembers)
-        .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
-        .where(eq(schema.dmMembers.dmChannelId, contextId))
-        .all();
-
-      const names = members
-        .map(m => m.displayName || m.username || 'Unknown')
-        .slice(0, 4)
-        .join(', ');
-
-      affectedContexts.push({
-        contextType: 'dm',
-        contextId,
-        contextLabel: names,
-      });
-
-      // Track local users to notify (non-federated members)
-      for (const m of members) {
-        if (!m.homeInstance) {
-          affectedUserIds.add(m.userId);
-        }
-      }
-    } else if (contextType === 'friend') {
-      affectedContexts.push({
-        contextType: 'friend',
-        contextId,
-        contextLabel: contextId, // friend context IDs include usernames
-      });
-    }
-  }
-
-  // Try to get the instance name for a better label
-  let peerLabel: string | undefined;
-  const peerRow = db
-    .select({ instanceName: schema.federationPeers.instanceName })
-    .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.origin, peerOrigin))
-    .get();
-  if (peerRow?.instanceName) {
-    peerLabel = peerRow.instanceName;
-  }
-
-  const event = {
-    type: 'federation_peer_rejected' as const,
-    peerOrigin,
-    peerLabel,
-    reason: reasonOverride || 'Remote instance requires manual peering approval',
-    affectedContexts,
-  };
-
-  for (const userId of affectedUserIds) {
-    connectionManager.sendToUser(userId, event);
   }
 }
 
@@ -1312,15 +1168,12 @@ export async function processRecoveryTick(): Promise<void> {
     if (probe.reachable) {
       const outcome = await recoverOrDetectReset(peer, probe);
       if (outcome === 'reset_detected') {
-        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch) — routed to needs_attention`);
-      } else {
-        console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch); routed to needs_attention`);
+      } else if (outcome === 'recovered') {
+        console.log(`[federation-worker] Peer ${peer.origin} recovered; marked active`);
       }
     } else {
-      db.update(schema.federationPeers)
-        .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: now })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
+      recordPeerAttempt(peer.id, { from: ['unreachable'], startedAt: now });
     }
   }
 }
@@ -1441,6 +1294,14 @@ async function processHealthCheckTick(): Promise<void> {
   // is a benign no-op retried next tick and must not disturb the rest of the tick.
   // No shared abort signal — probePeerReachable carries its own 10s timeout.
   await detectResetOnNeedsAttentionPeers().catch(() => {});
+
+  // ── Rows parked on the remote's older peering (#309) ────────────────────────
+  // A signed /epoch round-trip per parked row, no handshake: it tells whether
+  // the remote now holds our secret, holds no row for us (a handshake can land),
+  // or still holds its older row. See docs/systems/federation.md, "Peer state".
+  await resolveStaleParkedPeers().catch((err: unknown) => {
+    console.error('[federation-worker] parked-peer check failed:', err);
+  });
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────

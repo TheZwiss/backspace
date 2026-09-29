@@ -861,7 +861,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 // Admin attention surface for the instance-epoch self-healing flow (§6.4) and
 // the orphaned-account detach flow (detach spec §4.6). Two stacked surfaces:
 //   1. A persistent accent-rose banner per peer detected as reset
-//      (status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'),
+//      (status === 'needs_attention' && statusReason === 'peer_reset_detected'),
 //      with a one-click Re-peer (resetPeer → initiatePeering) that triggers the
 //      server-side heal on activation. This one is genuinely actionable, so it
 //      keeps the rose/danger styling.
@@ -896,7 +896,7 @@ function ResetCleanup() {
       ]);
       setResetPeers(
         peersResult.peers.filter(
-          (p) => p.status === 'needs_attention' && p.needsAttentionReason === 'peer_reset_detected',
+          (p) => p.status === 'needs_attention' && p.statusReason === 'peer_reset_detected',
         ),
       );
       setEvents(eventsResult.events);

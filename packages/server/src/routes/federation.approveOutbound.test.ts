@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 import { setWorkerId } from '../utils/snowflake.js';
 
 setWorkerId(1);
@@ -134,11 +135,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound token 
       approvalToken: token,
     }).run();
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote' }) }),
     );
 
     const response = await app.inject({
@@ -147,7 +145,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound token 
     });
 
     expect(response.statusCode).toBe(200);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // The handshake, then the signed /epoch round-trip that verifies it.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     const init = fetchSpy.mock.calls[0]?.[1];
     const body = JSON.parse(init?.body as string) as { approvalToken?: string };
     expect(body.approvalToken).toBe(token);
@@ -165,11 +164,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound token 
       approvalToken: null,
     }).run();
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote' }) }),
     );
 
     const response = await app.inject({
@@ -195,11 +191,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound token 
       approvalToken: 'a'.repeat(64),
     }).run();
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote' }) }),
     );
 
     const response = await app.inject({

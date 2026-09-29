@@ -5,6 +5,7 @@ import { isFederationRelayEnabled } from './federationOutbox.js';
 import { generateSnowflake } from './snowflake.js';
 import { healResetIncarnation } from './federationReset.js';
 import { syncPeerMutationLog } from './federationSync.js';
+import type { PeerExitCause } from './federationPeerState.js';
 
 export type PeerActivationReason =
   | 'initiate_accepted'
@@ -16,6 +17,7 @@ export type PeerActivationReason =
   | 'approval_handshake'
   | 'health_check_recovery'
   | 'ensure_peered'
+  | 'stale_peering_verified'
   | 'startup_bootstrap';
 
 // Dedup: concurrent activations for the same peerId share one promise.
@@ -28,16 +30,9 @@ const inFlightActivation = new Map<string, Promise<void>>();
  *   2. Pull-sync the peer's mutation log (`syncPeerMutationLog`, utils/federationSync.ts)
  *      from this instance's cursors for it, every context.
  *
- * Call sites (must remain exhaustive — grep `onPeerActivated(` to audit):
- *   - routes/federation.ts /peer/initiate activation
- *   - routes/federation.ts /peer/accept existing-rejected override
- *   - routes/federation.ts /peer/accept existing-awaiting_approval
- *   - routes/federation.ts /peer/accept existing-pending
- *   - routes/federation.ts /peer/accept new-peer
- *   - routes/federation.ts /approval-requests/:id/approve
- *   - utils/federationWorker.ts health check recovery
- *   - utils/federationPeering.ts ensurePeered/performHandshake
- *   - utils/federationWorker.ts startup bootstrap (via startupBootstrapSync)
+ * Called by the peer state machine (utils/federationPeerState.ts) on every
+ * transition into `active`, with the transition's activation reason, and by
+ * startupBootstrapSync. No other code calls it.
  *
  * Deduplicated by peerId — concurrent calls share one promise.
  */
@@ -259,11 +254,8 @@ export async function startupBootstrapSync(): Promise<void> {
   }
 }
 
-export type PeerDeactivationReason =
-  | 'network_threshold'        // outbox worker hit PEER_UNREACHABLE_THRESHOLD
-  | 'auth_threshold'           // outbox worker hit AUTH_FAILURE_THRESHOLD
-  | 'remote_rejected'          // auto-peer handshake got a 403 (PEERING_REQUIRES_APPROVAL or revoked)
-  | 'admin_revoked';           // admin revoked peering from this side
+// Why a peer left `active`: the cause of the transition (utils/federationPeerState.ts).
+export type PeerDeactivationReason = PeerExitCause;
 
 // Dedup: concurrent deactivations for the same peerId share one promise.
 // SEPARATE from inFlightActivation — a flapping peer's activate-then-deactivate
@@ -276,13 +268,8 @@ const inFlightDeactivation = new Map<string, Promise<void>>();
  * the peer origin, emitting dm_call_undeliverable { phase: 'host_unreachable', terminal: true }
  * to stranded ringed users and clearing the entries.
  *
- * Call sites (must remain exhaustive — grep `onPeerDeactivated(` to audit):
- *   - utils/federationWorker.ts handleOutboxDeliveryFailure when status flips to 'unreachable'
- *   - utils/federationWorker.ts auth-failure path when status flips to 'needs_attention'
- *   - utils/federationWorker.ts resolvePendingPeers case 'rejected'
- *   - routes/federation.ts admin revoke endpoint
- *   - routes/federation.ts admin reset endpoint (when it transitions to a non-active status)
- *   - utils/federationPeering.ts performHandshake 403 path (settleRejectedHandshake)
+ * Called by the peer state machine (utils/federationPeerState.ts) on every
+ * transition out of `active`, with the transition's cause. No other code calls it.
  *
  * Deduplicated by peerId — concurrent calls share one promise. Separate map from
  * onPeerActivated so flapping peers don't collapse transitions.

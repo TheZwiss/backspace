@@ -115,7 +115,7 @@
   },
   "packages/server/src/routes/federation/handlers/peerHandshake.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     }
   },
   "packages/server/src/routes/federation/identity.ts": {

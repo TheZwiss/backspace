@@ -88,7 +88,7 @@ describe('ensurePeered — refuses when unresolved inbound approval-request exis
     sqlite.close();
   });
 
-  it('returns rejected when a peer_approval_requests row exists for the target origin, even if no peer row exists', async () => {
+  it('returns admin_required when a peer_approval_requests row exists for the target origin, even if no peer row exists', async () => {
     const now = Date.now();
     testDb.insert(schema.peerApprovalRequests).values({
       id: 'approval-1',
@@ -105,8 +105,10 @@ describe('ensurePeered — refuses when unresolved inbound approval-request exis
     _clearInFlightPeering();
     const result = await ensurePeered('https://orbit.test', { kind: 'system' });
 
-    expect(result.status).toBe('rejected');
-    if (result.status === 'rejected') {
+    // The local admin's decision on the inbound request settles the peering;
+    // the row (if any) is not refused, so the caller hears admin_required.
+    expect(result.status).toBe('admin_required');
+    if (result.status === 'admin_required') {
       expect(result.error).toMatch(/admin must resolve/i);
     }
 

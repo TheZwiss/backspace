@@ -95,6 +95,18 @@ describe('federationRecovery primitives', () => {
     expect(onPeerActivated).toHaveBeenCalledWith('peer-rec', 'health_check_recovery');
   });
 
+  it('markPeerRecovered leaves a peer an admin revoked while the probe ran as revoked', async () => {
+    seedUnreachable('peer-revoked-meanwhile');
+    testDb.update(schema.federationPeers).set({ status: 'revoked' })
+      .where(eq(schema.federationPeers.id, 'peer-revoked-meanwhile')).run();
+    const { markPeerRecovered } = await import('./federationRecovery.js');
+    expect(await markPeerRecovered('peer-revoked-meanwhile')).toBe(false);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-revoked-meanwhile')).get()!;
+    expect(row.status).toBe('revoked');
+    expect(onPeerActivated).not.toHaveBeenCalled();
+  });
+
   it('recoverOrDetectReset recovers when the probed epoch matches the trusted baseline', async () => {
     testDb.insert(schema.federationPeers).values({
       id: 'peer-match', origin: 'https://peer.example', hmacSecret: 'secret',
@@ -144,7 +156,7 @@ describe('federationRecovery primitives', () => {
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-reset')).get()!;
     expect(row.status).toBe('needs_attention');
-    expect(row.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row.statusReason).toBe('peer_reset_detected');
     expect(row.peerInstanceId).toBe('E0'); // trusted baseline untouched
     expect(row.hmacSecret).toBe('secret'); // never rekeyed
     // A reset peer must NOT be recovered to active.
@@ -161,7 +173,7 @@ describe('federationRecovery primitives', () => {
   function seedNeedsAttention(id: string, reason: string | null, peerInstanceId: string | null): void {
     testDb.insert(schema.federationPeers).values({
       id, origin: 'https://peer.example', hmacSecret: 'secret',
-      status: 'needs_attention', needsAttentionReason: reason,
+      status: 'needs_attention', statusReason: reason,
       peerInstanceId, consecutiveFailures: 0,
       lastSyncedAt: Date.now(), createdAt: Date.now(),
     }).run();
@@ -183,7 +195,7 @@ describe('federationRecovery primitives', () => {
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-na')).get()!;
     expect(row.status).toBe('needs_attention'); // NOT flipped to active
-    expect(row.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row.statusReason).toBe('peer_reset_detected');
     expect(row.observedPeerInstanceId).toBe('E1'); // observed epoch recorded
     expect(row.peerInstanceId).toBe('E0'); // trusted baseline untouched
     expect(row.hmacSecret).toBe('secret'); // secret untouched
@@ -210,7 +222,7 @@ describe('federationRecovery primitives', () => {
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-same')).get()!;
     expect(row.status).toBe('needs_attention');
-    expect(row.needsAttentionReason).toBe('auth_failures'); // unchanged
+    expect(row.statusReason).toBe('auth_failures'); // unchanged
     expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
     expect(onPeerActivated).not.toHaveBeenCalled();
   });
@@ -252,7 +264,7 @@ describe('federationRecovery primitives', () => {
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-evt')).get()!;
     expect(row.status).toBe('needs_attention'); // detection only — never flipped to active
-    expect(row.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row.statusReason).toBe('peer_reset_detected');
     expect(row.observedPeerInstanceId).toBe('E1');
     expect(row.peerInstanceId).toBe('E0'); // trusted baseline untouched
     expect(row.hmacSecret).toBe('secret'); // never rekeyed
@@ -271,7 +283,7 @@ describe('federationRecovery primitives', () => {
     expect(detected).toBe(false);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-evt-same')).get()!;
-    expect(row.needsAttentionReason).toBe('auth_failures'); // unchanged
+    expect(row.statusReason).toBe('auth_failures'); // unchanged
     expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
   });
 
@@ -294,6 +306,6 @@ describe('federationRecovery primitives', () => {
     expect(detected).toBe(false);
     expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
     expect(testDb.select().from(schema.federationPeers)
-      .where(eq(schema.federationPeers.id, 'peer-evt-down')).get()!.needsAttentionReason).toBe('auth_failures');
+      .where(eq(schema.federationPeers.id, 'peer-evt-down')).get()!.statusReason).toBe('auth_failures');
   });
 });

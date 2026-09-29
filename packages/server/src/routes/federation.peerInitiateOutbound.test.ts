@@ -223,13 +223,14 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
 
   // ─── Task 6: 409 honest-refusal + verify-before-activate (BUG-1b/BUG-2) ─────
 
-  it('(a) on 409 PEER_EXISTS_RESET_REQUIRED, returns 409 and DELETES the pending row', async () => {
+  it('(a) on 409 PEER_EXISTS_RESET_REQUIRED, returns 409 and parks the row until the remote resets (#309)', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
       new Response(
         JSON.stringify({ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error: 'reset required' }),
         { status: 409, headers: { 'Content-Type': 'application/json' } },
       ),
-      // No epoch call is expected on this path; guard with null anyway.
+      // The signed /epoch probe with our secret does not verify: the remote
+      // holds its older secret.
       null,
     ));
 
@@ -242,10 +243,13 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
     expect(response.statusCode).toBe(409);
     expect(response.json().code).toBe('PEER_EXISTS_RESET_REQUIRED');
 
-    // The pending row must be gone — no false-active, no lingering slot.
+    // Never a false active: the row is parked, and it keeps the admin's
+    // provenance so the remote's Re-peer lands on it even with auto-accept off.
     const peer = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
-    expect(peer).toBeUndefined();
+    expect(peer?.status).toBe('rejected');
+    expect(peer?.statusReason).toBe('stale_peering_on_remote');
+    expect(peer?.initiatedBy).toBe('admin');
   });
 
   it('(b) on 200 but failed epoch verification, parks in needs_attention (verified:false), NOT active', async () => {
@@ -270,10 +274,10 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
     const peer = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(peer?.status).toBe('needs_attention');
-    expect(peer?.needsAttentionReason).toBe('repeer_incomplete');
+    expect(peer?.statusReason).toBe('repeer_incomplete');
   });
 
-  it('(c) on 200 with a valid signed epoch, activates (verified:true) and clears needsAttentionReason', async () => {
+  it('(c) on 200 with a valid signed epoch, activates (verified:true) and clears statusReason', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
       new Response(
         JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
@@ -294,7 +298,7 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
     const peer = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(peer?.status).toBe('active');
-    expect(peer?.needsAttentionReason).toBeNull();
+    expect(peer?.statusReason).toBeNull();
     expect(peer?.peerInstanceId).toBe('remote-epoch');
   });
 
@@ -318,7 +322,7 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
   }
 
   it('needs_attention row → does NOT 500; deletes the stale row and proceeds to a fresh handshake (activates)', async () => {
-    const oldId = seedExistingPeer('needs_attention', { needsAttentionReason: 'repeer_incomplete' });
+    const oldId = seedExistingPeer('needs_attention', { statusReason: 'repeer_incomplete' });
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
       new Response(
@@ -343,7 +347,7 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
     expect(peer).toBeDefined();
     expect(peer?.id).not.toBe(oldId);
     expect(peer?.status).toBe('active');
-    expect(peer?.needsAttentionReason).toBeNull();
+    expect(peer?.statusReason).toBeNull();
     expect(peer?.hmacSecret).toBe(PENDING_SECRET);
   });
 

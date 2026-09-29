@@ -265,7 +265,7 @@ describe('syncPeerMutationLog: where the first pull after the upgrade starts', (
       INSERT INTO federation_peers (id, origin, hmac_secret, status, last_synced_at, created_at, peer_instance_id)
       VALUES (?, ?, 'secret', 'active', ?, 1, 'epoch-1')
     `).run(PEER, PEER_ORIGIN, lastSyncedAt);
-    applyMigrations(sqlite, f => f.startsWith('0022'));
+    applyMigrations(sqlite, f => f >= '0022');
   }
 
   function ledgerStartedAt(): number {

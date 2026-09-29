@@ -162,6 +162,13 @@
       "when": 1791335942928,
       "tag": "0022_peer_resync",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791372547519,
+      "tag": "0023_peer_status_reason",
+      "breakpoints": true
     }
   ]
 }

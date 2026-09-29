@@ -681,6 +681,26 @@ describe('processRecoveryTick — demand-driven recovery', () => {
     expect(row.lastProbeAt).toBeGreaterThan(0);
   });
 
+  it('re-probes 30 s after the first failed probe, the first step of RECOVERY_BACKOFF_MS (#322)', async () => {
+    seedUnreachable('peer-first-step');
+    seedOutboxEntry('e-first-step', 'peer-first-step', 'm-first-step');
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 502 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const t0 = Date.now();
+      await processRecoveryTick();
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(t0 + 30_000);
+      await processRecoveryTick();
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does NOT probe a silent peer before the 15-min backstop is due', async () => {
     seedUnreachable('peer-c', 1, Date.now() - 60_000); // no outbox entry, probed 1m ago
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
@@ -758,5 +778,54 @@ describe('retry waits follow config.federation.backoffDivisor (#367)', () => {
     await processRecoveryTick();
 
     expect(spy).toHaveBeenCalledWith('https://peer.example/api/instance/info', expect.anything());
+  });
+});
+
+describe('auth-failure threshold (#324)', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceEpoch();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  it('records auth_failures as the reason when the threshold moves a peer to needs_attention', async () => {
+    seedPeer('peer-auth');
+    seedOutboxEntry('e-auth', 'peer-auth', 'm-auth');
+    const { evaluateAuthFailure } = await import('./federationAuthFailure.js');
+    vi.mocked(evaluateAuthFailure).mockReturnValueOnce({ kind: 'transition_to_needs_attention', newAuthFailures: 5 });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 401 }));
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    await processOutboxTick();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-auth')).get()!;
+    expect(row.status).toBe('needs_attention');
+    expect(row.statusReason).toBe('auth_failures');
+  });
+
+  it('does not move a peer an admin revoked while the delivery was in flight', async () => {
+    seedPeer('peer-auth-revoked');
+    seedOutboxEntry('e-auth-r', 'peer-auth-revoked', 'm-auth-r');
+    const { evaluateAuthFailure } = await import('./federationAuthFailure.js');
+    vi.mocked(evaluateAuthFailure).mockReturnValueOnce({ kind: 'transition_to_needs_attention', newAuthFailures: 5 });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      testDb.update(schema.federationPeers).set({ status: 'revoked' })
+        .where(eq(schema.federationPeers.id, 'peer-auth-revoked')).run();
+      return new Response('', { status: 401 });
+    });
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    await processOutboxTick();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-auth-revoked')).get()!;
+    expect(row.status).toBe('revoked');
   });
 });

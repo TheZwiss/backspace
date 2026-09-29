@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 import { setWorkerId } from '../utils/snowflake.js';
 
 setWorkerId(1);
@@ -308,11 +309,8 @@ describe('Inbound regression after direction split', () => {
 
   it('/approve on inbound row → existing 200 path activates peer (preserved verbatim)', async () => {
     seedInboundRequest('req-in-approve');
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Inbound Backspace' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Inbound Backspace' }) }),
     );
 
     const response = await app.inject({
@@ -367,6 +365,9 @@ describe('Inbound regression after direction split', () => {
     const peer = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://inbound.example')).get();
     expect(peer?.status).toBe('rejected');
+    // Recorded as our own refusal, so the origin's next handshake is refused
+    // and not read as the remote refusing us (#323).
+    expect(peer?.statusReason).toBe('denied_by_local_admin');
 
     // Queue row deleted.
     expect(testDb.select().from(schema.peerApprovalRequests)

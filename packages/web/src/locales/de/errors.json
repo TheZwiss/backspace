@@ -37,6 +37,8 @@
   "peer_pending_local_admin": "Dein Admin muss die Föderation mit dieser Instanz zuerst genehmigen. Deine Anfrage steht unter „Verbindungen“.",
   "peer_unreachable": "Die andere Instanz ist gerade nicht erreichbar.",
   "PEER_EXISTS_RESET_REQUIRED": "Es gibt bereits eine Verbindung zu dieser Instanz. Setze sie zurück, bevor du dich erneut verbindest.",
+  "PEER_REVOKED": "Diese Instanz hat die Föderation mit dieser Instanz widerrufen.",
+  "PEER_HANDSHAKE_IN_PROGRESS": "Diese Instanz verbindet sich gerade mit dieser. Versuche es gleich noch einmal.",
   "recipient_deleted": "Dieses Konto wurde gelöscht.",
   "username_length_invalid": "Benutzernamen müssen zwischen {{min}} und {{max}} Zeichen lang sein.",
   "username_characters_invalid": "Benutzernamen dürfen nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.",

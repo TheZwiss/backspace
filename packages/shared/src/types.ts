@@ -571,7 +571,7 @@ export type ServerEvent =
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
   | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
-  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
+  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; reasonCode?: FederationPeerStatusReason; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
   | { type: 'federation_peer_active'; peerOrigin: string }
   | { type: 'federation_peers_changed' }
   | { type: 'federation_peer_reset_detected'; origin: string }
@@ -1560,7 +1560,7 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
+  statusReason: FederationPeerStatusReason | null;
 }
 
 // ─── Reset-cleanup admin surface (instance-epoch self-healing §6.4) ──────────
@@ -1825,3 +1825,33 @@ export interface TelemetryStatus {
 }
 
 export type { DmSystemEvent } from './dmSystemEvents.js';
+
+// ─── Federation peer state (docs/systems/federation.md, "Peer state") ────────
+
+/** Every value `federation_peers.status` takes. */
+export type FederationPeerStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'active'
+  | 'unreachable'
+  | 'needs_attention'
+  | 'rejected'
+  | 'revoked';
+
+/** Why a peer is in `needs_attention`. */
+export type FederationNeedsAttentionReason = 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete';
+
+/**
+ * Why a peer is `rejected`. `denied_by_local_admin` is our own refusal; every
+ * other value is the remote refusing us, or holding an older peering with us
+ * that its admin has to reset (`stale_peering_on_remote`).
+ */
+export type FederationRejectedReason =
+  | 'denied_by_local_admin'
+  | 'denied_by_remote'
+  | 'revoked_by_remote'
+  | 'expired_on_remote'
+  | 'stale_peering_on_remote';
+
+/** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
+export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;

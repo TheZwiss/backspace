@@ -319,7 +319,7 @@ describe('POST /api/federation/peer/initiate — verifies the handshake before p
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(row?.status).toBe('needs_attention');
-    expect(row?.needsAttentionReason).toBe('repeer_incomplete');
+    expect(row?.statusReason).toBe('repeer_incomplete');
     expect(row?.peerInstanceId).toBeNull();
   });
 });

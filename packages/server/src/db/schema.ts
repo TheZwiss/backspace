@@ -461,7 +461,10 @@ export const federationPeers = sqliteTable('federation_peers', {
   approvalToken: text('approval_token'),
   peerInstanceId: text('peer_instance_id'),
   observedPeerInstanceId: text('observed_peer_instance_id'),
-  needsAttentionReason: text('needs_attention_reason'),
+  // Why the row is in its status, for the statuses that carry a reason
+  // (needs_attention, rejected); NULL for every other status. Written only by
+  // utils/federationPeerState.ts. See docs/systems/federation.md, "Peer state".
+  statusReason: text('status_reason'),
 });
 
 // Pull-sync position per peer and context ('dm' | 'friend' | 'profile'): the

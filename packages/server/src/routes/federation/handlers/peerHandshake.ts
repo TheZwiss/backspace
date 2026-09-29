@@ -1,14 +1,13 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { authenticate, requireAdmin } from '../../../utils/auth.js';
-import { generateHmacSecret, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
-import { fetchPeerEpoch, getInstanceId } from '../../../utils/federationEpoch.js';
-import { onPeerActivated } from '../../../utils/federationPeerActivation.js';
+import { parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { getInstanceId } from '../../../utils/federationEpoch.js';
 import { markPeerReset } from '../../../utils/federationReset.js';
-import { claimAdminHandshake, releaseAdminHandshake } from '../../../utils/federationPeering.js';
-import { generateSnowflake } from '../../../utils/snowflake.js';
-import { connectionManager } from '../../../ws/handler.js';
-import { and, eq, inArray, or, sql } from 'drizzle-orm';
+import { claimAdminHandshake, isHandshakeInFlight, releaseAdminHandshake } from '../../../utils/federationPeering.js';
+import { decideInboundHandshake, insertPeer, transitionPeer } from '../../../utils/federationPeerState.js';
+import { prepareAdminHandshakeRow, runOutboundHandshake } from '../../../utils/federationHandshake.js';
+import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { queueApprovalRequest } from './approvals.js';
 import { resolveLocalOrigin, sanitizePeer, validateOrigin } from '../origin.js';
@@ -40,6 +39,11 @@ function peerEnsureTarget(reason: PeerEnsureReason, remoteOrigin: string): strin
   }
 }
 
+/** The full peer row, for the API's sanitized view. */
+function readPeerRow(peerId: string): typeof schema.federationPeers.$inferSelect | null {
+  return getDb().select().from(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).get() ?? null;
+}
+
 export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/peer/initiate ────────────────────────────────────
   // Admin-only: start a peering handshake with a remote instance.
@@ -57,64 +61,6 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         return reply.code(400).send({ error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)', statusCode: 400 });
       }
 
-      const db = getDb();
-
-      // Check if a peer already exists for this origin
-      const existing = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, remoteOrigin))
-        .get();
-
-      // A `pending` row that local traffic created (`initiatedBy: 'auto'`) is
-      // taken over rather than refused: nothing but the outbox worker's paced
-      // retries stands behind it, and its queued entries must survive. The
-      // takeover and the delete of a parked row below are applied only once
-      // this request holds the origin's handshake claim.
-      let takeoverRow: typeof existing | null = null;
-      let parkedRowId: string | null = null;
-
-      if (existing) {
-        if (existing.status === 'active') {
-          return reply.code(200).send({ peer: sanitizePeer(existing) });
-        }
-        if (existing.status === 'pending' && existing.initiatedBy !== 'auto') {
-          return reply.code(409).send({
-            error: 'A peering handshake with this instance is already in progress',
-            statusCode: 409,
-          });
-        }
-        if (existing.status === 'pending') {
-          takeoverRow = existing;
-        }
-        if (existing.status === 'awaiting_approval') {
-          return reply.code(409).send({
-            error: "A peering handshake with this instance is awaiting the remote admin's approval",
-            statusCode: 409,
-          });
-        }
-        // Every remaining terminal/parked state is safe to clear and re-initiate
-        // from — falling through here (rather than to the db.insert below) is what
-        // keeps this route from violating UNIQUE(origin) and 500-ing.
-        //  - revoked: local admin revoked; re-initiate cleanly.
-        //  - rejected: a prior attempt was rejected; allow the local admin's
-        //    authenticated retry (mirrors revoked).
-        //  - needs_attention: this IS the one-click Re-peer step (resetPeer +
-        //    initiate). Deleting the row here is equivalent to the documented
-        //    reset: the reset-heal snapshot lives on users.federation_heal_pending
-        //    (not the peer row) and the federation_reset_events journal is designed
-        //    to survive peer-row deletion (design §4.2/§6.1), and onPeerActivated
-        //    after the fresh handshake re-triggers the heal — so no recovery state
-        //    is lost by removing the local needs_attention peer row here.
-        if (
-          existing.status === 'revoked' ||
-          existing.status === 'rejected' ||
-          existing.status === 'needs_attention'
-        ) {
-          parkedRowId = existing.id;
-        }
-      }
-
       let localOrigin: string;
       try {
         localOrigin = resolveLocalOrigin();
@@ -124,17 +70,13 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
           statusCode: 500,
         });
       }
-
-      // Prevent self-peering
       if (localOrigin === remoteOrigin) {
         return reply.code(400).send({ error: 'Cannot peer with yourself', statusCode: 400 });
       }
 
       // One handshake per origin: an exchange already running (ensurePeered for
       // local traffic, or another admin request) settles the row itself, and a
-      // second /peer/accept would race it on the remote. Everything from the
-      // row read above to this claim is synchronous, so the row is still the
-      // one the decisions above were made on.
+      // second /peer/accept would race it on the remote.
       if (!claimAdminHandshake(remoteOrigin)) {
         return reply.code(409).send({
           error: 'A peering handshake with this instance is already in progress',
@@ -143,216 +85,55 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
       }
 
       try {
-        if (parkedRowId) {
-          db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, parkedRowId)).run();
+        const startedAt = Date.now();
+        const prepared = prepareAdminHandshakeRow(remoteOrigin, 'initiate');
+        if (prepared.kind === 'already_active') {
+          const peer = readPeerRow(prepared.peerId);
+          return peer
+            ? reply.code(200).send({ peer: sanitizePeer(peer) })
+            : reply.code(409).send({ error: 'The peer changed; try again', statusCode: 409 });
+        }
+        if (prepared.kind === 'busy') {
+          return reply.code(409).send({ error: prepared.error, statusCode: 409 });
         }
 
-        const now = Date.now();
-        let peerId: string;
-        let hmacSecret: string;
+        // 'approved': remoteOrigin is the body of an admin-authenticated
+        // request on this route, so a private peer address is allowed.
+        const outcome = await runOutboundHandshake({
+          peerId: prepared.peerId,
+          origin: remoteOrigin,
+          hmacSecret: prepared.hmacSecret,
+          trust: 'approved',
+          activation: 'initiate_accepted',
+          startedAt,
+          // A row this request created goes away unless traffic queued on it;
+          // a row it took over goes back to local traffic.
+          onFailure: prepared.created ? 'remove_unless_queued' : 'release_to_traffic',
+        });
+        const peer = outcome.peerId ? readPeerRow(outcome.peerId) : null;
+        const sanitized = peer ? sanitizePeer(peer) : null;
 
-        // `initiatedBy: 'admin'` is what later lets the inbound /peer/accept gate
-        // tell this row apart from one that local traffic created; this route is
-        // admin-only, so it is the real thing.
-        if (takeoverRow) {
-          // Keep the row, its secret and its queued outbox entries. The secret may
-          // already have reached the remote in an earlier auto attempt.
-          peerId = takeoverRow.id;
-          hmacSecret = takeoverRow.hmacSecret;
-          db.update(schema.federationPeers)
-            .set({ initiatedBy: 'admin' })
-            .where(eq(schema.federationPeers.id, peerId))
-            .run();
-        } else {
-          hmacSecret = generateHmacSecret();
-          peerId = generateSnowflake();
-          db.insert(schema.federationPeers).values({
-            id: peerId,
-            origin: remoteOrigin,
-            hmacSecret,
-            status: 'pending',
-            initiatedBy: 'admin',
-            createdAt: now,
-          }).run();
-        }
-
-        // Undo this request's hold on the row when the handshake does not go
-        // through. A row this request created is removed. A taken-over row goes
-        // back to local traffic as it was, entries included, with this attempt
-        // counted on the pacing the outbox worker retries it on.
-        const releasePendingRow = (): void => {
-          if (takeoverRow) {
-            db.update(schema.federationPeers)
-              .set({
-                initiatedBy: 'auto',
-                probeAttempts: sql`${schema.federationPeers.probeAttempts} + 1`,
-                lastProbeAt: now,
-              })
-              .where(and(
-                eq(schema.federationPeers.id, peerId),
-                eq(schema.federationPeers.status, 'pending'),
-              ))
-              .run();
-          } else {
-            db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).run();
-          }
-        };
-
-        // Initiate the server-to-server handshake
-        try {
-          // 'approved': remoteOrigin is the body of an admin-authenticated
-          // request on this route, so a private peer address is allowed.
-          const response = await federationFetch(remoteOrigin, '/api/federation/peer/accept', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              sourceOrigin: localOrigin,
-              hmacSecret,
-              instanceName: db
-                .select({ name: schema.instanceSettings.instanceName })
-                .from(schema.instanceSettings)
-                .where(eq(schema.instanceSettings.id, 1))
-                .get()?.name ?? undefined,
-              instanceId: getInstanceId(),
-            }),
-            signal: AbortSignal.timeout(10_000),
-          }, 'approved');
-
-          if (response.status === 202) {
-            // Remote instance queued our request for admin approval
-            // (autoAcceptPeering is off on their side). Do NOT activate the
-            // local peer — mirror the auto-peer flow in federationPeering.ts
-            // by transitioning the pending record to awaiting_approval.
-            // Capture the approval token they returned so the next inbound
-            // /peer/accept (when their admin approves) can be verified. §3.7.
-            let returnedToken: string | null = null;
-            try {
-              const body = (await response.json()) as { approvalToken?: string };
-              if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
-                returnedToken = body.approvalToken;
-              }
-            } catch {
-              // Non-JSON / empty body — legacy peer.
-            }
-
-            db.update(schema.federationPeers)
-              .set({ status: 'awaiting_approval', approvalToken: returnedToken })
-              .where(eq(schema.federationPeers.id, peerId))
-              .run();
-            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-
-            const peer = db
-              .select()
-              .from(schema.federationPeers)
-              .where(eq(schema.federationPeers.id, peerId))
-              .get();
-
-            if (!peer) {
-              return reply.code(500).send({ error: 'Failed to read peer after queuing', statusCode: 500 });
-            }
-
-            return reply.code(202).send({ peer: sanitizePeer(peer) });
-          }
-
-          if (!response.ok) {
-            // Read the body exactly ONCE here — response.json()/text() consumes the
-            // stream, so both the honest-409 branch and the generic branch below
-            // share this single parse (no double-read of the same Response).
-            const rawBody = await response.text().catch(() => '');
-            let parsed: { error?: string; code?: string } = {};
-            try { parsed = JSON.parse(rawBody) as { error?: string; code?: string }; } catch { /* non-JSON body */ }
-
-            // Responder honestly refused: it already holds peering for us and will
-            // not rekey (anti-hijack). Do NOT create a conflicting row — release the
-            // pending row so our slot stays clean and the remote's own later Re-peer
-            // can land on a fresh responder slot. Surface an actionable reason.
-            if (response.status === 409 && parsed.code === 'PEER_EXISTS_RESET_REQUIRED') {
-              releasePendingRow();
+        switch (outcome.kind) {
+          case 'active':
+            return reply.code(200).send({ peer: sanitized, ...(outcome.verified ? { verified: true } : {}) });
+          case 'needs_attention':
+            return reply.code(200).send({ peer: sanitized, verified: false });
+          case 'awaiting_approval':
+            return reply.code(202).send({ peer: sanitized });
+          case 'rejected':
+            if (outcome.reason === 'stale_peering_on_remote') {
               return reply.code(409).send({
-                error: 'The remote instance still holds stale peering for you. Ask its admin to reset (or Re-peer) their side, then try again.',
+                error: 'The remote instance still holds stale peering for you. Ask its admin to reset (or Re-peer) their side; this instance checks every 15 minutes and completes the peering once they have.',
                 code: 'PEER_EXISTS_RESET_REQUIRED',
                 statusCode: 409,
+                peer: sanitized,
               });
             }
-
-            const errorMessage = parsed.error || `Remote instance rejected peering (HTTP ${response.status})`;
-            releasePendingRow();
-            return reply.code(502).send({ error: errorMessage, statusCode: 502 });
-          }
-
-          // Remote accepted — activate the peer. Parse the remote's instanceName
-          // and instanceId (epoch) from the response body so the federation panel
-          // renders a friendly label and we record the peer's authenticated
-          // epoch baseline. Tolerate omission and non-JSON bodies.
-          let remoteInstanceName: string | null = null;
-          let remoteInstanceId: string | null = null;
-          try {
-            const body = (await response.json()) as { instanceName?: string | null; instanceId?: string | null };
-            if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
-              remoteInstanceName = body.instanceName;
-            }
-            if (typeof body?.instanceId === 'string' && body.instanceId.length > 0) {
-              remoteInstanceId = body.instanceId;
-            }
-          } catch {
-            // Non-JSON body — leave null.
-          }
-
-          // The responder returned 200 → it claims it adopted our secret. PROVE it
-          // with a signed round-trip before trusting the peering (catches BUG-1: a
-          // responder that reported success without adopting, and any residual
-          // desync). fetchPeerEpoch signs with the just-negotiated secret; a desync
-          // → 401/403 → null. Park the peer in needs_attention instead of falsely
-          // activating so the admin sees "re-peer incomplete", not a dead-active row.
-          const verifiedEpoch = await fetchPeerEpoch({ origin: remoteOrigin, hmacSecret });
-          if (!verifiedEpoch) {
-            db.update(schema.federationPeers)
-              .set({ status: 'needs_attention', needsAttentionReason: 'repeer_incomplete', lastSeenAt: Date.now() })
-              .where(eq(schema.federationPeers.id, peerId))
-              .run();
-            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-            const parked = db.select().from(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).get();
-            return reply.code(200).send({ peer: parked ? sanitizePeer(parked) : null, verified: false });
-          }
-
-          db.update(schema.federationPeers)
-            // The baseline is trust-consequential (design §9 — a poisoned baseline can drive
-            // a spurious heal), so store the epoch we cryptographically verified via the signed
-            // /epoch round-trip, not the unverified handshake-response body. They are normally
-            // identical; the verified one is authoritative if they ever differ.
-            .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: verifiedEpoch, needsAttentionReason: null, approvalToken: null })
-            .where(eq(schema.federationPeers.id, peerId))
-            .run();
-          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-          onPeerActivated(peerId, 'initiate_accepted').catch(err =>
-            console.error('[federation] onPeerActivated from /peer/initiate failed:', err)
-          );
-
-          const peer = db
-            .select()
-            .from(schema.federationPeers)
-            .where(eq(schema.federationPeers.id, peerId))
-            .get();
-
-          if (!peer) {
-            return reply.code(500).send({ error: 'Failed to read peer after activation', statusCode: 500 });
-          }
-
-          return reply.code(200).send({ peer: sanitizePeer(peer), verified: true });
-        } catch (err: unknown) {
-          releasePendingRow();
-
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          if (err instanceof DOMException && err.name === 'TimeoutError') {
-            return reply.code(504).send({
-              error: 'Remote instance did not respond within 10 seconds',
-              statusCode: 504,
-            });
-          }
-          return reply.code(502).send({
-            error: `Failed to reach remote instance: ${message}`,
-            statusCode: 502,
-          });
+            return reply.code(502).send({ error: outcome.error, statusCode: 502, peer: sanitized });
+          case 'revoked':
+            return reply.code(409).send({ error: 'This peer was revoked meanwhile', statusCode: 409 });
+          case 'failed':
+            return reply.code(outcome.timedOut ? 504 : 502).send({ error: outcome.error, statusCode: outcome.timedOut ? 504 : 502 });
         }
       } finally {
         releaseAdminHandshake(remoteOrigin);
@@ -362,7 +143,9 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
 
   // ─── POST /api/federation/peer/accept ──────────────────────────────────────
   // Server-to-server: accept a peering request from a remote instance.
-  // No JWT auth — this is first contact. Rate-limited by IP.
+  // No JWT auth: this is first contact. Rate-limited by IP. What it answers
+  // for each state of our row is decideInboundHandshake's table
+  // (docs/systems/federation.md, "Answering a handshake").
   app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string; instanceName?: string; instanceId?: string; approvalToken?: string } }>(
     '/api/federation/peer/accept',
     async (request, reply) => {
@@ -389,7 +172,6 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
       }
 
       const db = getDb();
-
       const settings = db
         .select({
           instanceName: schema.instanceSettings.instanceName,
@@ -401,99 +183,84 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
 
       const ourInstanceName = settings?.instanceName ?? null;
       const ourInstanceId = getInstanceId();
-      const autoAccept = settings?.autoAcceptPeering ?? 1;
+      const autoAccept = (settings?.autoAcceptPeering ?? 1) === 1;
 
-      // ── autoAcceptPeering gate ──────────────────────────────────────────
-      // When auto-accept is disabled, only allow incoming accept requests
-      // that correspond to a local pending peer (i.e., a local admin
-      // initiated the handshake). Unsolicited requests are rejected.
-
-      if (autoAccept === 0) {
-        // Check if the local admin already initiated or approved peering with this origin.
-        // 'pending' = admin used peer/initiate (handshake in progress)
-        // 'awaiting_approval' = admin approved an earlier request, handshake was sent,
-        //   remote queued it (202). Now the remote admin approved too and is handshaking
-        //   back to us. We should accept — both admins have approved.
-        //
-        // The `initiated_by = 'admin'` term is load-bearing: `pending` rows are
-        // also created by local traffic (the outbox placeholder, ensurePeered
-        // auto-peering), and those record no admin decision. Without the term,
-        // any origin a local user happened to address could hand itself the
-        // approval this gate exists to withhold. Positive test, not a denylist,
-        // so a future provenance value cannot silently reopen it — and rows
-        // predating the column read as 'auto', so the gate fails closed on
-        // upgrade (a handshake in flight at that moment re-queues for approval).
-        const localPending = db
-          .select({ id: schema.federationPeers.id })
-          .from(schema.federationPeers)
-          .where(
-            and(
-              eq(schema.federationPeers.origin, sourceOrigin),
-              inArray(schema.federationPeers.status, ['pending', 'awaiting_approval']),
-              eq(schema.federationPeers.initiatedBy, 'admin'),
-            ),
-          )
-          .get();
-
-        if (!localPending) {
-          // Check if this origin is blocked (previously denied)
-          const blockedPeer = db
-            .select({ id: schema.federationPeers.id })
-            .from(schema.federationPeers)
-            .where(
-              and(
-                eq(schema.federationPeers.origin, sourceOrigin),
-                eq(schema.federationPeers.status, 'rejected'),
-              ),
-            )
-            .get();
-
-          if (blockedPeer) {
-            return reply.code(403).send({
-              error: 'This instance requires manual peering approval',
-              code: 'PEERING_REQUIRES_APPROVAL',
-              statusCode: 403,
-            });
-          }
-
-          return queueApprovalRequest(db, reply, sourceOrigin, hmacSecret, reqInstanceName ?? null);
-        }
-      }
-
-      // Check if peer already exists
       const existing = db
         .select()
         .from(schema.federationPeers)
         .where(eq(schema.federationPeers.origin, sourceOrigin))
-        .get();
+        .get() ?? null;
 
-      if (existing) {
-        if (existing.status === 'active' || existing.status === 'needs_attention') {
-          // Idempotent — already peered (or peering is in needs_attention state).
-          // In both cases we refuse to overwrite hmac_secret via this
-          // unauthenticated endpoint. An unauthenticated caller cannot
-          // prove prior trust, and needs_attention means "we don't know
-          // why this broke" — letting an unauthenticated request flip it
-          // to active with a new secret defeats the purpose.
-          //
-          // Legitimate recovery path: local admin clicks "Reset peering" →
-          // row is deleted → remote's /peer/accept then lands on a
-          // non-existent row and the normal handshake path runs.
-          //
-          // Detection-only: if the inbound epoch differs from our trusted
-          // baseline, the peer is a NEW incarnation on the same domain (a
-          // wipe-and-reinstall). Route it to needs_attention + snapshot +
-          // journal — but STILL return 409 (PEER_EXISTS_RESET_REQUIRED) and
-          // STILL do not rekey. The anti-hijack guard above is preserved
-          // verbatim; detection never grants capability.
-          if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) {
+      const decision = decideInboundHandshake({
+        row: existing,
+        autoAccept,
+        inboundToken,
+        ownHandshakeInFlight: isHandshakeInFlight(sourceOrigin),
+        ourOrigin: resolveLocalOrigin(),
+        sourceOrigin,
+      });
+
+      const accepted = { accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId };
+      const theirs = {
+        hmacSecret,
+        instanceName: reqInstanceName ?? null,
+        peerInstanceId: reqInstanceId ?? null,
+        lastSeenAt: Date.now(),
+        approvalToken: null,
+      };
+
+      switch (decision.kind) {
+        case 'create': {
+          const inserted = insertPeer({
+            origin: sourceOrigin,
+            hmacSecret,
+            instanceName: reqInstanceName ?? null,
+            peerInstanceId: reqInstanceId ?? null,
+            lastSeenAt: Date.now(),
+            initiatedBy: 'remote',
+            status: 'active',
+            cause: 'accept_new',
+          });
+          if (!inserted) {
+            return reply.code(409).send({ error: 'A peering handshake with this instance is already in progress', code: 'PEER_HANDSHAKE_IN_PROGRESS', statusCode: 409 });
+          }
+          return reply.code(200).send(accepted);
+        }
+
+        case 'activate': {
+          if (!existing) return reply.code(500).send({ error: 'Peer row missing', statusCode: 500 });
+          const outcome = transitionPeer(existing.id, {
+            from: [decision.from],
+            expectSecret: existing.hmacSecret,
+            to: 'active',
+            cause: decision.cause,
+            fields: theirs,
+          });
+          if (!outcome.applied) {
+            return reply.code(409).send({ error: 'A peering handshake with this instance is already in progress', code: 'PEER_HANDSHAKE_IN_PROGRESS', statusCode: 409 });
+          }
+          if (decision.from === 'awaiting_approval') {
+            // Debris from an earlier unverifiable attempt that was queued.
+            db.delete(schema.peerApprovalRequests)
+              .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
+              .run();
+          }
+          return reply.code(200).send(accepted);
+        }
+
+        case 'queue':
+          return queueApprovalRequest(db, reply, sourceOrigin, hmacSecret, reqInstanceName ?? null);
+
+        case 'refuse_exists':
+          // We hold an established peering for the caller (active, unreachable
+          // or needs_attention) and do not adopt a secret from an unauthenticated
+          // request over it. Reported honestly (409) so the initiator never
+          // activates on a secret we did not take. Detection only: a different
+          // epoch means a new incarnation on that domain (markPeerReset routes
+          // the row to needs_attention and journals it; it never re-keys).
+          if (existing && reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) {
             markPeerReset(existing.id, sourceOrigin, existing.peerInstanceId, reqInstanceId);
           }
-          // Anti-hijack: we did NOT adopt the caller's secret. Report that
-          // honestly (409) instead of a false success (was 200 {accepted:true}),
-          // so the initiator does not false-activate into a permanent HMAC
-          // desync. Legacy initiators read only response.ok → they fail loudly
-          // (never a silent desync); new initiators special-case this code.
           return reply.code(409).send({
             accepted: false,
             code: 'PEER_EXISTS_RESET_REQUIRED',
@@ -502,162 +269,31 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
             instanceId: ourInstanceId,
             statusCode: 409,
           });
-        }
-        if (existing.status === 'revoked') {
+
+        case 'refuse_revoked':
+          // The error text is what releases before PEER_REVOKED match on.
           return reply.code(403).send({
             error: 'Peering with this instance has been revoked',
+            code: 'PEER_REVOKED',
             statusCode: 403,
           });
-        }
-        if (existing.status === 'rejected') {
-          // A remote admin manually initiated peering with us after we
-          // previously auto-rejected them. Override rejected → active.
-          db.update(schema.federationPeers)
-            .set({
-              hmacSecret,
-              instanceName: reqInstanceName ?? null,
-              peerInstanceId: reqInstanceId ?? null,
-              status: 'active',
-              lastSeenAt: Date.now(),
-            })
-            .where(eq(schema.federationPeers.id, existing.id))
-            .run();
 
-          // Broadcast activation to all connected local users
-          for (const uid of connectionManager.getAllOnlineUserIds()) {
-            connectionManager.sendToUser(uid, {
-              type: 'federation_peer_active' as const,
-              peerOrigin: sourceOrigin,
-            });
-          }
+        case 'refuse_denied':
+          return reply.code(403).send({
+            error: 'This instance requires manual peering approval',
+            code: 'PEERING_REQUIRES_APPROVAL',
+            statusCode: 403,
+          });
 
-          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-          onPeerActivated(existing.id, 'accept_rejected_override').catch(err =>
-            console.error('[federation] onPeerActivated from /peer/accept (rejected override) failed:', err)
-          );
-
-          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
-        }
-        if (existing.status === 'awaiting_approval') {
-          // Spec §3.5: token verification gates the awaiting_approval → active
-          // promotion. Without proof the inbound came from the remote's
-          // /approve endpoint, an adversarial timing-knowledge attack or a
-          // bug-prone background code path could falsely flip this row to
-          // active. The token is single-use entropy issued in the 202 we
-          // returned when the remote's outbound /peer/accept first hit our
-          // queue — only their /approve endpoint forwards it.
-          const tokenValid =
-            typeof existing.approvalToken === 'string' &&
-            existing.approvalToken.length > 0 &&
-            existing.approvalToken === inboundToken;
-
-          if (tokenValid) {
-            db.update(schema.federationPeers)
-              .set({
-                hmacSecret,
-                instanceName: reqInstanceName ?? null,
-                peerInstanceId: reqInstanceId ?? null,
-                status: 'active',
-                lastSeenAt: Date.now(),
-                approvalToken: null,
-              })
-              .where(eq(schema.federationPeers.id, existing.id))
-              .run();
-
-            // Clean up any stale approval-request row for this origin (e.g.,
-            // queued debris from a prior bypass attempt that did not promote).
-            db.delete(schema.peerApprovalRequests)
-              .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
-              .run();
-
-            for (const uid of connectionManager.getAllOnlineUserIds()) {
-              connectionManager.sendToUser(uid, {
-                type: 'federation_peer_active' as const,
-                peerOrigin: sourceOrigin,
-              });
-            }
-            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-            onPeerActivated(existing.id, 'accept_awaiting_approval').catch(err =>
-              console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
-            );
-            return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
-          }
-
-          // Token absent or mismatched. Cannot prove mutual approval.
-          if (autoAccept === 1) {
-            // We accept any inbound anyway — promoting here is no weaker than
-            // accepting a fresh handshake from a new peer. Clear the stored
-            // token (moot now) and proceed.
-            db.update(schema.federationPeers)
-              .set({
-                hmacSecret,
-                instanceName: reqInstanceName ?? null,
-                peerInstanceId: reqInstanceId ?? null,
-                status: 'active',
-                lastSeenAt: Date.now(),
-                approvalToken: null,
-              })
-              .where(eq(schema.federationPeers.id, existing.id))
-              .run();
-
-            for (const uid of connectionManager.getAllOnlineUserIds()) {
-              connectionManager.sendToUser(uid, {
-                type: 'federation_peer_active' as const,
-                peerOrigin: sourceOrigin,
-              });
-            }
-            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-            onPeerActivated(existing.id, 'accept_awaiting_approval_fallback').catch(err =>
-              console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval fallback) failed:', err)
-            );
-            return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
-          }
-
-          // autoAccept=0 + unverifiable inbound → queue as new approval-request.
-          // Existing awaiting_approval row stays untouched; the new approval-
-          // request lets the local admin decide whether to honor this inbound.
-          return queueApprovalRequest(db, reply, sourceOrigin, hmacSecret, reqInstanceName ?? null);
-        }
-        // Pending — update with new secret and activate
-        db.update(schema.federationPeers)
-          .set({
-            hmacSecret,
-            instanceName: reqInstanceName ?? null,
-            peerInstanceId: reqInstanceId ?? null,
-            status: 'active',
-            lastSeenAt: Date.now(),
-          })
-          .where(eq(schema.federationPeers.id, existing.id))
-          .run();
-
-        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-        onPeerActivated(existing.id, 'accept_pending').catch(err =>
-          console.error('[federation] onPeerActivated from /peer/accept (pending) failed:', err)
-        );
-
-        return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
+        case 'refuse_in_progress':
+          // Both sides are handshaking at once and ours wins (the lower origin's
+          // does, on both sides). Our /peer/accept on the remote settles both rows.
+          return reply.code(409).send({
+            error: 'This instance is completing its own peering handshake with you',
+            code: 'PEER_HANDSHAKE_IN_PROGRESS',
+            statusCode: 409,
+          });
       }
-
-      // New peer — create and activate
-      const peerId = generateSnowflake();
-      db.insert(schema.federationPeers).values({
-        id: peerId,
-        origin: sourceOrigin,
-        hmacSecret,
-        instanceName: reqInstanceName ?? null,
-        peerInstanceId: reqInstanceId ?? null,
-        status: 'active',
-        initiatedBy: 'remote',
-        lastSeenAt: Date.now(),
-        createdAt: Date.now(),
-      }).run();
-
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-      onPeerActivated(peerId, 'accept_new').catch(err =>
-        console.error('[federation] onPeerActivated from /peer/accept (new) failed:', err)
-      );
-
-      return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
     },
   );
 
@@ -851,47 +487,16 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
         return reply.code(401).send({ error: 'Invalid HMAC signature', statusCode: 401 });
       }
 
-      const { reason, message } = request.body;
+      const { reason } = request.body;
 
-      // Transition to rejected
-      db.update(schema.federationPeers)
-        .set({ status: 'rejected' })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
-
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-
-      // Push federation_peer_rejected WS event to affected users
-      const entries = db
-        .select({
-          contextId: schema.federationOutbox.contextId,
-          contextType: schema.federationOutbox.contextType,
-        })
-        .from(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, peer.id))
-        .all();
-
-      const contextMap = new Map<string, string>();
-      for (const entry of entries) {
-        contextMap.set(entry.contextId, entry.contextType);
-      }
-
-      // Purge outbox entries
-      db.delete(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, peer.id))
-        .run();
-
-      // Build and send WS event
-      if (contextMap.size > 0) {
-        const { pushPeerRejectedEvent } = await import('../../../utils/federationWorker.js');
-        pushPeerRejectedEvent(
-          senderOrigin,
-          contextMap,
-          message || (reason === 'expired'
-            ? 'Request expired — no response from admin within 30 days'
-            : 'Request denied by admin'),
-        );
-      }
+      // The remote's admin refused our request (or it expired unanswered).
+      // Entering rejected purges the outbox and tells the affected users.
+      transitionPeer(peer.id, {
+        from: ['awaiting_approval'],
+        to: 'rejected',
+        reason: reason === 'expired' ? 'expired_on_remote' : 'denied_by_remote',
+        cause: 'remote_denied_request',
+      });
 
       return reply.code(200).send({ acknowledged: true });
     },
