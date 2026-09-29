@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next';
 import type { DmChannel, User } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { api } from '../../api/client';
 import { kickFromGroupDm, transferGroupDmOwnership, updateGroupDmMetadata } from '../../utils/groupDmOwnerActions';
-import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { isMine, parseFederatedUsername, isFederationGlobeApplicable, userKey } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { AvatarStack } from '../ui/AvatarStack';
 import { ImageCropModal } from '../ui/ImageCropModal';
@@ -69,7 +69,6 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   const channelId = params?.channelId ?? null;
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
   const openModal = useUIStore((s) => s.openModal);
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
@@ -80,6 +79,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     () => dmChannels.find((dm) => dm.id === channelId) ?? null,
     [dmChannels, channelId],
   );
+  const viewer = useDmViewer(dmChannel?.id);
 
   // ── Inline edit state ──────────────────────────────────────────────────
   type IconState =
@@ -155,11 +155,9 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     );
   }
 
-  const isOwner = !!authUser && dmChannel.ownerId === authUser.id;
+  const isOwner = isMine({ id: dmChannel.ownerId }, viewer.origin, viewer.self);
 
-  const otherMembers: User[] = authUser
-    ? dmChannel.members.filter((m) => !isSelf(m, authUser))
-    : dmChannel.members;
+  const otherMembers: User[] = dmChannel.members.filter((m) => !isMine(m, viewer.origin, viewer.self));
 
   const fallbackName = otherMembers
     .map((m) => m.displayName ?? parseFederatedUsername(m.username).baseName)
@@ -199,7 +197,10 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   const canAddMembers = memberCount < MAX_GROUP_MEMBERS;
 
   // Friend lookup — federation-safe local-id compare (mirrors DmRosterPanel).
-  const isFriendOfCaller = (m: User): boolean => friends.some((f) => f.id === m.id);
+  const isFriendOfCaller = (m: User): boolean => {
+    const key = userKey(m, viewer.origin);
+    return friends.some((f) => userKey(f, f._instanceOrigin) === key);
+  };
 
   // ── Icon handlers ──────────────────────────────────────────────────────
   const handleHeroClick = () => {
@@ -307,7 +308,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     if (action === 'profile') {
       // DmMemberRow normally opens the profile itself. Fallback path —
       // push the mobile user-profile screen directly.
-      pushMobileScreen('user-profile', { userId: member.id });
+      pushMobileScreen('user-profile', { userId: member.id, origin: viewer.origin });
       return;
     }
     if (action === 'kick') {
@@ -381,7 +382,8 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
       key={member.id}
       member={member}
       isOwner={ownerFlag}
-      isSelf={!!authUser && isSelf(member, authUser)}
+      isSelf={isMine(member, viewer.origin, viewer.self)}
+      origin={viewer.origin}
       callerIsOwner={isOwner}
       isFriend={isFriendOfCaller(member)}
       showKebab
@@ -433,6 +435,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             >
               <AvatarStack
                 members={otherMembers}
+                origin={viewer.origin}
                 size={80}
                 border="chat"
                 iconUrl={previewIconUrl}

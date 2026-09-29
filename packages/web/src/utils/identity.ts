@@ -1,5 +1,3 @@
-import type { User } from '@backspace/shared';
-
 /**
  * Splits a potentially federated username into base name and domain.
  * "erin@nova.ddns.net" → { baseName: "erin", domain: "nova.ddns.net" }
@@ -21,82 +19,11 @@ export function userDisplayName(user: { displayName?: string | null; username: s
   return user.displayName || parseFederatedUsername(user.username).baseName;
 }
 
-// ─── Cross-instance self-ID registry ─────────────────────────────────────────
-// Tracks all Snowflake IDs that belong to the current user across connected
-// instances (home + remotes). Populated from WS `ready` events.
+// ─── Hosts and identities across instances ──────────────────────────────────
+// Origins are `''` for the page's own instance and full URLs for the others;
+// `users.home_instance` is a bare host. Two hosts are compared only through
+// `homeHostOf`, never by raw string comparison.
 
-const _knownSelfIds = new Set<string>();
-
-export function registerSelfId(id: string): void {
-  _knownSelfIds.add(id);
-}
-
-export function clearSelfIds(): void {
-  _knownSelfIds.clear();
-}
-
-/**
- * Whether `id` is one of the signed-in user's own rows, as a connected
- * instance's `ready` reported it (`registerSelfId`). Proof by id only, with no
- * username heuristic.
- */
-export function isRegisteredSelfId(id: string): boolean {
-  return _knownSelfIds.has(id);
-}
-
-/**
- * Stateless check: is `user` a replicated alias of `homeUser`?
- * Uses the immutable (username, homeInstance) composite key —
- * no store lookups, no snowflake ID mapping.
- */
-export function isSelf(
-  user: { id: string; username: string; homeInstance?: string | null },
-  homeUser: { id: string; username: string } | null,
-): boolean {
-  if (!homeUser) return false;
-  // Same instance, same ID — trivial case
-  if (user.id === homeUser.id) return true;
-  // Cross-instance: check all known user IDs from connected instances
-  if (_knownSelfIds.has(user.id)) return true;
-  // Replicated user: homeInstance matches our origin
-  if (!user.homeInstance) return false;
-  if (user.homeInstance !== window.location.host) return false;
-  // Username: "erin" or "erin@nova.ddns.net" → base must match
-  const { baseName } = parseFederatedUsername(user.username);
-  const { baseName: homeBase } = parseFederatedUsername(homeUser.username);
-  return baseName === homeBase;
-}
-
-/**
- * If `user` is a replicated alias of `homeUser`, return `homeUser`
- * for display purposes (avatar gradient, display name). Otherwise
- * return the original user unchanged. Data is never mutated.
- */
-export function resolveDisplayIdentity(user: User, homeUser: User | null): User {
-  if (!homeUser) return user;
-  if (isSelf(user, homeUser)) return homeUser;
-  return user;
-}
-
-// ─── Cross-instance origin / canonical-identity helpers ─────────────────────
-// Used by the userViews cache (spaceStore) and any code that needs to compare
-// a user's home instance against a delivering connection's origin. Bare-domain
-// `users.home_instance` and full-URL connection origins must always agree
-// through these helpers — never via ad-hoc string comparisons.
-
-/**
- * Extract the bare host from a delivering-origin string.
- *
- *   ''                       → ''   (the empty-origin sentinel for "home connection")
- *   null / undefined         → ''
- *   'https://nova.ddns.net' → 'nova.ddns.net'
- *   'http://localhost:3000'  → 'localhost:3000'
- *   'nova.ddns.net'         → 'nova.ddns.net'
- *
- * Empty inputs return `''`. Use {@link deliveringHost} when you need the
- * concrete host that an origin represents (which substitutes
- * `window.location.host` for the empty sentinel).
- */
 /**
  * The host of an origin for a message, or the origin itself when it does
  * not parse, so the text still names what was meant. Compare
@@ -116,6 +43,16 @@ export function homeHostOf(value: string): string {
   return (stripped.split('/')[0] ?? '').split(':')[0]!.toLowerCase();
 }
 
+/**
+ * The host an origin or `homeInstance` value names, as written (port kept):
+ *
+ *   null / undefined / ''   → ''
+ *   'https://nova.ddns.net' → 'nova.ddns.net'
+ *   'http://localhost:3000' → 'localhost:3000'
+ *   'nova.ddns.net'         → 'nova.ddns.net'
+ *
+ * For request payloads and display. Compare hosts with {@link homeHostOf}.
+ */
 export function normalizeOriginToHost(input: string | null | undefined): string {
   if (!input) return '';
   if (input.includes('://')) {
@@ -138,77 +75,100 @@ export function deliveringHost(origin: string): string {
   return normalizeOriginToHost(origin);
 }
 
-/**
- * Stable cross-instance cache key for a user.
- *
- * Federated user: `<homeInstanceHost>:<homeUserId>` — same key for the same
- * person regardless of which instance's local stub we're holding.
- *
- * Purely local user: `:<id>` (homeInstance and homeUserId are null) — local
- * users never collide with federated keys because the host segment is empty.
- *
- * Defensive fallback: if homeInstance is set but homeUserId is missing
- * (legacy stubs from before homeUserId was populated), the local id is used
- * as the identifier portion. This is rare and self-corrects when fresh
- * profile data arrives.
- */
-export function canonicalUserKey(
-  user: { id: string; homeUserId?: string | null; homeInstance?: string | null },
-): string {
-  const host = normalizeOriginToHost(user.homeInstance);
-  const ident = user.homeUserId ?? user.id;
-  return `${host}:${ident}`;
-}
-
-/**
- * The fields a presence or activity entry is about: the delivering instance's
- * row id and, when that row is replicated, its federated identity.
- */
-export interface PresenceSubject {
+/** The identity fields of a user row, as the instance that issued it sent them. */
+export interface IdentityFields {
   id: string;
   homeUserId?: string | null;
   homeInstance?: string | null;
 }
 
 /**
- * The one key for a user's presence and activities (#340), whatever instance
- * delivered them: {@link canonicalUserKey} of the person's home identity.
- *
- * A row with a `homeInstance` is replicated and names its home itself. A row
- * without one is native to the delivering instance, so its home host is the
- * delivering origin's (`''` = the page's own instance) and its id is its home
- * id. So Bob's replicated row on the viewer's home, Bob's replicated row on a
- * third instance and Bob's native row on his home all key as
- * `orbit.example:<bob's id>`.
- *
- * Writers (the WS presence handler) and readers (friends views, member lists)
- * both go through this; nothing looks activities up by a raw id.
+ * Who a person is across instances: their home instance's host and their row
+ * id there. `host` is kept as the row or origin named it, for request payloads;
+ * compare hosts only through {@link userKey} (or {@link homeHostOf}).
  */
-export function activityKey(subject: PresenceSubject, deliveringOrigin: string): string {
-  if (subject.homeInstance) return canonicalUserKey(subject);
-  return canonicalUserKey({ id: subject.id, homeUserId: subject.id, homeInstance: deliveringHost(deliveringOrigin) });
+export interface HomeIdentity {
+  host: string;
+  userId: string;
 }
 
 /**
- * True iff the delivering origin is the user's home — i.e. the receiving
- * payload contains the authoritative view of this user.
+ * The home identity of `row`, as the instance at `origin` issued it
+ * (`''` = the page's own instance). The one statement of the rule; every
+ * "which person is this" on the client derives from it.
  *
- * Cases:
- *  - `user.homeInstance` is null/empty: the user is native to whatever
- *    instance delivered them. Always a home view.
- *  - `user.homeInstance` is set: home view iff the delivering host equals
- *    the user's home host (with `''` resolving to `window.location.host`).
+ * - A row with a `homeInstance` is replicated and names its home itself:
+ *   `(homeInstance, homeUserId)`.
+ * - A row without one is native to the instance that issued it: its home is
+ *   `origin`'s host and its home id is its own id.
+ * - A replicated row without a `homeUserId` (a legacy stub) names no
+ *   identity: null. It is only ever the row it is.
  *
- * Used as the "isHome" tier in the userViews preference rule. Stub views
- * never overwrite home views; home views always upgrade stubs.
+ * So Bob's native row on orbit, orbit's row for him as nova's replicated row
+ * shows it, and any third instance's row for him all have the identity
+ * `(orbit, <his id on orbit>)`, and a user native to nova and one native to
+ * orbit never share an identity, whatever their ids (#353).
  */
-export function isDeliveryFromHome(
-  user: { homeInstance?: string | null },
-  deliveringOrigin: string,
-): boolean {
-  const dh = deliveringHost(deliveringOrigin);
-  const uh = user.homeInstance ? normalizeOriginToHost(user.homeInstance) : dh;
-  return uh === dh;
+export function homeIdentityOf(row: IdentityFields, origin: string): HomeIdentity | null {
+  if (row.homeInstance) {
+    const host = normalizeOriginToHost(row.homeInstance);
+    if (!row.homeUserId || !host) return null;
+    return { host, userId: row.homeUserId };
+  }
+  return { host: deliveringHost(origin), userId: row.id };
+}
+
+/**
+ * The key for a person: `<home host>:<home user id>`, with the host compared
+ * through {@link homeHostOf}. The same for every instance's row of the same
+ * person. A row without an identity (a legacy stub, see
+ * {@link homeIdentityOf}) gets a key of its own, `~<issuing host>:<id>`, that
+ * no other row shares.
+ *
+ * Every client map keyed by person (user views, activities, presence,
+ * friends' status) is keyed by this, and nothing looks a person up by a raw
+ * row id.
+ */
+export function userKey(row: IdentityFields, origin: string): string {
+  const identity = homeIdentityOf(row, origin);
+  if (!identity) return `~${homeHostOf(deliveringHost(origin))}:${row.id}`;
+  return `${homeHostOf(identity.host)}:${identity.userId}`;
+}
+
+/**
+ * Whether `origin` is the home of the person `row` names, so the row is their
+ * own view rather than another instance's copy of them. Always true for a row
+ * native to the instance that issued it.
+ */
+export function isIssuedByHome(row: IdentityFields, origin: string): boolean {
+  const identity = homeIdentityOf(row, origin);
+  if (!identity) return false;
+  return homeHostOf(identity.host) === homeHostOf(deliveringHost(origin));
+}
+
+/** The fields a presence or activity entry is about: the delivering instance's row. */
+export type PresenceSubject = IdentityFields;
+
+/** How a request names a person to an instance (a DM create, for one). */
+export interface PersonTarget {
+  userId?: string;
+  homeUserId?: string;
+  homeInstance?: string;
+}
+
+/**
+ * Where to send a request about the person `row` names (issued by `origin`),
+ * and how to name them there. A person with an identity is asked about on
+ * the page's own instance (`''`): by their id when they are native to it,
+ * otherwise by their home identity, which that server resolves or creates the
+ * row for. A legacy stub has no identity to send, so it is named by its own
+ * id on the instance that issued it.
+ */
+export function personRequest(row: IdentityFields, origin: string): { origin: string; target: PersonTarget } {
+  const identity = homeIdentityOf(row, origin);
+  if (!identity) return { origin, target: { userId: row.id } };
+  if (origin === '' && !row.homeInstance) return { origin: '', target: { userId: row.id } };
+  return { origin: '', target: { homeUserId: identity.userId, homeInstance: identity.host } };
 }
 
 /**
@@ -234,32 +194,44 @@ export function isFederationGlobeApplicable(
   return domain !== window.location.host;
 }
 
+// ─── The signed-in user ──────────────────────────────────────────────────────
+
 /**
- * Federation-safe check: do two user-like objects represent the same person?
- * Uses cascading strategies to handle missing homeUserId on old replicated users.
+ * Everything that says a row is the signed-in user: the person their session
+ * row names (`key`, the `userKey` of the page's session row) and, per
+ * connected instance, the row id that instance's `ready` gave them
+ * (`rowIds`, `''` = the page's own instance and its session row).
+ * Built by `selfIdentityOf` from `stores/authStore.ts`, the one source.
  */
-export function canonicalUserMatch(
-  a: { id: string; username: string; homeUserId?: string | null; homeInstance?: string | null },
-  b: { id: string; username: string; homeUserId?: string | null; homeInstance?: string | null },
-): boolean {
-  // 1. Same local ID (same instance)
-  if (a.id === b.id) return true;
-
-  // 2. homeUserId cross-matching
-  if (a.homeUserId && b.homeUserId && a.homeUserId === b.homeUserId) return true;
-  if (a.homeUserId && a.homeUserId === b.id) return true;
-  if (b.homeUserId && b.homeUserId === a.id) return true;
-
-  // 3. Username + home instance fallback (mirrors isSelf resilience)
-  const aBase = parseFederatedUsername(a.username);
-  const bBase = parseFederatedUsername(b.username);
-  if (aBase.baseName !== bBase.baseName) return false;
-
-  const aHome = a.homeInstance ?? aBase.domain ?? null;
-  const bHome = b.homeInstance ?? bBase.domain ?? null;
-
-  if (!aHome && !bHome) return true;                    // Both native to home instance
-  if (!aHome) return bHome === window.location.host;     // a native, b federated
-  if (!bHome) return aHome === window.location.host;     // b native, a federated
-  return aHome === bHome;                                // Both have explicit homes
+export interface SelfIdentity {
+  key: string;
+  rowIds: ReadonlyMap<string, string>;
 }
+
+/**
+ * The signed-in user as `isMine` reads them, from the page's session row and
+ * the row id each connected instance's `ready` gave them
+ * (`authStore.myRowIds`). Null when signed out.
+ */
+export function selfIdentityOf(
+  user: IdentityFields | null,
+  myRowIds: ReadonlyMap<string, string>,
+): SelfIdentity | null {
+  if (!user) return null;
+  const rowIds = new Map(myRowIds);
+  rowIds.set('', user.id);
+  return { key: userKey(user, ''), rowIds };
+}
+
+/**
+ * Whether `row`, as `origin` issued it, is the signed-in user: the row that
+ * instance named as theirs, or any row naming the same person (a replicated
+ * copy of them on any instance). No username or display-name heuristic: a
+ * name can be shared by two people.
+ */
+export function isMine(row: IdentityFields, origin: string, self: SelfIdentity | null): boolean {
+  if (!self) return false;
+  if (self.rowIds.get(origin) === row.id) return true;
+  return homeIdentityOf(row, origin) !== null && userKey(row, origin) === self.key;
+}
+

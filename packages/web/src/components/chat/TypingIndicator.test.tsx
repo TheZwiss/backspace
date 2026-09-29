@@ -5,7 +5,6 @@ import { setLanguage } from '../../i18n';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 import { TypingIndicator } from './TypingIndicator';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -66,7 +65,7 @@ afterEach(async () => {
   useAuthStore.setState({ user: null });
   useChatStore.setState({ typingUsers: new Map() });
   useSpaceStore.setState({ dmChannels: [], members: [], channelToSpaceMap: new Map(), channelOriginMap: new Map() });
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
   await setLanguage('en');
 });
 
@@ -146,7 +145,7 @@ describe('TypingIndicator', () => {
     const orbitDm = { id: 'dm-orbit', ownerId: null, createdAt: 1, members: [meOnOrbit, sameIdOnOrbit], lastMessage: null } as unknown as DmChannel;
 
     beforeEach(() => {
-      setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+      useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
       useSpaceStore.setState({ dmChannels: [orbitDm], channelOriginMap: new Map([[orbitDm.id, ORBIT]]) });
     });
 

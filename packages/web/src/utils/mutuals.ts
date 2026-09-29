@@ -2,6 +2,7 @@ import type { User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from '../stores/instanceStore';
 import { normalizeUserAssets, resolveAssetUrl } from './assetUrls';
+import { userKey } from './identity';
 
 // ─── Tagged types ────────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ export interface FederatedMutuals {
  * Follows the same Promise.allSettled fan-out pattern as socialStore.loadFriends().
  *
  * - Waits for auto-connect to finish before fanning out (same guard as socialStore)
- * - Deduplicates friends by canonical identity (homeUserId ?? id)
+ * - Deduplicates friends by person (`userKey`)
  * - Concatenates spaces (spaces on different instances are distinct)
  * - Normalizes assets for remote-origin results
  */
@@ -65,11 +66,11 @@ export async function loadFederatedMutuals(
     if (result.status !== 'fulfilled') continue;
     const { data, origin } = result.value;
 
-    // Deduplicate friends by canonical identity (homeUserId ?? id)
+    // Deduplicate friends by person (`userKey`), whichever instance listed them
     for (const friend of data.mutualFriends) {
-      const canonicalId = friend.homeUserId ?? friend.id;
-      if (seenFriends.has(canonicalId)) continue;
-      seenFriends.add(canonicalId);
+      const key = userKey(friend, origin);
+      if (seenFriends.has(key)) continue;
+      seenFriends.add(key);
       if (origin) normalizeUserAssets(friend, origin);
       allFriends.push({ ...friend, _instanceOrigin: origin });
       useSpaceStore.getState().upsertUserView(friend, origin);

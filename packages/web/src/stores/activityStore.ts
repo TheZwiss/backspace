@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Activity } from '@backspace/shared';
 import { wsSendAll } from '../hooks/useWebSocket';
-import { activityKey, type PresenceSubject } from '../utils/identity';
+import { userKey, type PresenceSubject } from '../utils/identity';
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -20,14 +20,14 @@ export function activitiesFor(
   subject: PresenceSubject,
   origin: string,
 ): Activity[] {
-  return userActivities.get(activityKey(subject, origin)) ?? [];
+  return userActivities.get(userKey(subject, origin)) ?? [];
 }
 
 interface ActivityState {
-  /** Keyed by `activityKey` (the person's home identity), never by a raw row id. */
+  /** Keyed by `userKey` (the person's home identity), never by a raw row id. */
   userActivities: Map<string, Activity[]>;
   /**
-   * `activityKey` → the origin whose delivery set that entry last. A `ready`
+   * `userKey` → the origin whose delivery set that entry last. A `ready`
    * is an origin's full snapshot, so it replaces exactly the entries that
    * origin set (`initActivities`); an entry another origin set last is that
    * origin's to change.
@@ -70,7 +70,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   myActivities: null,
 
   setUserActivities: (subject, origin, activities) => {
-    const key = activityKey(subject, origin);
+    const key = userKey(subject, origin);
     set((state) => {
       const next = new Map(state.userActivities);
       const writers = new Map(state.activityWriters);
@@ -86,7 +86,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   },
 
   clearUserActivities: (subject, origin) => {
-    const key = activityKey(subject, origin);
+    const key = userKey(subject, origin);
     set((state) => {
       const next = new Map(state.userActivities);
       const writers = new Map(state.activityWriters);
@@ -101,7 +101,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       const next = new Map(state.userActivities);
       const writers = new Map(state.activityWriters);
       const covered = coveredRows
-        ? new Set([...coveredRows.values()].map((subject) => activityKey(subject, origin)))
+        ? new Set([...coveredRows.values()].map((subject) => userKey(subject, origin)))
         : null;
       // What this origin reported before and its snapshot no longer lists has
       // ended while the client was not hearing from it.
@@ -112,7 +112,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
         writers.delete(key);
       }
       for (const { subject, activities } of entries) {
-        const key = activityKey(subject, origin);
+        const key = userKey(subject, origin);
         if (activities.length > 0) {
           next.set(key, activities);
           writers.set(key, origin);

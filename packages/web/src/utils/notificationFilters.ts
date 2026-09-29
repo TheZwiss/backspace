@@ -3,31 +3,33 @@ import { contentMentionsAny } from './mentionTokens';
 
 /**
  * The rule that decides whether a freshly-arrived chat message alerts the user.
- * Pure; the caller supplies every id the user has (see `messageAlertsUser` in
- * utils/alerts.ts, which both outputs of the `message` alert kind go through).
+ * Pure; the caller answers who wrote it and which id is the user's in that
+ * channel (see `messageAlertsUser` in utils/alerts.ts, which both outputs of
+ * the `message` alert kind go through).
  *
  * Rule (Discord-default):
- *   - Never for a message authored by self (any id in myIds).
- *   - For a DM, or for content with a `<@${id}>` mention of any id in myIds
- *     outside code (the shared scan in utils/mentionTokens.ts).
+ *   - Never for a message the user wrote (`authoredBySelf`).
+ *   - For a DM, or for content with a `<@${myId}>` mention outside code (the
+ *     shared scan in utils/mentionTokens.ts). `myId` is the user's id on the
+ *     instance that issued the channel, which is the id a mention there carries.
  *   - When allChannels=true, for every other message too. Only the in-app
  *     cue passes it: the "Play sound for every message" preference is a sound
  *     setting and does not widen the OS notification.
  */
 export interface MessageAlertInput {
-  authorUserId: string;
-  myIds: ReadonlySet<string>;
+  authoredBySelf: boolean;
+  myId: string | undefined;
   isDmChannel: boolean;
   content: string | null;
   allChannels: boolean;
 }
 
 export function isMessageAlert(input: MessageAlertInput): boolean {
-  if (input.myIds.has(input.authorUserId)) return false;
+  if (input.authoredBySelf) return false;
   if (input.allChannels) return true;
   if (input.isDmChannel) return true;
-  if (!input.content) return false;
-  return contentMentionsAny(input.content, input.myIds);
+  if (!input.content || !input.myId) return false;
+  return contentMentionsAny(input.content, new Set([input.myId]));
 }
 
 /**

@@ -4,7 +4,6 @@ import { useFormatters } from '../../i18n/formatters';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { Avatar } from '../ui/Avatar';
@@ -12,7 +11,8 @@ import { AvatarStack } from '../ui/AvatarStack';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
-import { parseFederatedUsername, isFederationGlobeApplicable, isSelf, userDisplayName } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable, isMine, userDisplayName } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import type { DmChannel, User } from '@backspace/shared';
@@ -29,7 +29,7 @@ function MobileFriendBubble({
   dmChannels: DmChannel[];
   onTap: (dmId: string) => void;
 }) {
-  const canonical = useCanonicalUserView(friend as unknown as User);
+  const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   // _instanceOrigin lives on TaggedFriend, not on the canonical User. Use the
   // canonical avatar value but source the origin from the original friend.
   const avatarUrl = canonical.avatar
@@ -71,31 +71,30 @@ function MobileFriendBubble({
 
 function MobileDmRow({
   dm,
-  authUser,
   readStates,
   onTap,
   onContextMenu,
   formatTimestamp,
 }: {
   dm: DmChannel;
-  authUser: User | null;
   readStates: Map<string, string>;
   onTap: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string, isGroup: boolean) => void;
   formatTimestamp: (ts: number) => string;
 }) {
   const { t } = useTranslation(['dm', 'common']);
-  const otherMembers = dm.members.filter(m => authUser ? !isSelf(m, authUser) : m.id !== authUser);
+  const viewer = useDmViewer(dm.id);
+  const otherMembers = dm.members.filter(m => !isMine(m, viewer.origin, viewer.self));
   const isGroup = !!dm.ownerId;
   const rawMainUser = otherMembers[0] ?? null;
-  const canonicalMainUser = useCanonicalUserView(rawMainUser ?? FALLBACK_USER);
+  const canonicalMainUser = useCanonicalUserView(rawMainUser ?? FALLBACK_USER, viewer.origin);
   const mainUser = rawMainUser ? canonicalMainUser : null;
 
   // Group DMs → `formatDmHeaderName` (single source of truth shared with
   // `MobileChatScreen`, `MainContent`, `DmListItem`, welcome hero). 1:1 DMs
   // keep the canonical view of the single other member.
   const name = isGroup
-    ? formatDmHeaderName(dm, authUser ?? null)
+    ? formatDmHeaderName(dm, viewer)
     : (mainUser && userDisplayName(mainUser)) || t('common:states.unknown');
 
   // Show a single federation globe next to the group name when any non-self
@@ -107,7 +106,7 @@ function MobileDmRow({
   const readState = readStates.get(dm.id);
   const isUnread = lastMsgId && (!readState || readState < lastMsgId);
 
-  const preview = formatDmSidebarPreview(dm, authUser ?? null);
+  const preview = formatDmSidebarPreview(dm, viewer);
   const previewTime = dm.lastMessage?.createdAt;
 
   const avatarUrl = mainUser?.avatar ? `/api/uploads/${mainUser.avatar}` : null;
@@ -128,6 +127,7 @@ function MobileDmRow({
           // surface-chat border color used elsewhere on the messages list.
           <AvatarStack
             members={otherMembers}
+            origin={viewer.origin}
             size={40}
             border="chat"
             iconUrl={dm.icon}
@@ -190,7 +190,6 @@ export function MobileDmsScreen() {
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const readStates = useChatStore((s) => s.readStates);
-  const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
   const navigate = useNavigate();
   const f = useFormatters();
@@ -289,7 +288,6 @@ export function MobileDmsScreen() {
           <MobileDmRow
             key={dm.id}
             dm={dm}
-            authUser={authUser ?? null}
             readStates={readStates}
             onTap={handleDmTap}
             onContextMenu={handleDmContextMenu}

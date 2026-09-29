@@ -4,10 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 import { parseFederatedUsername } from '../../utils/identity';
+import { openDirectMessage } from '../../utils/openDirectMessage';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 
 function NewDmUserRow({
@@ -17,7 +17,8 @@ function NewDmUserRow({
   user: User;
   onSelect: (user: User) => void;
 }) {
-  const canonical = useCanonicalUserView(user);
+  // Search results come from the page's own instance.
+  const canonical = useCanonicalUserView(user, '');
   const { baseName } = parseFederatedUsername(canonical.username);
   const displayName = canonical.displayName ?? baseName;
   return (
@@ -44,7 +45,6 @@ export function NewDmModal() {
   const [error, setError] = useState('');
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -89,20 +89,7 @@ export function NewDmModal() {
   const handleSelectUser = async (user: User) => {
     setError('');
     try {
-      const existing = useSpaceStore.getState().findExistingDmForUser(user);
-      if (existing) {
-        closeModal();
-        useUIStore.getState().setShowDms(true);
-        navigate(`/channels/@me/${existing.dm.id}`);
-        return;
-      }
-      const channel = await api.dm.create({
-        userId: user.homeInstance ? undefined : user.id,
-        homeUserId: user.homeUserId ?? undefined,
-        homeInstance: user.homeInstance ?? undefined,
-      });
-      // The answer joins its conversation; open the conversation's row.
-      const rowId = upsertDmCopy('', channel, 'stated');
+      const rowId = await openDirectMessage(user, '');
       closeModal();
       useUIStore.getState().setShowDms(true);
       navigate(`/channels/@me/${rowId}`);

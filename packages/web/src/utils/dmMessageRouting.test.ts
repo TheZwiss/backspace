@@ -18,14 +18,9 @@ vi.mock('../audio/AudioManager', () => ({
 }));
 
 // The signed-in user: alice, native on the home instance.
-vi.mock('../stores/authStore', () => {
+vi.mock('../stores/authStore', async () => {
   const state = { user: { id: 'alice-home', username: 'alice', homeInstance: null, homeUserId: null }, token: 't' };
-  return {
-    useAuthStore: Object.assign(
-      (selector: (s: unknown) => unknown) => selector(state),
-      { getState: () => state, setState: vi.fn(), subscribe: vi.fn() },
-    ),
-  };
+  return (await import('../test/authStoreMock')).authStoreMock(() => state);
 });
 
 vi.mock('../stores/instanceStore', async () => {
@@ -34,7 +29,8 @@ vi.mock('../stores/instanceStore', async () => {
   return { useInstanceStore: store };
 });
 
-import { useSpaceStore, setApiForOriginResolver, setMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, setApiForOriginResolver } from '../stores/spaceStore';
+import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { api, type BackspaceApiClient } from '../api/client';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from './dmMessageRouting';
@@ -108,7 +104,7 @@ beforeEach(() => {
   remoteListCalls = 0;
   remoteListShape = dm => dm;
   setApiForOriginResolver(() => fakeRemoteClient());
-  setMyUserIdForOrigin(REMOTE, 'alice-on-remote');
+  useAuthStore.getState().recordMyRow(REMOTE, 'alice-on-remote');
 
   // Home lists carol's and bob's DMs. REMOTE's ready arrived before its copy
   // of the bob DM existed, so only the home copy is known.

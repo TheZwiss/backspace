@@ -8,12 +8,14 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ProfileBio } from '../ui/ProfileBio';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
-import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useSelfIdentity } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
-import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
+import { parseFederatedUsername, isMine, userKey, type SelfIdentity } from '../../utils/identity';
+import { openDirectMessage } from '../../utils/openDirectMessage';
+import { normalizeUserAssets } from '../../utils/assetUrls';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { presenceLabel } from '../../i18n/presence';
@@ -31,21 +33,26 @@ type FriendshipStatus =
   | { state: 'inbound_pending'; request: TaggedFriendRequest }
   | { state: 'none' };
 
+/**
+ * Where the viewer stands with the person `viewedUser` names (as `origin`
+ * issued the row). Friends and requests from any instance are matched by
+ * person (`userKey`), never by id or username alone.
+ */
 function getFriendshipStatus(
   viewedUser: User,
-  currentUser: User | null,
+  origin: string,
+  self: SelfIdentity | null,
   friends: TaggedFriend[],
   requests: TaggedFriendRequest[],
 ): FriendshipStatus {
-  if (!currentUser) return { state: 'none' };
-  if (isSelf(viewedUser, currentUser)) return { state: 'self' };
+  if (!self) return { state: 'none' };
+  if (isMine(viewedUser, origin, self)) return { state: 'self' };
 
-  const friend = friends.find(f => canonicalUserMatch(f, viewedUser));
+  const key = userKey(viewedUser, origin);
+  const friend = friends.find(f => userKey(f, f._instanceOrigin) === key);
   if (friend) return { state: 'friends', friend };
 
-  const request = requests.find(r =>
-    r.user && canonicalUserMatch(r.user, viewedUser)
-  );
+  const request = requests.find(r => r.user && userKey(r.user, r._instanceOrigin) === key);
   if (request?.user) {
     // request.user is the OTHER party. If their ID === toId, then I am fromId (outbound)
     const isOutbound = request.user.id === request.toId;
@@ -66,14 +73,13 @@ export function UserProfileModal() {
   const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
   const f = useFormatters();
-  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const friends = useSocialStore((s) => s.friends);
   const requests = useSocialStore((s) => s.requests);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
   const removeFriend = useSocialStore((s) => s.removeFriend);
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
   const cancelFriendRequest = useSocialStore((s) => s.cancelFriendRequest);
-  const currentUser = useAuthStore((s) => s.user);
+  const self = useSelfIdentity();
 
   const [user, setUser] = useState<User | null>(null);
   const [userOrigin, setUserOrigin] = useState('');
@@ -94,13 +100,15 @@ export function UserProfileModal() {
 
   // Determine friendship status (federation-safe canonical matching)
   const friendship: FriendshipStatus = user
-    ? getFriendshipStatus(user, currentUser, friends, requests)
+    ? getFriendshipStatus(user, userOrigin, self, friends, requests)
     : { state: 'none' };
 
   const loadUser = useCallback(async (id: string, origin: string) => {
     try {
       const targetApi = getApiForOrigin(origin);
       const u = await targetApi.users.get(id);
+      // Another instance's assets as absolute URLs, like every other row.
+      if (origin) normalizeUserAssets(u, origin);
       setUser(u);
       useSpaceStore.getState().upsertUserView(u, origin);
     } catch {
@@ -133,8 +141,9 @@ export function UserProfileModal() {
         ? getProfileMember({ spaceId: memberSpaceId, userId: memberUserId })
         : undefined;
       const knownUser = passedUser ?? fromSpace?.row.user;
-      const origin = passedOrigin
-        || (passedUser ? resolveUserOrigin(passedUser) : fromSpace?.origin ?? '');
+      // The instance that issued the row: every opener names it; a member
+      // opened by ids alone is its space's.
+      const origin = passedUser || !fromSpace ? passedOrigin : fromSpace.origin;
       setUserOrigin(origin);
       // Use a user already in hand (avoids 404 for federated users on local API)
       if (knownUser) {
@@ -166,17 +175,17 @@ export function UserProfileModal() {
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, closeModal]);
 
-  const shownStatus = useShownStatus(user, user?.status);
+  const shownStatus = useShownStatus(user, userOrigin, user?.status);
 
   if (!isOpen || !user) return null;
 
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 
-  // Banner — use correct API client for remote users
-  const profileApi = getApiForOrigin(userOrigin);
+  // Banner. Another instance's assets are absolute URLs
+  // (`normalizeUserAssets`); a bare filename is the page's own instance's.
   const bannerSrc = user.banner
-    ? (user.banner.startsWith('http') ? user.banner : profileApi.uploads.url(user.banner))
+    ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : api.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
     ? mutedGradient(user.accentColor, adjustColor(user.accentColor, -40))
@@ -187,20 +196,7 @@ export function UserProfileModal() {
 
   const handleSendMessage = async () => {
     try {
-      const existing = useSpaceStore.getState().findExistingDmForUser(user);
-      if (existing) {
-        useUIStore.getState().setShowDms(true);
-        closeModal();
-        navigate(`/channels/@me/${existing.dm.id}`);
-        return;
-      }
-      const channel = await api.dm.create({
-        userId: user.homeInstance ? undefined : user.id,
-        homeUserId: user.homeUserId ?? undefined,
-        homeInstance: user.homeInstance ?? undefined,
-      });
-      // The answer joins its conversation; open the conversation's row.
-      const rowId = upsertDmCopy('', channel, 'stated');
+      const rowId = await openDirectMessage(user, userOrigin);
       useUIStore.getState().setShowDms(true);
       closeModal();
       navigate(`/channels/@me/${rowId}`);
@@ -253,7 +249,7 @@ export function UserProfileModal() {
   };
 
   const handleViewFriend = (friend: TaggedMutualFriend) => {
-    const friendOrigin = friend._instanceOrigin || resolveUserOrigin(friend);
+    const friendOrigin = friend._instanceOrigin;
     setUserOrigin(friendOrigin);
     setUser(friend);
     loadMutuals(friend.id, friend);
@@ -499,49 +495,52 @@ export function UserProfileModal() {
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex-shrink-0 px-5 py-3 border-t border-white/[0.06] flex gap-2">
-          <button
-            onClick={handleSendMessage}
-            className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors"
-          >
-            {t('social:profile.sendMessage')}
-          </button>
-
-          {friendship.state === 'none' && (
-            <button onClick={handleAddFriend} disabled={friendActionLoading}
-              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : t('social:profile.addFriend')}
+        {/* Action buttons. Your own profile offers none: nobody messages or
+            befriends themselves. */}
+        {friendship.state !== 'self' && (
+          <div className="flex-shrink-0 px-5 py-3 border-t border-white/[0.06] flex gap-2">
+            <button
+              onClick={handleSendMessage}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors"
+            >
+              {t('social:profile.sendMessage')}
             </button>
-          )}
 
-          {friendship.state === 'outbound_pending' && (
-            <button onClick={handleCancelRequest} disabled={friendActionLoading}
-              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : t('social:request.cancel')}
-            </button>
-          )}
-
-          {friendship.state === 'inbound_pending' && (
-            <>
-              <button onClick={handleAcceptRequest} disabled={friendActionLoading}
-                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : t('common:actions.accept')}
+            {friendship.state === 'none' && (
+              <button onClick={handleAddFriend} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
+                {friendActionLoading ? '...' : t('social:profile.addFriend')}
               </button>
-              <button onClick={handleDeclineRequest} disabled={friendActionLoading}
-                className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
-                {friendActionLoading ? '...' : t('social:request.ignore')}
-              </button>
-            </>
-          )}
+            )}
 
-          {friendship.state === 'friends' && (
-            <button onClick={handleRemoveFriend} disabled={friendActionLoading}
-              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
-              {friendActionLoading ? '...' : t('social:friend.remove')}
-            </button>
-          )}
-        </div>
+            {friendship.state === 'outbound_pending' && (
+              <button onClick={handleCancelRequest} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
+                {friendActionLoading ? '...' : t('social:request.cancel')}
+              </button>
+            )}
+
+            {friendship.state === 'inbound_pending' && (
+              <>
+                <button onClick={handleAcceptRequest} disabled={friendActionLoading}
+                  className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
+                  {friendActionLoading ? '...' : t('common:actions.accept')}
+                </button>
+                <button onClick={handleDeclineRequest} disabled={friendActionLoading}
+                  className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
+                  {friendActionLoading ? '...' : t('social:request.ignore')}
+                </button>
+              </>
+            )}
+
+            {friendship.state === 'friends' && (
+              <button onClick={handleRemoveFriend} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
+                {friendActionLoading ? '...' : t('social:friend.remove')}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
     </div>

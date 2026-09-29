@@ -19,16 +19,10 @@ vi.mock('./instanceStore', () => ({
   ),
 }));
 
-vi.mock('./authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ user: null, token: null }),
-    {
-      getState: () => ({ user: null, token: null }),
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    },
-  ),
-}));
+vi.mock('./authStore', async () => {
+  const state = { user: null, token: null };
+  return (await import('../test/authStoreMock')).authStoreMock(() => state);
+});
 
 import { useSpaceStore, isDmChannel, getChannelKind, useIsDmChannel, type TaggedSpace } from './spaceStore';
 import { api } from '../api/client';

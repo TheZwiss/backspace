@@ -3,7 +3,7 @@ import type { Friend, FriendRequest, SendFriendRequest, User } from '@backspace/
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
-import { activityKey, type PresenceSubject } from '../utils/identity';
+import { userKey, type PresenceSubject } from '../utils/identity';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
@@ -405,13 +405,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   // Called from WS handler on presence_update to keep friend status live.
-  // Matched by the same key as activities (activityKey), so a delivery from
+  // Matched by the same key as activities (userKey), so a delivery from
   // any instance reaches the friend it is about and no other.
   updateFriendPresence: (subject: PresenceSubject, origin: string, status: string) => {
-    const key = activityKey(subject, origin);
+    const key = userKey(subject, origin);
     set((state) => ({
       friends: state.friends.map(f =>
-        activityKey(f, f._instanceOrigin) === key ? { ...f, status: status as Friend['status'] } : f
+        userKey(f, f._instanceOrigin) === key ? { ...f, status: status as Friend['status'] } : f
       ),
     }));
   },

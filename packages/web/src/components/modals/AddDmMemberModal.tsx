@@ -4,13 +4,24 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore, dmCopyOnOrigin, getChannelOrigin } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useSpaceStore, dmCopyOnOrigin } from '../../stores/spaceStore';
+import { useSelfIdentity } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api } from '../../api/client';
-import { isSelf, parseFederatedUsername, deliveringHost } from '../../utils/identity';
+import { isMine, parseFederatedUsername, personRequest, type IdentityFields } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import type { User } from '@backspace/shared';
+import type { GroupDmUserIdentity, User } from '@backspace/shared';
+
+/**
+ * A member of a group DM create request to the page's own instance: the row
+ * as `origin` issued it, with the home identity home resolves it by
+ * (`personRequest`), or its id alone for a person native to home.
+ */
+function groupMemberRef(row: IdentityFields, origin: string): GroupDmUserIdentity {
+  const { target } = personRequest(row, origin);
+  return { id: target.userId ?? row.id, homeUserId: target.homeUserId ?? null, homeInstance: target.homeInstance ?? null };
+}
 
 function AddDmFriendRow({
   friend,
@@ -28,7 +39,7 @@ function AddDmFriendRow({
   onToggle: (id: string) => void;
 }) {
   const { t } = useTranslation(['dm', 'common']);
-  const canonical = useCanonicalUserView(friend as unknown as User);
+  const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   const { baseName } = parseFederatedUsername(canonical.username);
   const friendDisplayName = canonical.displayName ?? baseName;
   return (
@@ -91,12 +102,13 @@ export function AddDmMemberModal() {
   const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const friends = useSocialStore((s) => s.friends);
   const navigate = useNavigate();
-  const myUser = useAuthStore((s) => s.user);
+  const self = useSelfIdentity();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isOpen = activeModal === 'addDmMember';
   const dmChannelId = modalData.dmChannelId as string | undefined;
   const dmChannel = dmChannels.find(dm => dm.id === dmChannelId);
+  const viewer = useDmViewer(dmChannelId);
   const currentMemberIds = useMemo(
     () => new Set(dmChannel?.members.map(m => m.id) ?? []),
     [dmChannel?.members],
@@ -109,13 +121,13 @@ export function AddDmMemberModal() {
   const filteredFriends = useMemo(() => {
     const q = query.trim().toLowerCase();
     return friends.filter((f) => {
-      if (isSelf(f, myUser)) return false;
+      if (isMine(f, f._instanceOrigin, self)) return false;
       if (!q) return true;
       const displayName = (f.displayName ?? '').toLowerCase();
       const username = f.username.toLowerCase();
       return displayName.includes(q) || username.includes(q);
     });
-  }, [friends, query, myUser]);
+  }, [friends, query, self]);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -167,7 +179,8 @@ export function AddDmMemberModal() {
     try {
       if (!dmChannel.ownerId) {
         // 1-on-1 DM → create a new group DM with all selected + existing other member
-        const partner = (homeCopy ?? dmChannel).members.find(m => !isSelf(m, myUser));
+        const partnerOrigin = homeCopy ? '' : viewer.origin;
+        const partner = (homeCopy ?? dmChannel).members.find(m => !isMine(m, partnerOrigin, self));
         if (!partner) {
           setError(t('dm:addMember.noOtherMember'));
           setIsAdding(false);
@@ -175,20 +188,9 @@ export function AddDmMemberModal() {
         }
         // Home's own row for the partner when it holds the conversation;
         // otherwise the partner by their home identity, which home resolves.
-        const partnerIdentity = homeCopy
-          ? { id: partner.id, homeUserId: partner.homeUserId, homeInstance: partner.homeInstance }
-          : {
-              id: partner.id,
-              homeUserId: partner.homeUserId ?? partner.id,
-              homeInstance: partner.homeInstance ?? deliveringHost(getChannelOrigin(dmChannelId)),
-            };
         const users = [
-          partnerIdentity,
-          ...selectedFriends.map((f) => ({
-            id: f.id,
-            homeUserId: f.homeUserId,
-            homeInstance: f.homeInstance,
-          })),
+          groupMemberRef(partner, partnerOrigin),
+          ...selectedFriends.map((f) => groupMemberRef(f, f._instanceOrigin)),
         ];
         // Home checks the source 1-on-1 by its own id; without a home copy
         // there is none to name.
@@ -204,11 +206,7 @@ export function AddDmMemberModal() {
           return;
         }
         for (const friend of selectedFriends) {
-          await api.dm.addMember(homeCopy.id, {
-            userId: friend.homeInstance ? undefined : friend.id,
-            homeUserId: friend.homeUserId ?? undefined,
-            homeInstance: friend.homeInstance ?? undefined,
-          });
+          await api.dm.addMember(homeCopy.id, personRequest(friend, friend._instanceOrigin).target);
         }
         closeModal();
       }

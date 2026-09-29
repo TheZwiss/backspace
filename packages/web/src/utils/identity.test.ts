@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   normalizeOriginToHost,
-  canonicalUserKey,
-  isDeliveryFromHome,
+  homeIdentityOf,
+  userKey,
+  isIssuedByHome,
+  personRequest,
   isFederationGlobeApplicable,
   hostOf,
   userDisplayName,
@@ -32,105 +34,99 @@ describe('normalizeOriginToHost', () => {
   });
 });
 
-describe('canonicalUserKey', () => {
-  it('keys purely-local users by id only (empty host segment)', () => {
-    expect(canonicalUserKey({ id: '123' })).toBe(':123');
-    expect(canonicalUserKey({ id: '123', homeUserId: null, homeInstance: null })).toBe(':123');
+describe('homeIdentityOf and userKey', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', { value: { host: 'nova.ddns.net' }, writable: true });
   });
 
-  it('keys federated users by their home host + homeUserId', () => {
-    expect(canonicalUserKey({
-      id: '999', // local id on the receiving instance (irrelevant)
-      homeUserId: '291641217365663744',
-      homeInstance: 'nova.ddns.net',
-    })).toBe('nova.ddns.net:291641217365663744');
+  it('names a native row by the host of the instance that issued it', () => {
+    expect(homeIdentityOf({ id: '42' }, '')).toEqual({ host: 'nova.ddns.net', userId: '42' });
+    expect(homeIdentityOf({ id: '42', homeInstance: null }, 'https://orbit.ddns.net')).toEqual({ host: 'orbit.ddns.net', userId: '42' });
   });
 
-  it('produces the same key for stubs of the same person across instances', () => {
-    const fromOrbit = canonicalUserKey({
-      id: 'orbitLocalId',
-      homeUserId: 'nova-frank',
-      homeInstance: 'nova.ddns.net',
-    });
-    const fromAnotherPeer = canonicalUserKey({
-      id: 'otherPeerLocalId',
-      homeUserId: 'nova-frank',
-      homeInstance: 'nova.ddns.net',
-    });
-    expect(fromOrbit).toBe(fromAnotherPeer);
+  it('names a replicated row by the home identity it carries, whoever issued it', () => {
+    const row = { id: 'local', homeUserId: 'frank', homeInstance: 'nova.ddns.net' };
+    expect(homeIdentityOf(row, 'https://orbit.ddns.net')).toEqual({ host: 'nova.ddns.net', userId: 'frank' });
   });
 
-  it('falls back to local id when homeInstance is set but homeUserId is missing', () => {
-    expect(canonicalUserKey({
-      id: 'localId',
-      homeInstance: 'nova.ddns.net',
-      homeUserId: null,
-    })).toBe('nova.ddns.net:localId');
+  it('keeps natives of two instances apart even when their ids are equal (#353)', () => {
+    expect(userKey({ id: '42' }, '')).not.toBe(userKey({ id: '42' }, 'https://orbit.ddns.net'));
   });
 
-  it('local users do not collide with federated keys', () => {
-    const local = canonicalUserKey({ id: '291641217365663744' });
-    const federated = canonicalUserKey({
-      id: '999',
-      homeUserId: '291641217365663744',
-      homeInstance: 'nova.ddns.net',
-    });
-    expect(local).not.toBe(federated);
+  it("keys a page-native user's own row and another instance's copy of them alike", () => {
+    const own = userKey({ id: 'frank' }, '');
+    const copyOnOrbit = userKey({ id: 'orbit-row', homeUserId: 'frank', homeInstance: 'nova.ddns.net' }, 'https://orbit.ddns.net');
+    expect(own).toBe(copyOnOrbit);
+  });
+
+  it("keys a remote native's own row and the page's copy of them alike", () => {
+    const own = userKey({ id: 'bob' }, 'https://orbit.ddns.net');
+    const copyHere = userKey({ id: 'nova-row', homeUserId: 'bob', homeInstance: 'orbit.ddns.net' }, '');
+    expect(own).toBe(copyHere);
+  });
+
+  it('compares hosts through homeHostOf (scheme, case and port)', () => {
+    expect(userKey({ id: 'a', homeUserId: 'x', homeInstance: 'Orbit.ddns.net:443' }, ''))
+      .toBe(userKey({ id: 'x' }, 'https://orbit.ddns.net'));
+  });
+
+  it('gives a legacy stub without homeUserId a key no other row shares', () => {
+    const stub = { id: '42', homeUserId: null, homeInstance: 'orbit.ddns.net' };
+    expect(homeIdentityOf(stub, '')).toBeNull();
+    expect(userKey(stub, '')).toBe('~nova.ddns.net:42');
+    expect(userKey(stub, '')).not.toBe(userKey({ id: '42' }, ''));
+    expect(userKey(stub, '')).not.toBe(userKey({ id: '42' }, 'https://orbit.ddns.net'));
   });
 });
 
-describe('isDeliveryFromHome', () => {
+describe('isIssuedByHome', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'location', {
-      value: { host: 'nova.ddns.net' },
-      writable: true,
-    });
+    Object.defineProperty(window, 'location', { value: { host: 'nova.ddns.net' }, writable: true });
   });
 
-  it('treats native users delivered by our home connection as home view', () => {
-    expect(isDeliveryFromHome({ homeInstance: null }, '')).toBe(true);
-    expect(isDeliveryFromHome({ homeInstance: undefined }, '')).toBe(true);
+  it('is true for a native row from any instance', () => {
+    expect(isIssuedByHome({ id: 'a' }, '')).toBe(true);
+    expect(isIssuedByHome({ id: 'a' }, 'https://orbit.ddns.net')).toBe(true);
   });
 
-  it('treats native users delivered by a remote connection as home view of that remote', () => {
-    expect(isDeliveryFromHome({ homeInstance: null }, 'https://orbit.ddns.net')).toBe(true);
+  it('is true when the issuing instance is the home the row names', () => {
+    expect(isIssuedByHome({ id: 'a', homeUserId: 'x', homeInstance: 'nova.ddns.net' }, '')).toBe(true);
+    expect(isIssuedByHome({ id: 'a', homeUserId: 'x', homeInstance: 'orbit.ddns.net' }, 'https://orbit.ddns.net')).toBe(true);
   });
 
-  it('marks federated user as home view when delivering origin is their home', () => {
-    expect(isDeliveryFromHome(
-      { homeInstance: 'nova.ddns.net' },
-      'https://nova.ddns.net',
-    )).toBe(true);
+  it("is false for another instance's copy of the person", () => {
+    expect(isIssuedByHome({ id: 'a', homeUserId: 'x', homeInstance: 'nova.ddns.net' }, 'https://orbit.ddns.net')).toBe(false);
+    expect(isIssuedByHome({ id: 'a', homeUserId: 'x', homeInstance: 'orbit.ddns.net' }, '')).toBe(false);
   });
 
-  it('marks federated user as home view when our home connection (origin "") IS their home', () => {
-    // We are at nova; user.homeInstance is nova; delivery from origin '' means our home.
-    expect(isDeliveryFromHome(
-      { homeInstance: 'nova.ddns.net' },
-      '',
-    )).toBe(true);
+  it('is false for a legacy stub', () => {
+    expect(isIssuedByHome({ id: 'a', homeInstance: 'orbit.ddns.net' }, 'https://orbit.ddns.net')).toBe(false);
+  });
+});
+
+describe('personRequest', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', { value: { host: 'nova.ddns.net' }, writable: true });
   });
 
-  it('rejects sibling-stub deliveries (orbit delivering Frank whose home is nova)', () => {
-    expect(isDeliveryFromHome(
-      { homeInstance: 'nova.ddns.net' },
-      'https://orbit.ddns.net',
-    )).toBe(false);
+  it("names a page-native user by their id on the page's instance", () => {
+    expect(personRequest({ id: 'a' }, '')).toEqual({ origin: '', target: { userId: 'a' } });
   });
 
-  it('rejects our-home delivery of a user whose home is a different instance', () => {
-    // We are at nova; user.homeInstance is orbit; delivery from '' (our home).
-    expect(isDeliveryFromHome(
-      { homeInstance: 'orbit.ddns.net' },
-      '',
-    )).toBe(false);
+  it("names a remote instance's native user by their identity there, never by their remote id alone", () => {
+    expect(personRequest({ id: 'bob' }, 'https://orbit.ddns.net'))
+      .toEqual({ origin: '', target: { homeUserId: 'bob', homeInstance: 'orbit.ddns.net' } });
   });
 
-  it('handles bare-domain homeInstance against full-URL delivering origin', () => {
-    expect(isDeliveryFromHome(
-      { homeInstance: 'orbit.ddns.net' },
-      'https://orbit.ddns.net',
-    )).toBe(true);
+  it('names a replicated row by the home identity it carries', () => {
+    expect(personRequest({ id: 'r', homeUserId: 'bob', homeInstance: 'orbit.ddns.net' }, 'https://third.example'))
+      .toEqual({ origin: '', target: { homeUserId: 'bob', homeInstance: 'orbit.ddns.net' } });
+  });
+
+  it('asks about a legacy stub on the instance that issued it, by its id there', () => {
+    expect(personRequest({ id: 'r', homeInstance: 'orbit.ddns.net' }, '')).toEqual({ origin: '', target: { userId: 'r' } });
+    expect(personRequest({ id: 'r', homeInstance: 'x.example' }, 'https://orbit.ddns.net'))
+      .toEqual({ origin: 'https://orbit.ddns.net', target: { userId: 'r' } });
   });
 });
 

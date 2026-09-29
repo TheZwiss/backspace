@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { isChosenUserStatus, type ChosenUserStatus, type User } from '@backspace/shared';
 import { api } from '../api/client';
@@ -11,7 +12,7 @@ import { useSettingsStore } from './settingsStore';
 import { useExploreStore } from './exploreStore';
 import { useDirectoryStore } from './directoryStore';
 import { deleteAccountOnRemotes } from '../utils/federationOps';
-import { clearSelfIds } from '../utils/identity';
+import { isMine, selfIdentityOf, type IdentityFields, type SelfIdentity } from '../utils/identity';
 import { myChosenStatus, statusAuthority, type OwnStatusReport } from '../utils/selfStatus';
 import i18n from '../i18n';
 
@@ -27,6 +28,13 @@ interface AuthState {
    * (utils/selfStatus.ts), never directly.
    */
   trueHomeStatus: ChosenUserStatus | null;
+  /**
+   * origin → the signed-in user's row id on that connected instance, as its
+   * `ready` named it. The page's own instance is not in it: its row is
+   * `user`. The one record of "my ids"; read through `getMyUserIdForOrigin`,
+   * `isMe` and `useSelfIdentity`.
+   */
+  myRowIds: ReadonlyMap<string, string>;
   isLoading: boolean;
   error: string | null;
   initSession: (token: string, user: User) => void;
@@ -38,6 +46,10 @@ interface AuthState {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string, username: string) => Promise<void>;
   setUser: (user: User) => void;
+  /** A connected instance's `ready` named `userId` as the signed-in user's row there. */
+  recordMyRow: (origin: string, userId: string) => void;
+  /** The instance at `origin` was removed: its row id no longer says anything. */
+  forgetMyRow: (origin: string) => void;
   /** Apply the owner's own report of the user's status (`ownStatusReport`). */
   applyOwnStatus: (report: OwnStatusReport) => void;
   clearError: () => void;
@@ -61,7 +73,6 @@ interface AuthState {
  * could land in the new one.
  */
 function resetUserStores() {
-  clearSelfIds();
   useChatStore.getState().clearAllMessages();
   useSpaceStore.getState().reset();
   useSocialStore.getState().reset();
@@ -127,13 +138,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('backspace_token'),
   user: null,
   trueHomeStatus: null,
+  myRowIds: new Map(),
   isLoading: false,
   error: null,
 
   initSession: (token: string, user: User) => {
     resetUserStores();
     localStorage.setItem('backspace_token', token);
-    set({ token, user, trueHomeStatus: lastTrueHomeStatus(user), isLoading: false });
+    set({ token, user, trueHomeStatus: lastTrueHomeStatus(user), myRowIds: new Map(), isLoading: false });
     useInstanceStore.getState().autoConnectAll().catch(() => {});
   },
 
@@ -162,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('backspace_token');
     resetUserStores();
-    set({ token: null, user: null, trueHomeStatus: null });
+    set({ token: null, user: null, trueHomeStatus: null, myRowIds: new Map() });
   },
 
   loadUser: async () => {
@@ -178,7 +190,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useInstanceStore.getState().autoConnectAll().catch(() => {});
     } catch {
       localStorage.removeItem('backspace_token');
-      set({ token: null, user: null, trueHomeStatus: null, isLoading: false });
+      set({ token: null, user: null, trueHomeStatus: null, myRowIds: new Map(), isLoading: false });
     }
   },
 
@@ -228,10 +240,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Clear all state
     localStorage.removeItem('backspace_token');
     resetUserStores();
-    set({ token: null, user: null, trueHomeStatus: null });
+    set({ token: null, user: null, trueHomeStatus: null, myRowIds: new Map() });
   },
 
   setUser: (user: User) => set({ user }),
+
+  recordMyRow: (origin, userId) => {
+    if (!origin || get().myRowIds.get(origin) === userId) return;
+    const myRowIds = new Map(get().myRowIds);
+    myRowIds.set(origin, userId);
+    set({ myRowIds });
+  },
+
+  forgetMyRow: (origin) => {
+    if (!get().myRowIds.has(origin)) return;
+    const myRowIds = new Map(get().myRowIds);
+    myRowIds.delete(origin);
+    set({ myRowIds });
+  },
 
   applyOwnStatus: ({ owner, status }) => {
     if (owner === 'trueHome') {
@@ -245,3 +271,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+// ─── The signed-in user's rows ───────────────────────────────────────────────
+
+/** Reactive `selfIdentityOf` for the current session. */
+export function useSelfIdentity(): SelfIdentity | null {
+  const user = useAuthStore((s) => s.user);
+  const myRowIds = useAuthStore((s) => s.myRowIds);
+  return useMemo(() => selfIdentityOf(user, myRowIds), [user, myRowIds]);
+}
+
+/** Whether `row`, as `origin` issued it, is the signed-in user (`isMine`). */
+export function isMe(row: IdentityFields, origin: string): boolean {
+  const { user, myRowIds } = useAuthStore.getState();
+  return isMine(row, origin, selfIdentityOf(user, myRowIds));
+}
+
+/**
+ * The signed-in user's row id on the instance at `origin` ('' = the page's
+ * own), or undefined while that instance's `ready` has not named it.
+ */
+export function getMyUserIdForOrigin(origin: string): string | undefined {
+  const { user, myRowIds } = useAuthStore.getState();
+  if (!origin) return user?.id;
+  return myRowIds.get(origin);
+}
+

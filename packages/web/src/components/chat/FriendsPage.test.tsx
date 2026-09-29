@@ -7,6 +7,8 @@ import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import type { Friend, FriendRequest } from '@backspace/shared';
+import { api as mockedApi } from '../../api/client';
+pageApi.client = mockedApi;
 
 // Mock the mascot animation hook
 vi.mock('../../hooks/useMascotAnimation', () => ({
@@ -25,6 +27,17 @@ vi.mock('../../audio/AudioManager', () => ({
 
 // Mock the api module
 // Keep the real HttpError class: describeError narrows on it when a request fails.
+// `api/client` and `crossStoreResolvers` import each other, so the resolver
+// module can hold the unmocked client; route the page's own origin to the
+// mocked one, as `getApiForOrigin('')` does in the app.
+const pageApi = vi.hoisted(() => ({ client: null as unknown }));
+vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/crossStoreResolvers')>();
+  return {
+    ...actual,
+    getApiForOrigin: (origin: string) => (origin ? actual.getApiForOrigin(origin) : pageApi.client),
+  };
+});
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
   api: {
@@ -83,18 +96,10 @@ vi.mock('../../stores/discoverStore', () => ({
   ),
 }));
 
-vi.mock('../../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: any) => any) => selector({
-      user: { id: 'current-user' },
-    }),
-    {
-      getState: () => ({ user: { id: 'current-user' } }),
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    }
-  ),
-}));
+vi.mock('../../stores/authStore', async () => {
+  const state = { user: { id: 'current-user' } };
+  return (await import('../../test/authStoreMock')).authStoreMock(() => state);
+});
 
 // Mock activityStore
 vi.mock('../../stores/activityStore', () => ({

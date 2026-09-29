@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import { useSpaceStore, getMyUserIdForOrigin, getChannelOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
 import { resolveSpaceLayout } from '../../utils/spaceLayout';
 import { useChatStore } from '../../stores/chatStore';
@@ -600,7 +600,7 @@ export function MobileSpacesScreen() {
                   key={userId}
                   data-context-menu={`voice-user-${userId}`}
                   className="px-3 py-1 rounded-lg hover:bg-interactive-hover transition-colors"
-                  onClick={() => openModal('userProfile', { userId: member?.user.homeUserId ?? userId })}
+                  onClick={() => openModal('userProfile', { userId, user: member?.user, origin: getChannelOrigin(channel.id) })}
                   onContextMenu={(e) => handleVoiceUserContextMenu(e, userId, channel.id)}
                 >
                   <VoiceUserRow

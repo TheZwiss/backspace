@@ -42,7 +42,7 @@ function makeUsers(count: number): User[] {
 describe('AvatarStack', () => {
   it('renders empty placeholder + group badge for an empty group', () => {
     const { container } = render(
-      <AvatarStack members={[]} size={40} border="channel" />
+      <AvatarStack members={[]} origin="" size={40} border="channel" />
     );
     // Placeholder slot present
     expect(container.querySelector('[data-avatar-stack-placeholder]')).toBeTruthy();
@@ -56,7 +56,7 @@ describe('AvatarStack', () => {
 
   it('renders centered avatar + 12x12 group badge for a single member', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(1)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(1)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(1);
@@ -73,7 +73,7 @@ describe('AvatarStack', () => {
 
   it('renders two avatars in offset overlap for two members', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(2)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(2)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(2);
@@ -87,7 +87,7 @@ describe('AvatarStack', () => {
 
   it('renders triangular layout with three tiles and no +N for three members', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(3)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(3)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(3);
@@ -97,7 +97,7 @@ describe('AvatarStack', () => {
 
   it('renders diamond layout with four tiles and no +N for four members', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(4)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(4)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(4);
@@ -107,7 +107,7 @@ describe('AvatarStack', () => {
 
   it('renders three tiles + "+2" overflow in diamond layout for five members', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(5)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(5)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(3);
@@ -119,7 +119,7 @@ describe('AvatarStack', () => {
 
   it('renders three tiles + "+7" overflow in diamond layout for ten members (cap)', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(10)} size={40} border="channel" />
+      <AvatarStack members={makeUsers(10)} origin="" size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(3);
@@ -131,7 +131,7 @@ describe('AvatarStack', () => {
 
   it('places tiles on the correct radial slots (3-member triangle)', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(3)} size={40} border="channel" />,
+      <AvatarStack members={makeUsers(3)} origin="" size={40} border="channel" />,
     );
     const tiles = Array.from(
       container.querySelectorAll('[data-avatar-stack-tile]'),
@@ -149,7 +149,7 @@ describe('AvatarStack', () => {
 
   it('places overflow tile in the bottom slot of the diamond', () => {
     const { container } = render(
-      <AvatarStack members={makeUsers(5)} size={40} border="channel" />,
+      <AvatarStack members={makeUsers(5)} origin="" size={40} border="channel" />,
     );
     const overflow = container.querySelector(
       '[data-avatar-stack-overflow]',
@@ -171,7 +171,7 @@ describe('AvatarStack', () => {
     // lower-right of the visible disc. The fix is to size the inner Avatar to
     // (tileSize − 2·border) and center it geometrically with flex.
     const { container } = render(
-      <AvatarStack members={makeUsers(4)} size={80} border="chat" />,
+      <AvatarStack members={makeUsers(4)} origin="" size={80} border="chat" />,
     );
     const tiles = Array.from(
       container.querySelectorAll('[data-avatar-stack-tile]'),
@@ -197,6 +197,7 @@ describe('AvatarStack', () => {
     const { container } = render(
       <AvatarStack
         members={makeUsers(3)}
+        origin=""
         size={40}
         border="channel"
         iconUrl="abc.png"
@@ -218,6 +219,7 @@ describe('AvatarStack', () => {
     const { container } = render(
       <AvatarStack
         members={[]}
+        origin=""
         size={40}
         border="channel"
         iconUrl="https://example.com/icon.png"

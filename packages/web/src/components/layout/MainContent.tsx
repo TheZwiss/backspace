@@ -4,7 +4,6 @@ import { useLocation } from 'react-router-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { VoiceGrid } from '../voice/VoiceGrid';
@@ -19,7 +18,8 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { canStartDmCall, startDmCall, cancelOutgoingDmCall } from '../../utils/voiceActions';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
-import { isSelf, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { isMine, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -75,7 +75,6 @@ export function MainContent() {
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const canStartCall = useVoiceStore(canStartDmCall);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const authUser = useAuthStore((s) => s.user);
   const openModal = useUIStore((s) => s.openModal);
 
   const voiceContainerRef = useRef<HTMLDivElement>(null);
@@ -93,9 +92,10 @@ export function MainContent() {
   // cache. The hook must be called unconditionally at the component top, so we
   // pass a fallback when there is no current DM channel or 1-on-1 partner.
   const _dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
-  const _rawFirstOther = _dmChannel?.members.filter(m => !isSelf(m, authUser))[0] ?? null;
+  const dmViewer = useDmViewer(_dmChannel?.id);
+  const _rawFirstOther = _dmChannel?.members.filter(m => !isMine(m, dmViewer.origin, dmViewer.self))[0] ?? null;
   const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
-  const _canonicalFirstOther = useCanonicalUserView(_rawFirstOther ?? _FALLBACK_USER);
+  const _canonicalFirstOther = useCanonicalUserView(_rawFirstOther ?? _FALLBACK_USER, dmViewer.origin);
 
   // Reset search when channel changes
   useEffect(() => {
@@ -198,7 +198,7 @@ export function MainContent() {
     }
 
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
-    const otherMembers = dmChannel?.members.filter(m => !isSelf(m, authUser)) ?? [];
+    const otherMembers = dmChannel?.members.filter(m => !isMine(m, dmViewer.origin, dmViewer.self)) ?? [];
     const isGroupDm = !!dmChannel?.ownerId;
     // Use the canonicalized view of the 1-on-1 partner (resolved above the
     // conditional so the hook is called unconditionally).
@@ -207,7 +207,7 @@ export function MainContent() {
     // back to joined member names); 1-on-1 DMs keep the canonical-view path
     // so replicated aliases still surface the home-instance display name.
     const dmName = isGroupDm && dmChannel
-      ? formatDmHeaderName(dmChannel, authUser)
+      ? formatDmHeaderName(dmChannel, dmViewer)
       : ((firstOther && userDisplayName(firstOther)) || t('spaces:main.dm.fallbackName'));
     // Message-input placeholder — groups use `formatDmInputLabel` which
     // collapses unnamed groups to "the group" so the textarea doesn't render
@@ -216,11 +216,11 @@ export function MainContent() {
     // resolves the raw partner; on replicated aliases the canonical view
     // can disagree).
     const dmInputPlaceholder = isGroupDm && dmChannel
-      ? t('spaces:main.dm.composerPlaceholder', { target: formatDmInputLabel(dmChannel, authUser) })
+      ? t('spaces:main.dm.composerPlaceholder', { target: formatDmInputLabel(dmChannel, dmViewer) })
       : dmChannel
         ? t('spaces:main.dm.composerPlaceholder', { target: `@${dmName}` })
         : undefined;
-    const dmPartnerDeleted = dmChannel ? isDeletedPartnerDm(dmChannel, authUser) : false;
+    const dmPartnerDeleted = dmChannel ? isDeletedPartnerDm(dmChannel, dmViewer) : false;
 
     const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
@@ -305,7 +305,7 @@ export function MainContent() {
                 className="flex-shrink-0 cursor-pointer"
                 aria-label={t('spaces:main.dm.openGroupSettings')}
               >
-                <AvatarStack members={otherMembers} size={32} border="chat" iconUrl={dmChannel?.icon} />
+                <AvatarStack members={otherMembers} origin={dmViewer.origin} size={32} border="chat" iconUrl={dmChannel?.icon} />
               </div>
             ) : (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">

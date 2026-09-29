@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -10,7 +10,6 @@ import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '..
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessageRouting';
-import { registerSelfId } from '../utils/identity';
 import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
@@ -194,8 +193,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
   switch (event.type) {
     case 'ready':
-      // Register this user's ID for cross-instance self-identification
-      registerSelfId(event.user.id);
+      // This instance names the signed-in user's row there (the home's is the
+      // session row itself, set below). The one record of "my ids".
+      if (!isHome) useAuthStore.getState().recordMyRow(origin, event.user.id);
 
       if (isHome) {
         setUser(event.user);
@@ -232,11 +232,6 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Pending messages restored at boot wait for the ready that lists their channel.
       notePendingOriginReady(origin);
 
-      // Cache authoritative identity for this origin (federation-safe)
-      if (!isHome) {
-        setMyUserIdForOrigin(origin, event.user.id);
-      }
-
       // The user's own chosen status (utils/selfStatus.ts): take it from this
       // socket when it is the owner's report (the true home, for a session on
       // a replicated row), and re-send it to this remote when this session owns
@@ -246,7 +241,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         const report = ownStatusReport(authUser, { origin, isHome }, { userId: event.user.id, status: event.user.status });
         if (report) useAuthStore.getState().applyOwnStatus(report);
         if (!isHome) {
-          const status = statusToAssertOnRemote(authUser, event.user, window.location.host);
+          const status = statusToAssertOnRemote(authUser, event.user);
           if (status) wsSend({ type: 'presence_update', status }, origin);
         }
       }

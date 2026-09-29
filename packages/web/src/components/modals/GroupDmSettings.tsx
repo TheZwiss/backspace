@@ -6,13 +6,13 @@ import { ImageCropModal } from '../ui/ImageCropModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { api } from '../../api/client';
 import { kickFromGroupDm, transferGroupDmOwnership, updateGroupDmMetadata } from '../../utils/groupDmOwnerActions';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { AvatarStack } from '../ui/AvatarStack';
 import { DmMemberRow, type DmMemberRowAction } from '../layout/DmMemberRow';
 import { visualPixels } from '../../platform/interfaceScale';
@@ -51,7 +51,6 @@ export function GroupDmSettings() {
   const addToast = useUIStore((s) => s.addToast);
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
 
   const isOpen = activeModal === 'groupDmSettings';
@@ -62,6 +61,7 @@ export function GroupDmSettings() {
     () => dmChannels.find((dm) => dm.id === dmChannelId) ?? null,
     [dmChannels, dmChannelId],
   );
+  const viewer = useDmViewer(dmChannel?.id);
 
   // ── Tab + mobile pane state ────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -126,11 +126,9 @@ export function GroupDmSettings() {
   // Group DMs only: this modal is meaningless for 1-on-1 conversations.
   if (!dmChannel.ownerId) return null;
 
-  const isOwner = !!authUser && dmChannel.ownerId === authUser.id;
+  const isOwner = isMine({ id: dmChannel.ownerId }, viewer.origin, viewer.self);
 
-  const otherMembers: User[] = authUser
-    ? dmChannel.members.filter((m) => !isSelf(m, authUser))
-    : dmChannel.members;
+  const otherMembers: User[] = dmChannel.members.filter((m) => !isMine(m, viewer.origin, viewer.self));
 
   const fallbackName = otherMembers
     .map((m) => m.displayName ?? parseFederatedUsername(m.username).baseName)
@@ -254,7 +252,10 @@ export function GroupDmSettings() {
 
   // ── Members panel data ────────────────────────────────────────────────
   // Friend lookup mirrors DmRosterPanel — local-id compare is federation-safe.
-  const isFriendOfCaller = (m: User): boolean => friends.some((f) => f.id === m.id);
+  const isFriendOfCaller = (m: User): boolean => {
+    const key = userKey(m, viewer.origin);
+    return friends.some((f) => userKey(f, f._instanceOrigin) === key);
+  };
 
   const memberCount = dmChannel.members.length;
   const remainingSlots = MAX_GROUP_MEMBERS - memberCount;
@@ -268,7 +269,7 @@ export function GroupDmSettings() {
       // Fallback path — DmMemberRow normally opens the profile itself via
       // its own bounding rect. If we reach this branch, just route to a
       // top-left anchor (matches DmRosterPanel's fallback).
-      useUIStore.getState().openUserProfile(member, pointAnchor(visualPixels(100), visualPixels(100)));
+      useUIStore.getState().openUserProfile(member, viewer.origin, pointAnchor(visualPixels(100), visualPixels(100)));
       return;
     }
     if (action === 'kick') {
@@ -372,6 +373,7 @@ export function GroupDmSettings() {
           >
             <AvatarStack
               members={otherMembers}
+              origin={viewer.origin}
               size={80}
               border="modal"
               iconUrl={previewIconUrl}
@@ -545,7 +547,8 @@ export function GroupDmSettings() {
           <DmMemberRow
             member={ownerMember}
             isOwner
-            isSelf={!!authUser && isSelf(ownerMember, authUser)}
+            isSelf={isMine(ownerMember, viewer.origin, viewer.self)}
+            origin={viewer.origin}
             callerIsOwner={isOwner}
             isFriend={isFriendOfCaller(ownerMember)}
             showKebab={false}
@@ -557,7 +560,8 @@ export function GroupDmSettings() {
             key={m.id}
             member={m}
             isOwner={false}
-            isSelf={!!authUser && isSelf(m, authUser)}
+            isSelf={isMine(m, viewer.origin, viewer.self)}
+            origin={viewer.origin}
             callerIsOwner={isOwner}
             isFriend={isFriendOfCaller(m)}
             showKebab={false}
@@ -577,6 +581,7 @@ export function GroupDmSettings() {
           <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
             <AvatarStack
               members={otherMembers}
+              origin={viewer.origin}
               size={36}
               border="modal"
               iconUrl={dmChannel.icon}
@@ -606,6 +611,7 @@ export function GroupDmSettings() {
             <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
               <AvatarStack
                 members={otherMembers}
+                origin={viewer.origin}
                 size={36}
                 border="modal"
                 iconUrl={dmChannel.icon}
