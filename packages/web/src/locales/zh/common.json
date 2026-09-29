@@ -82,7 +82,8 @@
     "searchMembers": "搜索成员…",
     "noMembersFound": "未找到成员",
     "or": "或",
-    "nameAZ": "按名称 (A-Z)"
+    "nameAZ": "按名称 (A-Z)",
+    "suggestions": "建议"
   },
   "time": {
     "today": "今天 {{time}}",

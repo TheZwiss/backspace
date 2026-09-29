@@ -1,3 +1,4 @@
+import { notificationMenuItems } from '../notifications/notificationMenuItems';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -336,6 +337,7 @@ export function MobileSpacesScreen() {
     const availableFolders = folders.filter(f => !f.spaceIds.includes(spaceId));
 
     const items: ContextMenuItem[] = [
+      ...notificationMenuItems({ origin: space._instanceOrigin, targetType: 'space', targetId: spaceId }),
       {
         key: 'invite',
         type: 'action',
@@ -421,9 +423,13 @@ export function MobileSpacesScreen() {
       channelPermissions.get(channelId),
       PermissionBits.MANAGE_CHANNELS
     );
-    if (!canManageChannels) return;
+    if (!canManageChannels) {
+      openContextMenu({ x: e.clientX, y: e.clientY }, notificationMenuItems({ origin: useSpaceStore.getState().channelOriginMap.get(channelId) ?? '', targetType: 'channel', targetId: channelId }));
+      return;
+    }
 
     const items: ContextMenuItem[] = [
+      ...notificationMenuItems({ origin: useSpaceStore.getState().channelOriginMap.get(channelId) ?? '', targetType: 'channel', targetId: channelId }),
       {
         key: 'channel-settings',
         type: 'action',

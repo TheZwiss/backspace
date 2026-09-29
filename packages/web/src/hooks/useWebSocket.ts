@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useNotificationStore } from '../stores/notificationStore';
 import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
@@ -186,7 +187,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
   const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceChannelElapsedSeconds, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
+    case 'notification_setting_updated':
+      useNotificationStore.getState().apply(origin, event.setting);
+      break;
     case 'ready':
+      useNotificationStore.getState().hydrate({ origin, userId: event.user.id, spaces: event.spaces, settings: event.notificationSettings ?? [] });
       // Register this user's ID for cross-instance self-identification
       registerSelfId(event.user.id);
 

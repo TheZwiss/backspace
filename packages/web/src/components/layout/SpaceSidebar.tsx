@@ -1,3 +1,5 @@
+import { useNotificationMuted } from '../notifications/useNotificationMuted';
+import { notificationMenuItems } from '../notifications/notificationMenuItems';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -61,6 +63,9 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
+  const notificationOrigin = useSpaceStore(state => state.spaces.find(space => space.id === id)?._instanceOrigin ?? '');
+  const notificationMuted = useNotificationMuted({ origin: notificationOrigin, targetType: 'space', targetId: id });
+  const isNotificationDimmed = dimmed || (type === 'space' && notificationMuted);
   const { t } = useTranslation(['spaces', 'common']);
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
@@ -110,7 +115,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   };
 
   const buttonContent = (
-    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name} aria-current={active ? 'page' : undefined}>
+    <button onClick={onClick} className={`${getButtonClasses()} ${isNotificationDimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name} aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
         <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
@@ -635,6 +640,7 @@ export function SpaceSidebar() {
     const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
 
     const items: ContextMenuItem[] = [
+      ...notificationMenuItems({ origin: space._instanceOrigin, targetType: 'space', targetId: spaceId }),
       {
         key: 'invite',
         type: 'action',

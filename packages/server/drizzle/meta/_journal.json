@@ -148,6 +148,13 @@
       "when": 1790621580065,
       "tag": "0020_users_home_user_id_index",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1790621580066,
+      "tag": "0021_notification_settings",
+      "breakpoints": true
     }
   ]
 }
