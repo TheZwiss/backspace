@@ -596,10 +596,9 @@ export function PermissionsEditor({
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
           {unhides ? (
-            // Note and pill float over the scrolling rows as one group on one
-            // solid ground. Inside the modal's glass a nested backdrop-filter
-            // does not blur, so a see-through fill would let rows show through.
-            <div className="glass-bubble bg-surface-chat rounded-lg mt-3 mb-1 p-2 space-y-2 pointer-events-auto">
+            // Note and pill float over the scrolling rows as one glass group
+            // (design-system.md, "Nested glass").
+            <div className="glass-bubble rounded-lg mt-3 mb-1 p-2 space-y-2 pointer-events-auto">
               {/* Laid out like the Overview privacy note. */}
               <div className="flex items-start gap-2 text-xs text-txt-tertiary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-0.5 text-txt-secondary">
