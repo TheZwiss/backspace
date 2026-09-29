@@ -991,6 +991,14 @@ Trigger (API/WS handler)
 | `update` | `update` | Payload updated, type becomes latest |
 | `delete` | `update` | Payload updated, type becomes `delete` |
 | any | none | New entry inserted |
+| any | on the wire | Payload and type become the incoming event's; the merge waits for the peer's answer |
+
+The table (`mergeUndeliveredEvent` in `federationOutbox.ts`) assumes the peer has not received the existing entry. That is not known while the worker has the entry **on the wire**: read for a POST whose answer has not come back. `federationOutbox.ts` keeps those outbox ids in memory (`rowsOnTheWire`, set by `beginOutboxDelivery`, cleared by `finishOutboxDelivery`), and an event queued for one of them is stored as itself and marks the entry superseded. When the answer comes:
+
+- **Accepted, or terminally rejected:** a superseded entry is kept (not deleted with the batch) and goes out on the next tick as the newer event. An edit or delete of a message whose create was on the wire is therefore sent as an `update` / `delete`, and a status change made while the previous one was on the wire is not lost.
+- **Not taken** (retryable rejection, not mentioned, auth failure, HTTP error, network error or timeout, worker stopping): a superseded entry is merged now by the table with the sent event as the existing one (`requeueAfterUndeliveredSend`): a create and delete cancel out, a create with a later edit stays a create. It stays due and is not backed off; only entries nobody touched move to their next backoff step.
+
+Before #367 the worker settled entries by id whatever had been merged into them meanwhile, so an accepted batch deleted the newer event with it, and the create-then-delete rule dropped a delete whose create had already reached the peer.
 
 ### Outbox Delivery Worker (`federationWorker.ts:processOutboxTick`)
 
@@ -1000,7 +1008,7 @@ Trigger (API/WS handler)
 
 1. Query entries where `nextRetryAt <= now` joined with active peers, ordered by `createdAt ASC`, limit 50
 2. Group by peer
-3. For each peer, reconstruct `FederationRelayEvent[]` from stored payloads:
+3. For each peer, read its entries again (an earlier peer's POST in the same tick may have taken up to the timeout, and entries merged into or removed meanwhile go out as they are now), mark them on the wire (`beginOutboxDelivery`, see [Coalescing Rules](#coalescing-rules-per-peer-per-entity)), and reconstruct `FederationRelayEvent[]` from stored payloads:
    - Parse JSON payload
    - Copy fields: `federatedId`, `participants`, `message`, `reactions`, `reaction`, `target`, `membership`, `ownership`, `group`, `friendship`, file_rejected fields
    - Set `eventType`, `contextType`, `messageId`, `dmChannelId`, `encryptionVersion`, `timestamp`
@@ -1009,7 +1017,7 @@ Trigger (API/WS handler)
 6. POST to `{peerOrigin}/api/federation/relay`
 7. On success (200):
    - Compute the **terminal entity set** = accepted entries ∪ duplicate-rejected entries
-   - Delete all terminal entries from outbox (matched by `entityId` -> `outboxId`)
+   - Delete all terminal entries from outbox (matched by `entityId` -> `outboxId`), except entries superseded while on the wire
    - Every other entry in the batch (non-terminal rejections, and any entry the response does not mention) stays in the outbox and moves to its next backoff step (`attempts + 1`, `nextRetryAt = now + backoff`). Before this, such entries kept their `nextRetryAt` and were resent on every 10-second tick; a run of them at the head of the `createdAt`-ordered batch could crowd newer events out of it
    - Log non-terminal rejected entries at `console.warn`
    - Store `result.maxUploadSize` on peer record

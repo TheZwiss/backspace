@@ -125,15 +125,98 @@ export function appendMutationLog(
   }
 }
 
+// ─── Merging, and rows on the wire ──────────────────────────────────────────
+
+/**
+ * The event type one outbox row carries when a newer event for an entity is
+ * merged into an older one the peer has NOT received. Null: the two cancel out
+ * and the row goes.
+ * - create, then delete: nothing to tell the peer, it never saw the entity.
+ * - create, then anything else: still a create, with the newer payload, so the
+ *   peer receives the whole entity rather than a change to something it lacks.
+ * - otherwise: the newer event.
+ */
+function mergeUndeliveredEvent(olderType: string, newerType: string): string | null {
+  if (olderType === 'create') return newerType === 'delete' ? null : 'create';
+  return newerType;
+}
+
+/**
+ * Outbox rows the delivery worker has put on the wire and not yet settled,
+ * keyed by outbox id. `superseded` is set when `queueOutboxEvent` writes a
+ * newer event into the row meanwhile.
+ *
+ * While a row is on the wire nobody knows whether the peer will take its event,
+ * so the merge rule above cannot be applied yet: its create-then-delete and
+ * keep-the-create cases assume the peer never saw the older event. The newer
+ * event is stored as itself instead, and the worker settles the pair when the
+ * answer arrives (`finishOutboxDelivery`, `requeueAfterUndeliveredSend`).
+ *
+ * Kept in memory: the worker is the only sender and runs in this process, and
+ * better-sqlite3 is synchronous, so a check here and the write it guards
+ * cannot interleave with a merge. If the process dies with a request out, a
+ * superseded row keeps the newer event as written and goes out as that after
+ * the restart.
+ */
+const rowsOnTheWire = new Map<string, { superseded: boolean }>();
+
+/** The worker is about to send these rows, as it has just read them. */
+export function beginOutboxDelivery(outboxIds: readonly string[]): void {
+  for (const id of outboxIds) rowsOnTheWire.set(id, { superseded: false });
+}
+
+/**
+ * The answer for these rows is in (or will never come). Clears them and
+ * returns the ids a newer event was written into meanwhile. A superseded row
+ * holds that newer event and must not be deleted or backed off as the one
+ * that was sent: if the peer took the sent event, the row is simply the next
+ * one to send; if not, pass it to `requeueAfterUndeliveredSend`.
+ */
+export function finishOutboxDelivery(outboxIds: readonly string[]): Set<string> {
+  const superseded = new Set<string>();
+  for (const id of outboxIds) {
+    if (rowsOnTheWire.get(id)?.superseded) superseded.add(id);
+    rowsOnTheWire.delete(id);
+  }
+  return superseded;
+}
+
+/**
+ * A superseded row whose sent event (`sentEventType`) the peer did not take:
+ * merge the two now, as `queueOutboxEvent` would have had the send never
+ * happened. The row stays due immediately.
+ */
+export function requeueAfterUndeliveredSend(outboxId: string, sentEventType: string): void {
+  const db = getDb();
+  const row = db
+    .select({ eventType: schema.federationOutbox.eventType })
+    .from(schema.federationOutbox)
+    .where(eq(schema.federationOutbox.id, outboxId))
+    .get();
+  if (!row) return;
+  const merged = mergeUndeliveredEvent(sentEventType, row.eventType);
+  if (merged === null) {
+    db.delete(schema.federationOutbox).where(eq(schema.federationOutbox.id, outboxId)).run();
+  } else if (merged !== row.eventType) {
+    db.update(schema.federationOutbox)
+      .set({ eventType: merged })
+      .where(eq(schema.federationOutbox.id, outboxId))
+      .run();
+  }
+}
+
 /**
  * Queue an outbox event for all active federation peers.
  *
- * Performs per-peer coalescing inside a transaction:
- * - If a 'create' already exists and a 'delete' arrives, the entry is removed
- *   (net effect: message was never relayed).
- * - If an entry already exists, it is updated with the latest payload/event type,
- *   preserving the original 'create' event type if applicable.
- * - Otherwise a new entry is inserted.
+ * Keeps one row per (peer, entity), inside a transaction:
+ * - No row yet: insert one.
+ * - A row the peer has not received: merge into it (`mergeUndeliveredEvent`):
+ *   a create and a later delete cancel out, a create stays a create with the
+ *   latest payload, anything else becomes the newer event.
+ * - A row on the wire (`rowsOnTheWire`): store the newer event as itself and
+ *   leave the merge to the worker, which knows the outcome once the peer
+ *   answers.
+ * Every write leaves the row due now with no attempts.
  *
  * No-op if federation relay is disabled.
  * Failures are logged but never propagate — federation must not break DM flow.
@@ -291,25 +374,25 @@ export function queueOutboxEvent(
           )
           .get();
 
-        if (eventType === 'delete' && existing?.eventType === 'create') {
-          // Entity created and deleted before relay — net effect is nothing
-          tx.delete(schema.federationOutbox)
-            .where(eq(schema.federationOutbox.id, existing.id))
-            .run();
-        } else if (existing) {
-          // Coalesce: update existing entry with latest state.
-          // If the original was a 'create', keep it as 'create' so the peer
-          // receives the full message on first relay rather than an update/delete
-          // for something it never saw.
+        const onTheWire = existing ? rowsOnTheWire.get(existing.id) : undefined;
+        if (existing && onTheWire) {
           tx.update(schema.federationOutbox)
-            .set({
-              eventType: existing.eventType === 'create' ? 'create' : eventType,
-              payload,
-              attempts: 0,
-              nextRetryAt: now,
-            })
+            .set({ eventType, payload, attempts: 0, nextRetryAt: now })
             .where(eq(schema.federationOutbox.id, existing.id))
             .run();
+          onTheWire.superseded = true;
+        } else if (existing) {
+          const merged = mergeUndeliveredEvent(existing.eventType, eventType);
+          if (merged === null) {
+            tx.delete(schema.federationOutbox)
+              .where(eq(schema.federationOutbox.id, existing.id))
+              .run();
+          } else {
+            tx.update(schema.federationOutbox)
+              .set({ eventType: merged, payload, attempts: 0, nextRetryAt: now })
+              .where(eq(schema.federationOutbox.id, existing.id))
+              .run();
+          }
         } else {
           // No existing entry — insert new
           tx.insert(schema.federationOutbox)

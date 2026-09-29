@@ -41,6 +41,10 @@ vi.mock('../utils/federationOutbox.js', () => ({
   isFederationRelayEnabled: () => true,
   queueOutboxEvent: vi.fn(),
   appendMutationLog: vi.fn(),
+  // Nothing in these suites queues during a send, so no row is ever superseded.
+  beginOutboxDelivery: vi.fn(),
+  finishOutboxDelivery: () => new Set<string>(),
+  requeueAfterUndeliveredSend: vi.fn(),
 }));
 
 vi.mock('../utils/federationPeerActivation.js', () => ({
