@@ -148,6 +148,27 @@
       "when": 1790621580065,
       "tag": "0020_users_home_user_id_index",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1790621580066,
+      "tag": "0021_notification_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1790621580067,
+      "tag": "0022_persistent_channel_pokes",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1790621580068,
+      "tag": "0023_space_owner_title",
+      "breakpoints": true
     }
   ]
 }

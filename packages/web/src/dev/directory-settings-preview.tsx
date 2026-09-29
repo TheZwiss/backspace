@@ -166,7 +166,7 @@ const SPACE: TaggedSpace = {
   icon: null,
   banner: null,
   avatarColor: 'lavender',
-  ownerId: 'workbench-user',
+  ownerId: 'workbench-user', ownerTitle: null,
   inviteCode: null,
   visibility: 'public',
   directoryListed: false,

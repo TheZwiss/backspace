@@ -3,6 +3,7 @@ import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
+import { MassMentionBadge } from './MassMentionBadge';
 import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 import { replaceMentionTokens } from '../../utils/mentionTokens';
@@ -46,7 +47,16 @@ function walkTree(node: MdastNode) {
 // highlight and the alert rule use.
 
 function preprocessMentions(raw: string): string {
-  return replaceMentionTokens(raw, (userId) => `[@${userId}](mention://${userId})`);
+  // Add mass tokens without replacing the upstream scan for user mentions.
+  const withMassMentions = raw.replace(
+    /(```[\s\S]*?```|`[^`]+`)|<@(&[a-zA-Z0-9_-]+)>|(?<![\w@])@(everyone|here)(?![\w-])/g,
+    (match, code: string | undefined, role: string | undefined, mass: string | undefined) => {
+      if (code) return code;
+      const token = mass ?? role;
+      return '[@' + token + '](mass-mention://' + token + ')';
+    },
+  );
+  return replaceMentionTokens(withMassMentions, (userId) => `[@${userId}](mention://${userId})`);
 }
 
 // ─── URL Transform: Allow mention:// Scheme ─────────────────────────────────
@@ -54,7 +64,7 @@ function preprocessMentions(raw: string): string {
 // We whitelist mention:// so the `a` component override receives the full href.
 
 function urlTransform(url: string): string {
-  if (url.startsWith('mention://')) return url;
+  if (url.startsWith('mention://') || url.startsWith('mass-mention://')) return url;
   return defaultUrlTransform(url);
 }
 
@@ -130,6 +140,9 @@ function buildComponents(): Components {
     // remark-parse autolinks <@userId> into mailto:@userId before plugins run,
     // so we intercept that pattern here instead of using a remark plugin.
     a: ({ href, children }) => {
+      if (href?.startsWith('mass-mention://')) {
+        return <MassMentionBadge token={href.slice('mass-mention://'.length)} />;
+      }
       if (href?.startsWith('mention://')) {
         return <ChannelMentionBadge userId={href.slice('mention://'.length)} />;
       }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
@@ -22,7 +23,7 @@ const SPACE_ID = 'space-1';
 
 const SPACE: TaggedSpace = {
   id: SPACE_ID, name: 'Aether Drift', icon: null, banner: null, avatarColor: 'lavender',
-  ownerId: 'u-owner', inviteCode: null, visibility: 'public', directoryListed: false,
+  ownerId: 'u-owner', ownerTitle: null, inviteCode: null, visibility: 'public', directoryListed: false,
   description: '', createdAt: 1, _instanceOrigin: '',
 };
 
@@ -59,13 +60,13 @@ beforeEach(() => {
 
 describe('MemberSidebar: roles of offline members (#302)', () => {
   it('colours an offline member by their top role', () => {
-    render(<MemberSidebar />);
+    render(<MemoryRouter><MemberSidebar /></MemoryRouter>);
     const name = screen.getByText('Mira');
     expect(name).toHaveStyle({ color: '#c4b5fd' });
   });
 
   it('opens the profile with the space member it was opened for', async () => {
-    render(<MemberSidebar />);
+    render(<MemoryRouter><MemberSidebar /></MemoryRouter>);
     await userEvent.click(screen.getByText('Mira'));
     const popout = useUIStore.getState().userProfilePopout;
     expect(popout.user?.id).toBe('u-mira');
@@ -87,7 +88,7 @@ describe('MemberSidebar: member names', () => {
   it('names a member with an empty display name by their username, as every other surface does', () => {
     const blank: User = { ...user('u-kai', 'Kai', 'online'), displayName: '' };
     useSpaceStore.setState({ members: [member(blank, [])] });
-    render(<MemberSidebar />);
+    render(<MemoryRouter><MemberSidebar /></MemoryRouter>);
     expect(screen.getByText('kai')).toBeInTheDocument();
   });
 });

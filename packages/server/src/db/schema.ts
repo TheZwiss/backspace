@@ -51,6 +51,7 @@ export const users = sqliteTable('users', {
 }));
 
 export const spaces = sqliteTable('spaces', {
+  ownerTitle: text('owner_title'),
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   icon: text('icon'),
@@ -98,6 +99,7 @@ export const channels = sqliteTable('channels', {
 }));
 
 export const messages = sqliteTable('messages', {
+  type: text('type', { enum: ['user', 'system'] }).notNull().default('user'),
   id: text('id').primaryKey(),
   channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id),
@@ -304,6 +306,24 @@ export const readStates = sqliteTable('read_states', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.channelId] }),
   userIdx: index('idx_read_states_user_id').on(table.userId),
+}));
+
+// Per-user alert preferences for a space or one of its channels
+// (NotificationSetting in shared/types.ts). No FK on target_id: one table
+// serves both target kinds; the space and channel delete routes remove the
+// rows. Snowflake ids never collide across kinds, so the index is by id alone.
+export const notificationSettings = sqliteTable('notification_settings', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(), // 'space' | 'channel'
+  targetId: text('target_id').notNull(),
+  level: text('level'), // NotificationLevel | null (inherit)
+  mutedUntil: integer('muted_until'),
+  suppressEveryone: integer('suppress_everyone').notNull().default(0),
+  suppressRoles: integer('suppress_roles').notNull().default(0),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.targetType, table.targetId] }),
+  targetIdx: index('idx_notification_settings_target').on(table.targetId),
 }));
 
 export const spaceFolders = sqliteTable('space_folders', {

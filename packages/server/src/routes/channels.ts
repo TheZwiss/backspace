@@ -465,6 +465,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     // Clean up read_states (no FK, rows would be orphaned)
     db.delete(schema.readStates).where(eq(schema.readStates.channelId, id)).run();
+    db.delete(schema.notificationSettings).where(eq(schema.notificationSettings.targetId, id)).run();
 
     // Delete messages in channel (attachments cascade), then channel
     db.delete(schema.messages).where(eq(schema.messages.channelId, id)).run();

@@ -44,6 +44,7 @@ function seedListedSpace(spaceId: string, directoryListed: 0 | 1): void {
     inviteCode: `inv-${spaceId}`,
     visibility: 'public',
     directoryListed,
+    ownerTitle: directoryListed ? '首席摸鱼官' : null,
     createdAt: now,
   }).run();
   testDb.insert(schema.spaceMembers).values({ spaceId, userId: OWNER_ID, joinedAt: now }).run();
@@ -91,5 +92,7 @@ describe('ready payload directoryListed projection', () => {
     const byId = new Map(message.spaces.map(s => [s.id, s.directoryListed]));
     expect(byId.get('sp-listed')).toBe(true);
     expect(byId.get('sp-unlisted')).toBe(false);
+    expect(message.spaces.find(s => s.id === 'sp-listed')?.ownerTitle).toBe('首席摸鱼官');
+    expect(message.spaces.find(s => s.id === 'sp-unlisted')?.ownerTitle).toBeNull();
   });
 });

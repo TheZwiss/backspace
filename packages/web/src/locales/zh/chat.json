@@ -143,5 +143,10 @@
   "notification": {
     "unknownSender": "有人",
     "attachmentOnly": "发送了一个附件"
+  },
+  "poke": {
+    "action": "戳一戳",
+    "received": "{{actor}} 戳了戳 {{target}}",
+    "disconnected": "连接已断开，戳一戳未发送"
   }
 }

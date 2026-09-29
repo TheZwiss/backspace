@@ -443,9 +443,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await client.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       }
       // Real message will arrive via WebSocket and replace the temp one
-    } catch {
-      // Rollback: remove the optimistic message on failure
+    } catch (error) {
+      // Roll back locally, but let the composer expose failure and retain the draft.
       get().removeMessage(tempId, channelId);
+      throw error;
     }
   },
 
@@ -560,6 +561,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
       }
       newMessages.set(channelId, updated);
+      // Channel system history is passive: do not enqueue sound/desktop notification events.
+      if (normalizedMessage.type === 'system' && !('dmChannelId' in normalizedMessage)) {
+        return { messages: newMessages };
+      }
       // Append to realtimeMessageEvents (capped; see addedRealtimeMessageEvents)
       const newEvents = [...state.realtimeMessageEvents, { channelId, message: normalizedMessage }];
       if (newEvents.length > REALTIME_MESSAGE_EVENT_CAP) {

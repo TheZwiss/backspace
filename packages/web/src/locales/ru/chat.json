@@ -155,5 +155,10 @@
   "notification": {
     "unknownSender": "Кто-то",
     "attachmentOnly": "Отправлено вложение"
+  },
+  "poke": {
+    "action": "Толкнуть",
+    "received": "{{actor}} толкнул(а) {{target}}",
+    "disconnected": "Соединение разорвано. Действие не отправлено."
   }
 }
