@@ -357,9 +357,9 @@ The wire format of the queued event is identical to the pre-2026-04-25 flow; onl
 
 ### Failure Handling: Async Rollback
 
-When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `invalid_target` (a `friend_add` answering no pending request is `invalid_target`). Any other reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. `classifyRejection` (`utils/federationRejections.ts`) decides what each reason means; the list is in [federation.md "Rejection reasons"](federation.md#rejection-reasons). A `refused` reason (among them `recipient_not_found` and `invalid_target`, which a `friend_add` answering no pending request gets) deletes the outbox entry with no retry and runs the rollback below; a `retry` reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
 
-For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
+For `refused` rejections, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
 
 1. Looks up the `friend_requests` row by `relayMessageId` (the stored `entityId`).
 2. Deletes the row.

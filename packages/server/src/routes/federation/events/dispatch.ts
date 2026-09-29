@@ -10,14 +10,31 @@ import { processGroupMetadataUpdateEvent, processMemberAddEvent, processMemberRe
 import { processProfileUpdateEvent } from '../profile.js';
 
 /**
+ * How an event reached this instance.
+ * - `live`: the peer's outbox sent it (`POST /api/federation/relay`).
+ * - `catch_up`: this instance pulled it from the peer's mutation log
+ *   (`utils/federationSync.ts`), or replays a pulled event it deferred. A
+ *   pulled event is catch-up, not news: it raises no sound or notification on
+ *   a client, so a message created this way is stored without a
+ *   `dm_message_created` broadcast; clients see it when they next load the
+ *   conversation.
+ */
+export type RelayDelivery = 'live' | 'catch_up';
+
+export interface ProcessRelayOptions {
+  delivery?: RelayDelivery;
+}
+
+/**
  * Process an array of federation relay events. Used by the HTTP relay endpoint
- * and directly by the initial-sync worker (which skips the HTTP round-trip).
+ * (`live`) and by the pull (`catch_up`), which skips the HTTP round-trip.
  */
 export async function processRelayEvents(
   events: FederationRelayEvent[],
   sourceInstance: string,
   peerOrigin: string,
   db: ReturnType<typeof getDb>,
+  options: ProcessRelayOptions = {},
 ): Promise<{
   accepted: string[];
   rejected: Array<{ messageId: string; reason: string }>;
@@ -44,7 +61,7 @@ export async function processRelayEvents(
     try {
       switch (event.eventType) {
         case 'create':
-          await processCreateEvent(event, sourceInstance, peerOrigin, db, accepted, rejected);
+          await processCreateEvent(event, sourceInstance, peerOrigin, db, accepted, rejected, options.delivery ?? 'live');
           break;
         case 'update':
           processUpdateEvent(event, sourceInstance, db, accepted, rejected);

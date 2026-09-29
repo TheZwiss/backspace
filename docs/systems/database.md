@@ -174,6 +174,7 @@ PK: (dmChannelId, userId)
 | dmChannelId | text NOT NULL | | FK → dm_channels.id CASCADE |
 | userId | text NOT NULL | | FK → users.id CASCADE |
 | closed | integer | 0 | Soft-close flag |
+| closedChangedAt | integer NOT NULL | 0 | When `closed` took its value: insertion or local change (local clock), or a relayed close/reopen's timestamp. Last-writer-wins against relayed close/reopen; written only by `utils/dmMemberClosed.ts` (dm-system.md "Closed state is last-writer-wins"). Rows present at migration 0022 were stamped with the migration time |
 
 ### dm_messages
 | Column | Type | Default | Notes |
@@ -562,11 +563,51 @@ Index `idx_outbox_queue` on (peerId, queueKey, createdAt); `idx_outbox_retry` on
 | id | text PK | | |
 | entityId | text NOT NULL | | |
 | contextId | text NOT NULL | | |
-| contextType | text NOT NULL | `'dm'` | dm/friend |
-| mutationType | text NOT NULL | | create/update/delete |
-| mutatedAt | integer NOT NULL | | Checkpoint for sync |
+| contextType | text NOT NULL | `'dm'` | dm/friend/profile |
+| mutationType | text NOT NULL | | the relay event type (federation.md "Mutation log coverage") |
+| mutatedAt | integer NOT NULL | | With `id`, the `(mutated_at, id)` order `/sync` pages in |
 | payload | text | | JSON |
 Retention: 90 days (cleaned by federation janitor)
+
+### federation_sync_cursors
+Pull-sync position per peer and context (federation.md "Pull sync").
+PK: (peerId, contextType)
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
+| contextType | text NOT NULL | | dm/friend/profile |
+| cursorTs | integer NOT NULL | 0 | `mutated_at` of the last log row consumed, in the PEER's clock |
+| cursorId | text | | That row's id; null against a server that does not return `checkpointId` |
+| peerEpoch | text | | The peer's instance id the cursor was taken against; a different one restarts the cursor at 0 |
+| lastPulledAt | integer | | Local time of the last completed pass |
+
+### federation_sync_retry
+Pulled events kept for a later retry: refused for a reason that can pass (`classifyRejection` → `retry`), or held behind one in the same unit.
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | snowflake; tiebreak for order |
+| peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
+| contextType | text NOT NULL | | dm/friend/profile |
+| contextKey | text NOT NULL | | Ordering unit (`syncContextKey`): conversation, friend pair, or profile |
+| eventType | text NOT NULL | | |
+| messageId | text NOT NULL | | The event's `messageId` |
+| eventTs | integer NOT NULL | | The event's `timestamp` (peer clock); replay order |
+| eventJson | text NOT NULL | | The whole event, replayed locally |
+| lastReason | text NOT NULL | | Last refusal, or `held_behind_earlier_event` |
+| attempts | integer NOT NULL | 1 | |
+| firstFailedAt | integer NOT NULL | | Dropped 7 days after this |
+| nextRetryAt | integer NOT NULL | | When the unit's head is next tried |
+Indexes: `idx_sync_retry_event` UNIQUE (peerId, eventType, messageId, eventTs); `idx_sync_retry_order` (peerId, contextKey, eventTs)
+
+### federation_applied_events
+Ledger of relay events applied here, for events a processor cannot recognize as applied from state alone (federation.md "Receiver guarantees").
+PK: (sourceOrigin, eventKey)
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| sourceOrigin | text NOT NULL | | `normalizeOriginForCompare` of the origin the event is attributed to |
+| eventKey | text NOT NULL | | `dm_delete:<messageId>` (a delete's tombstone) or `<eventType>:<messageId>` |
+| appliedAt | integer NOT NULL | | Local time |
+Index: `idx_applied_events_applied_at`. Retention: 100 days (janitor `sweepAppliedEvents`)
 
 ### user_federation_registry
 Persistent registry of all instances a user has federated with. Tracks full lifecycle.

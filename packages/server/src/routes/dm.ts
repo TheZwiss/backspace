@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, or, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
+import { insertDmMember, reopenClosedDmMembers, setDmMemberClosed } from '../utils/dmMemberClosed.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
@@ -311,21 +312,13 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
  */
 export function reopenForClosedMembers(dmChannelId: string, lastMessage?: DmMessageWithUser): void {
   const db = getDb();
-  const closedMembers = db.select()
-    .from(schema.dmMembers)
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .all();
-  if (closedMembers.length === 0) return;
-
-  db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .run();
+  const reopened = reopenClosedDmMembers(db.$client, dmChannelId);
+  if (reopened.length === 0) return;
 
   const dmChannel = loadDmChannelWire(db, dmChannelId, lastMessage);
   if (!dmChannel) return;
-  for (const member of closedMembers) {
-    connectionManager.sendToUser(member.userId, {
+  for (const userId of reopened) {
+    connectionManager.sendToUser(userId, {
       type: 'dm_channel_created',
       dmChannel,
     });
@@ -395,15 +388,7 @@ function openOneOnOne(
   announceDmReconcile(opened.reconciled);
   if (opened.created) return opened;
 
-  const reopened = db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, opened.channelId),
-      eq(schema.dmMembers.userId, callerId),
-      eq(schema.dmMembers.closed, 1),
-    ))
-    .run();
-  if (reopened.changes > 0) {
+  if (setDmMemberClosed(db.$client, opened.channelId, callerId, false)) {
     // Relay reopen to federated peers
     queueDmCloseRelay(opened.channelId, callerId, 'dm_reopen');
   }
@@ -1009,16 +994,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         createdAt: now,
       }).run();
 
-      tx.insert(schema.dmMembers).values({
-        dmChannelId,
-        userId: request.userId,
-      }).run();
+      insertDmMember(db.$client, dmChannelId, request.userId, { at: now });
 
       for (const targetUser of targetUsers) {
-        tx.insert(schema.dmMembers).values({
-          dmChannelId,
-          userId: targetUser.id,
-        }).run();
+        insertDmMember(db.$client, dmChannelId, targetUser.id, { at: now });
       }
     });
 
@@ -1458,13 +1437,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Soft close: set closed flag (preserves membership for future message delivery)
-    db.update(schema.dmMembers)
-      .set({ closed: 1 })
-      .where(and(
-        eq(schema.dmMembers.dmChannelId, id),
-        eq(schema.dmMembers.userId, request.userId),
-      ))
-      .run();
+    setDmMemberClosed(db.$client, id, request.userId, true);
 
     // Broadcast dm_channel_closed to self for multi-tab sync
     connectionManager.sendToUser(request.userId, {
@@ -1554,10 +1527,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Insert dm_members row for new user
-    db.insert(schema.dmMembers).values({
-      dmChannelId: id,
-      userId: targetUserId,
-    }).run();
+    insertDmMember(db.$client, id, targetUserId);
 
     // If the channel doesn't have a federatedId and now has a remote member, assign one
     if (!dmChannel.federatedId && isFederationRelayEnabled()) {

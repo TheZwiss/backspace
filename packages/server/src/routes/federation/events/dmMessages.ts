@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { dmDeleteKey, hasAppliedEvent, recordAppliedEvent } from '../../../utils/federationAppliedEvents.js';
+import { reopenClosedDmMembers } from '../../../utils/dmMemberClosed.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { findOrCreateOneOnOne, oneOnOneKey } from '../../../utils/dmConversation.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
@@ -14,6 +16,7 @@ import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
 import { parseDmSystemEvent, RELAYABLE_DM_SYSTEM_EVENTS } from '@backspace/shared/src/dmSystemEvents.js';
+import type { RelayDelivery } from './dispatch.js';
 import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
@@ -25,6 +28,7 @@ export async function processCreateEvent(
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
+  delivery: RelayDelivery,
 ): Promise<void> {
   if (!event.message) {
     rejected.push({ messageId: event.messageId, reason: 'missing_message_payload' });
@@ -41,6 +45,13 @@ export async function processCreateEvent(
   if (refusal) {
     console.warn(`[federation] Attribution refused (${refusal}) in create: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
     rejected.push({ messageId: event.messageId, reason: refusal });
+    return;
+  }
+
+  // A delete for this message reached us before the message did: it is gone
+  // on its home, and this create is as good as already applied.
+  if (hasAppliedEvent(sourceInstance, dmDeleteKey(event.messageId), db)) {
+    rejected.push({ messageId: event.messageId, reason: 'duplicate' });
     return;
   }
 
@@ -242,39 +253,34 @@ export async function processCreateEvent(
     }
   }
 
-  // Broadcast to every local member, members homed on the source instance
-  // included. Federated DMs are mirrored: a client connected here and to the
-  // source holds both copies of the conversation, and its DM merge module
-  // (web `stores/dmConversations.ts`) decides which copy it shows, so each
-  // copy gets its own messages.
+  // A member who closed the conversation before this message was written gets
+  // it back, and dm_channel_created resurfaces it in their list before the
+  // message arrives. A close made after the message was written stands: a pull
+  // can deliver an old message long after it was sent.
+  const reopened = reopenClosedDmMembers(db.$client, localDmChannelId, { closedBefore: event.message.createdAt });
   const fullMessage = getDmMessageWithUser(localMessageId);
-  if (fullMessage) {
-    const dmMembers = db.select()
+  if (reopened.length > 0) {
+    const payload = loadDmChannelWire(db, localDmChannelId, delivery === 'live' ? fullMessage ?? undefined : undefined);
+    if (payload) {
+      for (const userId of reopened) {
+        connectionManager.sendToUser(userId, { type: 'dm_channel_created', dmChannel: payload });
+      }
+    }
+  }
+
+  // Live delivery goes to every local member, members homed on the source
+  // instance included. Federated DMs are mirrored: a client connected here and
+  // to the source holds both copies of the conversation, and its DM merge
+  // module (web `stores/dmConversations.ts`) decides which copy it shows, so
+  // each copy gets its own messages. A pulled message is catch-up
+  // (`RelayDelivery`): it is stored, and shows when a client next loads the
+  // conversation, without raising a sound or notification now.
+  if (fullMessage && delivery === 'live') {
+    const dmMembers = db.select({ userId: schema.dmMembers.userId })
       .from(schema.dmMembers)
       .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
       .all();
-
     for (const member of dmMembers) {
-      // If the member closed this DM, reopen it and send dm_channel_created
-      // so the sidebar resurfaces before the message arrives.
-      if (member.closed === 1) {
-        db.update(schema.dmMembers)
-          .set({ closed: 0 })
-          .where(and(
-            eq(schema.dmMembers.dmChannelId, localDmChannelId),
-            eq(schema.dmMembers.userId, member.userId),
-          ))
-          .run();
-
-        const payload = loadDmChannelWire(db, localDmChannelId, fullMessage);
-        if (payload) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_channel_created',
-            dmChannel: payload,
-          });
-        }
-      }
-
       connectionManager.sendToUser(member.userId, {
         type: 'dm_message_created',
         message: fullMessage,
@@ -476,7 +482,20 @@ export function processUpdateEvent(
 
   // Mention tokens carry the sender's ids; store them as this instance's.
   const content = rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
-  const editedAt = event.message?.editedAt ?? Date.now();
+
+  // Last-writer-wins on the author's `editedAt`: an edit this copy already
+  // holds, or an older one arriving after it (a pull replays the log), changes
+  // nothing and tells nobody. An older sender without `editedAt` is applied
+  // only when the content differs.
+  const incomingEditedAt = event.message?.editedAt ?? null;
+  const alreadyHeld = incomingEditedAt !== null
+    ? localMsg.editedAt !== null && incomingEditedAt <= localMsg.editedAt
+    : content === localMsg.content;
+  if (alreadyHeld) {
+    accepted.push(event.messageId);
+    return;
+  }
+  const editedAt = incomingEditedAt ?? Date.now();
 
   db.update(schema.dmMessages)
     .set({ content, editedAt })
@@ -550,6 +569,37 @@ export function processUpdateEvent(
 }
 
 
+/**
+ * The message a relayed delete names, in its home's coordinates: the target's
+ * shared coordinates, or for an older sender without a target, the sender's
+ * own id on the sender. Null for a target too malformed to name one.
+ */
+function relayedDeleteCoordinates(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+): { messageId: string; homeInstance: string } | null {
+  if (event.target === undefined) return { messageId: event.messageId, homeInstance: sourceInstance };
+  const target: unknown = event.target;
+  if (!isMessageTarget(target)) return null;
+  return { messageId: target.message.messageId, homeInstance: target.message.messageHomeInstance };
+}
+
+/**
+ * Record that the message at `coordinates` is deleted, so a create of it that
+ * arrives later is answered `duplicate` (`processCreateEvent`). Only a message
+ * homed on the signing peer: that peer is the only one whose creates carry
+ * those coordinates, so no peer can block another's messages this way.
+ */
+function recordDeleteTombstone(
+  coordinates: { messageId: string; homeInstance: string },
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): void {
+  if (normalizeOriginForCompare(coordinates.homeInstance) !== normalizeOriginForCompare(sourceInstance)) return;
+  recordAppliedEvent(sourceInstance, dmDeleteKey(coordinates.messageId), db);
+}
+
+
 export function processDeleteEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -559,10 +609,29 @@ export function processDeleteEvent(
 ): void {
   const resolved = resolveRelayedMutationTarget(event, sourceInstance, db);
   if (!resolved.ok) {
+    const coordinates = relayedDeleteCoordinates(event, sourceInstance);
+    if (resolved.reason === 'unknown_message' && coordinates
+      && !resolveLocalDmMessage(coordinates.messageId, coordinates.homeInstance, sourceInstance, db)) {
+      // Not held here: nothing to delete, and the create may still be on its
+      // way. Accept, and leave the tombstone that answers that create.
+      recordDeleteTombstone(coordinates, sourceInstance, db);
+      accepted.push(event.messageId);
+      return;
+    }
     rejected.push({ messageId: event.messageId, reason: resolved.reason });
     return;
   }
   const localMsg = resolved.localMsg;
+
+  // A create of this message delivered again later (an outbox retry whose
+  // first send did land) must not bring it back.
+  if (localMsg.sourceInstance && localMsg.sourceMessageId) {
+    recordDeleteTombstone(
+      { messageId: localMsg.sourceMessageId, homeInstance: localMsg.sourceInstance },
+      sourceInstance,
+      db,
+    );
+  }
 
   // Collect attachment filenames before deletion for disk cleanup
   const attachmentRows = db

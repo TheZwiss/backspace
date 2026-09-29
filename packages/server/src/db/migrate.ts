@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import crypto from 'crypto';
+import { insertDmMember } from '../utils/dmMemberClosed.js';
 
 /**
  * Ensure data invariants after schema migration. Idempotent — safe to run
@@ -88,13 +89,12 @@ export function backfillOneOnOneDmMembership(db: Database.Database): void {
     WHERE msg.dm_channel_id = ?
       AND msg.user_id NOT IN (SELECT user_id FROM dm_members WHERE dm_channel_id = ?)
   `);
-  const insertMember = db.prepare('INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, 0)');
 
   let restored = 0;
   const run = db.transaction(() => {
     for (const { channelId } of broken) {
       const authors = missingAuthors.all(channelId, channelId) as { userId: string }[];
-      for (const { userId } of authors) { insertMember.run(channelId, userId); restored++; }
+      for (const { userId } of authors) { insertDmMember(db, channelId, userId); restored++; }
     }
   });
   run();

@@ -1219,6 +1219,13 @@ export interface FederationRelayEvent {
   rejectionReason?: string;
   rejectionLimit?: number;
   affectedUserIds?: string[];
+  /**
+   * `file_rejected`: the same users as `affectedUserIds`, each with the
+   * instance that homes them, so the receiver matches the whole identity.
+   * Optional: absent from older senders, whose bare ids are matched only when
+   * exactly one local user carries that home user id.
+   */
+  affectedUsers?: Array<{ homeUserId: string; homeInstance: string }>;
   call?: FederationCallPayload;
   typing?: {
     homeUserId: string;
@@ -1471,9 +1478,16 @@ export interface FederationRelayResponse {
 
 export interface FederationSyncRequest {
   sinceTimestamp: number;
+  /**
+   * Keyset tiebreak: with it, the server returns the log rows after the row
+   * `(sinceTimestamp, afterId)` in `(mutated_at, id)` order, so rows sharing a
+   * millisecond across a page boundary are all served. Older servers ignore it
+   * and return rows with `mutated_at > sinceTimestamp`.
+   */
+  afterId?: string;
   dmChannelId?: string;
   federatedId?: string;
-  contextType?: 'dm' | 'friend';
+  contextType?: 'dm' | 'friend' | 'profile';
   limit: number;
 }
 
@@ -1481,6 +1495,12 @@ export interface FederationSyncResponse {
   events: FederationRelayEvent[];
   hasMore: boolean;
   checkpoint: number;
+  /**
+   * The id of the last log row the page covered (before any filtering), to be
+   * sent back as `afterId` with `sinceTimestamp: checkpoint`. Absent from older
+   * servers, whose next page has to start at `checkpoint - 1`.
+   */
+  checkpointId?: string;
 }
 
 // Detached-account re-attach (re-attach spec §3.1–3.2).

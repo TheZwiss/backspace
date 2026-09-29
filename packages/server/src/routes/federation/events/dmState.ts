@@ -1,4 +1,5 @@
 import { getDb, schema } from '../../../db/index.js';
+import { applyRelayedDmMemberClosed } from '../../../utils/dmMemberClosed.js';
 import { getOurOrigin } from '../../../utils/federationAuth.js';
 import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -9,6 +10,44 @@ import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { presenceUpdateEvent, validateActivities } from '../../../ws/presenceEvent.js';
 import { projectReplicaStatus } from '../../../ws/replicaPresence.js';
 import { extractDomain, resolveRelayActor, attributionRefusal } from '../identity.js';
+
+/**
+ * The local users a `file_rejected` names: the users homed on the rejecting
+ * instance who could not receive the file. With `affectedUsers` each is the
+ * user that IS that identity (`resolveRelayActor`). An older sender sends only
+ * bare home user ids, which are unique only on their home: one is used only
+ * when exactly one local user carries it.
+ */
+function resolveFileRejectedUsers(
+  event: FederationRelayEvent,
+  db: ReturnType<typeof getDb>,
+): Array<typeof schema.users.$inferSelect> {
+  const users: Array<typeof schema.users.$inferSelect> = [];
+  const seen = new Set<string>();
+  const add = (user: typeof schema.users.$inferSelect): void => {
+    if (seen.has(user.id)) return;
+    seen.add(user.id);
+    users.push(user);
+  };
+
+  if (Array.isArray(event.affectedUsers)) {
+    for (const identity of event.affectedUsers) {
+      if (typeof identity?.homeUserId !== 'string' || typeof identity.homeInstance !== 'string') continue;
+      const resolved = resolveRelayActor(identity, db);
+      if (resolved.kind === 'found') add(resolved.user);
+    }
+    return users;
+  }
+
+  for (const homeUserId of event.affectedUserIds ?? []) {
+    const candidates = db.select()
+      .from(schema.users)
+      .where(and(eq(schema.users.homeUserId, homeUserId), eq(schema.users.isDeleted, 0)))
+      .all();
+    if (candidates.length === 1) add(candidates[0]!);
+  }
+  return users;
+}
 
 export function processFileRejectedEvent(
   event: FederationRelayEvent,
@@ -56,22 +95,11 @@ export function processFileRejectedEvent(
     return;
   }
 
-  // Resolve affected user IDs to local usernames
-  const affectedUsers: Array<{ userId: string; username: string; limit: number }> = [];
-  for (const remoteUserId of (event.affectedUserIds ?? [])) {
-    // These are homeUserIds — find the replicated user stub
-    const user = db.select()
-      .from(schema.users)
-      .where(eq(schema.users.homeUserId, remoteUserId))
-      .get();
-    if (user) {
-      affectedUsers.push({
-        userId: user.id,
-        username: user.displayName || user.username,
-        limit: event.rejectionLimit ?? 0,
-      });
-    }
-  }
+  const affectedUsers = resolveFileRejectedUsers(event, db).map(user => ({
+    userId: user.id,
+    username: user.displayName || user.username,
+    limit: event.rejectionLimit ?? 0,
+  }));
 
   if (affectedUsers.length === 0) {
     // Fallback: if we can't resolve usernames, still accept the event
@@ -89,13 +117,15 @@ export function processFileRejectedEvent(
     } catch { /* ignore parse errors */ }
   }
 
-  // Add new affected users, avoiding duplicates by userId
+  // Add new affected users, avoiding duplicates by userId. When none is new
+  // (the same rejection delivered again), nothing changes and nobody is told.
   const existingUserIds = new Set(existingMeta.map(u => u.userId));
-  for (const user of affectedUsers) {
-    if (!existingUserIds.has(user.userId)) {
-      existingMeta.push(user);
-    }
+  const newUsers = affectedUsers.filter(user => !existingUserIds.has(user.userId));
+  if (newUsers.length === 0) {
+    accepted.push(event.messageId);
+    return;
   }
+  existingMeta.push(...newUsers);
 
   // Update attachment
   db.update(schema.attachments)
@@ -405,35 +435,17 @@ export function processDmCloseEvent(
   }
   const localUser = actor.user;
 
-  // Verify user is a DM member
-  const membership = db.select()
-    .from(schema.dmMembers)
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, channel.id),
-      eq(schema.dmMembers.userId, localUser.id),
-    ))
-    .get();
-
-  if (!membership) {
-    // Not a member — silently accept
-    accepted.push(event.messageId);
-    return;
+  // Last-writer-wins on the member row (utils/dmMemberClosed.ts): a close
+  // older than the row's state (a later message reopened it, the member
+  // reopened it here) changes nothing. A non-member has nothing to close.
+  // The member's clients hear of it only when the state actually changed.
+  const outcome = applyRelayedDmMemberClosed(db.$client, channel.id, localUser.id, true, event.timestamp);
+  if (outcome === 'changed') {
+    connectionManager.sendToUser(localUser.id, {
+      type: 'dm_channel_closed',
+      dmChannelId: channel.id,
+    });
   }
-
-  // Set closed = 1
-  db.update(schema.dmMembers)
-    .set({ closed: 1 })
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, channel.id),
-      eq(schema.dmMembers.userId, localUser.id),
-    ))
-    .run();
-
-  // Broadcast dm_channel_closed to local connections of this user
-  connectionManager.sendToUser(localUser.id, {
-    type: 'dm_channel_closed',
-    dmChannelId: channel.id,
-  });
 
   accepted.push(event.messageId);
 }
@@ -488,37 +500,17 @@ export function processDmReopenEvent(
   }
   const localUser = actor.user;
 
-  // Verify user is a DM member
-  const membership = db.select()
-    .from(schema.dmMembers)
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, channel.id),
-      eq(schema.dmMembers.userId, localUser.id),
-    ))
-    .get();
-
-  if (!membership) {
-    // Not a member — silently accept
-    accepted.push(event.messageId);
-    return;
-  }
-
-  // Set closed = 0
-  db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, channel.id),
-      eq(schema.dmMembers.userId, localUser.id),
-    ))
-    .run();
-
-  // Build full DM channel payload and broadcast dm_channel_created
-  const payload = loadDmChannelWire(db, channel.id);
-  if (payload) {
-    connectionManager.sendToUser(localUser.id, {
-      type: 'dm_channel_created',
-      dmChannel: payload,
-    });
+  // Last-writer-wins, as for dm_close above: a reopen older than the row's
+  // state (the member closed it again here) changes nothing.
+  const outcome = applyRelayedDmMemberClosed(db.$client, channel.id, localUser.id, false, event.timestamp);
+  if (outcome === 'changed') {
+    const payload = loadDmChannelWire(db, channel.id);
+    if (payload) {
+      connectionManager.sendToUser(localUser.id, {
+        type: 'dm_channel_created',
+        dmChannel: payload,
+      });
+    }
   }
 
   accepted.push(event.messageId);

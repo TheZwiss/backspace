@@ -23,6 +23,8 @@ import { ensurePeered, isHandshakeInFlight } from './federationPeering.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
+import { classifyRejection, isTerminalRejection } from './federationRejections.js';
+import { startPeerSyncWorkers, stopPeerSyncWorkers } from './federationSync.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,38 +70,18 @@ const MAX_FILE_ATTEMPTS = 10;
 const PEER_UNREACHABLE_THRESHOLD = 10;
 
 /**
- * Outbox rejection reasons that the receiver has acknowledged as permanently
- * undeliverable. These cause the outbox entry to be deleted (no retry) and
- * trigger the registered permanent-failure callback for the eventType.
+ * A peer's rejection of an event this worker sent is classified by
+ * `classifyRejection` (utils/federationRejections.ts), the one list both the
+ * outbox and the pull use: `taken` and `refused` end delivery and delete the
+ * row (`refused` also runs the event type's rollback, see
+ * utils/federationRollback.ts); `retry` keeps the row on the backoff schedule
+ * until the janitor drops it at its TTL. 5xx responses, network errors and
+ * timeouts are not rejections and are retried on the same schedule.
  *
- * 'duplicate' is treated as terminal-but-no-rollback (the receiver already has
- * the event; nothing to roll back locally).
- *
- * Every other rejection is retryable: the entry stays and waits out the next
- * step of BACKOFF_SCHEDULE_MS, until the janitor drops it at its TTL. That
- * includes `attribution_unproven` (the receiver does not hold the proof that
- * our user has an account here yet; it arrives from the user's client) and
- * reasons such as `channel_not_found` that resolve once an earlier event lands.
- *
- * 5xx responses, network errors, and timeouts are NOT in this set — they are
- * transient and retried via the existing backoff schedule.
- */
-const TERMINAL_REJECTION_REASONS = new Set<string>([
-  'duplicate',            // peer already has it (existing behavior)
-  'recipient_not_found',  // receiver doesn't know the target user
-  'attribution_mismatch', // the source can never speak for this actor (third-instance, malformed, or no such user)
-  'unknown_event_type',   // peer doesn't understand this eventType — never will
-  'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
-  'not_message_author',   // relayed edit/delete names a message the actor did not write
-  'system_message_immutable', // relayed edit names a system message, which cannot be edited
-  'invalid_system_message',   // relayed system message that is not a well-formed relayable event
-  'invalid_target',       // edit/delete/reaction target malformed or from a non-peer; 1-on-1 create or reaction by a non-member; group op on a 1-on-1; unacceptable bootstrap; friend_add answering no pending request
-]);
-
-/**
- * What this sender tells receivers it handles (`FederationRelayRequest.capabilities`).
- * `attribution_unproven` is listed because the reason is not in
- * TERMINAL_REJECTION_REASONS, so it is retried on the backoff schedule.
+ * `RELAY_CAPABILITIES` is what this sender tells receivers it handles
+ * (`FederationRelayRequest.capabilities`). `attribution_unproven` is listed
+ * because `classifyRejection` counts it as `retry`, so it is retried on the
+ * backoff schedule.
  */
 const RELAY_CAPABILITIES: FederationRelayCapability[] = ['attribution_unproven'];
 
@@ -293,18 +275,6 @@ async function sendOutboxBatch(
 }
 
 /**
- * What a rejection means for the row. The one place TERMINAL_REJECTION_REASONS
- * is read:
- * - `taken`: the peer already holds the event (`duplicate`);
- * - `refused`: the peer will never take it; the row goes;
- * - `retry`: the row stays and waits out its next backoff step.
- */
-function classifyRelayRejection(reason: string): 'taken' | 'refused' | 'retry' {
-  if (reason === 'duplicate') return 'taken';
-  return TERMINAL_REJECTION_REASONS.has(reason) ? 'refused' : 'retry';
-}
-
-/**
  * Read the rows chosen for a peer again, keep one per wire id (the peer's
  * answer names events by it), and mark them offered: from here on the peer
  * may hold them. Runs synchronously, so what is marked is exactly what is sent.
@@ -362,6 +332,7 @@ function buildRelayEvents(entries: OutboxEntry[]): FederationRelayEvent[] {
     if (parsed.rejectionReason) evt.rejectionReason = parsed.rejectionReason;
     if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
     if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
+    if (parsed.affectedUsers) evt.affectedUsers = parsed.affectedUsers;
     if (parsed.metadata) evt.metadata = parsed.metadata;
     if (parsed.profileUpdate) evt.profileUpdate = parsed.profileUpdate;
     if (parsed.presenceUpdate) evt.presenceUpdate = parsed.presenceUpdate;
@@ -489,7 +460,7 @@ function settleAnsweredBatch(
     const retry: OutboxEntry[] = [];
     for (const entry of batch) {
       const reason = rejections.get(entry.entityId);
-      const verdict = accepted.has(entry.entityId) ? 'taken' : reason === undefined ? 'retry' : classifyRelayRejection(reason);
+      const verdict = accepted.has(entry.entityId) ? 'taken' : reason === undefined ? 'retry' : classifyRejection(entry.eventType, reason);
       if (verdict === 'retry') {
         retry.push(entry);
         continue;
@@ -522,7 +493,8 @@ function settleAnsweredBatch(
     }
 
     for (const rejection of result.rejected) {
-      if (classifyRelayRejection(rejection.reason) === 'retry') {
+      const eventType = batch.find((entry) => entry.entityId === rejection.messageId)?.eventType ?? null;
+      if (!isTerminalRejection(eventType, rejection.reason)) {
         console.warn(
           `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId}: ${rejection.reason}`,
         );
@@ -1033,6 +1005,7 @@ function handleSizeRejection(
     .where(eq(schema.dmMembers.dmChannelId, localMsg.dmChannelId))
     .all();
   const affectedUserIds: string[] = [];
+  const affectedUsers: Array<{ homeUserId: string; homeInstance: string }> = [];
   for (const member of dmMembers) {
     const user = db.select()
       .from(schema.users)
@@ -1041,6 +1014,7 @@ function handleSizeRejection(
     const userHome = user?.homeInstance?.startsWith('http') ? user.homeInstance : user?.homeInstance ? `https://${user.homeInstance}` : null;
     if (user && (!user.homeInstance || userHome === ourOrigin)) {
       affectedUserIds.push(user.homeUserId || user.id);
+      affectedUsers.push({ homeUserId: user.homeUserId || user.id, homeInstance: ourOrigin });
     }
   }
 
@@ -1058,6 +1032,7 @@ function handleSizeRejection(
     rejectionReason: 'size_limit_exceeded',
     rejectionLimit: maxUploadSize,
     affectedUserIds,
+    affectedUsers,
   };
 
   appendMutationLog(
@@ -1070,6 +1045,7 @@ function handleSizeRejection(
       rejectionReason: 'size_limit_exceeded',
       rejectionLimit: maxUploadSize,
       affectedUserIds,
+      affectedUsers,
     }),
   );
   queueOutboxEvent(
@@ -1533,6 +1509,7 @@ export function startFederationWorkers(): void {
   scheduleHealthCheckTick();
   scheduleRecoveryTick();
   scheduleJanitorTick();
+  startPeerSyncWorkers();
   federatedCallSentinelTimer = setInterval(() => {
     runFederatedCallSentinelTick().catch(err =>
       console.error('[federation-worker] federatedCallSentinel tick failed:', err)
@@ -1601,6 +1578,8 @@ export function stopFederationWorkers(): void {
     clearInterval(federatedCallSentinelTimer);
     federatedCallSentinelTimer = null;
   }
+
+  stopPeerSyncWorkers();
 
   outboxAbortController?.abort();
   outboxAbortController = null;

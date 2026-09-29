@@ -8,6 +8,7 @@ import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import { generateSnowflake } from './snowflake.js';
 import { federationFetch } from './federationFetch.js';
 import { expireOutboxQueues } from './federationOutboxQueue.js';
+import { sweepAppliedEvents } from './federationAppliedEvents.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -938,6 +939,7 @@ let lastStorageCleanupAt = 0;
  * Run all periodic federation/GC cleanup tasks:
  *  - Expired outbox entries
  *  - Old mutation log entries
+ *  - Applied-event ledger rows past their retention (sweepAppliedEvents)
  *  - Stale file queue entries
  *  - Soft-deleted DM channels past grace period
  *  - Unused auto-created pending peer rows (cleanupUnusedAutoPendingPeers)
@@ -947,6 +949,7 @@ export async function runFederationJanitor(): Promise<void> {
   try {
     const outbox = cleanupFederationOutbox();
     const mutLog = cleanupFederationMutationLog();
+    const appliedEvents = sweepAppliedEvents();
     const fileQ = cleanupFederationFileQueue();
     const dmGc = cleanupSoftDeletedDmChannels();
 
@@ -959,10 +962,10 @@ export async function runFederationJanitor(): Promise<void> {
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     }
 
-    const total = outbox + mutLog + fileQ + dmGc + pendingPeers;
+    const total = outbox + mutLog + appliedEvents + fileQ + dmGc + pendingPeers;
     if (total > 0) {
       console.log(
-        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc} pendingPeers=${pendingPeers}`,
+        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} appliedEvents=${appliedEvents} fileQueue=${fileQ} dmChannels=${dmGc} pendingPeers=${pendingPeers}`,
       );
     }
 

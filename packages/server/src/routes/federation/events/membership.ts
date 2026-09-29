@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
+import { insertDmMember } from '../../../utils/dmMemberClosed.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { deleteUploadFile } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -120,11 +121,7 @@ export async function processMemberAddEvent(
       .run();
 
     for (const rosterUser of roster) {
-      db.insert(schema.dmMembers).values({
-        dmChannelId: channelId,
-        userId: rosterUser.id,
-        closed: 0,
-      }).run();
+      insertDmMember(db.$client, channelId, rosterUser.id);
     }
 
     channel = db.select().from(schema.dmChannels)
@@ -214,11 +211,7 @@ export async function processMemberAddEvent(
     )).get();
 
   if (!existingMember) {
-    db.insert(schema.dmMembers).values({
-      dmChannelId: channel.id,
-      userId: localUser.id,
-      closed: 0,
-    }).run();
+    insertDmMember(db.$client, channel.id, localUser.id);
   }
 
   // Insert system message for member addition — tagged with (sourceInstance, sourceMessageId)
