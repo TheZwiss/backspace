@@ -17,7 +17,20 @@ vi.mock('../utils/crossStoreResolvers', async (importOriginal) => ({
   }),
 }));
 
-import { startPendingMessageOrchestrator } from './pendingMessageRehydrate';
+// The remote instances as the orchestrator sees them: auto-connect is done
+// and none is configured, so the home ready is the last one to wait for.
+vi.mock('./instanceStore', () => ({
+  useInstanceStore: Object.assign(
+    (selector: (s: unknown) => unknown) => selector({ instances: [], _autoConnectDone: true }),
+    {
+      getState: () => ({ instances: [], _autoConnectDone: true }),
+      setState: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    },
+  ),
+}));
+
+import { startPendingMessageOrchestrator, notePendingOriginReady } from './pendingMessageRehydrate';
 import { usePendingMessageStore, type PendingBubble } from './pendingMessageStore';
 import { useSpaceStore } from './spaceStore';
 
@@ -66,5 +79,23 @@ describe('deferred sends wait until the channel is known', () => {
     expect(channelSend).toHaveBeenCalledTimes(1);
     expect(channelSend.mock.calls[0]?.[0]).toBe(C1.id);
     expect(dmSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails a bubble whose channel is still unknown once every instance has delivered its ready', async () => {
+    dmSend.mockClear();
+    channelSend.mockClear();
+    usePendingMessageStore.getState().append(bubble('b-gone', 'gone'));
+    await settle();
+    expect(channelSend).not.toHaveBeenCalled();
+
+    // The home ready lists neither the channel nor a DM of that id.
+    useSpaceStore.getState().populateFromReady('', [], [], [DM]);
+    notePendingOriginReady('');
+    await settle();
+
+    const gone = usePendingMessageStore.getState().bubbles.get('gone')?.[0];
+    expect(gone?.state).toBe('failed');
+    expect(channelSend).not.toHaveBeenCalled();
+    expect(dmSend).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,7 @@ import { useActivityStore } from '../stores/activityStore';
 import { presenceSubjectOf, readyActivityEntries, readyRowIndex } from '../utils/presenceSubject';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
+import { notePendingOriginReady } from '../stores/pendingMessageRehydrate';
 import { detectClientKind } from '../platform/clientKind';
 import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
@@ -222,6 +223,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // The DM part goes through the merge module, whose pin rule moves a
       // conversation first listed from a sibling to its home copy.
       populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout, event.layoutUpdatedAt);
+      // Pending messages restored at boot wait for the ready that lists their channel.
+      notePendingOriginReady(origin);
 
       // Cache authoritative identity for this origin (federation-safe)
       if (!isHome) {

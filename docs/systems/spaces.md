@@ -745,7 +745,7 @@ The space layout and folder data are delivered in the WS `ready` event (`handler
 
 `populateFromReady` merges incoming data by origin:
 - Replaces all spaces from the incoming origin, keeps spaces from other origins
-- Replaces this origin's entries in the space-channel index, `channelPermissions` and `categoryOriginMap` (client-federation.md, "Channel index and lookup maps")
+- Replaces this origin's entries in the space-channel index and `channelPermissions` (client-federation.md, "Channel index and lookup maps"), and adds this origin's categories to `categoryOriginMap` (entries of categories it no longer lists stay)
 - DM channels: removes existing DMs from this origin, appends incoming, deduplicates 1-on-1 DMs by canonical member pair (prefers home-origin copy)
 - Applies LWW layout merge as described above
 

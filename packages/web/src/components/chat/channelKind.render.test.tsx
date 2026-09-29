@@ -97,6 +97,8 @@ describe('MessageInput while the channel is unknown', () => {
   it('stays locked, then opens when the listing names the DM', () => {
     render(<MessageInput channelId={DM.id} channelName="@Kai" />);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    // Locked, but not for a missing permission: nothing is known yet.
+    expect(screen.queryByText(i18n.t('chat:composer.noPermission'))).not.toBeInTheDocument();
 
     act(() => { useSpaceStore.getState().populateFromReady('', [], [], [DM]); });
 
@@ -107,5 +109,6 @@ describe('MessageInput while the channel is unknown', () => {
     useSpaceStore.getState().populateFromReady('', [space([textChannel('c1', '0')])], [], []);
     render(<MessageInput channelId="c1" channelName="#c1" />);
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByText(i18n.t('chat:composer.noPermission'))).toBeInTheDocument();
   });
 });

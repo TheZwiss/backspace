@@ -7,15 +7,47 @@ import { HttpError, RateLimitError } from '../api/client';
 let started = false;
 
 /**
+ * Whether every instance that could hold a bubble's channel has delivered its
+ * ready: home, and every remote the auto-connect started, unless it is down.
+ * From then on a channel no listing named is gone (deleted, hidden, or its
+ * instance removed), so its bubble fails and the user can retry or discard it.
+ */
+let channelsSettled = false;
+const readyOrigins = new Set<string>();
+let remotes: { autoConnectDone: boolean; instances: ReadonlyArray<{ origin: string; status: string }> } | null = null;
+
+/** The ready of `origin` has been applied to the stores (called by the WS ready handler). */
+export function notePendingOriginReady(origin: string): void {
+  readyOrigins.add(origin);
+  recheckSettled();
+}
+
+function recheckSettled(): void {
+  if (
+    !channelsSettled
+    && readyOrigins.has('')
+    && remotes?.autoConnectDone === true
+    && remotes.instances.every((i) => readyOrigins.has(i.origin) || i.status === 'disconnected' || i.status === 'error')
+  ) {
+    channelsSettled = true;
+  }
+  if (started) dispatchReady();
+}
+
+/**
  * Dispatch every bubble that is ready and not dispatched yet. A bubble whose
  * channel the client does not know yet (no ready has listed it) waits: the
  * endpoint and the instance depend on what the channel is. It is dispatched
- * by the spaceStore subscription below once a listing or event names it.
+ * by the spaceStore subscription below once a listing or event names it, and
+ * fails once every instance has delivered its ready without naming it.
  */
 function dispatchReady(): void {
   for (const b of usePendingMessageStore.getState().listReadyForDeferredSend()) {
     if (sentClientIds.has(b.clientId)) continue;
-    if (getChannelKind(b.channelId) === 'unknown') continue;
+    if (getChannelKind(b.channelId) === 'unknown') {
+      if (channelsSettled) usePendingMessageStore.getState().markFailed(b.clientId);
+      continue;
+    }
     sentClientIds.add(b.clientId);
     void deferredSend(b);
   }
@@ -99,6 +131,17 @@ export function startPendingMessageOrchestrator(): void {
     lastChannelIndex = s.spaceChannelIndex;
     lastDmChannels = s.dmChannels;
     dispatchReady();
+  });
+
+  // 3d. The remote instances, for `channelsSettled`. Imported lazily:
+  //     instanceStore imports the WS layer, which reports readies here.
+  void import('./instanceStore').then(({ useInstanceStore }) => {
+    const read = (state: { _autoConnectDone: boolean; instances: ReadonlyArray<{ origin: string; status: string }> }): void => {
+      remotes = { autoConnectDone: state._autoConnectDone, instances: state.instances };
+      recheckSettled();
+    };
+    read(useInstanceStore.getState());
+    useInstanceStore.subscribe(read);
   });
 
   // 4. Auto-retry on `online`: bump+resend bubbles that failed once with no

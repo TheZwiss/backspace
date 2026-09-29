@@ -779,8 +779,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     return (
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
         <div className="flex items-center justify-center py-[14px] px-4">
+          {/* While the channel is unknown (before its ready) nothing is refused yet:
+              the shell alone, a non-breaking space keeping its height. */}
           <span className="text-txt-tertiary text-[14px]">
-            {t('chat:composer.noPermission')}
+            {isDm === undefined ? '\u00a0' : t('chat:composer.noPermission')}
           </span>
         </div>
       </div>
