@@ -17,14 +17,21 @@ const pairKey = (a: string, b: string): string => oneOnOneKey({ id: a, homeUserI
 setWorkerId(13);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Mock the Task-4 module so the endpoint never touches the network — the
-// re-attach flow's only outbound calls (proof verification + profile fetch)
-// go through these two functions.
+// The endpoint never touches the network: the re-attach flow's only outbound
+// calls are the proof verification and the home's by-home-id answer.
+// `profileMock` resolves to `{ username, profile }`, or null for a home that
+// gave no answer.
 const verifyMock = vi.fn();
 const profileMock = vi.fn();
 vi.mock('../utils/federationAttach.js', () => ({
   verifyAttachProofWithPeer: (...args: unknown[]) => verifyMock(...args),
-  fetchHomeProfileByHomeId: (...args: unknown[]) => profileMock(...args),
+}));
+vi.mock('../utils/federationLookup.js', async (importActual) => ({
+  ...(await importActual<typeof import('../utils/federationLookup.js')>()),
+  lookupRemoteUserByHomeId: async (peerOrigin: string, homeUserId: string) => {
+    const answer = await profileMock(peerOrigin, homeUserId) as { username: string; profile: Record<string, unknown> } | null;
+    return answer ? { ok: true, homeUserId, ...answer } : { ok: false, reason: 'unreachable' };
+  },
 }));
 
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;

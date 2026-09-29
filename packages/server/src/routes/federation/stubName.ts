@@ -6,7 +6,6 @@ import { collectProfileBroadcastTargetIds } from '../../utils/userDeletion.js';
 import { connectionManager } from '../../ws/handler.js';
 
 type UserRow = typeof schema.users.$inferSelect;
-type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
 /** The password hash every replicated row carries; bcrypt never produces it. */
 const REPLICATED_PASSWORD_HASH = '!federation-replicated';
@@ -237,14 +236,91 @@ export function claimHandleName(
 }
 
 /**
- * What the rename may seed besides the username. The stub backfill passes the
- * home's lookup answer. Identity resolution and hydration pass nothing:
- * hydration fills `displayName` itself (fill-empty), so seeding it here from
- * the bare username would keep the real display name out.
+ * A local part an older version (1.7.0 and earlier) gave a row whose handle
+ * was held: `<handle>_<n>` (n = 1..10) or `<handle>_<8 hex>`. It is also a
+ * valid handle, so only the row's home can say which it is.
  */
-export interface StubRenameSeed {
-  displayName?: string | null;
-  status?: UserStatus | null;
+const LEGACY_SUFFIXED_LOCAL_PART = /^[a-z0-9_]+_(?:[1-9]|10|[0-9a-f]{8})$/;
+
+/**
+ * Whether a row's name may be a pre-1.8 suffixed name (`kai_1@<domain>`) that
+ * its home should be asked about (`applyHomeHandle`). Replicas and accounts
+ * alike: re-attach gave accounts such names, the replica rule gave replicas.
+ */
+export function mayCarryLegacySuffix(user: UserRow): boolean {
+  if (!user.homeInstance || !user.homeUserId || user.federationHomeOrphaned === 1) return false;
+  const localPart = localPartOf(user);
+  return localPart !== null && LEGACY_SUFFIXED_LOCAL_PART.test(localPart);
+}
+
+/**
+ * The handle a row's user has on their home, as far as this instance knows it,
+ * or null when it does not know one. This is what every relayed profile
+ * snapshot carries as `username`: a receiver names and labels its own row
+ * from it (`handleFromHint`), so it is never this instance's row name.
+ *   - A native user: the username, which is the handle.
+ *   - A row homed elsewhere: the local part of `<local>@<homeInstance>`; for a
+ *     suffixed name (`kai~1`) the handle it was named for.
+ *   - A placeholder name (`<homeUserId>@<domain>`, a display name) or a name
+ *     that does not end in the row's domain: null.
+ * A tombstoned row is never asked: snapshot builders ship `deleted` instead.
+ */
+export function relayHandleOf(
+  user: Pick<UserRow, 'username' | 'homeInstance' | 'homeUserId'>,
+): string | null {
+  if (!user.homeInstance) return handleFromHint(user.username);
+  const suffix = `@${user.homeInstance}`.toLowerCase();
+  const username = user.username.toLowerCase();
+  if (!username.endsWith(suffix)) return null;
+  const localPart = username.slice(0, username.length - suffix.length);
+  if (user.homeUserId && localPart === user.homeUserId.toLowerCase()) return null;
+  return suffixedHandleOf(localPart) ?? handleFromHint(localPart);
+}
+
+/** What `applyHomeHandle` wrote: the row, and a replica that moved aside for it. */
+export interface HomeHandleResult {
+  user: UserRow;
+  moved: UserRow | null;
+}
+
+/**
+ * Name a row after the handle its home just reported for it, answering a
+ * by-home-id lookup of this row's own `homeUserId`. Only the home's answer
+ * comes here, never a relayed hint: an answer reports the handle of the id
+ * asked about, while a hint only claims one.
+ *   - A replica (`isRenameableReplica`) takes the first free name for the
+ *     handle (`firstFreeUsername`, itself when it already has it): a
+ *     placeholder, a pre-1.8 `_<n>` name or another stale name is replaced,
+ *     a `~<n>` name moves earlier when it can.
+ *   - A federated account takes exactly `<handle>@<domain>`
+ *     (`claimHandleName`); when that is held, it keeps its name and the
+ *     conflict is logged.
+ * Native and detached rows, and an answer that is not handle-shaped, change
+ * nothing. Logs each rename; announces nothing.
+ */
+export function applyHomeHandle(
+  user: UserRow,
+  homeUsername: string | null | undefined,
+  db: ReturnType<typeof getDb>,
+): HomeHandleResult {
+  const unchanged: HomeHandleResult = { user, moved: null };
+  const handle = handleFromHint(homeUsername);
+  if (!handle || !user.homeInstance || !user.homeUserId || user.federationHomeOrphaned === 1) return unchanged;
+
+  if (isRenameableReplica(user)) {
+    const username = firstFreeUsername(handle, user.homeInstance, db, user);
+    if (username === user.username) return unchanged;
+    db.update(schema.users).set({ username }).where(eq(schema.users.id, user.id)).run();
+    console.log(`[federation] Renamed replica ${user.id}: ${user.username} -> ${username} (its home reports ${handle})`);
+    return { user: { ...user, username }, moved: null };
+  }
+
+  const claim = claimHandleName(user, handle, user.homeInstance, db);
+  if (claim.kind === 'held') {
+    console.warn(`[federation] Account ${user.id} (${user.username}) keeps its name: ${handle}@${user.homeInstance} is held by ${claim.holderId}`);
+    return unchanged;
+  }
+  return { user: { ...user, username: claim.username }, moved: claim.moved };
 }
 
 /**
@@ -260,9 +336,7 @@ export interface StubRenameSeed {
  * the rename cannot loop between two rows.
  *
  * When another row already holds the name, the row takes the first free
- * suffixed name (`firstFreeUsername`), as creation does. With a `seed`, an
- * empty `displayName` is filled with `seed.displayName ?? username` and a
- * differing `status` is taken over.
+ * suffixed name (`firstFreeUsername`), as creation does.
  *
  * Announces nothing: `renamePlaceholderNamedStub` does, and hydration
  * announces once after it has filled the profile.
@@ -271,7 +345,6 @@ export function applyPlaceholderRename(
   user: UserRow,
   username: string | null | undefined,
   db: ReturnType<typeof getDb>,
-  seed?: StubRenameSeed,
 ): UserRow {
   if (!user.homeInstance) return user;
   const handle = handleFromHint(username);
@@ -281,18 +354,12 @@ export function applyPlaceholderRename(
   const newUsername = firstFreeUsername(handle, user.homeInstance, db, user);
   if (newUsername === user.username) return user;
 
-  const updates: { username: string; displayName?: string; status?: UserStatus } = { username: newUsername };
-  if (seed) {
-    if (!user.displayName) updates.displayName = seed.displayName ?? handle;
-    if (seed.status && seed.status !== user.status) updates.status = seed.status;
-  }
-
   db.update(schema.users)
-    .set(updates)
+    .set({ username: newUsername })
     .where(eq(schema.users.id, user.id))
     .run();
   console.log(`[federation] Renamed stub ${user.id}: ${user.username} -> ${newUsername}`);
-  return { ...user, ...updates };
+  return { ...user, username: newUsername };
 }
 
 /**
@@ -311,16 +378,15 @@ export function announceUserUpdated(user: UserRow): void {
 /**
  * `applyPlaceholderRename`, then `announceUserUpdated` when the row was
  * renamed. For callers that do not hydrate the row afterwards (identity
- * resolution, the stub backfill); a caller that hydrates next announces again
+ * resolution); a caller that hydrates next announces again
  * once the profile is filled.
  */
 export function renamePlaceholderNamedStub(
   user: UserRow,
   username: string | null | undefined,
   db: ReturnType<typeof getDb>,
-  seed?: StubRenameSeed,
 ): UserRow {
-  const renamed = applyPlaceholderRename(user, username, db, seed);
+  const renamed = applyPlaceholderRename(user, username, db);
   if (renamed !== user) announceUserUpdated(renamed);
   return renamed;
 }

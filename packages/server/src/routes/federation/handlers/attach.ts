@@ -2,7 +2,8 @@ import path from 'node:path';
 import { config } from '../../../config.js';
 import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { authenticate } from '../../../utils/auth.js';
-import { fetchHomeProfileByHomeId, verifyAttachProofWithPeer } from '../../../utils/federationAttach.js';
+import { verifyAttachProofWithPeer } from '../../../utils/federationAttach.js';
+import { lookupRemoteUserByHomeId } from '../../../utils/federationLookup.js';
 import { sendSignedJson } from './signedResponse.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js';
@@ -12,7 +13,7 @@ import type { DmChannel } from '@backspace/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { extractDomain } from '../identity.js';
-import { downloadProfileAsset } from '../profile.js';
+import { applyHomeProfile, homeProfileFromAnswer } from '../profile.js';
 import { isLookupRateLimited } from '../rateLimits.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 import { reconcileDmChannelFederatedId, type DmReconcileResult } from '../../../utils/dmConversation.js';
@@ -266,27 +267,13 @@ export function registerAttachRoutes(app: FastifyInstance): void {
     }
     if (movedReplica) announceUserUpdated(movedReplica);
 
-    // Best-effort initial profile pull (spec §3.2 step 4). Failure is fine — the
-    // account is re-attached; the next relay fills the profile.
-    const home = await fetchHomeProfileByHomeId(peerRow, verified.homeUserId);
-    if (home) {
-      let avatar: string | null = null;
-      let banner: string | null = null;
-      if (home.profile.avatar) {
-        const url = home.profile.avatar.startsWith('http') ? home.profile.avatar : `${peerRow.origin}/api/uploads/${home.profile.avatar}`;
-        avatar = (await downloadProfileAsset(url, peerRow.origin)) ?? url;
-      }
-      if (home.profile.banner) {
-        const url = home.profile.banner.startsWith('http') ? home.profile.banner : `${peerRow.origin}/api/uploads/${home.profile.banner}`;
-        banner = (await downloadProfileAsset(url, peerRow.origin)) ?? url;
-      }
-      db.update(schema.users).set({
-        displayName: home.profile.displayName ?? home.username,
-        avatar,
-        banner,
-        avatarColor: home.profile.avatarColor ?? detached.avatarColor,
-        bio: home.profile.bio,
-      }).where(eq(schema.users.id, detached.id)).run();
+    // Best-effort initial profile pull (spec §3.2 step 4), applied as the
+    // home's profile (`applyHomeProfile`). Failure is fine: the account is
+    // re-attached, and the next profile_update or activation pass fills it.
+    const home = await lookupRemoteUserByHomeId(peerRow.origin, verified.homeUserId).catch(() => null);
+    if (home?.ok && home.homeUserId === verified.homeUserId) {
+      const rebound = db.select().from(schema.users).where(eq(schema.users.id, detached.id)).get();
+      if (rebound) await applyHomeProfile(rebound, homeProfileFromAnswer(home), peerRow.origin, db);
     }
 
     const updated = db.select().from(schema.users).where(eq(schema.users.id, detached.id)).get()!;

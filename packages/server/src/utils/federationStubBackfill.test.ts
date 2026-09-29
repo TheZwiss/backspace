@@ -55,13 +55,15 @@ function applyMigrations(db: Database.Database): void {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   sqlite = new Database(':memory:');
   testDb = drizzle(sqlite, { schema });
   applyMigrations(sqlite);
   lookupCalls.length = 0;
   lookupResponses.clear();
   realLookup = false;
+  const { _resetHomeRecordPulls } = await import('./federationStubBackfill.js');
+  _resetHomeRecordPulls();
   vi.unstubAllGlobals();
   // Active peer
   testDb.insert(schema.federationPeers).values({
@@ -104,7 +106,7 @@ describe('backfillStubUsernamesForPeer', () => {
     expect(row!.displayName).toBe('pbtest3'); // displayName ?? username fallback fills in real handle
   });
 
-  it('skips stubs whose username is already human-readable (no lookup triggered)', async () => {
+  it('skips stubs with their real name and a profile version (no lookup triggered)', async () => {
     testDb.insert(schema.users).values({
       id: 'stub-1',
       username: 'pbtest3@orbit.ddns.net',  // already migrated
@@ -114,6 +116,7 @@ describe('backfillStubUsernamesForPeer', () => {
       isAdmin: 0,
       homeInstance: 'orbit.ddns.net',
       homeUserId: 'home-1',
+      profileUpdatedAt: 1000, // the home's profile already applied
       createdAt: Date.now(),
     }).run();
 
@@ -239,6 +242,116 @@ describe('backfillStubUsernamesForPeer', () => {
     await backfillStubUsernamesForPeer('https://orbit.ddns.net');
 
     expect(lookupCalls).toEqual([]); // gated on peer status
+  });
+});
+
+describe('backfillStubUsernamesForPeer: names from before 1.8 and profiles without a version', () => {
+  const DOMAIN = 'orbit.ddns.net';
+  const ORIGIN = 'https://orbit.ddns.net';
+
+  function seed(values: Partial<typeof schema.users.$inferInsert> & { id: string; username: string; homeUserId: string }): void {
+    testDb.insert(schema.users).values({
+      passwordHash: '!federation-replicated',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: DOMAIN,
+      profileUpdatedAt: 1000,
+      createdAt: 1,
+      ...values,
+    }).run();
+  }
+
+  function answer(homeUserId: string, username: string, profile: Record<string, unknown> = {}): unknown {
+    return {
+      ok: true,
+      homeUserId,
+      username,
+      profile: { displayName: null, avatar: null, avatarColor: null, banner: null, bio: null, ...profile },
+    };
+  }
+
+  function nameOf(id: string): string {
+    return testDb.select().from(schema.users).where(eq(schema.users.id, id)).get()!.username;
+  }
+
+  async function runPass(): Promise<void> {
+    const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+    await backfillStubUsernamesForPeer(ORIGIN);
+  }
+
+  it('renames a replica an older version suffixed with _<n> to the handle its home reports', async () => {
+    seed({ id: 'r-1', username: `kai_1@${DOMAIN}`, homeUserId: '111' });
+    lookupResponses.set('111', answer('111', 'kai'));
+
+    await runPass();
+
+    expect(nameOf('r-1')).toBe(`kai@${DOMAIN}`);
+  });
+
+  it('an account an older re-attach suffixed takes its handle; a replica of another identity moves aside', async () => {
+    seed({ id: 'acc', username: `kai_1@${DOMAIN}`, homeUserId: '111', passwordHash: 'real-hash' });
+    seed({ id: 'stale', username: `kai@${DOMAIN}`, homeUserId: '999' });
+    lookupResponses.set('111', answer('111', 'kai'));
+    lookupResponses.set('999', { ok: false, reason: 'not_found' });
+
+    await runPass();
+
+    expect(nameOf('acc')).toBe(`kai@${DOMAIN}`);
+    expect(nameOf('stale')).toBe(`kai~1@${DOMAIN}`);
+  });
+
+  it('an account keeps its suffixed name while another account signs in with the handle', async () => {
+    seed({ id: 'acc', username: `kai_1@${DOMAIN}`, homeUserId: '111', passwordHash: 'real-hash' });
+    seed({ id: 'other', username: `kai@${DOMAIN}`, homeUserId: '999', passwordHash: 'other-hash' });
+    lookupResponses.set('111', answer('111', 'kai'));
+
+    await runPass();
+
+    expect(nameOf('acc')).toBe(`kai_1@${DOMAIN}`);
+    expect(nameOf('other')).toBe(`kai@${DOMAIN}`);
+  });
+
+  it('a real handle that looks suffixed stays, and is asked about once per process', async () => {
+    seed({ id: 'r-1', username: `kai_1@${DOMAIN}`, homeUserId: '111' });
+    lookupResponses.set('111', answer('111', 'kai_1'));
+
+    await runPass();
+    await runPass();
+
+    expect(nameOf('r-1')).toBe(`kai_1@${DOMAIN}`);
+    expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111']);
+  });
+
+  it('a relayed hint never renames a _<n> row; only the home answer does', async () => {
+    seed({ id: 'r-1', username: `kai_1@${DOMAIN}`, homeUserId: '111' });
+    const { resolveOrCreateReplicatedUser } = await import('../routes/federation.js');
+
+    resolveOrCreateReplicatedUser('111', DOMAIN, testDb, { username: 'kai' });
+
+    expect(nameOf('r-1')).toBe(`kai_1@${DOMAIN}`);
+  });
+
+  it('a row without a profile version takes the home profile over what it holds', async () => {
+    seed({ id: 'r-1', username: `kai@${DOMAIN}`, homeUserId: '111', profileUpdatedAt: null, avatarColor: 'rose', displayName: 'Old' });
+    lookupResponses.set('111', answer('111', 'kai', { avatarColor: 'mint', displayName: 'Kai', profileUpdatedAt: 5000 }));
+
+    await runPass();
+
+    const stored = testDb.select().from(schema.users).where(eq(schema.users.id, 'r-1')).get()!;
+    expect(stored.avatarColor).toBe('mint');
+    expect(stored.displayName).toBe('Kai');
+    expect(stored.profileUpdatedAt).toBe(5000);
+  });
+
+  it('stops at the first rate-limited answer', async () => {
+    seed({ id: 'r-1', username: `ann@${DOMAIN}`, homeUserId: '111', profileUpdatedAt: null });
+    seed({ id: 'r-2', username: `ben@${DOMAIN}`, homeUserId: '222', profileUpdatedAt: null });
+    lookupResponses.set('111', { ok: false, reason: 'rate_limited', retryAfter: 60 });
+    lookupResponses.set('222', answer('222', 'ben', { profileUpdatedAt: 5000 }));
+
+    await runPass();
+
+    expect(lookupCalls).toHaveLength(1);
   });
 });
 

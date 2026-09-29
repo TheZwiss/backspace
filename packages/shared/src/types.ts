@@ -1493,6 +1493,12 @@ export interface FederationUserLookupProfile {
   // Carried so the requester can seed the stub's status at creation time.
   // Optional for backwards compat with peers that pre-date the field.
   status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
+  // `/users/by-home-id` only, from homes that send it: the profile's version
+  // (the value `profile_update` carries; a never-edited profile is at its
+  // account's creation time) and the accent colour, so the answer can be
+  // applied like a `profile_update`. Absent from older homes.
+  profileUpdatedAt?: number | null;
+  accentColor?: string | null;
 }
 
 export type FederationUserLookupResponse =
