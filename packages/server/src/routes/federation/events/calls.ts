@@ -7,8 +7,30 @@ import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
 import type { DmRoomMeta, FederatedCallEntry } from '../../../ws/handler.js';
-import type { DmCallUndeliverableFailure, FederationRelayEvent, ServerEvent } from '@backspace/shared';
+import type { DmCallUndeliverableFailure, FederationCallPayload, FederationRelayEvent, ServerEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
+
+/**
+ * The call's tokens by the local user each is for. A token names its holder
+ * by federated identity (`memberTokens`), resolved here with
+ * `resolveRelayActor`. From an older sender, which keys `tokens` by home user
+ * id alone and only for members the receiving instance homes, each key is a
+ * user homed here. A holder that resolves to no local user gets nothing.
+ */
+function callTokensByLocalUser(
+  call: FederationCallPayload,
+  db: ReturnType<typeof getDb>,
+): Map<string, string> {
+  const holders = call.memberTokens
+    ?? Object.entries(call.tokens ?? {}).map(([homeUserId, token]) => ({ homeUserId, homeInstance: getOurOrigin(), token }));
+  const byLocalUser = new Map<string, string>();
+  for (const holder of holders) {
+    if (typeof holder?.homeUserId !== 'string' || typeof holder.homeInstance !== 'string' || typeof holder.token !== 'string') continue;
+    const resolved = resolveRelayActor({ homeUserId: holder.homeUserId, homeInstance: holder.homeInstance }, db);
+    if (resolved.kind === 'found') byLocalUser.set(resolved.user.id, holder.token);
+  }
+  return byLocalUser;
+}
 
 export function processDmCallStartEvent(
   event: FederationRelayEvent,
@@ -51,25 +73,20 @@ export function processDmCallStartEvent(
   }
 
   const ringedUserIds: string[] = [];
+  const tokens = callTokensByLocalUser(event.call, db);
 
   if (channel) {
     // ── Path A: DM exists locally ──
     const localDmChannelId = channel.id;
 
-    const localMembers = db.select({
-      userId: schema.dmMembers.userId,
-      homeUserId: schema.users.homeUserId,
-      homeInstance: schema.users.homeInstance,
-    })
+    const localMembers = db.select({ userId: schema.dmMembers.userId })
       .from(schema.dmMembers)
-      .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
       .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
       .all();
 
     for (const member of localMembers) {
-      const homeUserId = member.homeUserId || member.userId;
-      // Bug 1 fix: don't ring the caller on this instance
-      if (homeUserId === event.call.caller.homeUserId) continue;
+      // Don't ring the caller on this instance.
+      if (member.userId === callerStub.id) continue;
 
       // #18: skip offline members. Entry-vs-no-entry decision uses the same
       // connection-count signal Path B has always used — keeps the two paths
@@ -81,7 +98,7 @@ export function processDmCallStartEvent(
       // own home instance, not by us — without a token there is nothing to ring
       // them with, so skip rather than dispatch an unusable `dm_call_incoming`.
       // Mirrors the same guard on Path B below.
-      const token = event.call!.tokens![homeUserId];
+      const token = tokens.get(member.userId);
       if (!token) continue;
 
       connectionManager.sendToUser(member.userId, {
@@ -112,7 +129,7 @@ export function processDmCallStartEvent(
       callerHomeUserId: event.call.caller.homeUserId,
       federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
       livekitUrl: event.call.livekitUrl,
-      tokens: new Map(Object.entries(event.call.tokens)),
+      tokens,
       ringedUserIds,
       state: 'ringing',
       startedAt: Date.now(),
@@ -138,7 +155,7 @@ export function processDmCallStartEvent(
       }
 
       // Strict identity resolution: homeUserId is only unique within its homeInstance
-      const localUser = db.select({ id: schema.users.id, homeUserId: schema.users.homeUserId })
+      const localUser = db.select({ id: schema.users.id })
         .from(schema.users)
         .where(
           or(
@@ -163,8 +180,7 @@ export function processDmCallStartEvent(
       const connections = connectionManager.getUserConnections(localUser.id);
       if (connections.size === 0) continue;
 
-      const homeUserId = localUser.homeUserId || localUser.id;
-      const token = event.call!.tokens![homeUserId];
+      const token = tokens.get(localUser.id);
       if (!token) continue;
 
       connectionManager.sendToUser(localUser.id, {
@@ -196,7 +212,7 @@ export function processDmCallStartEvent(
       callerHomeUserId: event.call.caller.homeUserId,
       federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
       livekitUrl: event.call.livekitUrl,
-      tokens: new Map(Object.entries(event.call.tokens)),
+      tokens,
       ringedUserIds,
       state: 'ringing',
       startedAt: Date.now(),

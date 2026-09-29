@@ -65,7 +65,7 @@ export interface FederatedCallEntry {
   callerHomeUserId: string;
   federatedCallHost: string;      // peer origin of the host instance
   livekitUrl: string;
-  tokens: Map<string, string>;    // homeUserId → LiveKit token
+  tokens: Map<string, string>;    // local userId → LiveKit token minted for them (`callTokensByLocalUser`)
   ringedUserIds: string[];        // local userIds that received dm_call_incoming
   state: 'ringing' | 'active';
   startedAt: number;
@@ -1568,13 +1568,6 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Resolve this user's homeUserId for token lookup
-  const readyUser = db.select({ homeUserId: schema.users.homeUserId })
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .get();
-  const myHomeUserId = readyUser?.homeUserId || userId;
-
   // Also include federated calls (this instance is NOT the host)
   for (const [_fedId, fedCall] of connectionManager.getAllFederatedCalls()) {
     const isParticipant = fedCall.ringedUserIds.includes(userId);
@@ -1589,7 +1582,7 @@ function buildReadyPayload(userId: string): {
         state: fedCall.state,
         federatedCallHost: fedCall.federatedCallHost,
         livekitUrl: fedCall.livekitUrl,
-        livekitToken: fedCall.tokens.get(myHomeUserId),
+        livekitToken: fedCall.tokens.get(userId),
       });
     }
   }

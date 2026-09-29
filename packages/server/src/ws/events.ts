@@ -1860,11 +1860,17 @@ async function sendFederatedCallStart(
    * needs it for Path B identity matching when the DM has no local row yet.
    */
   const buildRelayEvent = async (recipients: typeof members) => {
+    // `tokens` (by home user id) is for receivers that predate `memberTokens`,
+    // which names each holder with its home instance (FederationCallPayload).
     const tokens: Record<string, string> = {};
+    const memberTokens: Array<{ homeUserId: string; homeInstance: string; token: string }> = [];
     for (const m of recipients) {
       const homeUserId = m.homeUserId || m.userId;
       const name = m.displayName || m.username;
-      tokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
+      const token = await generateFederatedCallToken(federatedId, homeUserId, name);
+      tokens[homeUserId] = token;
+      const homeInstance = canonicalizeHomeInstance(m.homeInstance);
+      if (homeInstance) memberTokens.push({ homeUserId, homeInstance, token });
     }
     return {
       eventType: 'dm_call_start' as const,
@@ -1875,6 +1881,7 @@ async function sendFederatedCallStart(
       call: {
         livekitUrl,
         tokens,
+        memberTokens,
         caller: {
           homeUserId: callerHomeUserId,
           homeInstance: ourOrigin,

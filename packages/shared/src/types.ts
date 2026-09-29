@@ -1227,6 +1227,13 @@ export interface FederationRelayEvent {
 export interface FederationCallPayload {
   livekitUrl?: string;
   tokens?: Record<string, string>;  // homeUserId → LiveKit token
+  /**
+   * The same tokens with each holder's federated identity. Optional: older
+   * senders omit it, and every key of `tokens` is then a user homed on the
+   * receiving instance. A receiver gives a token only to the local user its
+   * identity resolves to; a home user id alone is unique only where issued.
+   */
+  memberTokens?: Array<{ homeUserId: string; homeInstance: string; token: string }>;
   caller?: { homeUserId: string; homeInstance: string; displayName: string };
   acceptor?: { homeUserId: string; homeInstance: string };
   rejector?: { homeUserId: string; homeInstance: string };
