@@ -10,7 +10,7 @@ vi.mock('../hooks/useWebSocket', () => ({
   disconnectAllRemote: vi.fn(),
 }));
 
-import { selectMyChosenStatus, useAuthStore } from './authStore';
+import { selectMyChosenStatus, useAuthStore, TRUE_HOME_STATUS_MAX_AGE_MS } from './authStore';
 import { useInstanceStore } from './instanceStore';
 import { api } from '../api/client';
 
@@ -115,5 +115,51 @@ describe("a replicated session's chosen status before the true home reports", ()
 
     expect(useAuthStore.getState().trueHomeStatus).toBeNull();
     expect(selectMyChosenStatus(useAuthStore.getState())).toBe('idle');
+  });
+
+  it('stops standing in for the true home once it is older than the maximum age (#325)', async () => {
+    const reportedAt = new Date('2026-09-28T08:00:00Z').getTime();
+    vi.useFakeTimers({ now: reportedAt, toFake: ['Date'] });
+    try {
+      useAuthStore.setState({ user: erinHere });
+      useAuthStore.getState().applyOwnStatus({ owner: 'trueHome', status: 'dnd' });
+
+      vi.setSystemTime(reportedAt + TRUE_HOME_STATUS_MAX_AGE_MS + 1);
+      reload();
+      vi.spyOn(api.users, 'me').mockResolvedValue(erinHere);
+      await useAuthStore.getState().loadUser();
+
+      expect(selectMyChosenStatus(useAuthStore.getState())).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still stands in just before the maximum age', async () => {
+    const reportedAt = new Date('2026-09-28T08:00:00Z').getTime();
+    vi.useFakeTimers({ now: reportedAt, toFake: ['Date'] });
+    try {
+      useAuthStore.setState({ user: erinHere });
+      useAuthStore.getState().applyOwnStatus({ owner: 'trueHome', status: 'dnd' });
+
+      vi.setSystemTime(reportedAt + TRUE_HOME_STATUS_MAX_AGE_MS - 1);
+      reload();
+      vi.spyOn(api.users, 'me').mockResolvedValue(erinHere);
+      await useAuthStore.getState().loadUser();
+
+      expect(selectMyChosenStatus(useAuthStore.getState())).toBe('dnd');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a value kept without its report time (an earlier version kept only the status)', async () => {
+    localStorage.setItem('backspace_true_home_status:nova.example:erin-nova', 'dnd');
+
+    reload();
+    vi.spyOn(api.users, 'me').mockResolvedValue(erinHere);
+    await useAuthStore.getState().loadUser();
+
+    expect(selectMyChosenStatus(useAuthStore.getState())).toBeNull();
   });
 });

@@ -87,6 +87,20 @@ function resetUserStores() {
 const TRUE_HOME_STATUS_KEY_PREFIX = 'backspace_true_home_status';
 
 /**
+ * How long a kept true-home report stands in for the true home. Past it the
+ * choice is unknown until the true home reports: a Do Not Disturb kept from
+ * days ago must not keep alerts silent after the user changed it elsewhere
+ * (#325).
+ */
+export const TRUE_HOME_STATUS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** What is kept: the status the true home reported and when it did. */
+interface KeptTrueHomeStatus {
+  status: ChosenUserStatus;
+  reportedAt: number;
+}
+
+/**
  * Where this device keeps the last status a true home reported, keyed by the
  * home account (host and user id there), so every session of that account on
  * any instance starts from it. Null for a session that owns its own choice.
@@ -97,19 +111,36 @@ function trueHomeStatusStorageKey(user: User | null): string | null {
   return `${TRUE_HOME_STATUS_KEY_PREFIX}:${authority.host}:${authority.userId}`;
 }
 
+function parseKeptStatus(stored: string | null): KeptTrueHomeStatus | null {
+  if (!stored) return null;
+  try {
+    const value: unknown = JSON.parse(stored);
+    if (typeof value !== 'object' || value === null) return null;
+    const { status, reportedAt } = value as Record<string, unknown>;
+    if (!isChosenUserStatus(status) || typeof reportedAt !== 'number' || !Number.isFinite(reportedAt)) return null;
+    return { status, reportedAt };
+  } catch {
+    // A value from before the report time was kept (a bare status) has no
+    // age, so it cannot be trusted: unknown.
+    return null;
+  }
+}
+
 /**
- * The last status the true home reported to this device, or null when there is
- * none (or storage cannot be read). It stands in until the true home's first
- * report in this page arrives, so Do Not Disturb holds from page load instead
- * of from the moment the home connection is up (activity-presence.md, "The
- * client's copy of the user's own status").
+ * The last status the true home reported to this device, when that report is
+ * at most `TRUE_HOME_STATUS_MAX_AGE_MS` old; null otherwise (or when storage
+ * cannot be read). It stands in until the true home's first report in this
+ * page arrives, which always wins (activity-presence.md, "The client's copy of
+ * the user's own status").
  */
-function lastTrueHomeStatus(user: User | null): ChosenUserStatus | null {
+function lastTrueHomeStatus(user: User | null, now: number = Date.now()): ChosenUserStatus | null {
   const key = trueHomeStatusStorageKey(user);
   if (!key) return null;
   try {
-    const stored = localStorage.getItem(key);
-    return isChosenUserStatus(stored) ? stored : null;
+    const kept = parseKeptStatus(localStorage.getItem(key));
+    if (!kept) return null;
+    const age = now - kept.reportedAt;
+    return age >= 0 && age <= TRUE_HOME_STATUS_MAX_AGE_MS ? kept.status : null;
   } catch {
     return null;
   }
@@ -118,8 +149,9 @@ function lastTrueHomeStatus(user: User | null): ChosenUserStatus | null {
 function rememberTrueHomeStatus(user: User | null, status: ChosenUserStatus): void {
   const key = trueHomeStatusStorageKey(user);
   if (!key) return;
+  const kept: KeptTrueHomeStatus = { status, reportedAt: Date.now() };
   try {
-    localStorage.setItem(key, status);
+    localStorage.setItem(key, JSON.stringify(kept));
   } catch {
     // Storage unavailable (private window, quota): the next page load starts
     // unknown until the true home reports, as it did before this was kept.
