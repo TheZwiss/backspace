@@ -5,7 +5,7 @@ import {
   createDm,
   readDb,
   withWritableDb,
-  waitUntil,
+  waitForRelay,
   settleRelays,
   type PeeredHarness,
 } from './helpers/federationE2E.js';
@@ -148,8 +148,9 @@ beforeAll(async () => {
     const group = await gRes.json() as { id: string };
 
     ws.send({ type: 'dm_call_start', dmChannelId: group.id });
-    const relayed = await waitUntil(() => callStarts(tapB).length > 0 && callStarts(tapC).length > 0);
-    if (!relayed) throw new Error('federated dm_call_start never reached B and C');
+    await waitForRelay(() => callStarts(tapB).length > 0 && callStarts(tapC).length > 0, {
+      sender: A, receiver: B, peerOrigin: tapB.origin, what: 'the federated dm_call_start at both B and C',
+    });
     // Give a stray broadcast several more outbox ticks to show up at D.
     await settleRelays();
   } finally {

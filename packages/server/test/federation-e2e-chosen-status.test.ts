@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import {
   bootTransportPeered,
   readDb,
+  waitForRelay,
   waitUntil,
   withWritableDb,
   type PeeredHarness,
@@ -140,7 +141,9 @@ describe('chosen status (#298 follow-up)', () => {
   });
 
   it("relays the chosen status, so the peer's copy of dana shows dnd", async () => {
-    expect(await waitUntil(() => statusRow(B, danaOnB.id)?.status === 'dnd', 15_000)).toBe(true);
+    await waitForRelay(() => statusRow(B, danaOnB.id)?.status === 'dnd', {
+      sender: A, receiver: B, what: "dnd on B's copy of dana",
+    });
   });
 
   it("keeps the home projection when dana's own connection to the peer authenticates", async () => {
@@ -157,7 +160,9 @@ describe('chosen status (#298 follow-up)', () => {
     expect(statusRow(B, danaOnB.id)?.status).toBe('dnd');
     const res = await setStatus(A, danaOnA, 'idle');
     expect(res.status).toBe(200);
-    expect(await waitUntil(() => statusRow(B, danaOnB.id)?.status === 'idle', 15_000)).toBe(true);
+    await waitForRelay(() => statusRow(B, danaOnB.id)?.status === 'idle', {
+      sender: A, receiver: B, what: "idle on B's copy of dana, set over REST on A",
+    });
     // The relay moves the live column only; the peer's chosen_status copy (the
     // decoy planted above) is not written.
     expect(statusRow(B, danaOnB.id)?.chosen).toBe('online');

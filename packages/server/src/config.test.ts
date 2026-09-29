@@ -37,3 +37,37 @@ describe('config.directory.endpoint', () => {
     expect(config.directory.endpoint).toBe('https://x.test');
   });
 });
+
+describe('config.federation.backoffDivisor', () => {
+  const savedDivisor = process.env.FEDERATION_BACKOFF_DIVISOR;
+
+  beforeEach(() => {
+    delete process.env.FEDERATION_BACKOFF_DIVISOR;
+  });
+
+  afterEach(() => {
+    if (savedDivisor === undefined) delete process.env.FEDERATION_BACKOFF_DIVISOR;
+    else process.env.FEDERATION_BACKOFF_DIVISOR = savedDivisor;
+  });
+
+  it('is 1, the production schedule, when FEDERATION_BACKOFF_DIVISOR is unset', async () => {
+    const config = await loadConfig();
+    expect(config.federation.backoffDivisor).toBe(1);
+  });
+
+  it('takes a whole number of at least 1', async () => {
+    process.env.FEDERATION_BACKOFF_DIVISOR = '30';
+    const config = await loadConfig();
+    expect(config.federation.backoffDivisor).toBe(30);
+  });
+
+  it('refuses 0, which would make every retry wait infinite', async () => {
+    process.env.FEDERATION_BACKOFF_DIVISOR = '0';
+    await expect(loadConfig()).rejects.toThrow(/FEDERATION_BACKOFF_DIVISOR/);
+  });
+
+  it('refuses a fraction, which would lengthen the waits', async () => {
+    process.env.FEDERATION_BACKOFF_DIVISOR = '0.5';
+    await expect(loadConfig()).rejects.toThrow(/FEDERATION_BACKOFF_DIVISOR/);
+  });
+});

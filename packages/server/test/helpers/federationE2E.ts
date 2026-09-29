@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import type { FederationRelayEvent, FederationRelayResponse } from '@backspace/shared';
 import {
   bootHomePlusRemotes,
+  readInstanceLog,
   type BootOptions,
   type SpawnedInstance,
 } from './twoInstanceHarness.js';
@@ -328,6 +329,191 @@ export async function waitUntil(
     if (Date.now() >= deadline) return false;
     await new Promise(r => setTimeout(r, intervalMs));
   }
+}
+
+/** What a relay wait is about, for `waitForRelay` and its failure report. */
+export interface RelayWait {
+  /** The instance whose outbox worker sends the relay. */
+  sender: SpawnedInstance;
+  /** The instance the relay should land on. */
+  receiver: SpawnedInstance;
+  /**
+   * The origin the sender addresses the receiver by, when that is not
+   * `receiver.origin` (a suite that peers through a `RelayTap` passes the tap's
+   * origin). Only used to point the report at the right peer row.
+   */
+  peerOrigin?: string;
+  /** What should have arrived, in words: the first line of the failure. */
+  what: string;
+  /** Default 15 s: many outbox ticks, well inside every suite's test timeout. */
+  timeoutMs?: number;
+}
+
+/**
+ * Poll `check` until the relay it describes has landed. On timeout, throw an
+ * error that carries `describeRelayState`, so a CI failure says where the
+ * relay stopped instead of only that it did.
+ *
+ * Use this for every wait on a relay the outbox worker delivers; a bare
+ * `waitUntil` is for waits that involve no worker.
+ */
+export async function waitForRelay(
+  check: () => boolean | Promise<boolean>,
+  wait: RelayWait,
+): Promise<void> {
+  const timeoutMs = wait.timeoutMs ?? 15_000;
+  if (await waitUntil(check, timeoutMs)) return;
+  throw new Error(
+    `Relay did not arrive within ${timeoutMs} ms: ${wait.what}\n\n${await describeRelayState(wait)}`,
+  );
+}
+
+/**
+ * How many outbox rows `sender` holds for the peer it knows as `peerOrigin`.
+ * A row leaves the outbox when the peer accepts it or rejects it terminally,
+ * and stays while it is on the wire, so zero means every relay to that peer
+ * has been sent AND settled.
+ */
+export function outboxRowCount(sender: SpawnedInstance, peerOrigin: string): number {
+  return readDb(sender, db =>
+    (db.prepare(`
+      SELECT COUNT(*) AS n FROM federation_outbox o
+      JOIN federation_peers p ON p.id = o.peer_id
+      WHERE p.origin = ?
+    `).get(peerOrigin) as { n: number }).n,
+  );
+}
+
+/**
+ * Wait until `sender` has nothing queued or in flight for the receiver. For a
+ * test that must start from a quiet link, for example before holding the
+ * peer's answers at a tap.
+ */
+export async function waitForOutboxDrained(wait: RelayWait): Promise<void> {
+  const peerOrigin = wait.peerOrigin ?? wait.receiver.origin;
+  await waitForRelay(() => outboxRowCount(wait.sender, peerOrigin) === 0, wait);
+}
+
+/** Lines of each instance's log a failure report quotes. */
+const REPORT_LOG_LINES = 40;
+/** A log line is cut here, so one request dump cannot drown the report. */
+const REPORT_LINE_CHARS = 400;
+
+function relativeTime(at: number | null, now: number): string {
+  if (at === null) return 'never';
+  const seconds = ((at - now) / 1000).toFixed(1);
+  return at >= now ? `in ${seconds}s` : `${seconds.replace('-', '')}s ago`;
+}
+
+/**
+ * One log line, readable: Fastify's JSON request records become
+ * `<time> <reqId> POST /api/federation/relay` and `<time> <reqId> -> 200 (2ms)`;
+ * the worker's own plain lines are kept as they are.
+ */
+function condenseLogLine(line: string): string {
+  if (line.startsWith('{')) {
+    try {
+      const rec = JSON.parse(line) as {
+        time?: number; reqId?: string; msg?: string; responseTime?: number;
+        req?: { method?: string; url?: string }; res?: { statusCode?: number };
+      };
+      const at = typeof rec.time === 'number' ? new Date(rec.time).toISOString().slice(11, 23) : '';
+      if (rec.req) return `${at} ${rec.reqId ?? ''} ${rec.req.method ?? ''} ${rec.req.url ?? ''}`;
+      if (rec.res) {
+        const ms = typeof rec.responseTime === 'number' ? ` (${rec.responseTime.toFixed(0)}ms)` : '';
+        return `${at} ${rec.reqId ?? ''} -> ${rec.res.statusCode ?? '?'}${ms}`;
+      }
+      return `${at} ${rec.msg ?? line}`;
+    } catch {
+      // Not JSON after all; quote it as written.
+    }
+  }
+  return line.length > REPORT_LINE_CHARS ? `${line.slice(0, REPORT_LINE_CHARS)} ...` : line;
+}
+
+function logTail(log: string): string {
+  const lines = log.split('\n').filter(line => line.trim() !== '');
+  const tail = lines.slice(-REPORT_LOG_LINES).map(condenseLogLine);
+  return tail.length > 0 ? tail.map(line => `    ${line}`).join('\n') : '    (empty)';
+}
+
+/**
+ * The sender's side of a relay, as text for a failure message:
+ * - every peer row it holds (status, failure counters, last seen/failed,
+ *   probe pacing), the receiver's marked;
+ * - every outbox row it holds for the receiver's peer row (event type,
+ *   entity, attempts, next retry, age), plus a count of rows for other peers.
+ *   The outbox has no delivered flag: a row is deleted when the peer accepts
+ *   it or rejects it terminally, so "no row" means nothing is waiting;
+ * - the tail of the sender's and the receiver's logs, where the worker writes
+ *   every failed attempt and every rejection with its reason. The logs live in
+ *   the run directory, which `cleanup()` deletes, so the tail is quoted here.
+ */
+export async function describeRelayState(wait: RelayWait): Promise<string> {
+  const { sender, receiver } = wait;
+  const peerOrigin = wait.peerOrigin ?? receiver.origin;
+  const now = Date.now();
+  const out: string[] = [];
+
+  try {
+    const peers = readDb(sender, db =>
+      db.prepare(`
+        SELECT id, origin, status, consecutive_failures AS failures,
+               consecutive_auth_failures AS authFailures, last_seen_at AS lastSeenAt,
+               last_failure_at AS lastFailureAt, probe_attempts AS probeAttempts,
+               last_probe_at AS lastProbeAt
+        FROM federation_peers ORDER BY origin
+      `).all() as {
+        id: string; origin: string; status: string; failures: number; authFailures: number;
+        lastSeenAt: number | null; lastFailureAt: number | null; probeAttempts: number;
+        lastProbeAt: number | null;
+      }[],
+    );
+    out.push(`Sender ${sender.domain} (${sender.origin}) peer rows:`);
+    if (peers.length === 0) out.push('  (none)');
+    for (const p of peers) {
+      out.push(
+        `  ${p.origin === peerOrigin ? '->' : '  '} ${p.origin} status=${p.status} ` +
+        `failures=${p.failures} authFailures=${p.authFailures} ` +
+        `lastSeen=${relativeTime(p.lastSeenAt, now)} lastFailure=${relativeTime(p.lastFailureAt, now)} ` +
+        `probeAttempts=${p.probeAttempts} lastProbe=${relativeTime(p.lastProbeAt, now)}`,
+      );
+    }
+
+    const target = peers.find(p => p.origin === peerOrigin);
+    const rows = readDb(sender, db =>
+      db.prepare(`
+        SELECT peer_id AS peerId, event_type AS eventType, context_type AS contextType,
+               entity_id AS entityId, attempts, next_retry_at AS nextRetryAt,
+               created_at AS createdAt
+        FROM federation_outbox ORDER BY created_at
+      `).all() as {
+        peerId: string; eventType: string; contextType: string; entityId: string;
+        attempts: number | null; nextRetryAt: number; createdAt: number;
+      }[],
+    );
+    const forPeer = target ? rows.filter(r => r.peerId === target.id) : [];
+    out.push(`Sender outbox rows for ${peerOrigin}${target ? '' : ' (the sender has NO peer row for this origin)'}:`);
+    if (forPeer.length === 0) {
+      out.push('  (none: nothing waiting; accepted and terminally rejected rows are deleted)');
+    }
+    for (const r of forPeer) {
+      out.push(
+        `  ${r.eventType} [${r.contextType}] entity=${r.entityId} attempts=${r.attempts ?? 0} ` +
+        `nextRetry=${relativeTime(r.nextRetryAt, now)} created=${relativeTime(r.createdAt, now)}`,
+      );
+    }
+    const others = rows.length - forPeer.length;
+    if (others > 0) out.push(`  (${others} more row(s) queued for other peers)`);
+  } catch (err) {
+    out.push(`Could not read ${sender.domain}'s database: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  for (const [role, inst] of [['Sender', sender], ['Receiver', receiver]] as const) {
+    out.push(`${role} ${inst.domain} log (${inst.logPath}, deleted at cleanup), last ${REPORT_LOG_LINES} lines:`);
+    out.push(logTail(await readInstanceLog(inst)));
+  }
+  return out.join('\n');
 }
 
 /**

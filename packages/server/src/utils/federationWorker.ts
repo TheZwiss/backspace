@@ -131,7 +131,16 @@ let recoveryAbortController: AbortController | null = null;
  */
 function getBackoffMs(attempt: number): number {
   const index = Math.min(attempt - 1, BACKOFF_SCHEDULE_MS.length - 1);
-  return BACKOFF_SCHEDULE_MS[Math.max(0, index)] ?? 86_400_000;
+  return retryWait(BACKOFF_SCHEDULE_MS[Math.max(0, index)] ?? 86_400_000);
+}
+
+/**
+ * A retry wait from the schedules above, as this instance uses it: divided by
+ * `config.federation.backoffDivisor` (1 in production; the two-instance test
+ * harness shortens the waits so a retried relay lands inside a test's wait).
+ */
+function retryWait(ms: number): number {
+  return Math.ceil(ms / config.federation.backoffDivisor);
 }
 
 /**
@@ -148,7 +157,7 @@ function isPeerAttemptDue(
 ): boolean {
   if (peer.lastProbeAt === null) return true;
   const interval = hasQueuedMail
-    ? RECOVERY_BACKOFF_MS[Math.min(peer.probeAttempts, RECOVERY_BACKOFF_MS.length - 1)]!
+    ? retryWait(RECOVERY_BACKOFF_MS[Math.min(peer.probeAttempts, RECOVERY_BACKOFF_MS.length - 1)]!)
     : HEALTH_CHECK_INTERVAL_MS;
   return now - peer.lastProbeAt >= interval;
 }

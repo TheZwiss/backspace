@@ -69,6 +69,21 @@ vi.mock('../utils/federationAuthFailure.js', () => ({
   AUTH_FAILURE_THRESHOLD: 5,
 }));
 
+// The real config, except that the retry divisor can be set per test.
+const federationConfig = vi.hoisted(() => ({ backoffDivisor: 1 }));
+vi.mock('../config.js', async (importActual) => {
+  const actual = await importActual<typeof import('../config.js')>();
+  return {
+    config: {
+      ...actual.config,
+      federation: {
+        ...actual.config.federation,
+        get backoffDivisor(): number { return federationConfig.backoffDivisor; },
+      },
+    },
+  };
+});
+
 const invokeRollbackMock = vi.fn();
 vi.mock('./federationRollback.js', () => ({
   invokePermanentFailureCallback: invokeRollbackMock,
@@ -689,5 +704,63 @@ describe('processRecoveryTick — demand-driven recovery', () => {
     await processRecoveryTick();
 
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('retry waits follow config.federation.backoffDivisor (#367)', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceEpoch();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    federationConfig.backoffDivisor = 1;
+    sqlite.close();
+  });
+
+  async function firstRetryWait(divisor: number): Promise<number> {
+    federationConfig.backoffDivisor = divisor;
+    seedPeer('peer-div');
+    seedOutboxEntry('e-div', 'peer-div', 'm-div');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 503 }));
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    const before = Date.now();
+    await processOutboxTick();
+    const row = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'e-div')).get()!;
+    return row.nextRetryAt - before;
+  }
+
+  it('waits the production 30 s after a first failure by default', async () => {
+    const wait = await firstRetryWait(1);
+    expect(wait).toBeGreaterThanOrEqual(30_000);
+    expect(wait).toBeLessThan(31_000);
+  });
+
+  it('divides that wait, as the test harness sets it', async () => {
+    const wait = await firstRetryWait(30);
+    expect(wait).toBeGreaterThanOrEqual(1_000);
+    expect(wait).toBeLessThan(2_000);
+  });
+
+  it("divides the pacing of an unreachable peer's recovery probe too", async () => {
+    federationConfig.backoffDivisor = 30;
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-rec', origin: 'https://peer.example', hmacSecret: 'secret',
+      status: 'unreachable', consecutiveFailures: 10, probeAttempts: 0, lastProbeAt: Date.now() - 5_000,
+      lastSyncedAt: Date.now(), createdAt: Date.now(),
+    }).run();
+    seedOutboxEntry('e-rec', 'peer-rec', 'm-rec');
+    // Probed 5 s ago: not due on the production 30 s pacing, due on 30 s / 30.
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    await processRecoveryTick();
+
+    expect(spy).toHaveBeenCalledWith('https://peer.example/api/instance/info', expect.anything());
   });
 });

@@ -481,9 +481,13 @@ Two harness profiles exist because production collapses three origins into one s
 | Profile | `PUBLIC_ORIGIN` | What it makes real | Suites |
 |---------|-----------------|--------------------|--------|
 | `bootIdentityPeered` | unset → `https://<DOMAIN>` | Distinct identity domains, so `extractDomain` can tell three instances apart. The handshake leaves the initiator a transport-keyed peer row and the responder an identity-keyed one, so **inbound** relay is fully real. | attribution, stub-claiming, reply-confinement |
-| `bootTransportPeered` | `http://127.0.0.1:<port>` | Identity == transport == peer key, so **outbound** routing (`getGroupDmTargetOrigins`, `sendCallRelay`) resolves to a live peer and the outbox worker really delivers. Federation workers and synthetic LiveKit credentials are enabled. | relay-scoping, call-addressing |
+| `bootTransportPeered` | `http://127.0.0.1:<port>` | Identity == transport == peer key, so **outbound** routing (`getGroupDmTargetOrigins`, `sendCallRelay`) resolves to a live peer and the outbox worker really delivers. Federation workers and synthetic LiveKit credentials are enabled. | relay-scoping, call-addressing, outbox-delivery |
 
 `test/helpers/relayTap.ts` is a transparent recording reverse proxy placed in front of a peer: it records every S2S request and forwards it verbatim (same bytes, so the HMAC still verifies), so peering and delivery behave normally while the wire stays readable. It exists because two claims are only observable in transit — which instances a `dm_call_start` was addressed to and which room tokens each payload carried, and whether an all-local DM's create *and* its delete were both broadcast (a leaked pair leaves the receiver's DB looking exactly like a conversation that was never relayed).
+
+Two more tap controls exist for delivery tests: `holdRelayResponses()` forwards relay POSTs but holds the receiver's answers until released (the receiver has applied the batch, the sender has not heard back: the on-the-wire window), and `failNextRelays(n)` answers the next `n` relay POSTs 503 without forwarding them.
+
+**Relay waits and their failure report.** A suite waits for a worker-delivered relay with `waitForRelay(check, { sender, receiver, peerOrigin?, what, timeoutMs? })` from `federationE2E.ts`, not a bare `waitUntil`. On timeout it throws with `describeRelayState`: the sender's peer rows (status, failure counters, last seen/failed, probe pacing), the sender's outbox entries for the receiver's peer row (event type, entity, attempts, next retry, age; the outbox has no delivered flag, so no entry means nothing is waiting), and the last 40 lines of both instances' logs, where the worker writes every failed attempt and rejection. The logs are quoted because `cleanup()` deletes the run directory. `waitForOutboxDrained` waits until the sender has nothing queued or on the wire for a peer.
 
 `packages/server/tsconfig.e2e.json` type-checks these suites and the shared helpers; the main server `tsconfig.json` includes only `src/**/*`, so nothing under `test/` is otherwise compiled. CI runs both (`typecheck:e2e`, then `pnpm -r test`) inside the required "Build & test" job.
 
@@ -1057,6 +1061,8 @@ Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from 
 | 5 | 1 hour |
 | 6 | 6 hours |
 | 7+ | 24 hours (cap) |
+
+Every wait in this schedule and in `RECOVERY_BACKOFF_MS` is divided by `config.federation.backoffDivisor` (`FEDERATION_BACKOFF_DIVISOR`, a whole number ≥ 1, default 1). Production leaves it at 1. The two-instance test harness sets 30 (first retry after 1 s), see [Retry backoff divisor (test only)](#retry-backoff-divisor-test-only).
 
 The schedule above (`BACKOFF_SCHEDULE_MS`) paces per-entry retries. Peer-level recovery from `unreachable` is separate and demand-driven: `processRecoveryTick` probes unreachable peers on `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` while they have queued mail (15-min backstop when silent), paced by the per-peer `last_probe_at` / `probe_attempts` columns and the `probePeerReachable` helper in `utils/federationRecovery.ts`. See [PEER_UNREACHABLE_THRESHOLD](#peer_unreachable_threshold).
 
@@ -2058,6 +2064,10 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 ### Test-Only Routes
 
 `POST /api/admin/test/seed-peer` directly inserts a `federation_peers` row, skipping the multi-step peer handshake. Strictly gated: `NODE_ENV='test'` AND `ENABLE_TEST_ROUTES='1'` together; returns 404 in any other configuration. Used exclusively by the two-instance integration harness in `packages/server/test/`. Validates `origin` (must be http(s) URL), `hmacSecret` (≥32 chars), and `status` (must be one of `'active'`, `'pending'`, `'awaiting_approval'`, `'rejected'`, `'revoked'`, `'needs_attention'`, `'unreachable'`, `'accepted'`).
+
+### Retry backoff divisor (test only)
+
+`FEDERATION_BACKOFF_DIVISOR` (`config.federation.backoffDivisor`, read once in `config.ts`) divides every federation retry wait: `BACKOFF_SCHEDULE_MS` for outbox entries and file downloads, and `RECOVERY_BACKOFF_MS` for unreachable-peer probes and pending-peer handshakes (`retryWait` in `federationWorker.ts`). Unset or 1 is the production schedule. It must be a whole number ≥ 1, so it can only shorten waits; 0 and fractions refuse to boot. The health-check interval and the 15-minute silent-peer backstop are not retry waits and are not divided. The two-instance harness sets 30 in every spawned instance (`HARNESS_BACKOFF_DIVISOR` in `twoInstanceHarness.ts`): a relay whose first attempt fails on a loaded runner is retried after 1 s instead of 30 s, inside the suites' relay waits. Not an operator setting.
 
 ### Rate-limit bypass (test only)
 

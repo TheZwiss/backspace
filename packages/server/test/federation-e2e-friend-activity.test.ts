@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import {
   bootTransportPeered,
   readDb,
+  waitForRelay,
   waitUntil,
   withWritableDb,
   type PeeredHarness,
@@ -95,7 +96,9 @@ describe("#340: a new friend's current activity", () => {
     const bobWs = track(await connectWs(B.origin, bob.token));
     bobWs.send({ type: 'activity_update', activities: [{ type: 'playing', name: 'Factorio' }] });
     expect(await waitUntil(() => pendingGameRelays(B, bob.id) > 0, 10_000, 50)).toBe(true);
-    expect(await waitUntil(() => pendingGameRelays(B, bob.id) === 0, 15_000)).toBe(true);
+    await waitForRelay(() => pendingGameRelays(B, bob.id) === 0, {
+      sender: B, receiver: A, what: "bob's Factorio presence relay delivered to A",
+    });
 
     // Then alice sends him a request, which gives A a row for bob.
     plantPendingFriendship();
@@ -108,10 +111,9 @@ describe("#340: a new friend's current activity", () => {
     });
     expect(res.status).toBe(200);
 
-    const sawGame = await waitUntil(() => presenceAbout(aliceWs, STUB_BOB_ON_A).some(e =>
+    await waitForRelay(() => presenceAbout(aliceWs, STUB_BOB_ON_A).some(e =>
       Array.isArray(e.activities) && (e.activities as Array<{ name?: string }>).some(a => a.name === 'Factorio'),
-    ), 20_000);
-    expect(sawGame).toBe(true);
+    ), { sender: B, receiver: A, what: "bob's Factorio on alice's socket after the friendship", timeoutMs: 20_000 });
     const withGame = presenceAbout(aliceWs, STUB_BOB_ON_A).find(e => Array.isArray(e.activities) && e.activities.length > 0)!;
     expect(withGame.homeUserId).toBe(bob.id);
     expect(withGame.homeInstance).toBe(B.origin);

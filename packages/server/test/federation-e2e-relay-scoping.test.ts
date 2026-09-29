@@ -6,10 +6,11 @@ import {
   sendDmMessage,
   dmMessageContents,
   readDb,
-  waitUntil,
+  waitForRelay,
   settleRelays,
   withWritableDb,
   type PeeredHarness,
+  type RelayWait,
 } from './helpers/federationE2E.js';
 import { registerLocal, createFederatedUser, type TestUser } from './helpers/testUsers.js';
 import { startRelayTap, type RelayTap } from './helpers/relayTap.js';
@@ -68,6 +69,8 @@ let carolOnA: TestUser;
 
 let localDmId: string;
 let federatedDmId: string;
+/** A's relays to B, which A addresses through B's tap. */
+let toB: Omit<RelayWait, 'what'>;
 
 /** Relay events a tap recorded that belong to a conversation, not to broadcast. */
 const conversationEvents = (tap: RelayTap): FederationRelayEvent[] =>
@@ -109,6 +112,7 @@ beforeAll(async () => {
 
   localDmId = await createDm(A, u1.token, u2.id);
   federatedDmId = await createDm(A, u1.token, carolOnA.id);
+  toB = { sender: A, receiver: B, peerOrigin: tapB.origin };
 }, 120_000);
 
 afterAll(async () => {
@@ -162,8 +166,12 @@ describe('federation e2e — DM relay is scoped to participant instances (4a5b54
     // POSITIVE CONTROL — the rig demonstrably relays, on the wire and into the
     // receiver's database. If these fail the negatives below mean nothing, and
     // the suite says so here first.
-    expect(await waitUntil(() => carriesContent(conversationEvents(tapB), federatedContent))).toBe(true);
-    expect(await waitUntil(() => dmMessageContents(B).includes(federatedContent))).toBe(true);
+    await waitForRelay(() => carriesContent(conversationEvents(tapB), federatedContent), {
+      ...toB, what: "the federated message on B's tap",
+    });
+    await waitForRelay(() => dmMessageContents(B).includes(federatedContent), {
+      ...toB, what: "the federated message in B's database",
+    });
 
     // Give any straggling outbox tick several more chances before asserting a
     // negative, so "suppressed" is not confused with "slow".
@@ -196,7 +204,9 @@ describe('federation e2e — DM relay is scoped to participant instances (4a5b54
     expect(fedSend.status).toBe(201);
     expect(fedSend.id).toBeTruthy();
 
-    expect(await waitUntil(() => dmMessageContents(B).includes(federatedContent))).toBe(true);
+    await waitForRelay(() => dmMessageContents(B).includes(federatedContent), {
+      ...toB, what: "the federated message in B's database",
+    });
 
     const del = async (messageId: string): Promise<number> => {
       const res = await fetch(`${A.origin}/api/dm/messages/${messageId}`, {
@@ -213,10 +223,12 @@ describe('federation e2e — DM relay is scoped to participant instances (4a5b54
     // supply no target list at all. It must still reach the peer that holds a
     // copy — proving this rig observes delete relays, which is what makes the
     // local-delete negative meaningful.
-    expect(
-      await waitUntil(() => referencesMessage(conversationEvents(tapB), 'delete', fedSend.id!)),
-    ).toBe(true);
-    expect(await waitUntil(() => !dmMessageContents(B).includes(federatedContent))).toBe(true);
+    await waitForRelay(() => referencesMessage(conversationEvents(tapB), 'delete', fedSend.id!), {
+      ...toB, what: "the federated message's delete on B's tap",
+    });
+    await waitForRelay(() => !dmMessageContents(B).includes(federatedContent), {
+      ...toB, what: "the federated message gone from B's database",
+    });
 
     await settleRelays();
 
