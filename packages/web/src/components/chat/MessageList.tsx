@@ -90,6 +90,21 @@ function topmostVisibleRow(container: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** True when `id` falls between the oldest and newest server ids in `ids`. */
+function idWithinRows(id: string, ids: readonly string[]): boolean {
+  if (!/^\d+$/.test(id)) return false;
+  const target = BigInt(id);
+  let min: bigint | null = null;
+  let max: bigint | null = null;
+  for (const rowId of ids) {
+    if (!/^\d+$/.test(rowId)) continue;
+    const value = BigInt(rowId);
+    if (min === null || value < min) min = value;
+    if (max === null || value > max) max = value;
+  }
+  return min !== null && max !== null && target >= min && target <= max;
+}
+
 function sharesAnyId(previous: readonly string[], next: readonly string[]): boolean {
   if (previous.length === 0) return false;
   const seen = new Set(previous);
@@ -568,15 +583,20 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     }
 
     const anchor = anchorRef.current;
-    const sameChannel = prev.channelId === channelId;
-    const replaced = !sameChannel || !sharesAnyId(prev.ids, ids);
     if (anchor.kind === 'message' && !findRow(container, anchor.messageId)) {
       if (anchorLoadInFlightRef.current) return;
-      if (replaced) void restoreAnchor(anchor);
-      else deriveAnchorFromLayout();
+      // Outside the rows now loaded, the anchored row was dropped with the
+      // cache (a reload, a replaced window): load it back. Inside them, it was
+      // deleted: hold what is on screen now.
+      if (idWithinRows(anchor.messageId, ids)) deriveAnchorFromLayout();
+      else void restoreAnchor(anchor);
       return;
     }
-    const appended = sameChannel && !replaced && ids.length > prev.ids.length && ids[ids.length - 1] !== prev.ids[prev.ids.length - 1];
+    const sameChannel = prev.channelId === channelId;
+    const appended = sameChannel
+      && sharesAnyId(prev.ids, ids)
+      && ids.length > prev.ids.length
+      && ids[ids.length - 1] !== prev.ids[prev.ids.length - 1];
     if (anchor.kind === 'bottom' && appended) {
       // New messages arrived while at the bottom — smooth scroll to them.
       beginSmoothScrollIntent('bottom');

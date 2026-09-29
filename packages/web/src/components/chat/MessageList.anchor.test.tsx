@@ -176,6 +176,40 @@ describe('reading position (issue #374)', () => {
     await waitFor(() => expect(document.getElementById('msg-21')).toBeInTheDocument());
   });
 
+  it('loads the window around the reading position when a newest-page reload drops it', async () => {
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    messagesAround.mockResolvedValue(page(1, 45));
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    readingAt(layout, container);
+
+    // A forced reload of the newest page: it overlaps the old cache but no
+    // longer reaches the row being read.
+    act(() => {
+      useChatStore.setState({ messages: new Map([[CHANNEL, page(30, 60)]]), hasMore: new Map([[CHANNEL, true]]) });
+    });
+
+    await waitFor(() => expect(messagesAround).toHaveBeenCalledWith(CHANNEL, '21', 50));
+  });
+
+  it('holds the row now at the top when the anchored row is deleted', async () => {
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(2000));
+    readingAt(layout, container);
+    const reading = layout.scrollTop;
+
+    act(() => {
+      useChatStore.getState().removeMessage('21', CHANNEL);
+    });
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))); });
+
+    expect(messagesAround).not.toHaveBeenCalled();
+    expect(layout.scrollTop).toBe(reading);
+  });
+
   it('restores the reading position after the list is remounted', async () => {
     const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
     stubScrollLayout(layout);
