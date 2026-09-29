@@ -227,11 +227,13 @@ interface StreamRepublishPayload {
 its screen share to publish the same capture again (`republishScreenShare`).
 It does not touch the watcher sets. It tells viewers that the removal that
 follows is not the share ending. They keep watching, the sharer stays in the
-`participants[].isScreenSharing` set across the gap, and so **neither
-`stream_ended` nor `stream_started` plays for anyone but the sharer**. If no
-new publication arrives within 15 s, the share ends and `stream_ended` plays
-then. The receiving state machine and the mixed-version rules are in
-`docs/systems/voice.md` (Screen Sharing → "Viewers across a republish").
+`participants[].isScreenSharing` set across the gap on every client including
+its own, and so **neither `stream_ended` nor `stream_started` plays for
+anyone**, and the sharer's watcher set survives. If no new publication arrives
+within 15 s, the share ends and `stream_ended` plays then. What
+`isScreenSharing` means on each side, the receiving state machine and the
+mixed-version rules are in `docs/systems/voice.md` (Screen Sharing → "A share,
+not a publication" and "Viewers across a republish").
 
 **Senders.** `StreamTile.tsx` is the **only** broadcast site, and only on
 explicit user actions:
@@ -255,7 +257,8 @@ disconnecting participant identity from every watcher set
 (`voiceStore.evictWatcher`). The `stream_user_left` cue plays on the streamer
 side at that point.
 
-**Self-stream-end suppression.** When the streamer themselves stops sharing,
+**Self-stream-end suppression.** When the streamer themselves stops sharing
+(a real stop; a codec republish is not one, see above),
 SoundController detects this in the same set-diff that fires `stream_ended`
 and synchronously calls `clearStreamWatchers(myUserId)`. The watcher diff is
 gated on `selfIsSharing` (which is now false), so neither the outer

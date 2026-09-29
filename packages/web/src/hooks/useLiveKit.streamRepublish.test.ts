@@ -6,6 +6,7 @@ import { useLiveKit } from './useLiveKit';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { STREAM_REPUBLISH_WINDOW_MS } from '../utils/streamRepublish';
+import { publishScreenShare, republishScreenShare, stopScreenShare } from '../utils/screenShare';
 import { SoundController } from '../components/voice/SoundController';
 import type { User } from '@backspace/shared';
 
@@ -47,7 +48,7 @@ vi.mock('../audio/SpeakingDetector', () => ({
 }));
 vi.mock('./useWebSocket', () => ({ wsSend: vi.fn() }));
 vi.mock('../utils/voice', () => ({ broadcastVoiceStatus: vi.fn(), clearSpaceVoiceForDmCall: vi.fn() }));
-vi.mock('../utils/hwOverdrive', () => ({ deactivate: vi.fn() }));
+vi.mock('../utils/hwOverdrive', () => ({ activate: vi.fn(), deactivate: vi.fn() }));
 vi.mock('../stores/spaceStore', () => ({
   getApiForOrigin: () => ({ livekit: { token: mocks.token, dmToken: mocks.token } }),
   getChannelOrigin: () => '', getMyUserIdForOrigin: () => 'me',
@@ -440,5 +441,184 @@ describe('viewer-side cues across a republish', () => {
     unpublish(room, sharer, first);
 
     expect(cuesPlayed()).toEqual(['stream_ended']);
+  });
+});
+
+describe('the sharer\'s own side across a republish', () => {
+  // The sharer changes codec: republishScreenShare unpublishes the screen share
+  // and publishes the same capture again. For the sharer this is the same share
+  // going on, exactly as it is for its viewers: no stream_ended / stream_started
+  // cue, and the viewers who keep watching stay in its watcher set.
+  const ME = 'me:Me';
+  const VIEWER = 'ann:Ann';
+
+  interface LocalPub { source: Track.Source; trackSid: string; track: { mediaStreamTrack: MediaStreamTrack; on: () => void }; isMuted: boolean }
+
+  beforeEach(() => {
+    // jsdom has no MediaStream; the share code builds one from the live tracks.
+    (globalThis as { MediaStream?: unknown }).MediaStream = class {
+      constructor(private readonly tracks: MediaStreamTrack[]) {}
+      getTracks() { return this.tracks; }
+      getVideoTracks() { return this.tracks.filter((t) => t.kind === 'video'); }
+      getAudioTracks() { return this.tracks.filter((t) => t.kind === 'audio'); }
+    };
+    useVoiceStore.setState({
+      screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, codec: 'vp9', shareAudio: false },
+    });
+  });
+
+  /** The local participant, with publish and unpublish emitting the SDK's events. */
+  function localSharer(room: Room) {
+    const lp = room.localParticipant;
+    (lp as { identity: string }).identity = ME;
+    const pubs = lp.trackPublications as unknown as Map<string, LocalPub>;
+    let sid = 0;
+    vi.spyOn(lp, 'publishData').mockResolvedValue(undefined);
+    vi.spyOn(lp, 'unpublishTrack').mockImplementation(async (track) => {
+      for (const [key, pub] of pubs) {
+        if (pub.track !== track) continue;
+        pubs.delete(key);
+        // livekit-client emits this synchronously inside unpublishTrack.
+        room.emit(RoomEvent.LocalTrackUnpublished, pub as never, lp);
+      }
+      return undefined;
+    });
+    vi.spyOn(lp, 'publishTrack').mockImplementation(async (track, options) => {
+      await Promise.resolve(); // the server accepting the publication
+      const pub: LocalPub = {
+        source: options?.source ?? Track.Source.Unknown,
+        trackSid: `TR_L${++sid}`,
+        track: { mediaStreamTrack: track as MediaStreamTrack, on: () => {} },
+        isMuted: false,
+      };
+      pubs.set(pub.trackSid, pub);
+      room.emit(RoomEvent.LocalTrackPublished, pub as never, lp);
+      return pub as never;
+    });
+  }
+
+  function videoCapture(): MediaStream {
+    const track = {
+      kind: 'video', id: 'capture', readyState: 'live', contentHint: '',
+      stop: vi.fn(), getSettings: () => ({}), applyConstraints: vi.fn(async () => {}),
+    } as unknown as MediaStreamTrack;
+    return new MediaStream([track]);
+  }
+
+  function viewerPing(room: Room, watching: boolean): void {
+    const payload = new TextEncoder().encode(JSON.stringify({ type: 'stream_watch', target: 'me', watching }));
+    act(() => { room.emit(RoomEvent.DataReceived, payload, { identity: VIEWER } as never); });
+  }
+
+  function cuesPlayed(): string[] {
+    return mocks.audio.playSound.mock.calls.map(([name]) => name as string);
+  }
+
+  async function sharingWithOneViewer() {
+    const room = await connectedRoom();
+    localSharer(room);
+    useAuthStore.setState({ user: { id: 'me', status: 'online' } as User });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(createElement(SoundController));
+    act(() => { vi.advanceTimersByTime(1000); });
+    await act(async () => { await publishScreenShare(room, videoCapture()); });
+    viewerPing(room, true);
+    expect(cuesPlayed()).toEqual(['stream_started', 'stream_user_joined']);
+    mocks.audio.playSound.mockClear();
+    return room;
+  }
+
+  it('plays neither stream_ended nor stream_started for the codec change', async () => {
+    const room = await sharingWithOneViewer();
+    const seen = recordSharingFlag(ME);
+
+    await act(async () => { await republishScreenShare(room); });
+
+    expect(cuesPlayed()).toEqual([]);
+    expect(seen).not.toContain(false);
+  });
+
+  it('keeps the viewers who resume in its watcher set, so a later stop is heard', async () => {
+    const room = await sharingWithOneViewer();
+
+    await act(async () => { await republishScreenShare(room); });
+    viewerPing(room, false);
+
+    expect(cuesPlayed()).toEqual(['stream_user_left']);
+  });
+
+  it('still plays stream_ended when the republish fails', async () => {
+    const room = await sharingWithOneViewer();
+    vi.mocked(room.localParticipant.publishTrack).mockRejectedValueOnce(new Error('publish timed out'));
+
+    await act(async () => { await republishScreenShare(room); });
+
+    expect(cuesPlayed()).toEqual(['stream_ended']);
+    expect(sharerIsListedAsSharing(ME)).toBe(false);
+  });
+
+  it('still plays stream_ended for a real stop', async () => {
+    const room = await sharingWithOneViewer();
+
+    await act(async () => { await stopScreenShare(room); });
+
+    expect(cuesPlayed()).toEqual(['stream_ended']);
+    expect(sharerIsListedAsSharing(ME)).toBe(false);
+  });
+});
+
+describe('events from a room that has been replaced', () => {
+  // A channel switch tears the old room down after the new one exists; the
+  // old room's late events must not reach the new room's republish state.
+
+  async function switchRooms() {
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('channel'); });
+    const oldRoom = result.current.room!;
+    const oldSharer = makeSharer(oldRoom);
+    const oldPub = publish(oldRoom, oldSharer, 'TR_OLD');
+    await act(async () => { await result.current.connect('other-channel'); });
+    const newRoom = result.current.room!;
+    expect(newRoom).not.toBe(oldRoom);
+    return { oldRoom, oldSharer, oldPub, newRoom };
+  }
+
+  it('an old room\'s screen-share removal does not end the watch in the new room', async () => {
+    const { oldRoom, oldSharer, oldPub, newRoom } = await switchRooms();
+    const sharer = makeSharer(newRoom);
+    publish(newRoom, sharer, 'TR_NEW');
+    useVoiceStore.getState().watchStream('bob');
+
+    unpublish(oldRoom, oldSharer, oldPub);
+
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(true);
+    expect(sharerIsListedAsSharing()).toBe(true);
+  });
+
+  it('an old room\'s republish announcement does not bridge a real stop in the new room', async () => {
+    const { oldRoom, oldSharer, newRoom } = await switchRooms();
+    const sharer = makeSharer(newRoom);
+    const pub = publish(newRoom, sharer, 'TR_NEW');
+    useVoiceStore.getState().watchStream('bob');
+
+    announceRepublish(oldRoom, oldSharer);
+    unpublish(newRoom, sharer, pub);
+
+    expect(sharerIsListedAsSharing()).toBe(false);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(false);
+  });
+
+  it('an old room\'s departing sharer does not cancel a republish in the new room', async () => {
+    const { oldRoom, oldSharer, newRoom } = await switchRooms();
+    const sharer = makeSharer(newRoom);
+    const pub = publish(newRoom, sharer, 'TR_NEW');
+    useVoiceStore.getState().watchStream('bob');
+    announceRepublish(newRoom, sharer);
+    unpublish(newRoom, sharer, pub);
+
+    leave(oldRoom, oldSharer);
+
+    expect(sharerIsListedAsSharing()).toBe(true);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(true);
   });
 });
