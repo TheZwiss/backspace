@@ -57,3 +57,6 @@
 {"snapshot_date":"2026-09-29","dimension":"web","title":"","count":101,"uniques":101}
 {"snapshot_date":"2026-09-29","dimension":"desktop","title":"","count":55,"uniques":55}
 {"snapshot_date":"2026-09-29","dimension":"mobile","title":"","count":18,"uniques":18}
+{"snapshot_date":"2026-09-30","dimension":"web","title":"","count":136,"uniques":136}
+{"snapshot_date":"2026-09-30","dimension":"desktop","title":"","count":58,"uniques":58}
+{"snapshot_date":"2026-09-30","dimension":"mobile","title":"","count":17,"uniques":17}
