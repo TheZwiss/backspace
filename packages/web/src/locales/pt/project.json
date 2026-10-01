@@ -1,0 +1,62 @@
+{
+  "nav": {
+    "label": "Backspace",
+    "updatedDot": "O Backspace foi atualizado"
+  },
+  "header": {
+    "title": "Backspace",
+    "tagline": "Chat de código aberto que você mesmo pode hospedar."
+  },
+  "whatsNew": {
+    "title": "Novidades",
+    "updated": "Atualizado para a versão {{version}}",
+    "current": "Você está na versão {{version}}",
+    "noVersion": "Notas de versão de todas as versões",
+    "action": "Ler as notas de versão"
+  },
+  "community": {
+    "title": "Entre na comunidade do Backspace",
+    "body": "Converse com as pessoas que desenvolvem o Backspace, tire dúvidas e compartilhe feedback.",
+    "join": "Entrar",
+    "open": "Abrir",
+    "pending": "Solicitação enviada",
+    "retry": "Tentar novamente",
+    "unreachable": "Não foi possível acessar a instância da comunidade.",
+    "notListed": "O espaço da comunidade não está disponível no momento."
+  },
+  "support": {
+    "title": "Apoie o projeto",
+    "body": "Ajuda a pagar as licenças de desenvolvedor que levam os apps do Backspace para as lojas de aplicativos, além dos outros custos de manter o projeto.",
+    "action": "Apoiar no Ko-fi"
+  },
+  "insights": {
+    "title": "Insights",
+    "body": "Números públicos sobre downloads, instâncias e atividade.",
+    "action": "Abrir insights"
+  },
+  "report": {
+    "title": "Reportar um bug ou sugerir um recurso",
+    "body": "Sua versão e seu navegador já vêm preenchidos.",
+    "bug": "Reportar um bug",
+    "feature": "Sugerir um recurso"
+  },
+  "host": {
+    "title": "Hospede sua própria instância",
+    "body": "Rode o Backspace no seu próprio servidor e convide quem você quiser.",
+    "action": "Ler o guia de instalação"
+  },
+  "desktop": {
+    "title": "Baixe o app para desktop",
+    "body": "Aperte para falar, atalhos globais e status de atividade.",
+    "action": "Baixar"
+  },
+  "instance": {
+    "title": "Esta instância"
+  },
+  "footer": {
+    "license": "Licença (AGPL-3.0)",
+    "security": "Reportar um problema de segurança",
+    "contributors": "Colaboradores",
+    "source": "Código-fonte no GitHub"
+  }
+}

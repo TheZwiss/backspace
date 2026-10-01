@@ -10,6 +10,10 @@ export const supportedLanguages = [
   // PR once every surface is covered and the translation has been reviewed.
   { code: 'ru', nativeName: 'Русский', dir: 'ltr', released: true },
   { code: 'de', nativeName: 'Deutsch', dir: 'ltr', released: true },
+  // Brazilian Portuguese. Detection sends every pt-* tag here, as with zh
+  // below: a pt-PT reader gets Portuguese rather than English, and the picker
+  // names the variant.
+  { code: 'pt', nativeName: 'Português do Brasil', dir: 'ltr', released: false },
   // Simplified Chinese. Detection sends every zh-* tag here, Traditional
   // included: a zh-TW reader gets a script they can read rather than English,
   // and the picker names the variant so they know what they got.

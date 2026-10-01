@@ -1,0 +1,483 @@
+{
+  "general": {
+    "title": "Geral",
+    "description": "Configure sua instância do Backspace. Estas configurações afetam todos os usuários.",
+    "instanceName": {
+      "label": "Nome da instância",
+      "description": "O nome exibido na página de login e para instâncias federadas.",
+      "counter": "{{length}}/{{max}}"
+    },
+    "discovery": {
+      "label": "Descoberta de espaços",
+      "description": "Até onde os espaços desta instância podem ser encontrados.",
+      "levels": {
+        "invite": {
+          "label": "Somente por convite",
+          "description": "Os espaços daqui não são listados em nenhum lugar. Os links de convite continuam funcionando."
+        },
+        "local": {
+          "label": "Descoberta local de espaços",
+          "description": "Os espaços aparecem em Explorar para pessoas nesta instância e em instâncias conectadas a ela."
+        },
+        "global": {
+          "label": "Permitir listagem global",
+          "description": "Cada espaço poderá então ser listado manualmente no diretório global do Backspace pelas próprias configurações de Descoberta."
+        }
+      },
+      "unconfigured": "Esta instância não está configurada para acessar um diretório, portanto nada aqui pode ser listado globalmente."
+    },
+    "directory": {
+      "listingHint": "Ativar isto não lista nenhum espaço por si só. Cada espaço ainda precisa ativar \"{{setting}}\" nas próprias configurações de Descoberta.",
+      "showMeWhere": "Mostrar onde",
+      "saveAndShowMeWhere": "Salvar e mostrar onde",
+      "listedCount_one": "{{count}} espaço listado",
+      "listedCount_other": "{{count}} espaços listados",
+      "registrationClosed": "Novas contas de outras instâncias estão fechadas, então os espaços listados aparecerão como fechados para novas contas.",
+      "openFederatedRegistration": "Abrir contas federadas",
+      "disclosure": "Para cada espaço listado, isto torna públicos: o nome, a descrição, o ícone, o banner, a quantidade de membros e o endereço desta instância. As pessoas que navegam pelo diretório carregam o ícone e o banner desta instância.",
+      "status": {
+        "never": "Nunca reportado",
+        "lastPing": "Último relatório em {{date}}",
+        "lastError": "A última tentativa falhou ({{status}})"
+      },
+      "reasons": {
+        "unreachable": "o diretório não conseguiu acessar esta instância",
+        "status": "esta instância respondeu com um erro",
+        "invalid": "esta instância forneceu um documento inválido",
+        "origin-mismatch": "esta instância informa um endereço diferente daquele pelo qual foi acessada",
+        "origin": "o diretório recusou o endereço desta instância; ele deve ser um domínio https sem porta (defina DOMAIN ou PUBLIC_ORIGIN)",
+        "network": "esta instância não conseguiu acessar o diretório",
+        "timeout": "o diretório não respondeu a tempo"
+      },
+      "listedCount_many": "{{count}} espaços listados"
+    },
+    "browse": {
+      "toggleLabel": "Mostrar espaços globais em Explorar",
+      "toggleDescription": "As pessoas daqui veem espaços de outras instâncias em Espaço Sideral. Os navegadores carregam os ícones e banners desses espaços das instâncias que os hospedam.",
+      "unavailable": "Esta instância não está configurada para acessar um diretório, então não há nada para mostrar."
+    },
+    "supportCard": {
+      "label": "Página do Backspace",
+      "toggleLabel": "Mostrar o cartão de suporte",
+      "toggleDescription": "Mostra na página do Backspace um cartão com um link para a página do projeto no Ko-fi. Desativá-lo oculta apenas esse cartão."
+    },
+    "gif": {
+      "label": "Pesquisa de GIFs",
+      "description": "Ativar pesquisa de GIFs fornecida pelo Klipy. Obtenha uma chave de API gratuita no portal de desenvolvedores do Klipy.",
+      "placeholderSaved": "Chave salva — informe uma nova chave para substituir",
+      "placeholderKey": "Chave de API do Klipy",
+      "enabled": "Ativado",
+      "notConfigured": "Não configurado",
+      "clearKey": "Limpar chave"
+    }
+  },
+  "registration": {
+    "title": "Cadastro",
+    "description": "Controle quem pode criar contas nesta instância. O cadastro público abrange inscrições locais; o cadastro federado abrange usuários de instâncias parceiras criando uma conta aqui.",
+    "public": {
+      "label": "Cadastro público",
+      "toggleLabel": "Permitir novas contas locais",
+      "toggleDescription": "Qualquer pessoa pode criar uma conta local pela página de cadastro. Quando desativado, somente links de convite podem criar novas contas locais."
+    },
+    "federated": {
+      "label": "Cadastro federado",
+      "toggleLabel": "Permitir novas contas federadas",
+      "toggleDescription": "Usuários de outras instâncias podem criar uma conta federada aqui pelas configurações de Conexões. Contas federadas existentes sempre podem fazer login, independentemente desta configuração."
+    },
+    "saved": "Configurações de cadastro salvas",
+    "saveFailed": "Falha ao atualizar as configurações de cadastro"
+  },
+  "invites": {
+    "label": "Links de convite",
+    "create": "+ Criar link",
+    "tabs": {
+      "active": "Ativos",
+      "archived": "Arquivados"
+    },
+    "loadFailed": "Falha ao carregar os convites",
+    "emptyActive": "Nenhum link de convite ativo.",
+    "emptyArchived": "Nenhum link de convite arquivado.",
+    "noMatch": "Nenhum convite corresponde ao filtro atual.",
+    "filter": {
+      "status": "Status",
+      "sort": {
+        "recent": "Mais recentes",
+        "oldest": "Mais antigos",
+        "name": "Nome (A–Z)",
+        "mostUsed": "Mais usados",
+        "expiringSoonest": "Expiram primeiro"
+      }
+    },
+    "status": {
+      "active": "Ativos",
+      "expired": "Expirado",
+      "exhausted": "Esgotado",
+      "revoked": "Revogado"
+    },
+    "expiry": {
+      "preset": {
+        "hour1": "1 hora",
+        "hours24": "24 horas",
+        "days7": "7 dias",
+        "days30": "30 dias",
+        "custom": "Personalizado…"
+      },
+      "keepCurrent": "Manter atual",
+      "invalidFuture": "Escolha uma data e hora futuras",
+      "invalidSelection": "Seleção de validade inválida",
+      "revokedOn": "Revogado em {{date}}",
+      "expiredOn": "Expirado em {{date}}",
+      "exhausted": "Esgotado",
+      "noExpiration": "Sem validade",
+      "inDays_one": "Expira em {{count}} dia",
+      "inDays_other": "Expira em {{count}} dias",
+      "inHours_one": "Expira em {{count}} hora",
+      "inHours_other": "Expira em {{count}} horas",
+      "inDays_many": "Expira em {{count}} dias",
+      "inHours_many": "Expira em {{count}} horas"
+    },
+    "form": {
+      "name": "Nome",
+      "namePlaceholder": "ex.: Grupo de amigos 1",
+      "maxUses": "Máximo de usos",
+      "unlimited": "Ilimitado",
+      "uses": "usos",
+      "expires": "Expira",
+      "nameLength": "O nome deve ter de 1 a 64 caracteres",
+      "maxUsesInteger": "O máximo de usos deve ser um número inteiro positivo"
+    },
+    "createModal": {
+      "title": "Criar link de convite",
+      "description": "Gere um link compartilhável que permite às pessoas se cadastrarem nesta instância. Você definirá quantas vezes ele pode ser usado e quando expira.",
+      "submit": "Criar link",
+      "submitting": "Criando…",
+      "createdCopied": "Link criado. Copiado para a área de transferência.",
+      "createdManual": "Link criado. Copie manualmente na linha.",
+      "failed": "Falha ao criar convite: {{message}}"
+    },
+    "editModal": {
+      "title": "Editar \"{{name}}\"",
+      "description": "Ajuste os limites deste link de convite. A URL permanece a mesma — qualquer pessoa que já a tenha poderá usá-la dentro das novas restrições.",
+      "used": "({{used}} usado)",
+      "maxUsesBelowUsed": "O máximo de usos não pode ser menor que o número atual de usos ({{used}})",
+      "noChanges": "Nenhuma alteração para salvar",
+      "updated": "Convite atualizado",
+      "failed": "Falha ao atualizar convite: {{message}}",
+      "submit": "Salvar alterações",
+      "submitting": "Salvando…"
+    },
+    "reinstateModal": {
+      "title": "Reativar \"{{name}}\"",
+      "descriptionRevoked": "Este convite foi revogado. Reativá-lo gera um novo link com uma URL diferente — a URL antiga permanece inativa.",
+      "descriptionLapsed": "Este convite expirou. Reativá-lo torna a mesma URL ativa novamente — qualquer pessoa que a tenha salvo poderá usá-la outra vez.",
+      "newLinkWarning": "Um novo link será gerado. Quem tiver a URL antiga não poderá usá-la.",
+      "maxUsesMeta": "(atual: {{max}}, usado: {{used}})",
+      "maxUsesMin": "O máximo de usos deve ser pelo menos {{min}} (usos atuais: {{used}})",
+      "submit": "Reativar",
+      "submitNewLink": "Reativar com novo link",
+      "submitting": "Reativando…",
+      "doneCopied": "Reativado com novo link. Copiado para a área de transferência.",
+      "doneManual": "Reativado com novo link. Copie manualmente na linha.",
+      "doneSameLink": "Reativado. O mesmo link está ativo novamente.",
+      "failed": "Falha ao reativar: {{message}}"
+    },
+    "redemptions": {
+      "title": "Usos de \"{{name}}\"",
+      "description": "Usuários que se cadastraram usando este link de convite, na ordem em que se cadastraram.",
+      "revokedNotice": "Este convite foi revogado. Os usos abaixo representam usuários que se cadastraram antes da revogação.",
+      "revokedNoticeDated": "Este convite foi revogado em {{date}}. Os usos abaixo representam usuários que se cadastraram antes da revogação.",
+      "usesOfMax_one": "{{count}} de {{max}} usos",
+      "usesOfMax_other": "{{count}} de {{max}} usos",
+      "uses_one": "{{count}} uso",
+      "uses_other": "{{count}} usos",
+      "loadFailed": "Falha ao carregar os usos",
+      "loadFailedInline": "Não foi possível carregar os usos.",
+      "empty": "Nenhum uso ainda.",
+      "now": "(agora {{name}})",
+      "deletedUser": "Usuário excluído",
+      "usesOfMax_many": "{{count}} de {{max}} usos",
+      "uses_many": "{{count}} usos"
+    },
+    "row": {
+      "usage": "{{usage}} usos",
+      "createdBy": "Criado por {{name}}",
+      "unknownCreator": "Desconhecido",
+      "subtitleActive": "{{usage}} · {{expiry}} · {{creator}}",
+      "subtitleArchived": "{{usage}} · {{expiry}} · {{when}}",
+      "used": "Usado",
+      "expires": "Expira",
+      "expiredAt": "Expirado em",
+      "revokedAt": "Revogado em",
+      "exhausted": "Esgotado",
+      "created": "Criado",
+      "createdByLabel": "Criado por",
+      "token": "Token",
+      "lastRedeemed": "Último uso",
+      "copyLink": "Copiar link",
+      "revoke": "Revogar",
+      "viewRedemptions": "Ver usos",
+      "reinstate": "Reativar",
+      "deletePermanently": "Excluir permanentemente",
+      "copied": "Link de convite copiado",
+      "copyFailed": "Falha ao copiar link",
+      "revoked": "Convite revogado",
+      "revokeFailed": "Falha ao revogar: {{message}}",
+      "deleted": "Convite excluído",
+      "deleteFailed": "Falha ao excluir: {{message}}",
+      "revokeDialog": {
+        "title": "Revogar \"{{name}}\"?",
+        "description": "O link para de funcionar imediatamente. Quem tiver a URL não poderá mais usá-la.<br/><br/>Se mudar de ideia depois, <strong>Reativar</strong> emitirá um novo link nesta entrada — a URL original permanecerá inativa.",
+        "confirm": "Revogar link"
+      },
+      "deleteDialog": {
+        "title": "Excluir \"{{name}}\" permanentemente?",
+        "description": "Isso não pode ser desfeito. O histórico de usos deste link também será removido. Se você só quiser impedir que o link funcione, use <strong>Revogar</strong> — isso preserva o registro de usos.",
+        "confirm": "Excluir permanentemente"
+      }
+    }
+  },
+  "storage": {
+    "title": "Armazenamento",
+    "description": "Monitore o uso do disco e limpe arquivos órfãos deixados por conteúdo excluído ou por avatares/banners substituídos.",
+    "loading": "Carregando estatísticas de armazenamento…",
+    "loadFailed": "Falha ao carregar estatísticas de armazenamento",
+    "refresh": "Atualizar estatísticas",
+    "overview": {
+      "label": "Visão geral do armazenamento",
+      "totalFiles": "Total de arquivos",
+      "referenced": "Referenciados",
+      "orphanedFiles": "Arquivos órfãos",
+      "unlinkedUploads": "Uploads não vinculados",
+      "danglingRecords": "Registros pendentes",
+      "staleUploads": "Uploads obsoletos"
+    },
+    "breakdown": {
+      "label": "Distribuição por tipo de arquivo",
+      "entry_one": "{{count}} arquivo — {{size}}",
+      "entry_other": "{{count}} arquivos — {{size}}",
+      "entry_many": "{{count}} arquivos — {{size}}"
+    },
+    "uploadLimit": {
+      "label": "Limite de upload",
+      "maxFileSize": "Tamanho máximo do arquivo",
+      "saved": "Limite de upload definido como {{limit}}",
+      "saveFailed": "Falha ao atualizar o limite de upload"
+    },
+    "cleanup": {
+      "label": "Limpeza",
+      "nothingFound": "Nenhum arquivo órfão, upload obsoleto ou registro pendente encontrado.",
+      "preview": "Visualizar limpeza",
+      "run": "Limpar agora",
+      "running": "Limpando…",
+      "previewResult": "Prévia — nenhum arquivo excluído",
+      "complete": "Limpeza concluída",
+      "orphanedFiles_one": "{{count}} arquivo órfão/pendente ({{size}})",
+      "orphanedFiles_other": "{{count}} arquivos órfãos/pendentes ({{size}})",
+      "staleRecords_one": ", {{count}} registro de upload obsoleto",
+      "staleRecords_other": ", {{count}} registros de upload obsoletos",
+      "errors_one": "{{count}} erro: {{first}}",
+      "errors_other": "{{count}} erros: {{first}}",
+      "cleanedToast_one": "{{count}} arquivo limpo ({{size}})",
+      "cleanedToast_other": "{{count}} arquivos limpos ({{size}})",
+      "failed": "Falha na limpeza",
+      "orphanedFiles_many": "{{count}} arquivos órfãos/pendentes ({{size}})",
+      "staleRecords_many": ", {{count}} registros de upload obsoletos",
+      "errors_many": "{{count}} erros: {{first}}",
+      "cleanedToast_many": "{{count}} arquivos limpos ({{size}})"
+    },
+    "stale": {
+      "label": "Uploads obsoletos",
+      "description": "Sessões de upload tus abandonadas em <code>.tus/</code> (pausadas/interrompidas sem DELETE). A expiração automática ocorre a cada 24 horas; isto permite fazer uma limpeza antecipada.",
+      "maxAge": "Idade máxima (horas)",
+      "sessionFiles_one": "{{count}} arquivo de sessão ({{size}})",
+      "sessionFiles_other": "{{count}} arquivos de sessão ({{size}})",
+      "cleanedToast_one": "{{count}} sessão de upload obsoleta limpa ({{size}})",
+      "cleanedToast_other": "{{count}} sessões de upload obsoletas limpas ({{size}})",
+      "failed": "Falha na limpeza de uploads obsoletos",
+      "sessionFiles_many": "{{count}} arquivos de sessão ({{size}})",
+      "cleanedToast_many": "{{count}} sessões de upload obsoletas limpas ({{size}})"
+    },
+    "media": {
+      "label": "Retenção de mídia",
+      "olderThan": "Excluir mídias do chat com mais de",
+      "days": "dias",
+      "run": "Excluir agora",
+      "running": "Excluindo…",
+      "files_one": "{{count}} arquivo ({{size}})",
+      "files_other": "{{count}} arquivos ({{size}})",
+      "deletedToast_one": "{{count}} arquivo excluído ({{size}})",
+      "deletedToast_other": "{{count}} arquivos excluídos ({{size}})",
+      "failed": "Falha na limpeza de mídia",
+      "files_many": "{{count}} arquivos ({{size}})",
+      "deletedToast_many": "{{count}} arquivos excluídos ({{size}})"
+    }
+  },
+  "streaming": {
+    "title": "Transmissão",
+    "description": "Estes limites se aplicam a todos os usuários desta instância. Os usuários podem escolher valores dentro desses limites.",
+    "units": {
+      "fps": "{{value}} fps",
+      "kbpsLabel": "kbps"
+    },
+    "bandwidth": {
+      "label": "Largura de banda",
+      "description": "Limites mínimo e máximo de taxa de bits e o tamanho do passo do controle deslizante de qualidade.",
+      "customBitrate": {
+        "label": "Permitir taxa de bits personalizada",
+        "description": "Permite que os usuários definam sua própria taxa de bits em vez de usar os valores padrão da matriz"
+      },
+      "range": "Faixa de taxa de bits",
+      "min": "Mín.",
+      "max": "Máx.",
+      "step": "Passo do controle deslizante"
+    },
+    "quality": {
+      "label": "Qualidade",
+      "description": "Opções de resolução e taxa de quadros disponíveis para compartilhamento de tela.",
+      "resolutions": "Resoluções permitidas",
+      "framerates": "Taxas de quadros permitidas"
+    },
+    "highEndWarning": {
+      "title": "Configurações de alto desempenho ativadas.",
+      "description": "Transmitir acima de 1080p ou 60 fps exige bastante capacidade de codificação de CPU/GPU no cliente e pode saturar a largura de banda do servidor, especialmente quando as transmissões são roteadas pelo TURN. Configurações avançadas (por exemplo, 4K a 120 fps) podem exigir até 45 Mbps por transmissão ativa. Certifique-se de que sua infraestrutura suporta essa carga antes de ativar estas opções para todos os usuários."
+    },
+    "matrix": {
+      "label": "Matriz de taxa de bits",
+      "description": "Taxas de bits padrão por resolução e taxa de quadros. Edite células individuais ou dimensione todos os valores de uma vez.",
+      "scaleAll": "Dimensionar tudo",
+      "scaleHint": "Arraste para dimensionar todas as taxas de bits. Ajuste as células individuais abaixo.",
+      "cellDefault": "Padrão: {{value}} (clique em × para redefinir)",
+      "cellEdit": "Clique para editar",
+      "resetAll": "Redefinir tudo para os padrões"
+    },
+    "capWarning": {
+      "title": "Os valores da matriz excedem o limite global.",
+      "description": "Alguns valores de taxa de bits excedem seu máximo de {{max}}. As transmissões nessas combinações terão a qualidade reduzida ao seu limite."
+    }
+  },
+  "updates": {
+    "title": "Atualizações",
+    "badge": {
+      "settingsAriaLabel": "Configurações, atualização da instância disponível",
+      "toast": "O Backspace {{version}} está disponível para esta instância",
+      "toastAction": "Ver"
+    },
+    "description": "O que esta instância está executando e como atualizá-la.",
+    "loading": "Carregando status da atualização…",
+    "loadFailed": "Não foi possível carregar o status da atualização.",
+    "copyFailed": "Não foi possível copiar. Selecione o comando e copie manualmente.",
+    "running": {
+      "label": "Em execução",
+      "commit": "commit {{commit}} · ",
+      "channel": {
+        "prebuilt": "imagem pré-compilada",
+        "source": "compilada a partir do código-fonte",
+        "unknown": "método de instalação não registrado"
+      }
+    },
+    "available": {
+      "label": "Disponível",
+      "version": "O Backspace {{version}} está disponível",
+      "released": "Lançado em {{date}} · ",
+      "releaseNotes": "Notas da versão",
+      "fromInstallDir": "Do seu diretório de instalação:",
+      "scriptDescription": "Cria um snapshot do banco de dados, baixa a nova imagem e reinicia apenas o contêiner do Backspace. Se a nova versão não iniciar corretamente ou continuar executando o código antigo, ela restaura a versão que você está usando agora.",
+      "noScript": "Não tenho o update.sh",
+      "manualIntro": "O update.sh acompanha o projeto a partir da versão 1.0.5. Em um checkout do Git, <code>git pull</code> o traz. Caso contrário, execute as etapas manualmente, depois de criar um snapshot com <code>./backup.sh</code>.",
+      "prebuiltInstall": "Instalação por imagem pré-compilada:",
+      "sourceInstall": "Instalação a partir do código-fonte:",
+      "manualWarning": "Nomeie explicitamente o serviço <code>backspace</code> e não passe <code>--remove-orphans</code>. O Compose sugerirá essa opção se você executar outros contêineres neste projeto, e ela os excluiria."
+    },
+    "upToDate": "Você está na versão mais recente.",
+    "disabled": {
+      "title": "As verificações de atualização estão desativadas",
+      "description": "Esta instância não entrará em contato com o GitHub. Defina <code>BACKSPACE_UPDATE_CHECK=true</code> no seu <code>.env</code> para permitir a consulta ou verifique a página de versões manualmente."
+    },
+    "rateLimited": {
+      "title": "O GitHub limitou a consulta por taxa",
+      "description": "Isso não indica se existe uma atualização. Tente novamente mais tarde."
+    },
+    "unreachable": {
+      "title": "Não foi possível verificar se há atualizações",
+      "description": "Não foi possível acessar o GitHub, então isso não indica se existe uma atualização. Sua instância não foi afetada."
+    },
+    "lastChecked": "Última verificação: {{when}}",
+    "noLookups": "Nenhuma consulta é realizada",
+    "checkAgain": "Verificar novamente",
+    "checking": "Verificando…"
+  },
+  "users": {
+    "title": "Usuários",
+    "description": "Visualize e gerencie as contas de usuários desta instância.",
+    "searchPlaceholder": "Pesquisar usuários…",
+    "loading": "Carregando usuários…",
+    "loadFailed": "Falha ao carregar usuários",
+    "empty": "Nenhum usuário encontrado",
+    "filters": {
+      "allInstances": "Todas as instâncias",
+      "localOnly": "Somente locais",
+      "allRoles": "Todas as funções",
+      "admin": "Administrador",
+      "nonAdmin": "Não administrador",
+      "joinedAfter": "Entrou depois de",
+      "joinedBefore": "Entrou antes de",
+      "newest": "Mais recentes primeiro",
+      "oldest": "Mais antigos primeiro",
+      "nameDesc": "Nome Z-A",
+      "deleted": "Excluído",
+      "clear": "Limpar filtros"
+    },
+    "badge": {
+      "admin": "Administrador",
+      "deleted": "Excluído"
+    },
+    "actions": {
+      "demote": "Remover administrador",
+      "promote": "Promover a administrador",
+      "federatedNoAdmin": "Usuários federados não podem ser administradores",
+      "resetPassword": "Redefinir senha",
+      "federatedNoReset": "Usuários federados se autenticam pela instância de origem",
+      "delete": "Excluir usuário",
+      "selfDelete": "Use as configurações da conta para excluir sua própria conta"
+    },
+    "tempPassword": {
+      "label": "Senha temporária:",
+      "note": "Exibida uma vez. O usuário foi desconectado e precisa fazer login novamente."
+    },
+    "pagination": "Página {{page}} de {{total}} ({{users}})",
+    "count_one": "{{count}} usuário",
+    "count_other": "{{count}} usuários",
+    "roleFailed": "Falha ao atualizar a função",
+    "resetFailed": "Falha ao redefinir a senha",
+    "actionFailed": "Ação falhou",
+    "resetDialog": {
+      "title": "Redefinir senha",
+      "description": "Redefinir a senha de <strong>{{username}}</strong>? A pessoa será desconectada imediatamente e deverá fazer login com a nova senha temporária.",
+      "confirm": "Redefinir senha"
+    },
+    "demoteDialog": {
+      "title": "Remover administrador",
+      "description": "Remover os privilégios de administrador de <strong>{{username}}</strong>? A pessoa perderá acesso às configurações da instância.",
+      "confirm": "Remover"
+    },
+    "deleteDialog": {
+      "title": "Excluir usuário",
+      "description": "Excluir permanentemente <strong>{{username}}</strong>? Isso removerá a pessoa de todos os espaços, DMs e listas de amigos. Isso não pode ser desfeito.",
+      "confirm": "Excluir usuário"
+    },
+    "count_many": "{{count}} usuários"
+  },
+  "mobile": {
+    "title": "Instância",
+    "sections": {
+      "general": "Geral",
+      "registration": "Cadastro",
+      "federation": "Federação",
+      "streaming": "Transmissão",
+      "storage": "Armazenamento",
+      "updates": "Atualizações",
+      "users": "Usuários",
+      "telemetry": "Oi"
+    }
+  }
+}

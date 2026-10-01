@@ -1,0 +1,155 @@
+{
+  "message": {
+    "edit": {
+      "hint": "esc para <cancel>cancelar</cancel> • enter para <save>salvar</save>"
+    },
+    "edited": "(editada)",
+    "gifAlt": "GIF",
+    "upload": {
+      "failed": "Falha no envio",
+      "discard": "Descartar"
+    },
+    "actions": {
+      "confirmDelete": "Confirmar exclusão"
+    },
+    "reply": {
+      "jump": "Ir para a mensagem original"
+    },
+    "mention": {
+      "unknownUser": "Usuário desconhecido"
+    },
+    "reactions": {
+      "you": "Você",
+      "others_one": "{{count}} outra pessoa",
+      "others_other": "{{count}} outras pessoas",
+      "bySelf": "Você reagiu",
+      "byOne": "{{name}} reagiu",
+      "byMany": "{{names}} reagiram",
+      "others_many": "{{count}} outras pessoas"
+    }
+  },
+  "list": {
+    "noHistoryPermission": "Você não tem permissão para ver o histórico de mensagens neste canal",
+    "loading": "Carregando mensagens",
+    "loadingOlder": "Carregando mensagens mais antigas",
+    "jumpToPresent": "Ir para o presente",
+    "jump": {
+      "unavailable": "Essa mensagem não está mais disponível",
+      "failed": "Não foi possível carregar essa mensagem",
+      "presentFailed": "Não foi possível carregar as mensagens mais recentes"
+    },
+    "welcome": {
+      "channel": {
+        "title": "Boas-vindas ao canal!",
+        "description": "Este é o começo da conversa."
+      },
+      "group": {
+        "intro": "Este é o começo da conversa do seu grupo.",
+        "owner": "Dono: <owner>@{{name}}</owner>",
+        "federatedNotice": "As mensagens ficam armazenadas na sua instância e nas instâncias de origem dos seus destinatários. Elas não têm criptografia de ponta a ponta.",
+        "openSettings": "Abrir configurações do grupo",
+        "leave": "Sair do grupo"
+      },
+      "dm": {
+        "fallbackName": "Mensagem direta",
+        "intro": "Este é o começo do seu histórico de mensagens diretas com <strong>@{{name}}</strong>.",
+        "federatedNotice": "As mensagens ficam armazenadas na sua instância e na instância de origem do seu destinatário. Elas não têm criptografia de ponta a ponta.",
+        "removeFriend": "Remover amigo"
+      }
+    }
+  },
+  "composer": {
+    "noPermission": "Você não tem permissão para enviar mensagens neste canal",
+    "placeholder": {
+      "channel": "Mensagem em #{{name}}",
+      "dm": "Mensagem para @{{name}}"
+    },
+    "replyingTo": "Respondendo a",
+    "cancelReply": "Cancelar resposta",
+    "removeAttachment": "Remover anexo",
+    "attachFile": "Anexar arquivo",
+    "uploading": "Enviando…",
+    "uploadingLabel": "Enviando",
+    "failedCount_one": "{{count}} falhou",
+    "failedCount_other": "{{count}} falharam",
+    "failedHint": "Remova o anexo que falhou ou tente enviá-lo de novo para poder enviar a mensagem",
+    "gif": "GIF",
+    "gifPicker": "Seletor de GIF",
+    "emoji": "Emoji",
+    "emojiPicker": "Seletor de emoji",
+    "send": "Enviar",
+    "sendMessage": "Enviar mensagem",
+    "uploadFailed": "Falha ao enviar {{file}}: {{reason}}",
+    "uploadFailedReason": "Falha no envio",
+    "sendFailed": "Falha ao enviar a mensagem",
+    "typing": {
+      "named_one": "{{names}} está digitando",
+      "named_other": "{{names}} estão digitando",
+      "several": "Várias pessoas estão digitando",
+      "named_many": "{{names}} estão digitando"
+    },
+    "failedCount_many": "{{count}} falharam"
+  },
+  "menu": {
+    "saveImage": "Salvar imagem",
+    "copyImage": "Copiar imagem",
+    "openOriginal": "Abrir original",
+    "saveVideo": "Salvar vídeo",
+    "saveAudio": "Salvar áudio",
+    "copyLink": "Copiar link",
+    "openLink": "Abrir link",
+    "copySelectedText": "Copiar texto selecionado",
+    "copyText": "Copiar texto",
+    "markUnread": "Marcar como não lida",
+    "editMessage": "Editar mensagem",
+    "deleteMessage": "Excluir mensagem",
+    "linkCopied": "Link copiado",
+    "linkCopyFailed": "Falha ao copiar o link"
+  },
+  "attachment": {
+    "progress": {
+      "pausedTitle": "Pausado — {{percent}}"
+    },
+    "video": {
+      "cannotPlayDownload": "Não é possível reproduzir aqui — baixe o arquivo",
+      "unsupportedFormat": "Formato de vídeo não compatível",
+      "unsupportedBrowser": "Seu navegador não é compatível com a reprodução de vídeo."
+    },
+    "audio": {
+      "unsupportedBrowser": "Seu navegador não é compatível com a reprodução de áudio."
+    },
+    "federation": {
+      "remoteNamed": "Hospedado na instância de {{sender}}. Baixe para manter uma cópia local.",
+      "remoteUnknown": "Hospedado na instância de quem enviou. Baixe para manter uma cópia local.",
+      "partialGeneric": "Alguns destinatários não conseguem guardar este arquivo em cache local.",
+      "partialInstance": "instância de {{username}} (limite: {{limit}})",
+      "partialList": "Não foi possível guardar o arquivo em cache em {{instances}}. Essas pessoas ainda podem vê-lo pela sua instância.",
+      "listPair": "{{first}} e {{second}}"
+    }
+  },
+  "gif": {
+    "searchPlaceholder": "Pesquisar GIFs",
+    "noResults": "Nenhum GIF encontrado",
+    "noTrending": "Nenhum GIF em alta",
+    "attribution": "Powered by Klipy"
+  },
+  "preview": {
+    "save": "Salvar imagem",
+    "copy": "Copiar imagem",
+    "alt": "Pré-visualização da imagem"
+  },
+  "invite": {
+    "sentBy": "{{name}} enviou um convite",
+    "memberCount_one": "{{count}} membro",
+    "memberCount_other": "{{count}} membros",
+    "revoked": "Convite não é mais válido",
+    "join": "Entrar",
+    "joining": "Entrando…",
+    "joinFailed": "Falha ao entrar",
+    "memberCount_many": "{{count}} membros"
+  },
+  "notification": {
+    "unknownSender": "Alguém",
+    "attachmentOnly": "Enviou um anexo"
+  }
+}

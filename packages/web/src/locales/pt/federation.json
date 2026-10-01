@@ -1,0 +1,336 @@
+{
+  "connections": {
+    "title": "Instâncias conectadas",
+    "description": "Vincule contas entre instâncias federadas do Backspace.",
+    "empty": "Nenhuma instância remota conectada. Adicione uma para começar a federar.",
+    "addButton": "+ Adicionar instância",
+    "home": {
+      "title": "Instância de origem",
+      "asUser": "como {{username}}",
+      "local": "Local"
+    },
+    "status": {
+      "connected": "Conectada",
+      "disconnected": "Desconectada",
+      "unreachable": "Inacessível",
+      "authExpired": "Autenticação expirada"
+    },
+    "add": {
+      "title": "Adicionar instância remota",
+      "urlPlaceholder": "https://instancia.exemplo.com",
+      "probing": "Verificando…",
+      "connect": "Conectar",
+      "connecting": "Conectando…",
+      "registrationClosed": "Esta instância desativou novos cadastros federados. Contas existentes ainda podem entrar.",
+      "passwordLabel": "Digite sua senha para conectar a {{host}}",
+      "passwordPlaceholder": "A que você usa para entrar",
+      "passwordHint": "Sua senha é verificada pela sua instância de origem e nunca é enviada para {{host}}. Essa instância recebe uma credencial única, gerada só para ela.",
+      "fallbackNotice": {
+        "credentialRefused": "Já existe uma conta em {{host}} e ela não aceita a credencial emitida pela sua instância de origem. Entre com a senha que você definiu nessa instância. Depois, ela será trocada pela credencial emitida.",
+        "registrationClosed": "{{host}} não está aceitando novas contas de outras instâncias, então não foi possível criar uma para você lá. Se você já tem uma conta em {{host}}, entre com ela abaixo."
+      },
+      "usernamePlaceholder": "Seu nome de usuário nesta instância",
+      "remotePasswordLabel": "Senha desta instância",
+      "remotePasswordPlaceholder": "Senha na instância remota",
+      "loggingIn": "Entrando…",
+      "loginAndConnect": "Entrar e conectar"
+    },
+    "filter": {
+      "all": "Todas",
+      "connected": "Conectadas",
+      "disconnected": "Desconectadas",
+      "issues": "Com problemas",
+      "noMatch": "Nenhuma instância corresponde ao filtro atual."
+    },
+    "sort": {
+      "dateAdded": "Data de adição",
+      "lastConnected": "Última conexão"
+    },
+    "row": {
+      "asUser": "como {{username}}",
+      "added": "Adicionada em {{date}}",
+      "connectedAgo": "Conectada {{time}}",
+      "disconnectedAgo": "Desconectada {{time}}",
+      "lastConnectedAgo": "Última conexão {{time}}",
+      "remoteUserId": "ID de usuário remoto",
+      "addedLabel": "Adicionada",
+      "disconnectedLabel": "Desconectada",
+      "lastConnectedLabel": "Última conexão",
+      "homePasswordLabel": "Senha da sua conta de origem",
+      "disconnect": "Desconectar",
+      "reconnect": "Reconectar",
+      "reauthenticate": "Autenticar novamente",
+      "forceRemove": "Forçar remoção",
+      "deleteIdentity": "Excluir identidade",
+      "deleteIdentityDisabled": "Desconecte primeiro para excluir a identidade",
+      "reason": {
+        "unreachable": "Não foi possível acessar esta instância.",
+        "sessionExpired": "A sessão salva expirou. Autentique-se novamente para reconectar.",
+        "reauthenticate": "Autentique-se novamente para conectar.",
+        "authenticateHome": "Autentique-se para conectar à sua instância de origem."
+      }
+    },
+    "forceRemove": {
+      "title": "Forçar remoção da entrada",
+      "description": "Isso removerá a entrada de registro de {{name}}. A instância remota não será notificada. Use isso somente se a instância estiver permanentemente inacessível.",
+      "confirm": "Forçar remoção"
+    },
+    "deleteIdentity": {
+      "title": "Excluir identidade",
+      "description": "Remover sua identidade federada em <name>{{name}}</name>. Escolha como seus dados devem ser tratados.",
+      "leave": {
+        "title": "Sair discretamente",
+        "description": "Desconectar desta instância. Sua conta e todos os dados permanecem."
+      },
+      "soft": {
+        "title": "Excluir usuário",
+        "description": "Exclui sua conta, mas mantém suas mensagens. Você aparecerá como ‘Usuário excluído’."
+      },
+      "full": {
+        "title": "Apagar tudo",
+        "description": "Exclui sua conta e todas as suas mensagens, DMs, reações e arquivos. Nada permanece."
+      },
+      "scope": {
+        "heading": "Escopo",
+        "this": "Somente esta instância",
+        "select": "Selecionar instâncias…",
+        "all": "Todas as instâncias remotas"
+      },
+      "deleting": "Excluindo…",
+      "disconnect": "Desconectar",
+      "confirm": "Excluir identidade",
+      "toast": {
+        "disconnected": "Desconectado com sucesso",
+        "deleted_one": "Identidade excluída com sucesso",
+        "deleted_other": "Identidade excluída em {{count}} instâncias",
+        "ownsSpaces": "{{host}}: transfira primeiro a propriedade dos espaços",
+        "failed": "{{host}}: {{error}}",
+        "failedGeneric": "Falhou",
+        "deleted_many": "Identidade excluída em {{count}} instâncias"
+      }
+    },
+    "action": {
+      "friendRequest": "solicitação de amizade",
+      "spaceJoin": "entrada em espaço",
+      "directMessage": "mensagem direta",
+      "friendRequestTo": "Solicitação de amizade para {{target}}",
+      "joinSpace": "Entrar em {{target}}",
+      "directMessageTo": "Mensagem direta para {{target}}",
+      "instanceConnect": "conexão",
+      "connectTo": "Conectar a {{target}}"
+    },
+    "pending": {
+      "title": "Aprovações de peering pendentes",
+      "description": "Seu administrador precisa aprovar antes que estas solicitações possam prosseguir.",
+      "onPeer": "em <peer>{{peer}}</peer>",
+      "cancelling": "Cancelando…",
+      "cancelled": "Solicitação de peering cancelada",
+      "cancelFailed": "Falha ao cancelar: {{error}}"
+    },
+    "outcomes": {
+      "title": "Resultados recentes de peering",
+      "approved": "Sua solicitação de peering com {{host}} foi aprovada pelo seu administrador.",
+      "denied": "Sua solicitação de peering com {{host}} foi negada pelo seu administrador.",
+      "expired": "Sua solicitação de peering com {{host}} expirou sem ação do administrador.",
+      "originalAction": "Ação original: {{action}}",
+      "retry": "Tentar novamente: {{action}}",
+      "dismissing": "Dispensando…",
+      "dismissFailed": "Falha ao dispensar: {{error}}",
+      "dismissAllFailed": "Falha ao dispensar tudo: {{error}}"
+    },
+    "peering": {
+      "unavailable": "As mensagens com pessoas em {{name}} não podem ser retransmitidas até que um administrador aprove o peering com essa instância.",
+      "inProgress": "Configurando o peering com {{name}}. As mensagens com as pessoas de lá serão retransmitidas em breve."
+    }
+  },
+  "admin": {
+    "title": "Federação",
+    "description": "Configure o relay de federação, a rotação de segredos e gerencie as instâncias em peering.",
+    "relay": {
+      "title": "Configurações de relay",
+      "description": "Controle o relay de DMs entre instâncias federadas. Quando ativado, as DMs com usuários de instâncias parceiras são retransmitidas de servidor para servidor.",
+      "enable": {
+        "label": "Ativar relay de DMs",
+        "description": "Retransmitir mensagens diretas de e para instâncias parceiras"
+      },
+      "autoAccept": {
+        "label": "Aceitar peering automaticamente",
+        "description": "Aceita automaticamente solicitações de peering de outras instâncias. Quando desativado, só é permitido o peering iniciado manualmente."
+      },
+      "ttl": {
+        "label": "TTL do relay (dias)",
+        "description": "Por quanto tempo as mensagens retransmitidas ficam retidas na caixa de saída antes da limpeza"
+      },
+      "rotation": {
+        "label": "Rotação de segredo padrão (dias)",
+        "description": "Intervalo de rotação automática para novos parceiros. Parceiros existentes mantêm a configuração atual."
+      }
+    },
+    "status": {
+      "active": "Ativa",
+      "pending": "Pendente",
+      "unreachable": "Inacessível",
+      "rejected": "Rejeitada (peering automático negado)",
+      "rejectedShort": "Rejeitada",
+      "revoked": "Revogada",
+      "awaitingApproval": "Aguardando aprovação",
+      "needsAttention": "Requer atenção"
+    },
+    "filter": {
+      "statusHeading": "Status",
+      "sort": {
+        "domain": "Domínio (A-Z)",
+        "lastSeen": "Visto por último",
+        "dateAdded": "Data de adição",
+        "failures": "Falhas",
+        "revokedDate": "Data de revogação"
+      }
+    },
+    "views": {
+      "active": "Ativas",
+      "revoked": "Revogadas"
+    },
+    "peer": {
+      "instanceName": "Nome da instância",
+      "revokedMeta": "Revogada: {{revoked}} · Peering: {{peered}}",
+      "unreachableMeta": "Visto por último: {{lastSeen}} · {{failures}}",
+      "activeMeta": "Visto por último: {{lastSeen}} · Sincronizada: {{synced}}",
+      "failures_one": "{{count}} falha",
+      "failures_other": "{{count}} falhas",
+      "reinitiate": "Reiniciar peering",
+      "deletePermanently": "Excluir permanentemente",
+      "consecutiveFailures": "Falhas consecutivas",
+      "authFailures": "Falhas de autenticação",
+      "lastFailure": "Última falha",
+      "peeredSince": "Em peering desde",
+      "secretRotated": "Segredo rotacionado",
+      "autoRotate": "Rotação automática",
+      "rotationStatus": "Status da rotação",
+      "rotateEvery_one": "A cada {{count}} dia",
+      "rotateEvery_other": "A cada {{count}} dias",
+      "defaultTag": "(padrão)",
+      "inProgress": "Em andamento",
+      "idle": "Ociosa",
+      "intervalRange": "Deve ser de 1 a 365",
+      "intervalUpdated": "Intervalo de rotação atualizado",
+      "checking": "Verificando…",
+      "checkNow": "Verificar agora",
+      "resetPeering": "Redefinir peering",
+      "rotateSecret": "Rotacionar segredo",
+      "rotationInProgress": "Já há uma rotação em andamento",
+      "revoke": "Revogar",
+      "editInterval": "Editar intervalo de rotação",
+      "failures_many": "{{count}} falhas",
+      "rotateEvery_many": "A cada {{count}} dias"
+    },
+    "approvals": {
+      "title": "Solicitações de aprovação pendentes",
+      "outboundTitle_one": "{{name}} — {{count}} usuário quer que façamos peering",
+      "outboundTitle_other": "{{name}} — {{count}} usuários querem que façamos peering",
+      "requested": "Solicitada {{time}}",
+      "subscriber": {
+        "friendAdd": "adicionar como amigo {{target}}",
+        "spaceJoin": "quer entrar em {{target}}",
+        "directMessage": "quer enviar DM para {{target}}",
+        "instanceConnect": "conectou uma conta em {{target}}"
+      },
+      "approve": "Aprovar",
+      "deny": "Negar",
+      "established": "Peering estabelecido com {{name}}",
+      "deniedToast": "Solicitação de peering de {{name}} negada",
+      "confirm": {
+        "approveTitle": "Aprovar solicitação de peering",
+        "denyTitle": "Negar solicitação de peering",
+        "approveOutbound_one": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuário solicitante. A instância remota precisa estar acessível.",
+        "approveOutbound_other": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuários solicitantes. A instância remota precisa estar acessível.",
+        "approveInbound": "Isso iniciará um handshake de peering com {{name}}. A instância remota precisa estar acessível.",
+        "denyOutbound_one": "Isso negará a solicitação de peering de saída e notificará o usuário solicitante. Ele poderá pedir de novo repetindo o que fez.",
+        "denyOutbound_other": "Isso negará a solicitação de peering de saída e notificará os usuários solicitantes. Eles poderão pedir de novo repetindo o que fizeram.",
+        "denyInbound": "Isso negará a solicitação e bloqueará futuras solicitações de peering automático de {{name}}. Você poderá desbloquear essa instância depois, na lista de parceiros rejeitados.",
+        "approveAndPeer": "Aprovar e fazer peering",
+        "approve": "Aprovar",
+        "denyAndNotify": "Negar e notificar",
+        "deny": "Negar",
+        "approveOutbound_many": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuários solicitantes. A instância remota precisa estar acessível.",
+        "denyOutbound_many": "Isso negará a solicitação de peering de saída e notificará os usuários solicitantes. Eles poderão pedir de novo repetindo o que fizeram."
+      },
+      "outboundTitle_many": "{{name}} — {{count}} usuários querem que façamos peering"
+    },
+    "resetCleanup": {
+      "title": "Limpeza após redefinição",
+      "peerReset": "{{name}} foi redefinida",
+      "peerResetDescription": "Uma nova instância está rodando neste domínio. Restabeleça a federação para corrigir amizades e DMs obsoletas.",
+      "repeer": "Refazer peering",
+      "resetToast": "{{host}} foi redefinida — é preciso restabelecer a federação",
+      "repeerIncomplete": "Peering incompleto — {{name}} ainda mantém um peering obsoleto com você. O administrador dela precisa redefinir o lado dele e depois você deve refazer o peering.",
+      "repeerInitiated": "Peering reiniciado com {{name}}",
+      "removed": "{{username}} e todo o seu conteúdo foram removidos",
+      "ownsSpaces": "{{username}} possui espaços — transfira a propriedade primeiro (Configurações do espaço → Propriedade).",
+      "staleRemote": "A instância remota ainda mantém um peering obsoleto com você. Peça ao administrador dela que redefina o lado dele e depois refaça o peering.",
+      "eventSummary": "<host>{{host}}</host> foi redefinida — {{identities}} limpas automaticamente, {{accounts}} com conteúdo local desvinculadas. As contas desvinculadas continuam funcionando localmente — os donos mantêm o acesso com a senha atual. O dono pode revincular uma conta desvinculada à sua nova identidade de origem nas configurações dela (Conta → aviso de desvinculação) estando conectado às duas.",
+      "identitiesCleaned_one": "{{count}} identidade replicada",
+      "identitiesCleaned_other": "{{count}} identidades replicadas",
+      "accountsDetached_one": "{{count}} conta",
+      "accountsDetached_other": "{{count}} contas",
+      "memberships_one": "{{count}} participação",
+      "memberships_other": "{{count}} participações",
+      "messages_one": "{{count}} mensagem",
+      "messages_other": "{{count}} mensagens",
+      "owns": "Possui: {{spaces}}",
+      "dismissKeep": "Dispensar — manter todas as contas desvinculadas",
+      "confirm": {
+        "repeerTitle": "Restabelecer federação",
+        "removeTitle": "Remover conta desvinculada",
+        "repeerDescription": "Isso exclui o registro local do parceiro e inicia um novo handshake autenticado com {{origin}}. A instância remota precisa estar acessível e, se não aceitar automaticamente, aprovar a solicitação.",
+        "removeDescription": "Excluir permanentemente {{username}} e todo o seu conteúdo nesta instância? Isso não pode ser desfeito.",
+        "repeerConfirm": "Refazer peering e corrigir",
+        "removeConfirm": "Excluir permanentemente"
+      },
+      "identitiesCleaned_many": "{{count}} identidades replicadas",
+      "accountsDetached_many": "{{count}} contas",
+      "memberships_many": "{{count}} participações",
+      "messages_many": "{{count}} mensagens"
+    },
+    "peers": {
+      "title": "Instâncias em peering",
+      "empty": "Nenhum parceiro de federação configurado. Os parceiros são criados automaticamente quando usuários se conectam a instâncias remotas.",
+      "noMatch": "Nenhum parceiro corresponde ao filtro atual.",
+      "noRevoked": "Nenhum parceiro revogado.",
+      "backOnline": "{{name}} voltou a ficar online",
+      "stillUnreachable": "{{name}} continua inacessível",
+      "rotationInitiated": "Rotação de segredo iniciada — período de tolerância de 15 minutos",
+      "revoked": "Parceiro revogado",
+      "reinitiated": "Peering reiniciado",
+      "reinitiateFailed": "O registro do parceiro foi excluído, mas o handshake falhou: {{error}}. Refaça o peering manualmente com {{origin}}",
+      "deleted": "Parceiro excluído permanentemente",
+      "resetDone": "Peering redefinido para {{name}}",
+      "confirm": {
+        "rotate": {
+          "title": "Rotacionar segredo HMAC",
+          "description": "Isso gerará um novo segredo HMAC para {{name}}. As duas instâncias aceitarão o segredo antigo e o novo durante um período de tolerância de 15 minutos.",
+          "confirm": "Rotacionar"
+        },
+        "revoke": {
+          "title": "Revogar parceiro",
+          "description": "Isso interromperá todo o tráfego de relay de federação com {{name}}. As entradas pendentes da caixa de saída serão apagadas. Você poderá reiniciar o peering depois.",
+          "confirm": "Revogar"
+        },
+        "reinitiate": {
+          "title": "Reiniciar peering",
+          "description": "Isso excluirá o registro revogado e iniciará um novo handshake com {{origin}}. A instância remota precisa estar acessível.",
+          "confirm": "Reiniciar"
+        },
+        "delete": {
+          "title": "Excluir registro do parceiro",
+          "description": "Isso excluirá permanentemente o registro do parceiro {{name}}. Isso não pode ser desfeito.",
+          "confirm": "Excluir"
+        },
+        "reset": {
+          "title": "Redefinir peering",
+          "description": "Redefinir o peering com {{name}}? Isso exclui o registro local do parceiro e todas as entradas pendentes da caixa de saída. Depois da redefinição, você precisará reiniciar o peering combinando com o administrador remoto por outro canal. Isso não pode ser desfeito.",
+          "confirm": "Redefinir"
+        }
+      }
+    }
+  }
+}

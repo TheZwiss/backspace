@@ -1,0 +1,147 @@
+{
+  "names": {
+    "group": "Grupo",
+    "directMessage": "Mensagem direta",
+    "theGroup": "o grupo",
+    "unknownHandle": "desconhecido",
+    "groupFallback": "DM em grupo",
+    "emptyGroup": "Grupo vazio"
+  },
+  "preview": {
+    "image": "Imagem",
+    "video": "Vídeo",
+    "audio": "Áudio",
+    "files_one": "📎 {{count}} arquivo",
+    "files_other": "📎 {{count}} arquivos",
+    "withSender": "{{name}}: {{text}}",
+    "files_many": "📎 {{count}} arquivos"
+  },
+  "system": {
+    "spaceInviteNamed": "📨 Enviou convite para {{spaceName}}",
+    "spaceInvite": "📨 Enviou um convite para um espaço",
+    "memberAdded": "{{actor}} adicionou {{target}}",
+    "memberLeft": "{{target}} saiu do grupo",
+    "memberRemoved": "{{actor}} removeu {{target}}",
+    "ownerChanged": "{{newOwner}} agora é o dono do grupo",
+    "renamed": "{{actor}} renomeou o grupo",
+    "nameCleared": "{{actor}} apagou o nome do grupo",
+    "iconChanged": "{{actor}} atualizou o ícone do grupo",
+    "generic": "Mensagem do sistema",
+    "someone": "alguém",
+    "aMember": "Um membro"
+  },
+  "deletedNotice": {
+    "accountDeleted": "A conta deste usuário foi excluída"
+  },
+  "memberRow": {
+    "viewProfile": "Ver perfil",
+    "transferOwnership": "Transferir propriedade",
+    "removeFromGroup": "Remover do grupo",
+    "removeFriend": "Remover amigo",
+    "ownerTooltip": "Dono do grupo",
+    "actions": "Ações do membro"
+  },
+  "roster": {
+    "owner": "Dono",
+    "sectionCount": "{{label}} — {{total}}"
+  },
+  "kick": {
+    "title": "Remover do grupo",
+    "description": "Remover {{name}} deste grupo? Essa pessoa não poderá ver as novas mensagens.",
+    "success": "{{name}} foi removido(a) do grupo",
+    "failed": "Falha ao remover o membro"
+  },
+  "transfer": {
+    "title": "Transferir propriedade",
+    "description": "Transferir a propriedade para {{name}}? Você perderá os privilégios de dono.",
+    "confirm": "Transferir",
+    "success": "Propriedade transferida para {{name}}",
+    "failed": "Falha ao transferir a propriedade"
+  },
+  "removeFriend": {
+    "failed": "Falha ao remover o amigo"
+  },
+  "leave": {
+    "title": "Sair do grupo",
+    "description": "Sair de “{{name}}”? Você deixará de receber mensagens desta conversa.",
+    "inProgress": "Saindo…",
+    "failed": "Falha ao sair do grupo",
+    "explanation": "Você deixará de receber mensagens desta conversa. Os outros membros verão uma mensagem do sistema."
+  },
+  "search": {
+    "trigger": "Encontrar ou iniciar uma conversa",
+    "placeholder": "Pesquisar…",
+    "emptyHint": "Pesquise um usuário para começar a conversar",
+    "conversations": "Conversas",
+    "users": "Usuários",
+    "searching": "Pesquisando…",
+    "noResults": "Nenhum resultado encontrado",
+    "createFailed": "Falha ao criar a DM"
+  },
+  "list": {
+    "title": "Mensagens",
+    "empty": "Nenhuma conversa ainda.",
+    "leaveGroup": "Sair do grupo",
+    "justNow": "agora",
+    "minutesShort_one": "{{count}} min",
+    "minutesShort_other": "{{count}} min",
+    "hoursShort_one": "{{count}} h",
+    "hoursShort_other": "{{count}} h",
+    "daysShort_one": "{{count}} d",
+    "daysShort_other": "{{count}} d",
+    "minutesShort_many": "{{count}} min",
+    "hoursShort_many": "{{count}} h",
+    "daysShort_many": "{{count}} d"
+  },
+  "newDm": {
+    "title": "Nova mensagem direta",
+    "searchPlaceholder": "Pesquisar usuário…",
+    "noUsers": "Nenhum usuário encontrado"
+  },
+  "addMember": {
+    "title": "Adicionar amigos à DM",
+    "description": "Selecione amigos para adicionar a esta conversa.",
+    "capacity": "{{current}}/{{max}}",
+    "searchPlaceholder": "Pesquisar amigos…",
+    "limitReached": "Esta DM em grupo atingiu o limite de {{max}} membros.",
+    "alreadyInDm": "Já está nesta DM",
+    "noMatch": "Nenhum amigo corresponde à sua pesquisa",
+    "noFriends": "Nenhum amigo ainda",
+    "selectFriends": "Selecionar amigos",
+    "addCount_one": "Adicionar {{count}} amigo",
+    "addCount_other": "Adicionar {{count}} amigos",
+    "adding": "Adicionando…",
+    "noOtherMember": "Não foi possível identificar o outro membro desta conversa.",
+    "failed": "Falha ao adicionar membros",
+    "addCount_many": "Adicionar {{count}} amigos"
+  },
+  "groupSettings": {
+    "title": "Configurações do grupo",
+    "general": "Geral",
+    "overview": "Visão geral",
+    "backToMenu": "Voltar ao menu de configurações da DM em grupo",
+    "changeIcon": "Alterar ícone do grupo",
+    "icon": "Ícone do grupo",
+    "clickToUpload": "Clique para enviar",
+    "removeIcon": "Remover ícone do grupo",
+    "nameLabel": "Nome do grupo",
+    "nameAria": "Nome do grupo",
+    "nameCount": "{{current}}/{{max}}",
+    "addMember": "Adicionar membro",
+    "groupFull": "O grupo está cheio",
+    "groupFullSuffix": "— O grupo está cheio",
+    "cropTitle": "Recortar ícone do grupo",
+    "saveFailed": "Falha ao salvar as configurações"
+  },
+  "groupInfo": {
+    "title": "Informações do grupo",
+    "plainTitle": "Informações",
+    "notFound": "Conversa não encontrada.",
+    "notGroup": "Esta conversa não tem informações de grupo.",
+    "cancelEdit": "Cancelar edição",
+    "federated": "Grupo federado",
+    "memberCount_one": "{{count}} membro",
+    "memberCount_other": "{{count}} membros",
+    "memberCount_many": "{{count}} membros"
+  }
+}

@@ -6,9 +6,9 @@ moves. This spec is the contract; the foundation PR implements it and each
 surface sweep PR extends it.
 
 Shipped languages: English (`en`, the source language and the fallback),
-Russian (`ru`), German (`de`), Simplified Chinese (`zh`). Adding a language is a
-catalog directory plus one entry in `supportedLanguages`; nothing else in the
-code should need to know the list.
+Russian (`ru`), German (`de`), Brazilian Portuguese (`pt`), Simplified Chinese
+(`zh`). Adding a language is a catalog directory plus one entry in
+`supportedLanguages`; nothing else in the code should need to know the list.
 
 `zh` is the Simplified catalog and detection maps every `zh-*` tag onto it,
 Traditional included: a `zh-TW` browser gets a script its user can read
@@ -16,6 +16,13 @@ rather than English, and the picker says 简体中文 so they know which variant
 they have. A Traditional catalog would be `zh-Hant`, and adding it means
 teaching `resolveSupportedLanguage` to look at the script subtag, which it
 does not today.
+
+`pt` is the Brazilian Portuguese catalog, and it follows the same rule.
+Portuguese has two written standards, Brazilian (`pt-BR`) and European
+(`pt-PT`), which differ in spelling, vocabulary and forms of address but are
+mutually readable. Detection maps every `pt-*` tag onto the one catalog: a
+`pt-PT` browser gets Portuguese its user can read rather than English, and the
+picker says Português do Brasil so they know which variant they have.
 
 Source files:
 - Runtime setup: `packages/web/src/i18n/index.ts` (`initI18n`, `setLanguage`,
