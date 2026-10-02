@@ -60,3 +60,6 @@
 {"snapshot_date":"2026-09-30","dimension":"web","title":"","count":136,"uniques":136}
 {"snapshot_date":"2026-09-30","dimension":"desktop","title":"","count":58,"uniques":58}
 {"snapshot_date":"2026-09-30","dimension":"mobile","title":"","count":17,"uniques":17}
+{"snapshot_date":"2026-10-01","dimension":"web","title":"","count":142,"uniques":142}
+{"snapshot_date":"2026-10-01","dimension":"desktop","title":"","count":64,"uniques":64}
+{"snapshot_date":"2026-10-01","dimension":"mobile","title":"","count":17,"uniques":17}
