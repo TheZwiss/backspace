@@ -696,3 +696,9 @@ All keyed by `request.ip`.
 1. Loads full user from DB by `request.userId`
 2. Rejects with 403 if user not found or `isAdmin !== 1`
 3. Used by admin routes (user management, password reset, federation peer management)
+
+## 12. Bot Accounts and Tokens
+
+A bot is a `users` row with `is_bot = 1` and `password_hash = '!bot'` (login by password is impossible). Its token is a JWT signed like a session token with a 3650-day lifetime, issued by `POST /api/bots` and `POST /api/bots/:id/token`; it is revoked through `users.password_changed_at`, the same mechanism as a password change. The `Authorization` header accepts `Bearer <token>` and its alias `Bot <token>` (`tokenFromAuthHeader` in `utils/auth.ts`, shared with the tus upload auth in `routes/files.ts`).
+
+`POST /api/auth/register` accepts an optional `botProof` for a bot registering as a federated account on another instance: the route verifies it with the bot's home over signed S2S and takes the identity and the `is_bot` flag from the answer, never from the request. See [bots.md](bots.md), section 7.

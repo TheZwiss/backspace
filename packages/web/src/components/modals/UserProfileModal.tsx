@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { BotBadge } from '../ui/BotBadge';
 import { ProfileBio } from '../ui/ProfileBio';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
@@ -266,9 +267,10 @@ export function UserProfileModal() {
     navigate(`/channels/${spaceId}`);
   };
 
+  // A bot takes no friends, so it has no mutual friends to list.
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'about', label: t('social:profile.tabs.about') },
-    { key: 'friends', label: t('social:profile.tabs.mutualFriends'), count: mutualFriends.length },
+    ...(user?.isBot ? [] : [{ key: 'friends' as const, label: t('social:profile.tabs.mutualFriends'), count: mutualFriends.length }]),
     { key: 'spaces', label: t('social:profile.tabs.mutualSpaces'), count: mutualSpaces.length },
   ];
 
@@ -309,7 +311,10 @@ export function UserProfileModal() {
           />
 
           <div className="mb-3">
-            <span className="text-[20px] font-bold leading-tight">{displayName}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[20px] font-bold leading-tight">{displayName}</span>
+              {user.isBot && <BotBadge />}
+            </div>
             <div className="text-[14px] text-txt-tertiary mt-0.5">
               <Username username={user.username} showAt className="text-[14px] text-txt-tertiary" />
             </div>
@@ -507,21 +512,21 @@ export function UserProfileModal() {
             {t('social:profile.sendMessage')}
           </button>
 
-          {friendship.state === 'none' && (
+          {!user.isBot && friendship.state === 'none' && (
             <button onClick={handleAddFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
               {friendActionLoading ? '...' : t('social:profile.addFriend')}
             </button>
           )}
 
-          {friendship.state === 'outbound_pending' && (
+          {!user.isBot && friendship.state === 'outbound_pending' && (
             <button onClick={handleCancelRequest} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
               {friendActionLoading ? '...' : t('social:request.cancel')}
             </button>
           )}
 
-          {friendship.state === 'inbound_pending' && (
+          {!user.isBot && friendship.state === 'inbound_pending' && (
             <>
               <button onClick={handleAcceptRequest} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
@@ -534,7 +539,7 @@ export function UserProfileModal() {
             </>
           )}
 
-          {friendship.state === 'friends' && (
+          {!user.isBot && friendship.state === 'friends' && (
             <button onClick={handleRemoveFriend} disabled={friendActionLoading}
               className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
               {friendActionLoading ? '...' : t('social:friend.remove')}

@@ -32,6 +32,7 @@ import { sendError } from '../utils/httpErrors';
 import { canActOnMemberInSpace, canManageRoleInSpace, getHierarchyStanding } from '../utils/roleHierarchy.js';
 import { canActOnMember, canManageRoleAt } from '@backspace/shared/src/permissions.js';
 import { moveRoleToPosition, normalizeRolePositions } from '../db/rolePositions.js';
+import { removeUserFromSpace } from '../utils/spaceMembership.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -1113,37 +1114,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'role_hierarchy');
     }
 
-    db.delete(schema.spaceMembers)
-      .where(and(
-        eq(schema.spaceMembers.spaceId, id),
-        eq(schema.spaceMembers.userId, uid),
-      ))
-      .run();
-
-    // Clean up any voice restrictions for the removed member
-    db.delete(schema.voiceRestrictions).where(
-      and(
-        eq(schema.voiceRestrictions.spaceId, id),
-        eq(schema.voiceRestrictions.userId, uid),
-      )
-    ).run();
-
-    // Clean up read_states for the departing user in this space's channels
-    const spaceChannelIds = db.select({ id: schema.channels.id })
-      .from(schema.channels).where(eq(schema.channels.spaceId, id)).all().map(c => c.id);
-    if (spaceChannelIds.length > 0) {
-      db.delete(schema.readStates).where(and(
-        eq(schema.readStates.userId, uid),
-        inArray(schema.readStates.channelId, spaceChannelIds),
-      )).run();
-    }
-
-    // Broadcast member_left event
-    connectionManager.sendToSpace(id, {
-      type: 'member_left',
-      spaceId: id,
-      userId: uid,
-    });
+    removeUserFromSpace(id, uid);
 
     return reply.code(200).send({ success: true });
   });
@@ -1618,6 +1589,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       spaceId: id,
       reason: reason?.trim() || null,
     });
+
+    // End live delivery of this space to the banned user's sockets (a bot keeps
+    // one open for days and would otherwise go on receiving the space's events).
+    connectionManager.removeUserSpace(targetId, id);
 
     return reply.code(200).send({ success: true });
   });

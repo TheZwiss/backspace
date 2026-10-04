@@ -10,7 +10,7 @@ import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername, deliveringHost } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import type { User } from '@backspace/shared';
+import type { BotSummary, User } from '@backspace/shared';
 
 function AddDmFriendRow({
   friend,
@@ -78,12 +78,68 @@ function AddDmFriendRow({
   );
 }
 
+function AddDmBotRow({
+  bot,
+  isInDm,
+  isSelected,
+  atCapacity,
+  isAdding,
+  onToggle,
+}: {
+  bot: BotSummary;
+  isInDm: boolean;
+  isSelected: boolean;
+  atCapacity: boolean;
+  isAdding: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const { t } = useTranslation(['dm']);
+  const name = bot.displayName || bot.username;
+  return (
+    <button
+      onClick={() => onToggle(bot.id)}
+      disabled={isInDm || isAdding || atCapacity}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
+        isInDm ? 'opacity-40 cursor-not-allowed' : isSelected ? 'bg-accent-mint/[0.08]' : 'hover:bg-interactive-hover'
+      } ${atCapacity && !isInDm ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      <Avatar
+        src={bot.avatar ? api.uploads.url(bot.avatar) : null}
+        name={name}
+        size={30}
+        avatarColor={bot.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-txt-primary truncate">{name}</div>
+        <div className="text-[11px] text-txt-tertiary truncate">
+          {isInDm ? t('dm:addMember.alreadyInDm') : `@${bot.username}`}
+        </div>
+      </div>
+      {!isInDm && (
+        <div
+          className={`w-[18px] h-[18px] rounded flex-shrink-0 flex items-center justify-center ${
+            isSelected ? 'bg-accent-mint' : 'border-2 border-border-hard'
+          }`}
+        >
+          {isSelected && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-surface-base">
+              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
 export function AddDmMemberModal() {
   const { t } = useTranslation(['dm', 'common']);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [bots, setBots] = useState<BotSummary[]>([]);
+  const [selectedBotIds, setSelectedBotIds] = useState<Set<string>>(new Set());
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -124,6 +180,8 @@ export function AddDmMemberModal() {
       setSelected(new Set());
       setError('');
       setIsAdding(false);
+      setSelectedBotIds(new Set());
+      api.bots.list().then((res) => setBots(res.bots)).catch(() => setBots([]));
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -136,7 +194,7 @@ export function AddDmMemberModal() {
         next.delete(friendId);
       } else {
         // Enforce remaining capacity
-        if (next.size >= remainingSlots) return prev;
+        if (next.size + selectedBotIds.size >= remainingSlots) return prev;
         next.add(friendId);
       }
       return next;
@@ -156,8 +214,37 @@ export function AddDmMemberModal() {
     [friends, selected],
   );
 
+  const filteredBots = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return bots.filter((b) => {
+      if (!q) return true;
+      return (b.displayName ?? '').toLowerCase().includes(q) || b.username.toLowerCase().includes(q);
+    });
+  }, [bots, query]);
+
+  const selectedBots = useMemo(
+    () => bots.filter((b) => selectedBotIds.has(b.id)),
+    [bots, selectedBotIds],
+  );
+
+  const toggleBot = (botId: string) => {
+    if (currentMemberIds.has(botId)) return;
+    setSelectedBotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(botId)) {
+        next.delete(botId);
+      } else {
+        if (selected.size + next.size >= remainingSlots) return prev;
+        next.add(botId);
+      }
+      return next;
+    });
+  };
+
+  const totalSelected = selectedFriends.length + selectedBots.length;
+
   const handleSubmit = async () => {
-    if (!dmChannelId || !dmChannel || isAdding || selectedFriends.length === 0) return;
+    if (!dmChannelId || !dmChannel || isAdding || totalSelected === 0) return;
     setError('');
     setIsAdding(true);
     // Both requests go to the home instance, which knows the conversation
@@ -189,6 +276,7 @@ export function AddDmMemberModal() {
             homeUserId: f.homeUserId,
             homeInstance: f.homeInstance,
           })),
+          ...selectedBots.map((b) => ({ id: b.id })),
         ];
         // Home checks the source 1-on-1 by its own id; without a home copy
         // there is none to name.
@@ -210,6 +298,9 @@ export function AddDmMemberModal() {
             homeInstance: friend.homeInstance ?? undefined,
           });
         }
+        for (const bot of selectedBots) {
+          await api.dm.addMember(homeCopy.id, { userId: bot.id });
+        }
         closeModal();
       }
     } catch (err) {
@@ -219,9 +310,9 @@ export function AddDmMemberModal() {
     }
   };
 
-  const buttonText = selectedFriends.length === 0
+  const buttonText = totalSelected === 0
     ? t('dm:addMember.selectFriends')
-    : t('dm:addMember.addCount', { count: selectedFriends.length });
+    : t('dm:addMember.addCount', { count: totalSelected });
 
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title={t('dm:addMember.title')} mobileStyle="sheet">
@@ -277,7 +368,7 @@ export function AddDmMemberModal() {
 
         {/* Friend list */}
         <div className="max-h-[300px] overflow-y-auto space-y-[2px]">
-          {filteredFriends.length === 0 && (
+          {filteredFriends.length === 0 && filteredBots.length === 0 && (
             <div className="py-4 text-center text-txt-tertiary text-[14px]">
               {query.trim() ? t('dm:addMember.noMatch') : t('dm:addMember.noFriends')}
             </div>
@@ -286,7 +377,7 @@ export function AddDmMemberModal() {
           {filteredFriends.map((friend) => {
             const isInDm = currentMemberIds.has(friend.id);
             const isSelected = selected.has(friend.id);
-            const atCapacity = !isSelected && selected.size >= remainingSlots;
+            const atCapacity = !isSelected && selected.size + selectedBotIds.size >= remainingSlots;
             return (
               <AddDmFriendRow
                 key={friend.id}
@@ -299,12 +390,35 @@ export function AddDmMemberModal() {
               />
             );
           })}
+          {filteredBots.length > 0 && (
+            <>
+              <div className="px-3 pt-3 pb-1 text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
+                {t('dm:addMember.yourBots')}
+              </div>
+              {filteredBots.map((bot) => {
+                const isInDm = currentMemberIds.has(bot.id);
+                const isSelected = selectedBotIds.has(bot.id);
+                const atCapacity = !isSelected && selected.size + selectedBotIds.size >= remainingSlots;
+                return (
+                  <AddDmBotRow
+                    key={bot.id}
+                    bot={bot}
+                    isInDm={isInDm}
+                    isSelected={isSelected}
+                    atCapacity={atCapacity}
+                    isAdding={isAdding}
+                    onToggle={toggleBot}
+                  />
+                );
+              })}
+            </>
+          )}
         </div>
 
         {/* Submit button */}
         <button
           onClick={handleSubmit}
-          disabled={selectedFriends.length === 0 || isAdding}
+          disabled={totalSelected === 0 || isAdding}
           className="w-full py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isAdding ? t('dm:addMember.adding') : buttonText}

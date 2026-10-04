@@ -147,5 +147,11 @@
   "notification": {
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
+  },
+  "commands": {
+    "title": "Commands",
+    "failed": "The command could not be sent",
+    "extraText": "This command takes no free text, but \"{{text}}\" is left over. Put the options first, the text last",
+    "optionsTitle": "Optional parameters"
   }
 }

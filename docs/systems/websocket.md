@@ -247,3 +247,13 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 The `ready` payload is the **only** carrier of voice presence at connect time. When a user joins a space *mid-session* (invite, public join, or join-request approval) without reloading, they would otherwise see empty voice channels until a refresh, because `member_joined` carries no voice state and `GET /api/spaces/:id` (the channel-sidebar hydrator) has none either.
 
 To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the joining user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.
+
+---
+
+## Bots
+
+A bot authenticates like any client (`{ type: 'auth', token }`, the token is the bot's JWT) and receives the same events as any member of the same chats; the server does not filter the ordinary events (no rule by mention or by kind of chat). See [bots.md](bots.md) for what a bot author needs (self-events, mentions, reconnecting).
+
+**Client to server, bots only:** `bot_voice_join { channelId }` and `bot_voice_leave { channelId }` seat a bot in a space voice channel and take it out again without touching its other seats (up to 25); the room is told with the ordinary `voice_state_update`. See [bots.md](bots.md), section 5c.
+
+**Server to a bot:** `interaction_created { interaction: { id, command, options, user, channelId?, spaceId?, dmChannelId?, expiresAt } }` when a person invokes one of the bot's slash commands; only the invoked bot's sockets receive it. See [bots.md](bots.md), section 5b.

@@ -411,7 +411,8 @@
       "oldest": "Oldest first",
       "nameDesc": "Name Z-A",
       "deleted": "Deleted",
-      "clear": "Clear filters"
+      "clear": "Clear filters",
+      "bot": "Bots"
     },
     "badge": {
       "admin": "Admin",

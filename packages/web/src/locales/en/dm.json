@@ -108,7 +108,8 @@
     "addCount_other": "Add {{count}} Friends",
     "adding": "Adding…",
     "noOtherMember": "Could not determine the other member of this conversation.",
-    "failed": "Failed to add members"
+    "failed": "Failed to add members",
+    "yourBots": "Your bots"
   },
   "groupSettings": {
     "title": "Group Settings",

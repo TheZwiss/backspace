@@ -208,5 +208,20 @@
   "directory_disabled": "此实例未连接到任何目录。",
   "directory_unreachable": "外部空间目前无法访问。内部空间仍可正常使用。",
   "directory_private_space": "请先将空间设为公开或需申请，再将其列入目录。",
-  "directory_requires_discovery": "请先开启空间发现功能。"
+  "directory_requires_discovery": "请先开启空间发现功能。",
+  "bot_name_invalid": "机器人名称必须为 {{min}} 到 {{max}} 个字符：小写字母、数字和下划线。",
+  "bot_name_suffix_required": "机器人名称必须以“_bot”结尾",
+  "bot_limit_reached": "最多只能创建 {{max}} 个机器人。",
+  "bot_not_found": "找不到该机器人。",
+  "bots_native_only": "只能使用在此实例上创建的账号管理机器人。",
+  "bots_no_friends": "无法向机器人发送好友请求",
+  "bot_home_not_peered": "该机器人的主实例尚未与本实例建立联邦",
+  "bot_proof_invalid": "机器人身份证明无效或已过期",
+  "bot_profile_owner_only": "机器人资料只能由其所有者修改",
+  "bot_account_required": "只有机器人账号可以执行此操作",
+  "command_not_found": "该机器人没有此命令",
+  "bot_unavailable": "机器人当前未连接",
+  "interaction_not_found": "未找到交互",
+  "interaction_expired": "此交互已过期",
+  "interaction_responses_exceeded": "此交互的回复次数已达上限"
 }

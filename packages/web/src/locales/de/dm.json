@@ -108,7 +108,8 @@
     "addCount_other": "{{count}} Freunde hinzufügen",
     "adding": "Wird hinzugefügt…",
     "noOtherMember": "Das andere Mitglied dieser Unterhaltung konnte nicht bestimmt werden.",
-    "failed": "Mitglieder konnten nicht hinzugefügt werden"
+    "failed": "Mitglieder konnten nicht hinzugefügt werden",
+    "yourBots": "Deine Bots"
   },
   "groupSettings": {
     "title": "Gruppeneinstellungen",

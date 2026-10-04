@@ -87,6 +87,10 @@ async function handleLocalFriendRequest(
     return sendError(reply, 400, 'cannot_friend_self');
   }
 
+  if (targetUser.isBot === 1) {
+    return sendError(reply, 400, 'bots_no_friends');
+  }
+
   // Check if already friends
   const existingFriend = db.select().from(schema.friends).where(or(
     and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUser.id)),
@@ -583,6 +587,10 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'not_authoritative_for_sender');
     }
 
+    if (sender.isBot === 1) {
+      return sendError(reply, 403, 'bots_native_only');
+    }
+
     if (target.kind === 'identity') {
       const { homeUserId, homeInstance } = target;
       // Our host exactly (port included), or one of our own bare domain names.
@@ -1050,6 +1058,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
         createdAt: u.createdAt,
         homeInstance: u.homeInstance,
         homeUserId: u.homeUserId,
+        isBot: u.isBot,
         mutualFriendCount,
         mutualSpaceCount,
         relationship,

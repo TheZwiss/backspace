@@ -103,7 +103,8 @@
     "addCount_other": "添加 {{count}} 位好友",
     "adding": "正在添加…",
     "noOtherMember": "无法确定该会话中的另一位成员。",
-    "failed": "添加成员失败"
+    "failed": "添加成员失败",
+    "yourBots": "你的机器人"
   },
   "groupSettings": {
     "title": "群组设置",

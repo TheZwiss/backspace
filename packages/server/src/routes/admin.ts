@@ -24,6 +24,7 @@ function toAdminUser(row: typeof schema.users.$inferSelect): AdminUser {
     avatarColor: row.avatarColor,
     status: row.status ?? 'offline',
     isAdmin: row.isAdmin === 1,
+    isBot: row.isBot === 1,
     isDeleted: row.isDeleted === 1,
     homeInstance: row.homeInstance,
     createdAt: row.createdAt,
@@ -144,6 +145,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         conditions.push(eq(schema.users.isAdmin, 1));
       } else if (roleFilter === 'non-admin') {
         conditions.push(eq(schema.users.isAdmin, 0));
+      } else if (roleFilter === 'bot') {
+        conditions.push(eq(schema.users.isBot, 1));
       }
 
       // Date range filter

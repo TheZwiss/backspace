@@ -158,6 +158,12 @@ export function handleClientEvent(
     case 'voice_leave':
       handleVoiceLeave(userId);
       break;
+    case 'bot_voice_join':
+      handleBotVoiceJoin(event, userId);
+      break;
+    case 'bot_voice_leave':
+      handleBotVoiceLeave(event, userId);
+      break;
     case 'dm_message_create':
       handleDmMessageCreate(event, userId);
       break;
@@ -494,6 +500,76 @@ function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): vo
       });
     }
   }
+}
+
+/** Voice channels one bot may sit in at the same time. */
+export const MAX_BOT_VOICE_ROOMS = 25;
+
+function isBotAccount(userId: string): boolean {
+  return getDb().select({ isBot: schema.users.isBot })
+    .from(schema.users).where(eq(schema.users.id, userId)).get()?.isBot === 1;
+}
+
+/**
+ * A bot takes a seat in a voice channel without leaving the others: one
+ * instance per channel. Same checks as `voice_join` (channel, membership,
+ * CONNECT); the audio itself is the bot's own LiveKit connection per room, with
+ * a token from `POST /api/livekit/token { channelId }`.
+ */
+function handleBotVoiceJoin(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId;
+  if (typeof channelId !== 'string' || channelId.length === 0) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
+    return;
+  }
+  if (!isBotAccount(userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Only bots can join several voice channels', code: 'bot_account_required' });
+    return;
+  }
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
+    return;
+  }
+  if (!isMember(spaceId, userId) || !hasPermission(userId, spaceId, PermissionBits.CONNECT, channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing CONNECT permission' });
+    return;
+  }
+  if (connectionManager.getBotRoomIds(userId).length >= MAX_BOT_VOICE_ROOMS
+      && !connectionManager.getBotRoomIds(userId).includes(channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `A bot can be in at most ${MAX_BOT_VOICE_ROOMS} voice channels` });
+    return;
+  }
+  if (!connectionManager.botJoinRoom(userId, channelId, spaceId)) return; // already there
+
+  const room = connectionManager.getRoom(channelId);
+  connectionManager.sendToRoom(channelId, {
+    type: 'voice_state_update',
+    channelId,
+    userId,
+    action: 'join',
+    channelElapsedSeconds: room ? getVoiceRoomElapsedSeconds(room) : undefined,
+  });
+
+  // A bot has no SPEAK-less listener mode of its own: a role without SPEAK mutes it like anyone.
+  const perms = computePermissions(userId, spaceId, channelId);
+  const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+  connectionManager.setPermissionMuted(spaceId, userId, !canSpeak);
+  if (!canSpeak) {
+    connectionManager.sendToSpace(spaceId, { type: 'voice_permission_muted', userId, spaceId, muted: true });
+  }
+}
+
+function handleBotVoiceLeave(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId;
+  if (typeof channelId !== 'string' || channelId.length === 0) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
+    return;
+  }
+  const room = connectionManager.botLeaveRoom(userId, channelId);
+  if (!room) return; // not in that channel
+  broadcastRoomLeave(channelId, room, userId);
+  if (connectionManager.getBotRoomIds(userId).length === 0) connectionManager.clearVoiceUserStatus(userId);
 }
 
 /**
@@ -1043,25 +1119,37 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
 
-function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
-  const messageId = event.messageId as string;
-  const emoji = event.emoji as string;
+export type ReactionOutcome =
+  | { ok: true; changed: boolean }
+  | { ok: false; reason: 'message_not_found' | 'missing_permission' | 'read_only' };
 
-  if (!messageId || !emoji) return;
-
+/**
+ * Adds a reaction for `userId` to a space or DM message, found by id. Shared by
+ * the WS `reaction_add` event and the REST route, so both check the same things
+ * and reach the same audience. A reaction that already exists is `changed: false`.
+ */
+export function applyReactionAdd(messageId: string, emoji: string, userId: string): ReactionOutcome {
   const db = getDb();
 
   // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
     const spaceId = getChannelSpaceId(message.channelId);
-    if (!spaceId || !isMember(spaceId, userId)) return;
+    if (!spaceId || !isMember(spaceId, userId)) return { ok: false, reason: 'message_not_found' };
 
     if (!hasPermission(userId, spaceId, PermissionBits.ADD_REACTIONS, message.channelId)) {
-      connectionManager.sendToUser(userId, { type: 'error', message: 'Missing ADD_REACTIONS permission' });
-      return;
+      return { ok: false, reason: 'missing_permission' };
     }
-
+    // Idempotent: the table has no unique index on (message, user, emoji), so a
+    // repeat must be caught here. The call is synchronous, so it cannot race.
+    const already = db.select({ id: schema.reactions.id }).from(schema.reactions)
+      .where(and(
+        eq(schema.reactions.messageId, messageId),
+        eq(schema.reactions.userId, userId),
+        eq(schema.reactions.emoji, emoji),
+      ))
+      .get();
+    if (already) return { ok: true, changed: false };
     const reactionId = generateSnowflake();
     const now = Date.now();
     try {
@@ -1084,19 +1172,28 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       });
     } catch (err) {
       // Unique constraint violation (already reacted)
+      return { ok: true, changed: false };
     }
-    return;
+    return { ok: true, changed: true };
   }
 
   // Fall through to DM message. A federated account reacts here like anyone
   // else: it is a member of the DM on this instance, and the relay carries its
   // home identity back to its home instance.
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
-  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'message_not_found' };
   // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
   // reaction mutations — the relay would fan out to all peers via undefined origins.
-  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'read_only' };
 
+  const alreadyInDm = db.select({ id: schema.dmReactions.id }).from(schema.dmReactions)
+    .where(and(
+      eq(schema.dmReactions.dmMessageId, messageId),
+      eq(schema.dmReactions.userId, userId),
+      eq(schema.dmReactions.emoji, emoji),
+    ))
+    .get();
+  if (alreadyInDm) return { ok: true, changed: false };
   const reactionId = generateSnowflake();
   const now = Date.now();
   try {
@@ -1142,22 +1239,20 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     }), reactionAddTargetOrigins);
   } catch (err) {
     // Unique constraint violation (already reacted)
+    return { ok: true, changed: false };
   }
+  return { ok: true, changed: true };
 }
 
-function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
-  const messageId = event.messageId as string;
-  const emoji = event.emoji as string;
-
-  if (!messageId || !emoji) return;
-
+/** Removes `userId`'s own reaction. Shared by the WS `reaction_remove` event and the REST route. */
+export function applyReactionRemove(messageId: string, emoji: string, userId: string): ReactionOutcome {
   const db = getDb();
 
   // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
     const spaceId = getChannelSpaceId(message.channelId);
-    if (!spaceId || !isMember(spaceId, userId)) return;
+    if (!spaceId || !isMember(spaceId, userId)) return { ok: false, reason: 'message_not_found' };
 
     const result = db.delete(schema.reactions)
       .where(and(
@@ -1175,17 +1270,13 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
         emoji,
       });
     }
-    return;
+    return { ok: true, changed: result.changes > 0 };
   }
 
-  // Fall through to DM message. A federated account reacts here like anyone
-  // else: it is a member of the DM on this instance, and the relay carries its
-  // home identity back to its home instance.
+  // Fall through to DM message (same rules as applyReactionAdd).
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
-  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
-  // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
-  // reaction mutations — the relay would fan out to all peers via undefined origins.
-  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'message_not_found' };
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'read_only' };
 
   const result = db.delete(schema.dmReactions)
     .where(and(
@@ -1230,6 +1321,28 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       reactionRemoveTargetOrigins,
     );
   }
+  return { ok: true, changed: result.changes > 0 };
+}
+
+function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  const outcome = applyReactionAdd(messageId, emoji, userId);
+  if (!outcome.ok && outcome.reason === 'missing_permission') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing ADD_REACTIONS permission' });
+  }
+}
+
+function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  applyReactionRemove(messageId, emoji, userId);
 }
 
 // ─── Read State Handler ────────────────────────────────────────────────────

@@ -34,6 +34,10 @@ export const users = sqliteTable('users', {
   federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
   federationHealPending: integer('federation_heal_pending').default(0),
   federationHomeOrphaned: integer('federation_home_orphaned').default(0),
+  /** 1 = bot account: no password login, authenticates with an owner-issued token. */
+  isBot: integer('is_bot').notNull().default(0),
+  /** users.id of the human who created the bot. No FK: tombstoneUser keeps the row. */
+  botOwnerId: text('bot_owner_id'),
   /** UTC day (YYYY-MM-DD) of the last authenticated WebSocket activity; written at most once per day. */
   lastActiveDay: text('last_active_day'),
   /** 'web' | 'desktop' | 'mobile', from the client's auth message. */
@@ -48,6 +52,7 @@ export const users = sqliteTable('users', {
    * composite's second column cannot be used.
    */
   homeUserIdx: index('idx_users_home_user_id').on(table.homeUserId),
+  botOwnerIdx: index('idx_users_bot_owner_id').on(table.botOwnerId),
 }));
 
 export const spaces = sqliteTable('spaces', {
@@ -630,4 +635,34 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
 }, (table) => ({
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
+}));
+
+/** Slash commands a bot registers for itself (replace-all through PUT /api/bots/@me/commands). */
+export const botCommands = sqliteTable('bot_commands', {
+  id: text('id').primaryKey(),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  /** JSON array of BotCommandOption. */
+  options: text('options').notNull().default('[]'),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  botNameIdx: uniqueIndex('idx_bot_commands_bot_name').on(table.botId, table.name),
+}));
+
+/** One slash-command invocation, kept until it expires so only the invoked bot can answer it. */
+export const interactions = sqliteTable('interactions', {
+  id: text('id').primaryKey(),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id'),
+  dmChannelId: text('dm_channel_id'),
+  command: text('command').notNull(),
+  /** JSON object of the validated option values. */
+  options: text('options').notNull().default('{}'),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  responses: integer('responses').notNull().default(0),
+}, (table) => ({
+  expiresIdx: index('idx_interactions_expires_at').on(table.expiresAt),
 }));

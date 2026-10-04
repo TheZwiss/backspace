@@ -55,7 +55,7 @@ export function payloadContextFromConfig(
  * instance is that user's home and counting it here would report the same
  * person from every instance that ever saw them.
  */
-const LOCAL_USER = 'home_instance IS NULL AND (is_deleted IS NULL OR is_deleted = 0)';
+const LOCAL_USER = 'home_instance IS NULL AND (is_deleted IS NULL OR is_deleted = 0) AND COALESCE(is_bot, 0) = 0';
 
 interface SettingsRow {
   registration_open: number | null;

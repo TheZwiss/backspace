@@ -20,9 +20,9 @@ export interface JwtPayload {
   iat?: number;
 }
 
-export function signJwt(payload: JwtPayload): string {
+export function signJwt(payload: JwtPayload, opts?: { expiresIn?: string }): string {
   const options: jwt.SignOptions = {
-    expiresIn: config.jwtExpiresIn as unknown as jwt.SignOptions['expiresIn'],
+    expiresIn: (opts?.expiresIn ?? config.jwtExpiresIn) as unknown as jwt.SignOptions['expiresIn'],
   };
   return jwt.sign(payload, config.jwtSecret, options);
 }
@@ -96,17 +96,24 @@ export async function verifyJwtAndUser(token: string): Promise<{
   };
 }
 
+/** The token of an `Authorization` header: `Bearer <token>`, or its alias `Bot <token>`. Null for anything else. */
+export function tokenFromAuthHeader(header: string | undefined): string | null {
+  if (!header) return null;
+  for (const scheme of ['Bearer ', 'Bot ']) {
+    if (header.startsWith(scheme)) return header.slice(scheme.length);
+  }
+  return null;
+}
+
 export async function authenticate(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const token = tokenFromAuthHeader(request.headers.authorization);
+  if (token === null) {
     reply.code(401).send({ error: 'Missing or invalid authorization header', code: 'unauthorized', statusCode: 401 });
     return;
   }
-
-  const token = authHeader.slice(7);
   try {
     const identity = await verifyJwtAndUser(token);
     (request as FastifyRequest & { userId: string; username: string }).userId = identity.userId;

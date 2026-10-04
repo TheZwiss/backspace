@@ -11,6 +11,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { extractDomain } from './federation.js';
 import { fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { stripTrailingSlashes } from '../utils/federationAuth.js';
+import { verifyAttachProofWithPeer } from '../utils/federationAttach.js';
 import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
 import { sendError, errorText } from '../utils/httpErrors.js';
 import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
@@ -49,7 +50,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { username, password, displayName, avatarColor: requestedAvatarColor, homeInstance, homeUserId } = request.body;
+    const { username, password, displayName, avatarColor: requestedAvatarColor, homeInstance, homeUserId, botProof } = request.body;
 
     if (!username || typeof username !== 'string') {
       return sendError(reply, 400, 'username_required');
@@ -154,6 +155,33 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // no consumption (spec §5.7).
     }
 
+    // Cross-instance bot: the ONLY way is_bot=1 can be set here. The client's
+    // homeUserId/username are ignored; identity and the bot flag come from the
+    // home instance over signed S2S (attach-proof is single-use and bound to
+    // OUR domain on the home side). The home must already be an active peer:
+    // no outbound handshake is ever started from this unauthenticated route.
+    let botIdentity: { username: string; homeUserId: string } | null = null;
+    if (botProof !== undefined) {
+      if (!homeInstance || typeof botProof !== 'string' || !/^[0-9a-f]{64}$/i.test(botProof)) {
+        return sendError(reply, 400, 'bot_proof_invalid');
+      }
+      const proofDomain = extractDomain(homeInstance).toLowerCase();
+      const proofPeer = db.select().from(schema.federationPeers).all()
+        .find(p => p.status === 'active' && extractDomain(p.origin).toLowerCase() === proofDomain);
+      if (!proofPeer) {
+        return sendError(reply, 409, 'bot_home_not_peered');
+      }
+      const verified = await verifyAttachProofWithPeer(proofPeer, botProof);
+      if (!verified.valid || !verified.isBot) {
+        return sendError(reply, 401, 'bot_proof_invalid');
+      }
+      botIdentity = {
+        username: `${verified.username.toLowerCase()}@${homeInstance.toLowerCase()}`,
+        homeUserId: verified.homeUserId,
+      };
+    }
+
+
     const passwordHash = await hashPassword(password);
 
     // --- Registration always creates a NEW row ---
@@ -169,7 +197,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // history) is exclusively the job of the authenticated, S2S-proof-gated
     // reattach flow: POST /api/users/@me/reattach, which requires an
     // attach-proof token minted by the home instance.
-    const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmedUsername)).get();
+    const finalUsername = botIdentity ? botIdentity.username : trimmedUsername;
+    const existing = db.select().from(schema.users).where(eq(schema.users.username, finalUsername)).get();
     if (existing) {
       return sendError(reply, 409, 'username_taken');
     }
@@ -195,12 +224,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // 'online' once a real socket attaches.
     const userRow = {
       id: userId,
-      username: trimmedUsername,
+      username: finalUsername,
       displayName: displayName?.trim() || null,
       passwordHash,
       isAdmin: isFirstUser ? 1 : 0,
       homeInstance: homeInstance || null,
-      homeUserId: (homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null,
+      homeUserId: botIdentity
+        ? botIdentity.homeUserId
+        : ((homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null),
+      isBot: botIdentity ? 1 : 0,
       avatarColor,
       createdAt: now,
     };

@@ -24,6 +24,23 @@ export const ERROR_CODES = [
   'validation_failed',
   'rate_limited',
 
+  // Bots
+  'bot_name_invalid',
+  'bot_name_suffix_required',
+  'bot_account_required',
+  'command_not_found',
+  'bot_unavailable',
+  'interaction_not_found',
+  'interaction_expired',
+  'interaction_responses_exceeded',
+  'bot_limit_reached',
+  'bot_not_found',
+  'bots_native_only',
+  'bots_no_friends',
+  'bot_home_not_peered',
+  'bot_proof_invalid',
+  'bot_profile_owner_only',
+
   // Auth and accounts
   'username_required',
   'password_required',

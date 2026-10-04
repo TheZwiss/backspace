@@ -147,5 +147,11 @@
   "notification": {
     "unknownSender": "Jemand",
     "attachmentOnly": "Hat einen Anhang gesendet"
+  },
+  "commands": {
+    "title": "Befehle",
+    "failed": "Der Befehl konnte nicht gesendet werden",
+    "extraText": "Dieser Befehl nimmt keinen freien Text, aber „{{text}}“ bleibt übrig. Erst die Optionen, dann der Text",
+    "optionsTitle": "Optionale Parameter"
   }
 }

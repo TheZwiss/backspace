@@ -397,7 +397,8 @@
       "oldest": "最早加入优先",
       "nameDesc": "名称降序 (Z-A)",
       "deleted": "已注销",
-      "clear": "清除筛选"
+      "clear": "清除筛选",
+      "bot": "机器人"
     },
     "badge": {
       "admin": "管理员",

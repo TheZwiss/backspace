@@ -55,6 +55,7 @@ vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   api: {
     dm: { create: vi.fn(), createGroup: vi.fn(), addMember: vi.fn(), list: vi.fn() },
+    bots: { list: vi.fn() },
     social: { search: vi.fn() },
     users: { get: vi.fn() },
     uploads: { url: (k: string) => `/uploads/${k}` },
@@ -134,6 +135,8 @@ beforeEach(() => {
   vi.mocked(api.social.search).mockReset();
   vi.mocked(api.users.get).mockReset();
   vi.mocked(api.users.get).mockResolvedValue(bobOnHome);
+  vi.mocked(api.bots.list).mockReset();
+  vi.mocked(api.bots.list).mockResolvedValue({ bots: [] });
   currentPath = '';
   // The conversation is shown from REMOTE's copy; home's copy is not known yet.
   useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(bobDmRemote)]);

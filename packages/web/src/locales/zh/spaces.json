@@ -351,7 +351,18 @@
       "kickFailed": "踢出成员失败",
       "banFailed": "封禁成员失败",
       "rolesAboveYou": "与您的最高身份组同级或更高的身份组已锁定。",
-      "rolesUnheld": "无法授予拥有您没有的权限的身份组。"
+      "rolesUnheld": "无法授予拥有您没有的权限的身份组。",
+      "botInvite": {
+        "warning": "该机器人将成为此服务器的成员，并接收其权限允许的所有频道的消息和事件。请仅添加你信任的机器人。",
+        "owner": "所有者：@{{owner}}",
+        "button": "添加机器人",
+        "title": "添加机器人",
+        "searchPlaceholder": "按名称搜索机器人...",
+        "searching": "搜索中...",
+        "noResults": "未找到机器人",
+        "add": "添加",
+        "adding": "添加中..."
+      }
     }
   },
   "bans": {

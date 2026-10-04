@@ -7,6 +7,7 @@ import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useAuthStore } from '../../../stores/authStore';
 import type { AdminUser, AdminUserListResponse } from '@backspace/shared';
+import { BotBadge } from '../../ui/BotBadge';
 
 export function UsersPanel() {
   const { t } = useTranslation(['admin', 'common']);
@@ -195,6 +196,7 @@ export function UsersPanel() {
           <option value="">{t('admin:users.filters.allRoles')}</option>
           <option value="admin">{t('admin:users.filters.admin')}</option>
           <option value="non-admin">{t('admin:users.filters.nonAdmin')}</option>
+          <option value="bot">{t('admin:users.filters.bot')}</option>
         </select>
 
         <input
@@ -300,6 +302,7 @@ export function UsersPanel() {
                           {t('admin:users.badge.admin')}
                         </span>
                       )}
+                      {user.isBot && <BotBadge />}
                       {isFederated && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-sky/20 text-accent-sky truncate max-w-[120px]">
                           {user.homeInstance}

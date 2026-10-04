@@ -242,6 +242,15 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // A bot's profile belongs to its owner (PATCH /api/bots/:id). Its own token
+    // must not rename it around the `_bot` suffix rule.
+    if (preUpdateUser.isBot === 1) {
+      const touchesProfile = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
+      if (touchesProfile) {
+        return sendError(reply, 403, 'bot_profile_owner_only');
+      }
+    }
+
     if (displayName !== undefined) {
       if (displayName !== null && typeof displayName === 'string') {
         const trimmed = displayName.trim();

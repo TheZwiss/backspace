@@ -48,7 +48,7 @@ export function registerAttachRoutes(app: FastifyInstance): void {
 
       // 2. Sign every downstream response with the peer's shared secret so the
       // caller can trust the identity (or the fail-closed verdict) it carries.
-      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply =>
+      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string; isBot?: boolean }): FastifyReply =>
         sendSignedJson(reply, payload, peer.hmacSecret);
 
       // 3. Validate the token shape (64 hex chars, as minted by attach-proof).
@@ -92,7 +92,12 @@ export function registerAttachRoutes(app: FastifyInstance): void {
         return sendSigned({ valid: false });
       }
 
-      return sendSigned({ valid: true, homeUserId: homeUser.id, username: homeUser.username });
+      return sendSigned({
+        valid: true,
+        homeUserId: homeUser.id,
+        username: homeUser.username,
+        ...(homeUser.isBot === 1 ? { isBot: true } : {}),
+      });
     },
   );
 

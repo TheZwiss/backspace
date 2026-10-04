@@ -637,3 +637,35 @@ POST /csp-report     (no auth) -> 204
 ```
 
 **`POST /api/csp-report`** is the Content Security Policy violation sink named by the policy's `report-uri` and `report-to`. Unauthenticated on purpose: a violation can happen on the login screen before any token exists. It registers content-type parsers for `application/csp-report` and `application/reports+json` in addition to the built-in `application/json`. Fastify ships parsers for neither of the first two and would otherwise answer 415, leaving an empty report log that looks exactly like a clean policy. It answers `204` to everything, including a malformed body, because a browser cannot act on an error and would only retry. It reads at most 16 KB off the wire and logs at most 4096 characters per report at `warn` level with the message `CSP violation reported`. Registered after `@fastify/rate-limit` so the shared 200/minute limit applies; that ordering is load-bearing. See `docs/systems/web-security.md`.
+
+## Bots (`routes/bots.ts`, `routes/reactions.ts`)
+
+Full reference in [bots.md](bots.md). Owner endpoints need the JWT of a native human account.
+
+```
+GET /bots → { bots: BotSummary[] }
+POST /bots { name } → 201 { bot, token } [5 per 15 min; the _bot suffix is appended when missing; max 10 per owner]
+PATCH /bots/:id { displayName?, avatar? } → { bot } [owner; displayName must end with _bot]
+POST /bots/:id/token → { token, federation } [5 per 15 min; revokes earlier tokens, cuts the bot off on other instances]
+DELETE /bots/:id → { success, federation }
+GET /bots/search?q= → { bots: BotSearchResult[] } [native discoverable bots, username substring of 2-32 chars, up to 25; each result adds ownerUsername, null when the owner is deleted or not discoverable; 60 per min]
+GET /bots/:id/spaces → { spaces: [{ id, name, icon, botIsMember }] } [owner; the caller's MANAGE_SPACE spaces plus every space the bot already sits in]
+POST /bots/:id/spaces { spaceId } → { success } [any native bot of this instance; MANAGE_SPACE in the space]
+DELETE /bots/:id/spaces/:spaceId → { success } [the bot's owner, or MANAGE_SPACE in the space]
+PUT /messages/:id/reactions/:emoji → { success, changed } [ADD_REACTIONS for space messages; channel or DM message, found by id]
+DELETE /messages/:id/reactions/:emoji → { success, changed } [own reaction]
+```
+
+`Authorization: Bot <token>` is accepted wherever `Bearer <token>` is (including tus uploads). `POST /auth/register` also takes `botProof` for a bot registering on another instance (bots.md, section 7).
+
+### Slash commands (`routes/botCommands.ts`, `routes/interactions.ts`)
+
+Full reference in [bots.md](bots.md), section 5b.
+```
+PUT    /bots/@me/commands          { commands } → { commands }          [bot token; replaces the whole list; 10 per 5 min]
+GET    /bots/@me/commands          → { commands }                       [bot token]
+GET    /commands                   ?channelId= | ?dmChannelId= → { commands } [caller sees the chat; commands of the bots in it, with `bot`]
+POST   /interactions               { botId, command, options?, channelId | dmChannelId } → 201 { id, expiresAt } [member + SEND_MESSAGES; bot in chat and connected; 5 per 5 s]
+POST   /interactions/:id/respond   { content?, attachments? } → 201 message [the invoked bot; 15 min, 5 responses; goes through the message routes]
+```
+Errors: `bot_account_required`, `command_not_found`, `bot_unavailable` (409), `interaction_not_found`, `interaction_expired` (410), `interaction_responses_exceeded` (429), and `validation_failed` with `details.field` for a bad definition or option value.

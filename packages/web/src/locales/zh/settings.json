@@ -130,7 +130,8 @@
       "connections": "连接",
       "keybinds": "按键绑定",
       "desktop": "桌面端",
-      "instance": "实例"
+      "instance": "实例",
+      "bots": "机器人"
     },
     "logOut": "退出登录",
     "backToMenu": "返回设置菜单"
@@ -428,5 +429,55 @@
     },
     "version": "版本 {{version}}",
     "allReleases": "GitHub 上的所有版本"
+  },
+  "bots": {
+    "title": "机器人",
+    "description": "机器人是由程序通过令牌控制的账号。创建机器人，复制其令牌，然后连接你的程序。机器人会在私信中回复。",
+    "create": {
+      "sectionTitle": "创建机器人",
+      "nameLabel": "机器人用户名",
+      "submit": "创建机器人",
+      "hint": "{{min}} 到 {{max}} 个字符：小写字母、数字和下划线。最多可创建 {{limit}} 个机器人。"
+    },
+    "list": {
+      "sectionTitle": "你的机器人",
+      "empty": "你还没有机器人。",
+      "createdOn": "创建于 {{date}}"
+    },
+    "token": {
+      "title": "{{name}} 的令牌",
+      "warning": "请立即复制令牌。它只显示一次，任何拥有它的人都能控制该机器人。",
+      "copy": "复制令牌",
+      "copied": "已复制",
+      "dismiss": "我已保存"
+    },
+    "actions": {
+      "regenerate": "新令牌",
+      "delete": "删除",
+      "confirmDelete": "确认删除",
+      "cancel": "取消",
+      "edit": "编辑",
+      "save": "保存",
+      "addToServer": "添加到服务器"
+    },
+    "edit": {
+      "nameLabel": "显示名称",
+      "hint": "用户名 @{{username}} 无法更改。最多 {{max}} 个字符。"
+    },
+    "avatar": {
+      "change": "更换头像",
+      "remove": "移除头像",
+      "cropTitle": "裁剪机器人头像",
+      "uploadFailed": "头像上传失败",
+      "notImage": "请选择图片文件"
+    },
+    "spaces": {
+      "title": "添加到空间",
+      "loading": "正在加载空间",
+      "empty": "你还没有可管理的空间。添加机器人需要空间管理权限。",
+      "add": "添加",
+      "added": "已添加",
+      "remove": "移除"
+    }
   }
 }

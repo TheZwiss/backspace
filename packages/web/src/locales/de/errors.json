@@ -208,5 +208,20 @@
   "directory_disabled": "Diese Instanz ist mit keinem Verzeichnis verbunden.",
   "directory_unreachable": "Der Äußere Space ist gerade nicht erreichbar. Der Innere Space funktioniert weiterhin.",
   "directory_private_space": "Stell den Space auf „Öffentlich“ oder „Auf Anfrage“, bevor du ihn eintragen lässt.",
-  "directory_requires_discovery": "Schalte zuerst das Entdecken von Spaces ein."
+  "directory_requires_discovery": "Schalte zuerst das Entdecken von Spaces ein.",
+  "bot_name_invalid": "Bot-Namen müssen {{min}} bis {{max}} Zeichen lang sein: Kleinbuchstaben, Zahlen und Unterstriche.",
+  "bot_name_suffix_required": "Der Bot-Name muss auf \"_bot\" enden",
+  "bot_limit_reached": "Du kannst höchstens {{max}} Bots haben.",
+  "bot_not_found": "Dieser Bot wurde nicht gefunden.",
+  "bots_native_only": "Bots können nur mit einem Konto verwaltet werden, das auf dieser Instanz erstellt wurde.",
+  "bots_no_friends": "Freundschaftsanfragen an Bots sind nicht möglich",
+  "bot_home_not_peered": "Die Heimatinstanz des Bots ist nicht mit dieser Instanz verbunden",
+  "bot_proof_invalid": "Der Identitätsnachweis des Bots ist ungültig oder abgelaufen",
+  "bot_profile_owner_only": "Das Profil eines Bots kann nur von seinem Besitzer geändert werden",
+  "bot_account_required": "Das kann nur ein Bot-Konto",
+  "command_not_found": "Dieser Bot hat diesen Befehl nicht",
+  "bot_unavailable": "Der Bot ist derzeit nicht verbunden",
+  "interaction_not_found": "Interaktion nicht gefunden",
+  "interaction_expired": "Diese Interaktion ist abgelaufen",
+  "interaction_responses_exceeded": "Das Antwortlimit für diese Interaktion ist erreicht"
 }

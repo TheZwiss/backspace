@@ -90,6 +90,14 @@ class ConnectionManager {
   private connections: Map<string, Set<WebSocket>> = new Map();
   // userId → Set of space IDs the user belongs to
   private userSpaces: Map<string, Set<string>> = new Map();
+  /**
+   * Voice rooms a BOT sits in. A bot may be in many voice channels at once, one
+   * instance per channel, so it is kept apart from `userToRoom` (one room per
+   * user, the rule every human session lives by). Members of these rooms are in
+   * `room.participants` like anyone else, so everything that reads occupancy
+   * (the ready payload, voice_state_update) already sees them.
+   */
+  private botRooms: Map<string, Set<string>> = new Map();
   // ws → userId (reverse lookup)
   private wsToUser: Map<WebSocket, string> = new Map();
   // Unified voice room tracking (replaces voiceStates + activeCalls)
@@ -269,6 +277,8 @@ class ConnectionManager {
     if (this.isUserOnline(userId)) return;
 
     console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
+    // A bot that dropped leaves every voice channel it sat in (humans have the reconnect grace).
+    this.botLeaveRooms(userId);
     const db = getDb();
     db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
 
@@ -361,6 +371,14 @@ class ConnectionManager {
 
   setUserSpaces(userId: string, spaceIds: string[]): void {
     this.userSpaces.set(userId, new Set(spaceIds));
+  }
+
+  /** Stops delivering a space's events to a user who is no longer a member. */
+  removeUserSpace(userId: string, spaceId: string): void {
+    // A bot removed or banned from a space must leave its voice channels too. This
+    // goes first: the bot is still a recipient of the space, so it hears itself leave.
+    this.botLeaveRooms(userId, spaceId);
+    this.userSpaces.get(userId)?.delete(spaceId);
   }
 
   addUserSpace(userId: string, spaceId: string): void {
@@ -856,6 +874,71 @@ class ConnectionManager {
 
   // ─── Broadcasting ─────────────────────────────────────────────────────────
 
+  /** The voice rooms a bot is in. */
+  getBotRoomIds(botId: string): string[] {
+    return [...(this.botRooms.get(botId) ?? [])];
+  }
+
+  /**
+   * Seats a bot in a space voice room (created on demand). False when it is
+   * already there. Caller checked the channel, the bot's membership and CONNECT.
+   */
+  botJoinRoom(botId: string, roomId: string, spaceId: string): boolean {
+    const rooms = this.botRooms.get(botId) ?? new Set<string>();
+    if (rooms.has(roomId)) return false;
+    this.createRoom(roomId, 'space', { type: 'space', spaceId });
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return false;
+    room.participants.add(botId);
+    rooms.add(roomId);
+    this.botRooms.set(botId, rooms);
+    return true;
+  }
+
+  /** Takes a bot out of one voice room. Returns the room, or null when it was not in it. */
+  botLeaveRoom(botId: string, roomId: string): VoiceRoom | null {
+    const rooms = this.botRooms.get(botId);
+    if (!rooms || !rooms.delete(roomId)) return null;
+    if (rooms.size === 0) this.botRooms.delete(botId);
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+    room.participants.delete(botId);
+    if (room.roomType === 'space') {
+      this.clearSpaceVoiceState((room.metadata as SpaceRoomMeta).spaceId, botId);
+    }
+    // Lazy-created space rooms disappear with their last participant.
+    if (room.participants.size === 0 && room.roomType === 'space') this.voiceRooms.delete(roomId);
+    return room;
+  }
+
+  /**
+   * Takes a bot out of every voice room, or only those of one space, and tells
+   * the rest of each space. Used when the bot disconnects, is removed or banned.
+   */
+  botLeaveRooms(botId: string, onlySpaceId?: string): void {
+    for (const roomId of this.getBotRoomIds(botId)) {
+      const meta = this.voiceRooms.get(roomId)?.metadata as SpaceRoomMeta | undefined;
+      if (onlySpaceId !== undefined && meta?.spaceId !== onlySpaceId) continue;
+      const room = this.botLeaveRoom(botId, roomId);
+      if (!room) continue;
+      this.sendToSpace((room.metadata as SpaceRoomMeta).spaceId, {
+        type: 'voice_state_update',
+        channelId: roomId,
+        userId: botId,
+        action: 'leave',
+      });
+    }
+    if (!this.botRooms.has(botId)) this.clearVoiceUserStatus(botId);
+  }
+
+  /** Whether the user has at least one open socket (a bot with none cannot be handed a command). */
+  hasLiveConnection(userId: string): boolean {
+    for (const ws of this.getUserConnections(userId)) {
+      if (ws.readyState === 1) return true;
+    }
+    return false;
+  }
+
   /** Send to a specific user (all their connections). */
   sendToUser(userId: string, event: ServerEvent): void {
     const connections = this.getUserConnections(userId);
@@ -976,6 +1059,9 @@ class ConnectionManager {
       clearTimeout(timeout);
       this.pendingOfflineTimeouts.delete(userId);
     }
+
+    // A bot may sit in several voice rooms
+    this.botLeaveRooms(userId);
 
     // Leave voice room if in one
     const left = this.leaveCurrentRoom(userId);

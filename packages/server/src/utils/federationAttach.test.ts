@@ -25,7 +25,7 @@ describe('verifyAttachProofWithPeer', () => {
     vi.stubGlobal('fetch', vi.fn(async () => signedResponse({ valid: true, homeUserId: 'h1', username: 'youruser' })));
     const { verifyAttachProofWithPeer } = await import('./federationAttach.js');
     const result = await verifyAttachProofWithPeer(PEER, 'a'.repeat(64));
-    expect(result).toEqual({ valid: true, homeUserId: 'h1', username: 'youruser' });
+    expect(result).toEqual({ valid: true, homeUserId: 'h1', username: 'youruser', isBot: false });
     const call = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(call[0]).toBe('https://orbit.test/api/federation/verify-attach-proof');
     expect((call[1] as RequestInit).headers).toHaveProperty('X-Federation-Signature');

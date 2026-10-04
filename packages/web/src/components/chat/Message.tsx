@@ -37,6 +37,7 @@ import { useTransferStore } from '../../stores/transferStore';
 import { useMessageJump } from './messageJumpContext';
 import { ReactionPill } from './ReactionPill';
 import { isOwnReaction } from './reactionSummary';
+import { BotBadge } from '../ui/BotBadge';
 
 interface MessageProps {
   message: MessageWithUser | PendingMessageView;
@@ -533,6 +534,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 style={roleColor}
               />
             </span>
+            {displayIdentity.isBot && <BotBadge className="ml-1" />}
             <span className="text-[11px] text-txt-tertiary leading-tight hover:cursor-default">
               {formatMessageTimestamp(t, fmt, message.createdAt)}
             </span>

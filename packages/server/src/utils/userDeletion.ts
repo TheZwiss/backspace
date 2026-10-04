@@ -104,6 +104,14 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
   const user = db.select().from(schema.users).where(eq(schema.users.id, uid)).get();
   if (!user) return [];
 
+  // Bots die with their owner: otherwise their tokens stay valid and their sockets stay open.
+  const ownedBots = db.select({ id: schema.users.id }).from(schema.users)
+    .where(and(
+      eq(schema.users.botOwnerId, uid),
+      eq(schema.users.isBot, 1),
+      eq(schema.users.isDeleted, 0),
+    )).all();
+
   const filesToDelete: string[] = [];
   if (user.avatar) filesToDelete.push(user.avatar);
   if (user.banner) filesToDelete.push(user.banner);
@@ -156,6 +164,10 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
     tx.delete(schema.userFederationCredentials)
       .where(eq(schema.userFederationCredentials.userId, uid))
       .run();
+
+    // A bot's slash commands go with the account (the tombstone keeps the users
+    // row, so the ON DELETE CASCADE never fires).
+    tx.delete(schema.botCommands).where(eq(schema.botCommands.botId, uid)).run();
 
     // Conditional deletes for tables that may reference userId
     try { tx.delete(schema.bans).where(eq(schema.bans.userId, uid)).run(); } catch { /* table may not exist */ }
@@ -279,6 +291,28 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       federationHomeOrphaned: 0,
     }).where(eq(schema.users.id, uid)).run();
   });
+
+  // After the commit: tombstoneUser opens its own transaction, so it cannot be nested.
+  for (const bot of ownedBots) {
+    // Origins first: the bot's tombstone deletes its federation credentials.
+    const botOrigins = db.select({ origin: schema.userFederationCredentials.origin })
+      .from(schema.userFederationCredentials)
+      .where(eq(schema.userFederationCredentials.userId, bot.id))
+      .all()
+      .map(r => r.origin);
+    filesToDelete.push(...tombstoneUser(bot.id, options));
+    if (botOrigins.length > 0) {
+      // Dynamic import: the federation utils import this module (cycle).
+      const mode = options?.purgeContent === false ? 'soft' : 'full';
+      void import('./botFederation.js')
+        .then(({ revokeBotOnPeers }) => revokeBotOnPeers(bot.id, botOrigins, mode))
+        .catch(() => { /* best effort: owner is gone, nobody to report to */ });
+    }
+    // Lazy import: ws/handler imports the DB layer, a static import would be a cycle.
+    void import('../ws/handler.js').then(({ connectionManager }) => {
+      connectionManager.forceDisconnectUser(bot.id);
+    }).catch(() => { /* best effort */ });
+  }
 
   return filesToDelete;
 }

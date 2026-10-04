@@ -130,7 +130,8 @@
       "connections": "Verbindungen",
       "keybinds": "Tastenkürzel",
       "desktop": "Desktop",
-      "instance": "Instanz"
+      "instance": "Instanz",
+      "bots": "Bot-Konten"
     },
     "logOut": "Abmelden",
     "backToMenu": "Zurück zum Einstellungsmenü"
@@ -429,5 +430,55 @@
     },
     "version": "Version {{version}}",
     "allReleases": "Alle Versionen auf GitHub"
+  },
+  "bots": {
+    "title": "Bot-Konten",
+    "description": "Ein Bot ist ein Konto, das ein Programm mit einem Token steuert. Erstelle einen Bot, kopiere sein Token und verbinde dein Programm. Bots antworten in Direktnachrichten.",
+    "create": {
+      "sectionTitle": "Bot erstellen",
+      "nameLabel": "Benutzername des Bots",
+      "submit": "Bot erstellen",
+      "hint": "{{min}} bis {{max}} Zeichen: Kleinbuchstaben, Zahlen und Unterstriche. Du kannst bis zu {{limit}} Bots erstellen."
+    },
+    "list": {
+      "sectionTitle": "Deine Bots",
+      "empty": "Du hast noch keine Bots.",
+      "createdOn": "Erstellt am {{date}}"
+    },
+    "token": {
+      "title": "Token für {{name}}",
+      "warning": "Kopiere das Token jetzt. Es wird nur einmal angezeigt, und wer es besitzt, steuert den Bot.",
+      "copy": "Token kopieren",
+      "copied": "Kopiert",
+      "dismiss": "Ich habe es gespeichert"
+    },
+    "actions": {
+      "regenerate": "Neues Token",
+      "delete": "Löschen",
+      "confirmDelete": "Löschen bestätigen",
+      "cancel": "Abbrechen",
+      "edit": "Bearbeiten",
+      "save": "Speichern",
+      "addToServer": "Zum Server hinzufügen"
+    },
+    "edit": {
+      "nameLabel": "Anzeigename",
+      "hint": "Der Benutzername @{{username}} kann nicht geändert werden. Bis zu {{max}} Zeichen."
+    },
+    "avatar": {
+      "change": "Avatar ändern",
+      "remove": "Avatar entfernen",
+      "cropTitle": "Bot-Avatar zuschneiden",
+      "uploadFailed": "Avatar konnte nicht hochgeladen werden",
+      "notImage": "Wähle eine Bilddatei"
+    },
+    "spaces": {
+      "title": "Zu einem Space hinzufügen",
+      "loading": "Spaces werden geladen",
+      "empty": "Du verwaltest noch keine Spaces. Zum Hinzufügen eines Bots brauchst du die Berechtigung zum Verwalten des Spaces.",
+      "add": "Hinzufügen",
+      "added": "Hinzugefügt",
+      "remove": "Entfernen"
+    }
   }
 }

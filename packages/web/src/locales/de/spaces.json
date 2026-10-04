@@ -354,7 +354,18 @@
       "kickFailed": "Mitglied konnte nicht entfernt werden",
       "banFailed": "Mitglied konnte nicht gesperrt werden",
       "rolesAboveYou": "Rollen auf oder über deiner höchsten Rolle sind gesperrt.",
-      "rolesUnheld": "Rollen mit Berechtigungen, die du nicht hast, kannst du nicht vergeben."
+      "rolesUnheld": "Rollen mit Berechtigungen, die du nicht hast, kannst du nicht vergeben.",
+      "botInvite": {
+        "warning": "Der Bot wird Mitglied dieses Servers und erhält die Nachrichten und Ereignisse aller Kanäle, die seine Berechtigungen erlauben. Füge nur Bots hinzu, denen du vertraust.",
+        "owner": "Besitzer: @{{owner}}",
+        "button": "Bot hinzufügen",
+        "title": "Bot hinzufügen",
+        "searchPlaceholder": "Bots nach Namen suchen...",
+        "searching": "Suche...",
+        "noResults": "Keine Bots gefunden",
+        "add": "Hinzufügen",
+        "adding": "Wird hinzugefügt..."
+      }
     }
   },
   "bans": {

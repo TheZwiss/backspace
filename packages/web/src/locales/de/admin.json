@@ -411,7 +411,8 @@
       "oldest": "Älteste zuerst",
       "nameDesc": "Name Z bis A",
       "deleted": "Gelöschte",
-      "clear": "Filter zurücksetzen"
+      "clear": "Filter zurücksetzen",
+      "bot": "Bot-Konten"
     },
     "badge": {
       "admin": "Administrator",

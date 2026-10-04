@@ -10,6 +10,8 @@ export const AVATAR_COLORS = ['mint', 'sky', 'lavender', 'coral', 'rose', 'teal'
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
 export interface User {
+  /** Bot account (no password login). Optional: older servers and relay stubs omit it. */
+  isBot?: boolean;
   id: string;
   username: string;
   displayName: string | null;
@@ -514,6 +516,7 @@ export interface PresenceIdentity {
 export type ServerEvent =
   | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; userActivityIdentities?: Record<string, PresenceIdentity>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'message_created'; message: MessageWithUser }
+  | { type: 'interaction_created'; interaction: BotInteraction }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
@@ -607,6 +610,8 @@ export interface RegisterRequest {
   homeInstance?: string;
   homeUserId?: string;
   inviteToken?: string;
+  /** Cross-instance bots: one-time attach-proof minted by the bot's home instance. */
+  botProof?: string;
 }
 
 export interface LoginRequest {
@@ -803,6 +808,7 @@ export interface Friend {
   addedAt: number;
   homeUserId: string | null;
   homeInstance: string | null;
+  isBot?: boolean;
 }
 
 export interface DiscoverUser {
@@ -821,6 +827,7 @@ export interface DiscoverUser {
   mutualFriendCount: number;
   mutualSpaceCount: number;
   relationship: 'none' | 'friends' | 'outbound_pending' | 'inbound_pending';
+  isBot?: boolean;
   requestId?: string;
 }
 
@@ -1112,6 +1119,7 @@ export interface CleanupResult {
 // ─── Admin User Management Types ──────────────────────────────────────────
 
 export interface AdminUser {
+  isBot: boolean;
   id: string;
   username: string;
   displayName: string | null;
@@ -1775,4 +1783,145 @@ export interface TelemetryStatus {
    * after a yes, and after a no again from the next minor release on.
    */
   askDue: boolean;
+}
+
+export interface BotSummary {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarColor: string | null;
+  avatar: string | null;
+  createdAt: number;
+}
+
+/** A bot as the invite search lists it: the owner is named so a manager sees whose code they invite. */
+export interface BotSearchResult extends BotSummary {
+  /** The owner's username; null when the owner is deleted or not discoverable. */
+  ownerUsername: string | null;
+}
+
+export interface UpdateBotRequest {
+  /** 1–32 characters after trim. The login (username, ends with `_bot`) is immutable. */
+  displayName?: string;
+  /** Bare filename from an upload, or null to clear. */
+  avatar?: string | null;
+}
+
+export interface UpdateBotResponse {
+  bot: BotSummary;
+}
+
+export interface BotSpaceOption {
+  id: string;
+  name: string;
+  icon: string | null;
+  /** Whether the bot is already a member. */
+  botIsMember: boolean;
+}
+
+export interface BotSpacesResponse {
+  spaces: BotSpaceOption[];
+}
+
+export interface CreateBotRequest {
+  name: string;
+}
+
+export interface CreateBotResponse {
+  bot: BotSummary;
+  /** Shown once; never stored in readable form. */
+  token: string;
+}
+
+export interface RegenerateBotTokenResponse {
+  token: string;
+}
+
+export type BotCommandOptionType = 'string' | 'integer' | 'number' | 'boolean';
+
+export interface BotCommandChoice {
+  name: string;
+  value: string | number;
+}
+
+export interface BotCommandOption {
+  name: string;
+  description: string;
+  type: BotCommandOptionType;
+  required: boolean;
+  /** Static choices (string, integer and number options only), at most 25. */
+  choices?: BotCommandChoice[];
+}
+
+/** What a bot sends when registering a command. */
+export interface BotCommandDefinition {
+  name: string;
+  description: string;
+  options?: Array<Omit<BotCommandOption, 'required'> & { required?: boolean }>;
+}
+
+export interface BotCommand {
+  id: string;
+  botId: string;
+  name: string;
+  description: string;
+  options: BotCommandOption[];
+  updatedAt: number;
+}
+
+export interface SetBotCommandsRequest {
+  commands: BotCommandDefinition[];
+}
+
+export interface BotCommandsResponse {
+  commands: BotCommand[];
+}
+
+export type BotInteractionOptionValue = string | number | boolean;
+
+/** The event a bot receives when a user invokes one of its slash commands. */
+export interface BotInteraction {
+  id: string;
+  command: string;
+  options: Record<string, BotInteractionOptionValue>;
+  user: User;
+  /** Set for a space channel. */
+  channelId?: string;
+  spaceId?: string;
+  /** Set for a direct or group DM. */
+  dmChannelId?: string;
+  expiresAt: number;
+}
+
+export interface CreateInteractionRequest {
+  botId: string;
+  command: string;
+  options?: Record<string, BotInteractionOptionValue>;
+  /** Exactly one of channelId and dmChannelId. */
+  channelId?: string;
+  dmChannelId?: string;
+}
+
+export interface CreateInteractionResponse {
+  id: string;
+  expiresAt: number;
+}
+
+export interface RespondToInteractionRequest {
+  content?: string;
+  attachments?: string[];
+}
+
+export interface BotCommandListing extends BotCommand {
+  bot: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatar: string | null;
+    avatarColor: string | null;
+  };
+}
+
+export interface ChatCommandsResponse {
+  commands: BotCommandListing[];
 }

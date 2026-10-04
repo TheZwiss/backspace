@@ -5,11 +5,13 @@ import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
+import { CommandOptionPopover, CommandPopover } from './CommandPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { AttachmentProgress } from './AttachmentProgress';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
+import type { BotCommandListing, BotCommandOption } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useComposerStore } from '../../stores/composerStore';
@@ -19,6 +21,9 @@ import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/id
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { useAuthStore } from '../../stores/authStore';
 import { findLastOwnEditableMessage } from './messageEditing';
+import { getApiForOrigin } from '../../utils/crossStoreResolvers';
+import { describeError } from '../../i18n/errors';
+import { parseCommandArgs, remainingOptions, suggestOptions, type OptionSuggest } from '../../utils/commandArgs';
 import {
   filterMentionCandidates,
   useChannelMentionCandidates,
@@ -37,6 +42,11 @@ interface MessageInputProps {
    * when the group has no `dm.name` set.
    */
   placeholder?: string;
+}
+
+interface CommandState {
+  query: string;
+  selectedIndex: number;
 }
 
 interface MentionState {
@@ -76,6 +86,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // UI-only state stays local
   const [mentionState, setMentionState] = useState<MentionState | null>(null);
   const [activePopover, setActivePopover] = useState<InputPopoverTab | null>(null);
+  // Slash commands of the bots in this chat, loaded the first time the composer starts with "/".
+  const [commandState, setCommandState] = useState<CommandState | null>(null);
+  const [chatCommands, setChatCommands] = useState<BotCommandListing[] | null>(null);
+  const pickedCommandRef = useRef<BotCommandListing | null>(null);
+  const [optionSuggest, setOptionSuggest] = useState<OptionSuggest | null>(null);
+  const commandsRequestRef = useRef<Promise<BotCommandListing[]> | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -200,6 +216,86 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       }
     }
   }, [stagedTransfers, addToast, t]);
+
+  // New chat, new command list.
+  useEffect(() => {
+    setChatCommands(null);
+    setCommandState(null);
+    setOptionSuggest(null);
+    commandsRequestRef.current = null;
+    pickedCommandRef.current = null;
+  }, [channelId]);
+
+  // The commands of the bots in this chat: fetched once per chat, shared by every caller.
+  const loadChatCommands = useCallback((): Promise<BotCommandListing[]> => {
+    const existing = commandsRequestRef.current;
+    if (existing) return existing;
+    const request: Promise<BotCommandListing[]> = getApiForOrigin(getChannelOrigin(channelId)).commands
+      .forChat(isDm ? { dmChannelId: channelId } : { channelId })
+      .then((res) => res.commands)
+      .catch(() => [] as BotCommandListing[])
+      .then((commands) => {
+        if (commandsRequestRef.current === request) setChatCommands(commands);
+        return commands;
+      });
+    commandsRequestRef.current = request;
+    return request;
+  }, [channelId, isDm]);
+
+  // The option popover's rows: the optional options of the typed command not written yet.
+  const optionMatches = useMemo(() => {
+    if (!optionSuggest || !draftText.startsWith('/' + optionSuggest.command.name + ' ')) return [];
+    return remainingOptions(optionSuggest.command, draftText)
+      .filter((o) => o.name.startsWith(optionSuggest.query))
+      .slice(0, 10);
+  }, [optionSuggest, draftText]);
+
+  const selectOption = useCallback(
+    (option: BotCommandOption) => {
+      if (!optionSuggest) return;
+      const text = draftText.slice(0, optionSuggest.startIndex) + option.name + ':';
+      setDraft(channelId, text);
+      setOptionSuggest(null);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        textarea.selectionStart = text.length;
+        textarea.selectionEnd = text.length;
+      });
+    },
+    [optionSuggest, draftText, setDraft, channelId],
+  );
+
+  // The command popover's rows.
+  const commandMatches = useMemo(() => {
+    if (!commandState || !chatCommands) return [];
+    const q = commandState.query.toLowerCase();
+    return chatCommands.filter((c) => c.name.includes(q)).slice(0, 25);
+  }, [commandState, chatCommands]);
+
+  const selectCommand = useCallback(
+    (command: BotCommandListing) => {
+      pickedCommandRef.current = command;
+      // Required options go into the text straight away, ready to be filled in.
+      const required = command.options.filter((o) => o.required);
+      const head = `/${command.name} `;
+      const text = head + required.map((o) => `${o.name}:`).join(' ');
+      setDraft(channelId, text);
+      setCommandState(null);
+      // With required options the caret goes behind the first one; without, the optional ones are offered.
+      const caret = required.length > 0 ? head.length + required[0]!.name.length + 1 : text.length;
+      setOptionSuggest(required.length === 0 && chatCommands ? suggestOptions(text, chatCommands, command) : null);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.focus();
+        textarea.selectionStart = caret;
+        textarea.selectionEnd = caret;
+      });
+    },
+    [setDraft, channelId, chatCommands],
+  );
 
   // The popover's rows; keyboard navigation indexes the same list.
   const mentionMatches = useMemo(
@@ -329,6 +425,42 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       typingTimeoutRef.current = undefined;
     }
 
+    // A slash command of a bot in this chat: invoke it instead of posting the text.
+    const commandHead = /^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i.exec(trimmed);
+    if (commandHead && stagedTransfers.length === 0) {
+      // A pasted command may be sent before the list has loaded: wait for it.
+      const known = chatCommands ?? await loadChatCommands();
+      const name = commandHead[1]!.toLowerCase();
+      const picked = pickedCommandRef.current;
+      const command = picked && picked.name === name
+        ? picked
+        : known.find((c) => c.name === name);
+      if (command) {
+        const parsed = parseCommandArgs(command, commandHead[2] ?? '');
+        if (!parsed.ok) {
+          addToast(t('chat:commands.extraText', { text: parsed.extra }), 'warning');
+          return;
+        }
+        try {
+          await getApiForOrigin(getChannelOrigin(channelId)).commands.invoke({
+            botId: command.botId,
+            command: command.name,
+            options: parsed.options,
+            ...(isDm ? { dmChannelId: channelId } : { channelId }),
+          });
+          pickedCommandRef.current = null;
+          clearComposer(channelId);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.focus();
+          }
+        } catch (err) {
+          addToast(err instanceof Error ? describeError(err) : t('chat:commands.failed'), 'warning');
+        }
+        return;
+      }
+    }
+
     if (stagedTransfers.length === 0) {
       // Text-only path — preserve the legacy optimistic-message flow
       try {
@@ -411,6 +543,60 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   );
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
+    // Option popover for the typed command: arrows move, Tab picks, Enter picks only after an arrow.
+    if (optionSuggest && optionMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setOptionSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.min(prev.selectedIndex + 1, optionMatches.length - 1) }
+          : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setOptionSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }
+          : null));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && optionSuggest.touched)) {
+        e.preventDefault();
+        const selected = optionMatches[optionSuggest.selectedIndex];
+        if (selected) selectOption(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOptionSuggest(null);
+        return;
+      }
+    }
+
+    // Slash command popover keyboard navigation
+    if (commandState && commandMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCommandState((prev) => (prev ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, commandMatches.length - 1) } : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCommandState((prev) => (prev ? { ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) } : null));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = commandMatches[commandState.selectedIndex];
+        if (selected) selectCommand(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setCommandState(null);
+        return;
+      }
+    }
+
     // Mention popover keyboard navigation
     if (mentionState && mentionMatches.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -534,6 +720,25 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     const value = e.target.value;
     const cursorPos = e.target.selectionStart;
     setDraft(channelId, value);
+
+    // A pasted or typed command is looked up as soon as the text starts with "/".
+    if (value.startsWith('/') && chatCommands === null) void loadChatCommands();
+
+    // Detect a slash command: "/" at the very start of the message, no space typed yet.
+    const commandMatch = /^\/([a-z0-9_-]*)$/i.exec(value.slice(0, cursorPos));
+    if (commandMatch && cursorPos === value.length) {
+      // The command list is loaded above, as soon as the text starts with "/".
+      setCommandState({ query: commandMatch[1] ?? '', selectedIndex: 0 });
+    } else {
+      setCommandState(null);
+    }
+
+    // After "/name " the options of that command are offered (only while the caret is at the end).
+    setOptionSuggest(
+      cursorPos === value.length && chatCommands
+        ? suggestOptions(value, chatCommands, pickedCommandRef.current)
+        : null,
+    );
 
     // Detect @mention trigger
     const textBeforeCursor = value.slice(0, cursorPos);
@@ -833,6 +1038,26 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         onDrop={canAttachFiles ? handleDrop : undefined}
         onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
+        {/* Slash command popover */}
+        {commandState && commandMatches.length > 0 && (
+          <CommandPopover
+            commands={commandMatches}
+            selectedIndex={commandState.selectedIndex}
+            onSelect={selectCommand}
+            anchorRef={inputContainerRef}
+          />
+        )}
+
+        {/* Slash command option popover */}
+        {optionSuggest && optionMatches.length > 0 && (
+          <CommandOptionPopover
+            options={optionMatches}
+            selectedIndex={Math.min(optionSuggest.selectedIndex, optionMatches.length - 1)}
+            onSelect={selectOption}
+            anchorRef={inputContainerRef}
+          />
+        )}
+
         {/* Mention autocomplete popover */}
         {mentionState && mentionMatches.length > 0 && (
           <MentionPopover
