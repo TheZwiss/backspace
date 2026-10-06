@@ -135,8 +135,9 @@ function inDocumentOrder(...nodes: HTMLElement[]): boolean {
 }
 
 /**
- * Renders the modal and waits for the instance info fetch to land, so the
- * assertions that follow run against a settled tree.
+ * Renders the modal and waits for the instance info fetch to land. The panels
+ * are lazily loaded (`lazySettingsPanels`), so this does not mean the open
+ * panel has mounted: a test that reads a panel waits for it with `findBy*`.
  */
 async function openSettings(): Promise<void> {
   render(<UserSettingsModal />);
@@ -206,7 +207,9 @@ describe('UserSettingsModal deep links (#330)', () => {
   ])('opens on the %s tab a caller names', async (tab, marker) => {
     mocks.ui.modalData = { tab };
     await openSettings();
-    expect(screen.getByText(marker)).toBeInTheDocument();
+    // The named panel has to mount before the absence check below means
+    // anything: before it does, no panel is rendered at all.
+    expect(await screen.findByText(marker)).toBeInTheDocument();
     expect(screen.queryByText('AccountPanel stub')).not.toBeInTheDocument();
   });
 
@@ -219,19 +222,19 @@ describe('UserSettingsModal deep links (#330)', () => {
   it('falls back to Account for the instance tab when the user is not an admin', async () => {
     mocks.ui.modalData = { tab: 'instance' };
     await openSettings();
-    expect(screen.getByText('AccountPanel stub')).toBeInTheDocument();
+    expect(await screen.findByText('AccountPanel stub')).toBeInTheDocument();
   });
 
   it('opens the instance tab for an admin', async () => {
     mocks.auth.user = { ...mocks.auth.user, isAdmin: true };
     mocks.ui.modalData = { tab: 'instance' };
     await openSettings();
-    expect(screen.getByText('InstancePanel stub')).toBeInTheDocument();
+    expect(await screen.findByText('InstancePanel stub')).toBeInTheDocument();
   });
 
   it('falls back to Account for a tab that does not exist', async () => {
     mocks.ui.modalData = { tab: 'nonsense' };
     await openSettings();
-    expect(screen.getByText('AccountPanel stub')).toBeInTheDocument();
+    expect(await screen.findByText('AccountPanel stub')).toBeInTheDocument();
   });
 });
