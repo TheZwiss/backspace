@@ -31,14 +31,33 @@ const inFlight = new Set<string>();
  */
 const handleConfirmed = new Set<string>();
 
-/** Test hook: forget the in-flight and confirmed sets. */
+/**
+ * Rows whose home answered in this process without a profile version (a home
+ * up to 1.7.0), keyed by row id and `homeUserId` (`answeredKey`). Such an
+ * answer leaves the row without a version, so without this the activation
+ * pass would ask about it on every activation, download its images again and
+ * announce it each time. In memory only: once the home upgrades, the next
+ * start asks again and gets a versioned answer.
+ */
+const answeredUnversioned = new Set<string>();
+
+/** The activation pass running for a peer origin, which a second call joins. */
+const passInFlight = new Map<string, Promise<void>>();
+
+/** Test hook: forget the in-flight, confirmed and answered sets. */
 export function _resetHomeRecordPulls(): void {
   inFlight.clear();
   handleConfirmed.clear();
+  answeredUnversioned.clear();
+  passInFlight.clear();
 }
 
 function pullKey(peerOrigin: string, homeUserId: string): string {
   return `${peerOrigin}\n${homeUserId}`;
+}
+
+function answeredKey(row: Pick<UserRow, 'id' | 'homeUserId'>): string {
+  return `${row.id}\n${row.homeUserId ?? ''}`;
 }
 
 /** The live, attached row `id` for identity `homeUserId`, or null. */
@@ -55,7 +74,8 @@ function liveRow(id: string, homeUserId: string): UserRow | null {
  * applied as the home's (`applyHomeProfile`, version-checked). An answer about
  * another id changes nothing. The row is read again once the home answered,
  * since it may have changed or gone meanwhile (a creation rolled back, a
- * merge, a deletion).
+ * merge, a deletion). An answer without a version is remembered for the
+ * process (`answeredUnversioned`).
  */
 async function refreshFromHome(row: UserRow, peerOrigin: string): Promise<RefreshOutcome> {
   const homeUserId = row.homeUserId;
@@ -82,7 +102,9 @@ async function refreshFromHome(row: UserRow, peerOrigin: string): Promise<Refres
   if (named.user !== current) announceUserUpdated(named.user);
   if (mayCarryLegacySuffix(named.user)) handleConfirmed.add(named.user.id);
 
-  await applyHomeProfile(named.user, homeProfileFromAnswer(result), peerOrigin, db);
+  const profile = homeProfileFromAnswer(result);
+  await applyHomeProfile(named.user, profile, peerOrigin, db);
+  if (profile.profileUpdatedAt === null) answeredUnversioned.add(answeredKey(named.user));
   return 'refreshed';
 }
 
@@ -120,13 +142,14 @@ export function scheduleHomeRecordPull(row: UserRow): void {
 /**
  * Whether the activation pass asks a row's home about it: the row carries a
  * placeholder name (`isPlaceholderNamedStub`), has no profile version yet
- * (never had a `profile_update` or an answer applied: rows filled only from
- * snapshots, rows from before 1.8), or may carry a pre-1.8 `_<n>` name
+ * (never had a `profile_update` or a versioned answer applied: rows filled
+ * only from snapshots, rows from before 1.8) and no unversioned answer in
+ * this process (`answeredUnversioned`), or may carry a pre-1.8 `_<n>` name
  * (`mayCarryLegacySuffix`) the home has not confirmed in this process.
  */
 function needsHomeAnswer(row: UserRow): boolean {
   if (isPlaceholderNamedStub(row)) return true;
-  if (row.profileUpdatedAt === null) return true;
+  if (row.profileUpdatedAt === null && !answeredUnversioned.has(answeredKey(row))) return true;
   return mayCarryLegacySuffix(row) && !handleConfirmed.has(row.id);
 }
 
@@ -143,13 +166,22 @@ function needsHomeAnswer(row: UserRow): boolean {
  * rate-limited answer and the next activation carries on. A row the home did
  * not answer for (unreachable, not found) is left for the next pass without
  * stopping the others. Rows whose home is asked already (a creation pull) are
- * skipped.
+ * skipped. A call while a pass for the same peer runs joins that pass, so two
+ * activations never ask about the same rows twice.
  *
  * Gated on our peer row being `active`: the lookup needs an active peering on
  * both sides. Called from `onPeerActivated` (every transition to active) and
  * the startup pass for every peer active at boot.
  */
-export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<void> {
+export function backfillStubUsernamesForPeer(peerOrigin: string): Promise<void> {
+  const running = passInFlight.get(peerOrigin);
+  if (running) return running;
+  const pass = runRecordPass(peerOrigin).finally(() => passInFlight.delete(peerOrigin));
+  passInFlight.set(peerOrigin, pass);
+  return pass;
+}
+
+async function runRecordPass(peerOrigin: string): Promise<void> {
   const db = getDb();
   const peerDomain = extractDomain(peerOrigin);
 

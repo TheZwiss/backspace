@@ -343,6 +343,47 @@ describe('backfillStubUsernamesForPeer: names from before 1.8 and profiles witho
     expect(stored.profileUpdatedAt).toBe(5000);
   });
 
+  it('a row whose home answers without a version (1.7.0) is asked once per process', async () => {
+    seed({ id: 'r-1', username: `kai@${DOMAIN}`, homeUserId: '111', profileUpdatedAt: null });
+    lookupResponses.set('111', answer('111', 'kai', { displayName: 'Kai' }));
+
+    await runPass();
+    await runPass();
+
+    expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111']);
+    const stored = testDb.select().from(schema.users).where(eq(schema.users.id, 'r-1')).get()!;
+    expect(stored.displayName).toBe('Kai');
+    expect(stored.profileUpdatedAt).toBeNull();
+
+    // A restart (the home may have upgraded meanwhile) asks again.
+    const { _resetHomeRecordPulls } = await import('./federationStubBackfill.js');
+    _resetHomeRecordPulls();
+    await runPass();
+    expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111', '111']);
+  });
+
+  it('a pass started while one runs for the same peer joins it', async () => {
+    seed({ id: 'r-1', username: `ann@${DOMAIN}`, homeUserId: '111', profileUpdatedAt: null });
+    seed({ id: 'r-2', username: `ben@${DOMAIN}`, homeUserId: '222', profileUpdatedAt: null });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+    vi.mocked(lookupRemoteUserByHomeId).mockImplementationOnce(async (peerOrigin: string, homeUserId: string) => {
+      lookupCalls.push({ peerOrigin, homeUserId });
+      await gate;
+      return answer('111', 'ann', { profileUpdatedAt: 5000 }) as Awaited<ReturnType<typeof lookupRemoteUserByHomeId>>;
+    });
+    lookupResponses.set('222', answer('222', 'ben', { profileUpdatedAt: 5000 }));
+    const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+
+    const first = backfillStubUsernamesForPeer(ORIGIN);
+    const second = backfillStubUsernamesForPeer(ORIGIN);
+    release();
+    await Promise.all([first, second]);
+
+    expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111', '222']);
+  });
+
   it('stops at the first rate-limited answer', async () => {
     seed({ id: 'r-1', username: `ann@${DOMAIN}`, homeUserId: '111', profileUpdatedAt: null });
     seed({ id: 'r-2', username: `ben@${DOMAIN}`, homeUserId: '222', profileUpdatedAt: null });
