@@ -49,6 +49,7 @@
   "account_deleted": "该账号已被注销。",
   "target_domain_required": "请输入要关联的实例地址。",
   "native_account_required": "仅在此实例上创建的原生账号可以执行此操作。",
+  "reattach_handle_taken": "此实例上已有其他账号使用该用户名登录，因此无法将此账号与其关联。",
   "username_confirmation_required": "请输入您的用户名以确认。",
   "username_confirmation_mismatch": "输入的用户名与您的账号不匹配。",
   "avatar_url_invalid": "头像图片地址无效。",

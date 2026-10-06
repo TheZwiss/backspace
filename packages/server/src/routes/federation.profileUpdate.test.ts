@@ -182,6 +182,8 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
 
   it('an empty avatarColor is filled once from a snapshot and announced once', async () => {
     const fed = await import('./federation.js');
+    // Hydration fills only a row the home has not answered with a version.
+    testDb.update(schema.users).set({ profileUpdatedAt: null }).where(eq(schema.users.id, 'stub-1')).run();
     expect(stub().avatarColor).toBeNull();
     await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'rose' }, testDb);
     expect(stub().avatarColor).toBe('rose');
@@ -195,7 +197,9 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
 
   it('the home\'s newer profile_update still replaces avatarColor and announces it', async () => {
     const fed = await import('./federation.js');
+    testDb.update(schema.users).set({ profileUpdatedAt: null }).where(eq(schema.users.id, 'stub-1')).run();
     await fed.hydrateReplicatedUserProfile(stub(), { avatarColor: 'rose' }, testDb);
+    expect(stub().avatarColor).toBe('rose');
     vi.mocked(connectionManager.sendToUser).mockClear();
     await fed.processProfileUpdateEvent({
       eventType: 'profile_update',

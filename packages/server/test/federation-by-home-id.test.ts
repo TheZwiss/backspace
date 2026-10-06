@@ -39,6 +39,32 @@ describe('POST /api/federation/users/by-home-id', () => {
     expect(json.user!.username).toBe(target.username);
   });
 
+  it('carries the profile version and accent colour, a never-edited profile at its creation time', async () => {
+    const target = await registerLocal(harness.remote, 'lookup_versioned');
+    const ask = async (): Promise<{ profileUpdatedAt?: number | null; accentColor?: string | null }> => {
+      const body = JSON.stringify({ homeUserId: target.id });
+      const headers = buildHeadersForOrigin(body, sharedSecret, `https://${harness.home.domain}`);
+      const res = await fetch(`${harness.remote.origin}/api/federation/users/by-home-id`, { method: 'POST', headers, body });
+      expect(res.status).toBe(200);
+      const json = await res.json() as { user: { profile: { profileUpdatedAt?: number | null; accentColor?: string | null } } };
+      return json.user.profile;
+    };
+
+    const fresh = await ask();
+    expect(typeof fresh.profileUpdatedAt).toBe('number');
+    expect(fresh.accentColor).toBeNull();
+
+    const patched = await fetch(`${harness.remote.origin}/api/users/@me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${target.token}` },
+      body: JSON.stringify({ accentColor: '#7c6cf6' }),
+    });
+    expect(patched.status).toBe(200);
+    const edited = await ask();
+    expect(edited.accentColor).toBe('#7c6cf6');
+    expect(edited.profileUpdatedAt!).toBeGreaterThan(fresh.profileUpdatedAt!);
+  });
+
   it('returns { found: false } on unknown homeUserId', async () => {
     const body = JSON.stringify({ homeUserId: 'definitely-not-a-real-id' });
     const headers = buildHeadersForOrigin(body, sharedSecret, `https://${harness.home.domain}`);

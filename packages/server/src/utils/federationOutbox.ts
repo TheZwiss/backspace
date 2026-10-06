@@ -7,6 +7,7 @@ import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 import { extractDomain, relayActorOfUser } from '../routes/federation.js';
 import { racePeering, ensurePeered, createAutoPlaceholderPeer } from './federationPeering.js';
 import { relayMentionsOf } from './federationMentions.js';
+import { relayHandleOf } from '../routes/federation/stubName.js';
 import { federationFetch } from './federationFetch.js';
 import { writeOutboxEvent, type OutboxEventType } from './federationOutboxQueue.js';
 
@@ -338,7 +339,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       homeUserId: m.homeUserId || m.id,
       homeInstance: m.homeInstance || domainOrigin,
       profile: {
-        username: m.username ?? null,
+        username: relayHandleOf(m),
         displayName: m.displayName ?? null,
         avatar: m.avatar ?? null,
         avatarColor: m.avatarColor ?? null,
@@ -1020,7 +1021,7 @@ export function queueGroupMetadataRelay(
     homeUserId: actorRow.homeUserId || actorRow.id,
     homeInstance: actorRow.homeInstance || ourOrigin,
     profile: {
-      username: actorRow.username ?? null,
+      username: relayHandleOf(actorRow),
       displayName: actorRow.displayName ?? null,
       avatar: actorRow.avatar ?? null,
       avatarColor: actorRow.avatarColor ?? null,

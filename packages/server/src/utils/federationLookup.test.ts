@@ -259,6 +259,28 @@ describe('lookupRemoteUserByHomeId', () => {
     expect(result).toMatchObject({ ok: true, homeUserId: 'remote-uid-1', username: 'bob' });
   });
 
+  it('reads the profile version and accent colour, and treats a malformed version as none', async () => {
+    const withVersion = (profileUpdatedAt: unknown, accentColor: unknown): unknown => ({
+      ...VALID_RESPONSE_BODY,
+      user: { ...VALID_RESPONSE_BODY.user, profile: { ...VALID_RESPONSE_BODY.user.profile, profileUpdatedAt, accentColor } },
+    });
+    const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');
+
+    answer(200, withVersion(5000, '#7c6cf6'));
+    const versioned = await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1');
+    expect(versioned.ok && versioned.profile).toMatchObject({ profileUpdatedAt: 5000, accentColor: '#7c6cf6' });
+
+    answer(200, withVersion('5000', 42));
+    const malformed = await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1');
+    expect(malformed.ok && malformed.profile.profileUpdatedAt).toBeNull();
+    expect(malformed.ok && 'accentColor' in malformed.profile).toBe(false);
+
+    answer(200, VALID_RESPONSE_BODY);
+    const older = await lookupRemoteUserByHomeId(PEER_ORIGIN, 'remote-uid-1');
+    expect(older.ok && older.profile.profileUpdatedAt).toBeNull();
+    expect(older.ok && 'accentColor' in older.profile).toBe(false);
+  });
+
   it('returns not_found only on an explicit { found: false }', async () => {
     answer(200, { found: false });
     const { lookupRemoteUserByHomeId } = await import('./federationLookup.js');

@@ -20,6 +20,7 @@ import type {
   DiscoverUser,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { relayHandleOf } from './federation/stubName.js';
 import { sendError } from '../utils/httpErrors.js';
 
 export function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
@@ -33,7 +34,7 @@ export function buildProfileSnapshot(user: typeof schema.users.$inferSelect): Fe
     ? (user.status as 'online' | 'idle' | 'dnd' | 'offline')
     : null;
   return {
-    username: user.username ?? null,
+    username: relayHandleOf(user),
     displayName: user.displayName ?? null,
     avatar: user.avatar ?? null,
     avatarColor: user.avatarColor ?? null,

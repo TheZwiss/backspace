@@ -67,28 +67,3 @@ describe('verifyAttachProofWithPeer', () => {
     expect(await verifyAttachProofWithPeer(PEER, 'a'.repeat(64))).toEqual({ valid: false });
   });
 });
-
-describe('fetchHomeProfileByHomeId', () => {
-  it('returns the profile for found:true', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      found: true,
-      user: { homeUserId: 'h1', username: 'youruser', profile: { displayName: 'J', avatar: 'a.webp', avatarColor: 'coral', banner: null, bio: null } },
-    }), { status: 200 })));
-    const { fetchHomeProfileByHomeId } = await import('./federationAttach.js');
-    const result = await fetchHomeProfileByHomeId(PEER, 'h1');
-    expect(result?.username).toBe('youruser');
-    expect(result?.profile.avatar).toBe('a.webp');
-  });
-
-  it('found:false → null', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ found: false }), { status: 200 })));
-    const { fetchHomeProfileByHomeId } = await import('./federationAttach.js');
-    expect(await fetchHomeProfileByHomeId(PEER, 'h1')).toBeNull();
-  });
-
-  it('network error → null', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
-    const { fetchHomeProfileByHomeId } = await import('./federationAttach.js');
-    expect(await fetchHomeProfileByHomeId(PEER, 'h1')).toBeNull();
-  });
-});

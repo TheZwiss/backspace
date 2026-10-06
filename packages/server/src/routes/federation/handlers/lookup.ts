@@ -75,9 +75,11 @@ export function registerLookupRoutes(app: FastifyInstance): void {
 
   // ─── POST /api/federation/users/by-home-id ──────────────────────────────────
   // Server-to-server: reverse-lookup a homeUserId to its canonical username +
-  // profile snapshot. Used by the stub-username backfill worker on peers that
-  // hold legacy snowflake-named replicas of users now visible by their real
-  // handle. Same auth+rate-limit shape as /users/lookup.
+  // versioned profile. Peers ask it when they create a row for one of our
+  // users, on activation for rows with a placeholder or pre-1.8 suffixed name
+  // or no profile version, from client DM routes and on re-attach; they apply
+  // the answer as they apply a `profile_update`. Same auth+rate-limit shape
+  // as /users/lookup.
   app.post<{ Body: { homeUserId?: unknown } }>(
     '/api/federation/users/by-home-id',
     { bodyLimit: 4 * 1024 },
@@ -131,6 +133,11 @@ export function registerLookupRoutes(app: FastifyInstance): void {
             status: user.status as 'online' | 'idle' | 'dnd' | 'offline' | null,
             banner: user.banner,
             bio: user.bio,
+            accentColor: user.accentColor,
+            // The version `profile_update` carries. A profile never edited
+            // has none stored; it is the one the account was created with,
+            // so its creation time orders it before every later edit.
+            profileUpdatedAt: user.profileUpdatedAt ?? user.createdAt,
           },
         },
       });

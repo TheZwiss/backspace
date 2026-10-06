@@ -1,11 +1,10 @@
 import { getDb, schema } from '../db/index.js';
-import { hydrateReplicatedUserProfile, resolveOrCreateReplicatedUser } from '../routes/federation.js';
+import { resolveOrCreateReplicatedUser } from '../routes/federation.js';
+import { applyHomeProfile, homeProfileFromAnswer } from '../routes/federation/profile.js';
 import { resolveRelayActor } from '../routes/federation/identity.js';
 import { isPlaceholderNamedStub } from '../routes/federation/stubName.js';
-import { canonicalizeHomeInstance } from './federationAuth.js';
 import { lookupRemoteUserByHomeId, type LookupResult } from './federationLookup.js';
-import { resolveOriginFromHostname } from './federationOriginResolve.js';
-import { eq } from 'drizzle-orm';
+import { activePeerOriginForHome } from './federationOriginResolve.js';
 
 type UserRow = typeof schema.users.$inferSelect;
 
@@ -17,29 +16,6 @@ type HomeAnswer =
   | { kind: 'answered'; user: Extract<LookupResult, { ok: true }> }
   | { kind: 'no_such_user' }
   | { kind: 'no_answer' };
-
-/**
- * The origin of the active peer that is the home of `homeInstance`, or null
- * when there is none (not peered, or the peering is not `active`).
- */
-function activePeerOriginFor(homeInstance: string, db: ReturnType<typeof getDb>): string | null {
-  const canon = canonicalizeHomeInstance(homeInstance);
-  if (!canon) return null;
-  let host: string;
-  try {
-    host = new URL(canon).host;
-  } catch {
-    return null;
-  }
-  const origin = resolveOriginFromHostname(host);
-  if (!origin) return null;
-  const peer = db
-    .select({ status: schema.federationPeers.status })
-    .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.origin, origin))
-    .get();
-  return peer?.status === 'active' ? origin : null;
-}
 
 /**
  * How long a client route waits for the identity's home. The request is held
@@ -94,7 +70,7 @@ async function askHome(peerOrigin: string, homeUserId: string): Promise<HomeAnsw
   try {
     result = await lookupRemoteUserByHomeId(peerOrigin, homeUserId, { timeoutMs: CLIENT_HOME_LOOKUP_TIMEOUT_MS });
   } catch (err) {
-    // Only a peer row that vanished since `activePeerOriginFor` read it; every
+    // Only a peer row that vanished since `activePeerOriginForHome` read it; every
     // peer failure comes back as `unreachable`.
     console.warn('[federation] by-home-id lookup of %s on %s failed: %s', homeUserId, peerOrigin, (err as Error).message);
     rememberNoAnswer(key, Date.now());
@@ -116,20 +92,24 @@ async function askHome(peerOrigin: string, homeUserId: string): Promise<HomeAnsw
 /**
  * Resolve or create the row for a remote identity with the username and
  * profile its home just reported. On an existing `<homeUserId>@<domain>` row,
- * the username hint renames it (`resolveOrCreateReplicatedUser`).
+ * the username hint renames it (`resolveOrCreateReplicatedUser`). The profile
+ * is the home's own answer, so it is applied as the home's
+ * (`applyHomeProfile`), not only into empty fields.
  */
 async function resolveWithAnswer(
   homeUserId: string,
   homeInstance: string,
+  peerOrigin: string,
   answer: Extract<LookupResult, { ok: true }>,
   db: ReturnType<typeof getDb>,
 ): Promise<UserRow | null> {
   const row = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, {
     username: answer.username,
     status: answer.profile.status ?? null,
+    homeAsked: true,
   });
   if (!row) return null;
-  return hydrateReplicatedUserProfile(row, { ...answer.profile, username: answer.username }, db);
+  return applyHomeProfile(row, homeProfileFromAnswer(answer), peerOrigin, db);
 }
 
 /**
@@ -169,11 +149,11 @@ export async function resolveRemoteIdentityForClient(
 
   if (known.kind === 'found') {
     if (!isPlaceholderNamedStub(known.user)) return known.user;
-    const peerOrigin = activePeerOriginFor(homeInstance, db);
+    const peerOrigin = activePeerOriginForHome(homeInstance, db);
     if (!peerOrigin) return known.user;
     const answer = await askHome(peerOrigin, homeUserId);
     if (answer.kind !== 'answered') return known.user;
-    return (await resolveWithAnswer(homeUserId, homeInstance, answer.user, db)) ?? known.user;
+    return (await resolveWithAnswer(homeUserId, homeInstance, peerOrigin, answer.user, db)) ?? known.user;
   }
 
   // A new row is created only for an id shaped like one (every user id is a
@@ -181,12 +161,12 @@ export async function resolveRemoteIdentityForClient(
   // home cannot be asked: the row gets the id name, and the DM's first message
   // starts the peering, whose activation renames the row (backfill).
   if (!SNOWFLAKE_ID.test(homeUserId)) return null;
-  const peerOrigin = activePeerOriginFor(homeInstance, db);
+  const peerOrigin = activePeerOriginForHome(homeInstance, db);
   if (!peerOrigin) return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
   const answer = await askHome(peerOrigin, homeUserId);
   switch (answer.kind) {
-    case 'answered': return resolveWithAnswer(homeUserId, homeInstance, answer.user, db);
+    case 'answered': return resolveWithAnswer(homeUserId, homeInstance, peerOrigin, answer.user, db);
     case 'no_such_user': return null;
-    case 'no_answer': return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+    case 'no_answer': return resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, { homeAsked: true });
   }
 }
