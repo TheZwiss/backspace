@@ -39,141 +39,27 @@ function optionalText(value: unknown): string | null | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-// ─── http(s) origins ────────────────────────────────────────────────────────
-//
-// The shared package compiles without DOM or Node types, so the URL global is
-// not available here. `isHttpOrigin` applies the URL standard's host rules
-// (https://url.spec.whatwg.org/#host-parsing) to the one shape an origin has.
-
-/** Printable ASCII without the standard's forbidden domain code points. */
-const DOMAIN_CHARS = /^[!"$&'()*+,\-.0-9;=A-Z_`a-z{}~]+$/;
-
-/** The standard's IPv4 number parser: decimal, `0x` hex or `0` octal; null on failure. */
-function ipv4Number(part: string): number | null {
-  let digits = part;
-  let radix = 10;
-  if (/^0x/i.test(digits)) {
-    digits = digits.slice(2);
-    radix = 16;
-  } else if (digits.length > 1 && digits.startsWith('0')) {
-    digits = digits.slice(1);
-    radix = 8;
-  }
-  if (digits === '') return part === '' ? null : 0;
-  const pattern = radix === 16 ? /^[0-9a-f]+$/i : radix === 8 ? /^[0-7]+$/ : /^[0-9]+$/;
-  return pattern.test(digits) ? parseInt(digits, radix) : null;
-}
-
-/** The standard's "ends in a number" check: such a host must be an IPv4 address. */
-function endsInNumber(parts: string[]): boolean {
-  const last = parts[parts.length - 1] ?? '';
-  return /^[0-9]+$/.test(last) || ipv4Number(last) !== null;
-}
-
-function isIpv4(parts: string[]): boolean {
-  if (parts.length > 4) return false;
-  const numbers = parts.map(ipv4Number);
-  if (numbers.some(n => n === null)) return false;
-  const values = numbers as number[];
-  if (values.slice(0, -1).some(n => n > 255)) return false;
-  return values[values.length - 1]! < 256 ** (5 - values.length);
-}
-
-function isDomain(host: string): boolean {
-  if (!DOMAIN_CHARS.test(host)) return false;
-  const parts = host.split('.');
-  if (parts[parts.length - 1] === '') {
-    if (parts.length === 1) return false;
-    parts.pop();
-  }
-  return !endsInNumber(parts) || isIpv4(parts);
-}
-
-/** The standard's IPv6 parser, without building the address. */
-function isIpv6(input: string): boolean {
-  const isHex = (c: string | undefined): boolean => c !== undefined && /^[0-9a-f]$/i.test(c);
-  const isDigit = (c: string | undefined): boolean => c !== undefined && c >= '0' && c <= '9';
-  let pieceIndex = 0;
-  let compressed = false;
-  let pointer = 0;
-  if (input[pointer] === ':') {
-    if (input[pointer + 1] !== ':') return false;
-    pointer += 2;
-    pieceIndex += 1;
-    compressed = true;
-  }
-  while (pointer < input.length) {
-    if (pieceIndex === 8) return false;
-    if (input[pointer] === ':') {
-      if (compressed) return false;
-      pointer += 1;
-      pieceIndex += 1;
-      compressed = true;
-      continue;
-    }
-    let length = 0;
-    while (length < 4 && isHex(input[pointer])) {
-      pointer += 1;
-      length += 1;
-    }
-    if (input[pointer] === '.') {
-      if (length === 0 || pieceIndex > 6) return false;
-      pointer -= length;
-      let numbersSeen = 0;
-      while (pointer < input.length) {
-        if (numbersSeen > 0) {
-          if (input[pointer] !== '.' || numbersSeen >= 4) return false;
-          pointer += 1;
-        }
-        if (!isDigit(input[pointer])) return false;
-        let piece: number | null = null;
-        while (isDigit(input[pointer])) {
-          const digit = Number(input[pointer]);
-          if (piece === 0) return false;
-          piece = piece === null ? digit : piece * 10 + digit;
-          if (piece > 255) return false;
-          pointer += 1;
-        }
-        numbersSeen += 1;
-        if (numbersSeen === 2 || numbersSeen === 4) pieceIndex += 1;
-      }
-      if (numbersSeen !== 4) return false;
-      break;
-    }
-    if (input[pointer] === ':') {
-      pointer += 1;
-      if (pointer === input.length) return false;
-    } else if (pointer < input.length) {
-      return false;
-    }
-    pieceIndex += 1;
-  }
-  return compressed || pieceIndex === 8;
-}
-
 /**
  * Whether `value` is an http(s) origin, `scheme://host[:port]` with nothing
- * after, that `new URL(value)` accepts: the host is a bracketed IPv6 address,
- * an IPv4 address, or an ASCII domain; the port is digits up to 65535. A
- * non-ASCII host is refused, since an origin as the standard serializes it
- * is ASCII, and `xn--` labels are not checked against Punycode.
+ * after, that `new URL(value)` accepts. URL decides the host and port; the
+ * checks before it refuse what URL would take but an origin is not: userinfo,
+ * a path, query or fragment (even an empty one), a scheme without `//`, an
+ * empty port, and anything URL would strip or decode before parsing (ASCII
+ * spaces and controls, `%`), so the value stored is the value that parsed.
  */
 export function isHttpOrigin(value: string): boolean {
   const scheme = /^https?:\/\//i.exec(value);
   if (!scheme) return false;
-  let rest = value.slice(scheme[0].length);
-  if (rest.startsWith('[')) {
-    const close = rest.indexOf(']');
-    if (close < 0 || !isIpv6(rest.slice(1, close))) return false;
-    rest = rest.slice(close + 1);
-  } else {
-    const colon = rest.indexOf(':');
-    if (!isDomain(colon < 0 ? rest : rest.slice(0, colon))) return false;
-    rest = colon < 0 ? '' : rest.slice(colon);
+  const authority = value.slice(scheme[0].length);
+  // Printable ASCII or non-ASCII; a non-ASCII host is left to URL's IDNA rules.
+  if (!/^(?:[!-~]|\P{ASCII})+$/u.test(authority)) return false;
+  if (/[/?#@\\%]/.test(authority) || authority.endsWith(':')) return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
   }
-  if (rest === '') return true;
-  const port = /^:([0-9]+)$/.exec(rest);
-  return port !== null && Number(port[1]) <= 65535;
 }
 
 function httpOrigin(value: unknown): string | null {

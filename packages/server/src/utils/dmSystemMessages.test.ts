@@ -62,11 +62,12 @@ describe('the space invite origin check agrees with the URL standard', () => {
   /**
    * What `isHttpOrigin` claims: `new URL` accepts the value as http(s), and the
    * value is `scheme://host[:port]` with nothing after, in printable ASCII
-   * (URL would drop tabs and newlines and decode `%`, so the stored value
-   * would not be what it parsed).
+   * or non-ASCII characters (URL would drop tabs and newlines and decode `%`,
+   * so the stored value would not be what it parsed). A non-ASCII host is
+   * accepted when URL's IDNA rules accept it.
    */
   function urlAcceptsOrigin(value: string): boolean {
-    if (!/^https?:\/\/[!-~]*$/i.test(value) || /[/?#@\\%]/.test(value.replace(/^https?:\/\//i, ''))) return false;
+    if (!/^https?:\/\/(?:[!-~]|\P{ASCII})*$/iu.test(value) || /[/?#@\\%]/.test(value.replace(/^https?:\/\//i, ''))) return false;
     if (/:$/.test(value) && !/\]$/.test(value)) return false;
     try {
       const url = new URL(value);
@@ -95,7 +96,11 @@ describe('the space invite origin check agrees with the URL standard', () => {
     // Not an origin, though URL parses some of them.
     'https://home.test/', 'https://home.test/path', 'https://home.test?q', 'https://home.test#f', 'https://u@home.test',
     'https://home.test\\x', 'https://home .test', 'https://home\t.test', 'https://h%6Fme.test', 'ftp://home.test',
-    'javascript:alert(1)', 'https:home.test', ' https://home.test', 'https://bücher.example',
+    'javascript:alert(1)', 'https:home.test', ' https://home.test',
+    // Non-ASCII hosts, which URL maps through IDNA.
+    'https://bücher.example', 'https://bücher.example:8443', 'https://ex\u3002ample', 'https://a\u00a0b',
+    'https://a\uff0fb', 'https://a\uff20b', 'https://a\uff05b', 'https://a\uff1a80', 'http://x:\uff18\uff10',
+    'http://[::\uff11]',
   ];
 
   for (const value of corpus) {
