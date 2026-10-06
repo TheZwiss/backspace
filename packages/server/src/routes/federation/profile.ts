@@ -8,7 +8,7 @@ import { generateSnowflake } from '../../utils/snowflake.js';
 import { collectProfileBroadcastTargetIds } from '../../utils/userDeletion.js';
 import { safeFetch } from '../../utils/ssrf.js';
 import { connectionManager } from '../../ws/handler.js';
-import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot, FederationUserLookupProfile } from '@backspace/shared';
@@ -17,8 +17,10 @@ import { announceUserUpdated, applyPlaceholderRename, handleFromHint } from './s
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
- * Only fills fields that are still null/empty on the local row and never
- * rewrites one. The snapshot carries no version, and a DM or friend event may
+ * Only fills fields that are still null/empty on the local row when it writes
+ * (checked in the UPDATE, not on the row passed in) and never rewrites one,
+ * so a home answer that lands while images download keeps its values. The
+ * snapshot carries no version, and a DM or friend event may
  * carry one that a third instance built from its own, possibly stale, replica
  * of the user, so it cannot tell whether it is newer than what is stored.
  * Stored profile fields change only through the home's version-checked
@@ -27,8 +29,8 @@ import { announceUserUpdated, applyPlaceholderRename, handleFromHint } from './s
  * (`applyPlaceholderRename`).
  *
  * When the row changed (renamed, or a field filled), the users who can see it
- * get one `user_updated` with the final row (`announceUserUpdated`), after
- * every field is written. A rename just before by `resolveOrCreateReplicatedUser`
+ * get one `user_updated` with the row as stored (`announceUserUpdated`), after
+ * every field is written. Returns the row as stored. A rename just before by `resolveOrCreateReplicatedUser`
  * announced the row without the display name this fills, so this is the event
  * that carries it.
  */
@@ -67,38 +69,59 @@ export async function hydrateReplicatedUserProfile(
     return localFile ?? absoluteUrl;
   };
 
-  const updates: Record<string, string | null> = {};
+  const fills: Partial<Record<FillColumn, string>> = {};
   // Use displayName from profile, falling back to the handle the snapshot
   // names. Senders put the handle there (`relayHandleOf`); an older sender put
   // its own row name (`kai@host`, `kai~1@host`), which is not a name to show,
   // so only a handle-shaped value counts (`handleFromHint`).
   const effectiveDisplayName = profile.displayName || handleFromHint(profile.username);
-  if (effectiveDisplayName && !user.displayName) updates.displayName = effectiveDisplayName;
+  if (effectiveDisplayName && !user.displayName) fills.displayName = effectiveDisplayName;
   // Hydrate is best-effort: only fill empty fields. Never overwrite an
   // existing value: that is exclusively processProfileUpdateEvent's job (it
   // carries a monotonic version and comes from the home). Overwriting from an
   // unversioned snapshot let a third instance's stale replica flip a field
   // back and forth, announcing each flip. Locally-downloaded bare filenames
   // produced by that path must not be clobbered back to URLs either.
-  if (profile.avatar && !user.avatar) updates.avatar = await resolveAsset(profile.avatar);
-  if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
-  if (profile.banner && !user.banner) updates.banner = await resolveAsset(profile.banner);
-  if (profile.bio && !user.bio) updates.bio = profile.bio;
+  if (profile.avatar && !user.avatar) fills.avatar = await resolveAsset(profile.avatar);
+  if (profile.avatarColor && !user.avatarColor) fills.avatarColor = profile.avatarColor;
+  if (profile.banner && !user.banner) fills.banner = await resolveAsset(profile.banner);
+  if (profile.bio && !user.bio) fills.bio = profile.bio;
 
-  if (Object.keys(updates).length === 0) {
+  const columns = Object.keys(fills) as FillColumn[];
+  if (columns.length === 0) {
     if (renamed) announceUserUpdated(user);
     return user;
   }
 
+  // The row was read before the images downloaded, and the home's answer to
+  // the creation pull (`scheduleHomeRecordPull`) or a `profile_update` may
+  // have written it since. Which columns are empty is therefore decided in
+  // the write itself, column by column, so a value written meanwhile stands.
+  const set: Partial<Record<FillColumn, SQL>> = {};
+  for (const column of columns) {
+    set[column] = sql`COALESCE(NULLIF(${schema.users[column]}, ''), ${fills[column]})`;
+  }
   db.update(schema.users)
-    .set(updates)
+    .set(set)
     .where(eq(schema.users.id, user.id))
     .run();
 
-  const hydrated = { ...user, ...updates };
-  announceUserUpdated(hydrated);
-  return hydrated;
+  const stored = db.select().from(schema.users).where(eq(schema.users.id, user.id)).get();
+  // A downloaded image that did not land (the column was filled meanwhile)
+  // is nobody's file.
+  for (const column of ['avatar', 'banner'] as const) {
+    const file = fills[column];
+    if (file && !file.startsWith('http') && stored?.[column] !== file) deleteUploadFile(file);
+  }
+  if (!stored) return user;
+
+  const filled = columns.some(column => stored[column] === fills[column] && user[column] !== fills[column]);
+  if (renamed || filled) announceUserUpdated(stored);
+  return stored;
 }
+
+/** The columns fill-empty hydration (`hydrateReplicatedUserProfile`) may fill. */
+type FillColumn = 'displayName' | 'avatar' | 'avatarColor' | 'banner' | 'bio';
 
 
 /**

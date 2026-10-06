@@ -49,6 +49,24 @@ vi.mock('../../utils/federationLookup.js', async (importActual) => {
   };
 });
 
+/**
+ * Profile image downloads wait for `assetGate` (when set), then answer 404 so
+ * the row stores the absolute URL and no file is written.
+ */
+let assetGate: Promise<void> | null = null;
+const assetFetches: string[] = [];
+vi.mock('../../utils/ssrf.js', async (importActual) => {
+  const actual = await importActual<typeof import('../../utils/ssrf.js')>();
+  return {
+    ...actual,
+    safeFetch: vi.fn(async (url: string) => {
+      assetFetches.push(url);
+      if (assetGate) await assetGate;
+      return new Response('not found', { status: 404 });
+    }),
+  };
+});
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -96,6 +114,8 @@ beforeEach(async () => {
   lookupCalls.length = 0;
   answers.clear();
   sendToUser.mockReset();
+  assetGate = null;
+  assetFetches.length = 0;
   testDb.insert(schema.federationPeers).values({
     id: 'peer-orbit', origin: HOME_ORIGIN, hmacSecret: 'a'.repeat(64), status: 'active', createdAt: 1,
   }).run();
@@ -117,6 +137,46 @@ describe('a new row for a remote user takes its profile from the home', () => {
     expect(stored.displayName).toBe('Kai');
     expect(stored.accentColor).toBe('#7c6cf6');
     expect(lookupCalls).toEqual(['1001']);
+  });
+
+  it('hydration that waited on an image download fills only what the creation pull left empty', async () => {
+    answers.set('1004', answer('1004', 'kai', { displayName: 'Kai', avatarColor: 'mint', profileUpdatedAt: 5000 }));
+    let release: () => void = () => undefined;
+    assetGate = new Promise<void>(resolve => { release = resolve; });
+    const { resolveOrCreateReplicatedUser, hydrateReplicatedUserProfile } = await import('../federation.js');
+
+    const created = resolveOrCreateReplicatedUser('1004', HOME, testDb, { username: 'kai' })!;
+    const hydrating = hydrateReplicatedUserProfile(created, {
+      username: 'kai', displayName: 'Old Kai', avatarColor: 'rose', avatar: 'old.webp', bio: 'old bio',
+    }, testDb);
+    // The pull lands while hydration waits on the avatar download.
+    await vi.waitFor(() => expect(row(created.id).profileUpdatedAt).toBe(5000));
+    expect(assetFetches).toEqual([`${HOME_ORIGIN}/api/uploads/old.webp`]);
+    release();
+    const returned = await hydrating;
+
+    const stored = row(created.id);
+    expect(stored.displayName).toBe('Kai');
+    expect(stored.avatarColor).toBe('mint');
+    // Columns the home left empty are still filled from the snapshot.
+    expect(stored.avatar).toBe(`${HOME_ORIGIN}/api/uploads/old.webp`);
+    expect(stored.bio).toBe('old bio');
+    expect(returned).toEqual(stored);
+  });
+
+  it('hydration from a row read before the home answered keeps what the home wrote', async () => {
+    insertReplica({ id: 'r-1005', username: `kai@${HOME}`, homeUserId: '1005' });
+    const before = row('r-1005');
+    testDb.update(schema.users)
+      .set({ displayName: 'Kai', avatarColor: 'mint', profileUpdatedAt: 5000 })
+      .where(eq(schema.users.id, 'r-1005'))
+      .run();
+    const { hydrateReplicatedUserProfile } = await import('../federation.js');
+
+    await hydrateReplicatedUserProfile(before, { username: 'kai', displayName: 'Old Kai', avatarColor: 'rose' }, testDb);
+
+    expect(row('r-1005').displayName).toBe('Kai');
+    expect(row('r-1005').avatarColor).toBe('mint');
   });
 
   it('asks nothing when the home is not an active peer', async () => {

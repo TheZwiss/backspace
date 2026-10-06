@@ -753,11 +753,11 @@ Two layers of replay protection:
 
 **`hydrateReplicatedUserProfile(user, profile, db)`** -- `federation.ts:2041`
 - Updates replicated stubs only (`homeInstance` must be set)
-- Only fills null/empty fields and never rewrites a stored one, `avatarColor` included (see "S2S Profile Hydration")
+- Only fills null/empty fields and never rewrites a stored one, `avatarColor` included (see "S2S Profile Hydration"). Emptiness is decided in the `UPDATE` itself (`COALESCE(NULLIF(col, ''), ?)` per column), not on the row passed in: the row is read before the images download, and the home's answer to the creation pull (`scheduleHomeRecordPull`) can land meanwhile. A downloaded image whose column was filled meanwhile is removed
 - Resolves bare filenames to `{homeInstance}/api/uploads/{filename}` absolute URLs
 - Sets an empty `displayName` from `profile.displayName || handleFromHint(profile.username)`: the handle a snapshot carries, never a row name such as `user@instance` an older sender sent
 - Renames a row that still carries a placeholder name to `<profile.username>@<domain>` (`applyPlaceholderRename`, see "Stub Username Backfill")
-- When it changed the row (renamed, or a field filled), sends one `user_updated` with the final row to `collectProfileBroadcastTargetIds` after every field is written (`announceUserUpdated`). A rename by `resolveOrCreateReplicatedUser` just before announced the row without the display name hydration fills; this is the event that carries it. A snapshot that fills nothing announces nothing
+- Returns the row as stored. When it changed the row (renamed, or a field filled), sends one `user_updated` with that row to `collectProfileBroadcastTargetIds` after every field is written (`announceUserUpdated`). A rename by `resolveOrCreateReplicatedUser` just before announced the row without the display name hydration fills; this is the event that carries it. A snapshot that fills nothing announces nothing
 
 ### Critical Rule
 
