@@ -3,5 +3,3 @@
 # rule still applies. Each sweep PR removes the files it converts, and the
 # list reaching zero is the definition of done for the first localized
 # release. Regenerate with: node scripts/check-i18n.mjs --write-pending
-# Held for PR #376, which is localizing this file's strings; remove the entry when #376 lands.
-packages/web/src/components/layout/MobileChatScreen.tsx
