@@ -35,7 +35,7 @@
     "fastify": "^4.28.1",
     "jsonwebtoken": "^9.0.2",
     "livekit-server-sdk": "^2.19.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15"
   },
   "devDependencies": {
