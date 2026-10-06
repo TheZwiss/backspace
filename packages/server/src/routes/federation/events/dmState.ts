@@ -7,6 +7,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { Activity, FederationRelayEvent } from '@backspace/shared';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { presenceUpdateEvent, validateActivities } from '../../../ws/presenceEvent.js';
+import { projectReplicaStatus } from '../../../ws/replicaPresence.js';
 import { extractDomain, resolveRelayActor, attributionRefusal } from '../identity.js';
 
 export function processFileRejectedEvent(
@@ -201,12 +202,12 @@ export function processPresenceUpdateEvent(
   }
 
   // The row shows the projection, or 'online' for an 'offline' one while the
-  // user has a session here (`applyReplicaProjection`, activity-presence.md).
-  const shownStatus = connectionManager.applyReplicaProjection(localUser.id, payload.status);
-  db.update(schema.users)
-    .set({ status: shownStatus })
-    .where(eq(schema.users.id, localUser.id))
-    .run();
+  // user has a session here (ws/replicaPresence.ts, activity-presence.md).
+  const shownStatus = projectReplicaStatus(localUser.id, payload.status);
+  if (shownStatus === null) {
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Keep the relayed activities on the replicated row, so the ready payload
   // and the friendship snapshot can report a remote user's activity that

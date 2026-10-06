@@ -25,8 +25,9 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { batchInArray } from '../utils/sqlBatch.js';
 import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
-import { replicaLiveStatus, statusOnConnect, type StatusSourceRow } from '../utils/presenceStatus.js';
-import { isChosenUserStatus, ownsChosenStatus, type ChosenUserStatus, type UserStatus } from '@backspace/shared';
+import { statusOnConnect, type StatusSourceRow } from '../utils/presenceStatus.js';
+import { ownsChosenStatus, type ChosenUserStatus } from '@backspace/shared';
+import { attachReplicaSessionHost, showReplicaStatusOnConnect, showReplicaStatusOnDisconnect, type ReplicaSessionHost } from './replicaPresence.js';
 import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { utcDay } from '../telemetry/day.js';
@@ -86,7 +87,7 @@ export function getVoiceRoomElapsedSeconds(room: VoiceRoom, now = Date.now()): n
 
 // ─── ConnectionManager ─────────────────────────────────────────────────────
 
-class ConnectionManager {
+class ConnectionManager implements ReplicaSessionHost {
   // userId → Set of WebSocket connections (multiple tabs)
   private connections: Map<string, Set<WebSocket>> = new Map();
   // userId → Set of space IDs the user belongs to
@@ -132,10 +133,6 @@ class ConnectionManager {
   private userStatuses: Map<string, string> = new Map();
   // userId → timestamp of last activity_update (rate limiting)
   private lastActivityUpdate: Map<string, number> = new Map();
-  // userId → the home instance's last projected status of a replicated user
-  // with a session here (from connect until `finalizeDisconnect`). The row's
-  // `status` shows `replicaLiveStatus` meanwhile; this is what it returns to.
-  private replicaProjections: Map<string, UserStatus> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -270,32 +267,21 @@ class ConnectionManager {
   }
 
   /**
-   * The status to publish when a connection for `row` authenticates
-   * (`statusOnConnect`). For a replicated row the first session here records
-   * the row's status as the home's projection, which the row returns to when
-   * the last session ends (`finalizeDisconnect`); a later session reads the
-   * projection recorded then, not the status the row shows meanwhile.
+   * Publish the status of a connection for `row` that just authenticated and
+   * return it. A row that owns its status shows its chosen one
+   * (`statusOnConnect`); a replicated row's status is written by
+   * `showReplicaStatusOnConnect` (ws/replicaPresence.ts).
    */
-  statusForConnect(row: StatusSourceRow & { id: string }): ChosenUserStatus {
-    if (ownsChosenStatus(row)) return statusOnConnect(row);
-    let projection = this.replicaProjections.get(row.id);
-    if (projection === undefined) {
-      projection = isChosenUserStatus(row.status) ? row.status : 'offline';
-      this.replicaProjections.set(row.id, projection);
-    }
-    return statusOnConnect(row, projection);
+  publishConnectStatus(row: StatusSourceRow & { id: string }): ChosenUserStatus {
+    if (!ownsChosenStatus(row)) return showReplicaStatusOnConnect(row);
+    const status = statusOnConnect(row);
+    getDb().update(schema.users).set({ status }).where(eq(schema.users.id, row.id)).run();
+    return status;
   }
 
-  /**
-   * A projection of a replicated user's status arrived from their home. Returns
-   * the status the row shows now: the projection, or `replicaLiveStatus` of it
-   * while the user has a session here (the grace period after the last one
-   * closes included), in which case it is also what the row returns to.
-   */
-  applyReplicaProjection(userId: string, projection: UserStatus): UserStatus {
-    if (!this.replicaProjections.has(userId)) return projection;
-    this.replicaProjections.set(userId, projection);
-    return replicaLiveStatus(projection, true);
+  /** A session of the user is open here, or its disconnect grace period runs. */
+  hasSessionHere(userId: string): boolean {
+    return this.isUserOnline(userId) || this.pendingOfflineTimeouts.has(userId);
   }
 
   private finalizeDisconnect(userId: string) {
@@ -303,26 +289,22 @@ class ConnectionManager {
     if (this.isUserOnline(userId)) return;
 
     console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
-    const db = getDb();
 
-    // A replicated row returns to its home's projection; the home owns its
-    // status, so nothing is relayed and relayed activities stay unless the
-    // projection is offline.
-    const projection = this.replicaProjections.get(userId);
-    if (projection !== undefined) {
-      this.replicaProjections.delete(userId);
-      const shown = db.select({ status: schema.users.status }).from(schema.users).where(eq(schema.users.id, userId)).get()?.status;
-      if (projection === 'offline') this.clearUserActivities(userId);
-      if (shown !== projection) {
-        db.update(schema.users).set({ status: projection }).where(eq(schema.users.id, userId)).run();
-        const payload = presenceUpdateFor(userId, projection, projection === 'offline' ? [] : undefined);
+    // A replicated row returns to its home's projection, or to 'offline' when
+    // none is known (ws/replicaPresence.ts). The home owns its status, so
+    // nothing is relayed, and relayed activities stay unless it is offline.
+    const replica = showReplicaStatusOnDisconnect(userId);
+    if (replica) {
+      if (replica.status === 'offline') this.clearUserActivities(userId);
+      if (replica.changed) {
+        const payload = presenceUpdateFor(userId, replica.status, replica.status === 'offline' ? [] : undefined);
         for (const uid of collectProfileBroadcastTargetIds(userId)) this.sendToUser(uid, payload);
       }
       this.forgetSessionState(userId);
       return;
     }
 
-    db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
+    getDb().update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
 
     // Clear activity state
     this.clearUserActivities(userId);
@@ -1125,6 +1107,7 @@ class ConnectionManager {
 }
 
 export const connectionManager = new ConnectionManager();
+attachReplicaSessionHost(connectionManager);
 
 // The pong path runs every 30 seconds per socket, so a database that keeps
 // refusing this write would flood the log at one line per socket per pong. One
@@ -1773,12 +1756,10 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           isFederated = !!userRow.homeInstance;
           clearTimeout(authTimeout);
 
-          // Publish the user's chosen status as their live presence. For a
-          // native row that is chosen_status (idle and dnd survive reconnects
-          // and restarts); for a replicated row it is the home instance's last
-          // projection. See utils/presenceStatus.ts.
-          const connectStatus = connectionManager.statusForConnect(userRow);
-          db.update(schema.users).set({ status: connectStatus }).where(eq(schema.users.id, userId)).run();
+          // Publish the user's live presence: for a native row its
+          // chosen_status (idle and dnd survive reconnects and restarts), for a
+          // replicated row what ws/replicaPresence.ts shows.
+          const connectStatus = connectionManager.publishConnectStatus(userRow);
 
           // Add connection
           connectionManager.addConnection(userId, ws);

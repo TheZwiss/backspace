@@ -4,6 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { connectionManager } from './handler.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { presenceUpdateEvent, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
+import { showReplicaChoice } from './replicaPresence.js';
 
 /**
  * The one path for a user changing their own status, shared by REST
@@ -13,8 +14,9 @@ import { presenceUpdateEvent, presenceUpdateFor, snapshotActivities } from './pr
  *   `chosen_status`, so the choice survives disconnects, restarts and the boot
  *   presence reset.
  * - Replicated row: the choice belongs to the home instance, so only the live
- *   `status` moves. `chosen_status` on a replicated row is never written here
- *   and never read anywhere.
+ *   `status` moves, until the home's next projection or the end of the last
+ *   session here (`showReplicaChoice`). `chosen_status` on a replicated row is
+ *   never written here and never read anywhere.
  * - Live `status` follows only while the user has a connection: 'offline'
  *   keeps meaning "no connection". Without one, nobody is told anything; the
  *   next socket auth publishes the choice (utils/presenceStatus.ts).
@@ -39,7 +41,7 @@ export function applyChosenStatus(userId: string, status: ChosenUserStatus): voi
   } else if (ownsChoice) {
     db.update(schema.users).set({ chosenStatus: status }).where(eq(schema.users.id, userId)).run();
   } else if (connected) {
-    db.update(schema.users).set({ status }).where(eq(schema.users.id, userId)).run();
+    showReplicaChoice(userId, status);
   }
 
   if (!connected) return;

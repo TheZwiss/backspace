@@ -13,10 +13,11 @@ setWorkerId(1);
 
 /**
  * #325: a replicated row's live status is its home instance's projection
- * (activity-presence.md, "DB Persistence"). A session of that user on this
+ * (activity-presence.md, "Replica presence"). A session of that user on this
  * instance shows 'online' while the projection says 'offline', and when the
  * session ends the row returns to the projection, instead of being written
- * 'offline' over whatever the home last said.
+ * 'offline' over whatever the home last said. A projection is only ever what
+ * the home reported to this process; with none, the row returns to 'offline'.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,12 +72,19 @@ async function manager() {
   return (await import('./handler.js')).connectionManager;
 }
 
+/** A process restart: fresh modules, nothing in memory, the database kept. */
+async function restart(): Promise<void> {
+  (await manager()).removeConnection(friendSocket as never);
+  vi.clearAllTimers();
+  vi.resetModules();
+  (await manager()).addConnection('friend', friendSocket as never);
+}
+
 /** A session of erin connects here, as the WebSocket auth path does it. */
 async function erinConnects(): Promise<Sock> {
   const cm = await manager();
   const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'erin')).get()!;
-  const status = cm.statusForConnect(row);
-  testDb.update(schema.users).set({ status }).where(eq(schema.users.id, 'erin')).run();
+  cm.publishConnectStatus(row);
   const ws: Sock = { readyState: 1, send: vi.fn() };
   cm.addConnection('erin', ws as never);
   return ws;
@@ -99,6 +107,8 @@ async function homeProjects(status: UserStatus, activities?: Activity[]): Promis
 
 beforeEach(async () => {
   vi.useFakeTimers();
+  // Each test starts as a fresh process: no projection is known.
+  vi.resetModules();
   const sqlite = new Database(':memory:');
   testDb = drizzle(sqlite, { schema });
   applyMigrations(sqlite);
@@ -118,8 +128,9 @@ function befriendErin(): void {
 
 describe('a replicated user\'s session here ends', () => {
   it('the row returns to the home\'s projection (dnd), not offline, and no one is told offline', async () => {
-    seedErin('dnd');
+    seedErin('offline');
     befriendErin();
+    await homeProjects('dnd');
     const ws = await erinConnects();
     expect(statusOf('erin')).toBe('dnd');
     await erinDisconnects(ws);
@@ -128,7 +139,8 @@ describe('a replicated user\'s session here ends', () => {
   });
 
   it('the next session starts from the projection again', async () => {
-    seedErin('dnd');
+    seedErin('offline');
+    await homeProjects('dnd');
     await erinDisconnects(await erinConnects());
     const ws = await erinConnects();
     expect(statusOf('erin')).toBe('dnd');
@@ -155,7 +167,8 @@ describe('a replicated user\'s session here ends', () => {
   });
 
   it('a projection of offline during the session shows online until the session ends', async () => {
-    seedErin('dnd');
+    seedErin('offline');
+    await homeProjects('dnd');
     const ws = await erinConnects();
     await homeProjects('offline');
     expect(statusOf('erin')).toBe('online');
@@ -177,13 +190,51 @@ describe('a native user\'s session here ends', () => {
     testDb.insert(schema.users).values({ id: 'nat', username: 'nat', passwordHash: 'x', status: 'offline', chosenStatus: 'dnd', createdAt: 1 }).run();
     const cm = await manager();
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'nat')).get()!;
-    const status = cm.statusForConnect(row);
-    expect(status).toBe('dnd');
-    testDb.update(schema.users).set({ status }).where(eq(schema.users.id, 'nat')).run();
+    expect(cm.publishConnectStatus(row)).toBe('dnd');
+    expect(statusOf('nat')).toBe('dnd');
     const ws: Sock = { readyState: 1, send: vi.fn() };
     cm.addConnection('nat', ws as never);
     cm.removeConnection(ws as never);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(statusOf('nat')).toBe('offline');
+  });
+});
+
+describe('a replicated user\'s projection is not taken from what the row shows', () => {
+  it('a peer deactivation during the session is what the row returns to when the session ends', async () => {
+    seedErin('offline');
+    befriendErin();
+    const ws = await erinConnects();
+    await homeProjects('online');
+    const { markPeerStubsOffline } = await import('../utils/federationPresence.js');
+    await markPeerStubsOffline('https://nova.test');
+    // The session here still shows erin online; the home's 'online' is gone.
+    expect(statusOf('erin')).toBe('online');
+    await erinDisconnects(ws);
+    expect(statusOf('erin')).toBe('offline');
+    expect(presenceSeenByFriend().at(-1)).toEqual({ userId: 'erin', status: 'offline' });
+  });
+
+  it('after a restart, a session that ends before any relay returns the row to offline', async () => {
+    seedErin('offline');
+    await homeProjects('dnd');
+    await erinConnects();
+    await homeProjects('offline');
+    expect(statusOf('erin')).toBe('online');
+    // The process restarts with the session open: the row keeps the 'online'
+    // the session showed, and nothing in memory survives.
+    await restart();
+    const again = await erinConnects();
+    expect(statusOf('erin')).toBe('online');
+    await erinDisconnects(again);
+    expect(statusOf('erin')).toBe('offline');
+  });
+
+  it('a row seeded with a status shows it on connect but does not return to it', async () => {
+    seedErin('dnd');
+    const ws = await erinConnects();
+    expect(statusOf('erin')).toBe('dnd');
+    await erinDisconnects(ws);
+    expect(statusOf('erin')).toBe('offline');
   });
 });

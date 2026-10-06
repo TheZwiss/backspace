@@ -16,10 +16,9 @@ export interface StatusSourceRow {
 
 /**
  * The live status of a replicated row (one that does not own its choice):
- * the home instance's last projection (S2S `presence_update`), except that
- * while this instance holds a session of the user a projection of 'offline'
- * (none yet, or the home sees no session of its own) reads 'online'. When the
- * session here ends, the row returns to the projection.
+ * the home instance's projection (S2S `presence_update`), except that while
+ * this instance holds a session of the user a projection of 'offline' reads
+ * 'online'. ws/replicaPresence.ts is the one writer that applies it.
  */
 export function replicaLiveStatus(projection: string | null, connectedHere: boolean): UserStatus {
   if (isChosenUserStatus(projection)) return projection;
@@ -32,8 +31,9 @@ export function replicaLiveStatus(projection: string | null, connectedHere: bool
  * - A row that owns its choice (native or detached, `ownsChosenStatus`): the
  *   user's chosen status.
  * - A replicated row: this instance does not own the user's choice, so its own
- *   `chosen_status` copy is ignored; `projection` is the home's last
- *   projection (`replicaLiveStatus` with a session here).
+ *   `chosen_status` copy is ignored; `projection` is the home's projection
+ *   when known, else the status the row shows (`showReplicaStatusOnConnect`),
+ *   with 'offline' read as 'online' (`replicaLiveStatus` with a session here).
  */
 export function statusOnConnect(row: StatusSourceRow, projection: string | null = row.status): ChosenUserStatus {
   if (ownsChosenStatus(row)) {
