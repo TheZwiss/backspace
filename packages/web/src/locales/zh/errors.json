@@ -203,6 +203,7 @@
   "message_empty": "消息必须包含文字或附件。",
   "message_edit_not_author": "您只能编辑自己的消息。",
   "message_delete_forbidden": "您无权删除此消息。",
+  "paging_cursor_conflict": "只能加载某条消息之前或之后的消息，不能同时加载两者。",
   "internal_error": "服务器发生错误，请重试。",
   "voice_disabled": "此实例尚未配置语音与视频功能。",
   "voice_connect_forbidden": "您无权加入此语音频道。",

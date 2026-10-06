@@ -203,6 +203,7 @@
   "message_empty": "A message needs some text or an attachment.",
   "message_edit_not_author": "You can only edit your own messages.",
   "message_delete_forbidden": "You cannot delete this message.",
+  "paging_cursor_conflict": "Messages can be loaded before a message or after it, not both at once.",
   "internal_error": "Something went wrong on the server. Try again.",
   "voice_disabled": "Voice and video are not set up on this instance.",
   "voice_connect_forbidden": "You are not allowed to join this voice channel.",

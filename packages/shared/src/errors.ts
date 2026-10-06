@@ -239,6 +239,7 @@ export const ERROR_CODES = [
   'system_message_immutable',
   'message_edit_not_author',
   'message_delete_forbidden',
+  'paging_cursor_conflict',
   'internal_error',
   // misc
   'voice_disabled',

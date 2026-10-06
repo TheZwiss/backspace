@@ -68,7 +68,7 @@ For DM search, the subquery joins on `attachments.dm_message_id = dm_messages.id
 
 ## Result Hydration
 
-Both search endpoints follow the same hydration pipeline after fetching raw message rows:
+Every read path that returns a page of messages (search, messages-around and message history) hydrates through one function per table: `hydrateChannelMessages(channelId, rows)` in `routes/messages.ts` and `hydrateDmMessages(dmChannelId, rows)` in `routes/dm.ts`. Both keep the order of the rows they are given:
 
 ```
 1. Fetch message rows (filtered, paginated)

@@ -203,6 +203,7 @@
   "message_empty": "Eine Nachricht braucht Text oder einen Anhang.",
   "message_edit_not_author": "Du kannst nur deine eigenen Nachrichten bearbeiten.",
   "message_delete_forbidden": "Du kannst diese Nachricht nicht löschen.",
+  "paging_cursor_conflict": "Nachrichten können vor oder nach einer Nachricht geladen werden, nicht beides gleichzeitig.",
   "internal_error": "Auf dem Server ist etwas schiefgelaufen. Versuche es erneut.",
   "voice_disabled": "Sprach- und Videochat sind auf dieser Instanz nicht eingerichtet.",
   "voice_connect_forbidden": "Du darfst diesem Sprachkanal nicht beitreten.",

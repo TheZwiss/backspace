@@ -179,12 +179,29 @@ DELETE /categories/:id/overrides/:tt/:tid                   → { success }  [MA
 
 ## Messages (`routes/messages.ts`) — auth required
 ```
-GET    /channels/:id/messages  ?before=&limit=50          → { messages[] }  [VIEW_CHANNEL+READ_MESSAGE_HISTORY]
+GET    /channels/:id/messages  ?before=|after=&limit=50 (1-100) → MessageWithUser[]  [VIEW_CHANNEL+READ_MESSAGE_HISTORY]
 POST   /channels/:id/messages  { content, attachments?, replyToId? } → { message }  [SEND_MESSAGES, +ATTACH_FILES]
 PATCH  /messages/:id           { content }                → { message }  [author]
 DELETE /messages/:id                                      → { success }  [author|MANAGE_MESSAGES]
 ```
 `replyToId` on POST must name a message in the same channel, otherwise `400 Invalid reply target` and nothing is inserted. See permissions.md, "Reply-target confinement".
+
+### Message history paging
+
+`GET /channels/:id/messages` and `GET /dm/:id/messages` share one implementation (`utils/messagePaging.ts`) and one contract. Both answer a bare array, oldest first: ordered by `createdAt`, the id breaking ties. Permission checks and hydration (authors, attachments, reactions, embeds, reply targets) do not depend on the direction.
+
+| Query | Page |
+|-------|------|
+| neither cursor | the `limit` newest messages |
+| `before=<id>` | the `limit` messages with id less than `<id>` and the newest `createdAt` |
+| `after=<id>` | the `limit` messages with the smallest ids greater than `<id>`: the next ids after it |
+| both | `400 paging_cursor_conflict`, nothing selected |
+
+- `limit` defaults to 50 and is clamped to 1-100. An empty cursor (`after=`) counts as absent. A repeated cursor (`after=a&after=b`) is `400 validation_failed`.
+- Cursors compare snowflake ids; the cursor message need not exist (a deleted message is a valid cursor).
+- **Next forward cursor:** the greatest id in the page, not the last element. A relayed DM message keeps its sender's `createdAt` but gets a local id on arrival, so it can sort earlier in the page than its id says. Cutting at the greatest id never skips or repeats a row.
+- **End of history:** a forward page shorter than `limit` reached the newest message at the time of the request; an empty forward page means nothing is newer than the cursor.
+- **Signal:** a response that honoured `after` carries `X-Backspace-Paging: after` (`MESSAGE_PAGING_HEADER` / `MESSAGE_PAGING_AFTER` in `@backspace/shared`), the empty page included. Backward, newest and error responses never carry it. A server that predates forward paging ignores `after` and answers with the newest page and no header, so a client that sent `after` and finds no header must treat the body as the newest page, not as the page after its cursor. The header is in the CORS `exposedHeaders`, so a browser on another instance can read it (web-security.md, section 6).
 
 ## DMs (`routes/dm.ts`) — auth required
 ```
@@ -198,7 +215,7 @@ DELETE /dm/:id/members                                              → { succes
 DELETE /dm/:id/members/:targetUserId  ?homeInstance=                → { success } [owner kick; cannot self-kick; group only; segment is homeUserId when ?homeInstance is set]
 POST   /dm/:id/transfer        { newOwnerId? | (homeUserId+homeInstance) } → { success } [owner; group only; resolved member must be in channel; not self]
 POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend; 400 invite_invalid when the snapshot would not make a well-formed invite (dm-system.md, "System messages")]
-GET    /dm/:id/messages        ?before=&limit=50 (1-100)            → DmMessageWithUser[] [member]
+GET    /dm/:id/messages        ?before=|after=&limit=50 (1-100)     → DmMessageWithUser[] [member]
 POST   /dm/:id/messages        { content?, attachments?, replyToId? } → 201 DmMessageWithUser [member; content or attachments required]
 PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [author; 403 system_message_immutable for a system message]
 DELETE /dm/messages/:id                                             → { success } [author]

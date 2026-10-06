@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { eq, and, or, desc, lt, inArray, isNull } from 'drizzle-orm';
+import { eq, and, or, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -26,6 +26,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { loadDmChannelWire, loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { findOrCreateOneOnOne, mintGroupKey, type OneOnOneResult } from '../utils/dmConversation.js';
 import { sendError } from '../utils/httpErrors.js';
+import { parseHistoryPage, selectHistoryPage, markHistoryPageHonoured } from '../utils/messagePaging.js';
 
 /** Members a group DM can hold, the owner included. */
 const GROUP_DM_MAX_MEMBERS = 10;
@@ -218,6 +219,52 @@ export function buildDmMessageWithUser(
     reactions,
     replyTo,
   };
+}
+
+/**
+ * Hydrate DM message rows into the wire shape, keeping their order.
+ *
+ * One batch each for authors, attachments, reactions, embeds and reply
+ * targets (confined to `dmChannelId`, see fetchDmReplyToMessages). A row whose
+ * author row is missing is dropped. Every read path that returns a page of DM
+ * messages goes through here: history, messages-around and search.
+ */
+export function hydrateDmMessages(
+  dmChannelId: string,
+  messageRows: (typeof schema.dmMessages.$inferSelect)[],
+): DmMessageWithUser[] {
+  if (messageRows.length === 0) return [];
+  const db = getDb();
+
+  const userIds = [...new Set(messageRows.map(m => m.userId))];
+  const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const messageIds = messageRows.map(m => m.id);
+  const allAttachments = db.select()
+    .from(schema.attachments)
+    .where(inArray(schema.attachments.dmMessageId, messageIds))
+    .all();
+  const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
+  for (const att of allAttachments) {
+    const mid = att.dmMessageId ?? '';
+    if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
+    attachmentMap.get(mid)!.push(att);
+  }
+
+  const reactionsMap = fetchDmReactionsForMessages(messageIds);
+  const embedMap = fetchDmEmbedsForMessages(messageIds);
+  const replyToMap = fetchDmReplyToMessages(dmChannelId, messageRows);
+
+  return messageRows
+    .map(m => {
+      const user = userMap.get(m.userId);
+      if (!user) return null;
+      const reactions = reactionsMap.get(m.id) ?? [];
+      const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
+      return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
+    })
+    .filter((m): m is DmMessageWithUser => m !== null);
 }
 
 /**
@@ -1891,83 +1938,33 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
-  // GET /api/dm/:id/messages - Get DM messages with pagination
+  // GET /api/dm/:id/messages - Get DM messages with cursor pagination
+  // (before or after; see docs/systems/api.md, "Message history paging")
   app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/dm/:id/messages', async (request, reply) => {
     const { id } = request.params;
-    const before = request.query.before;
-    const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
+
+    const parsed = parseHistoryPage(request.query);
+    if (!parsed.ok) {
+      return sendError(reply, 400, parsed.code);
+    }
+    const { page } = parsed;
 
     if (!isDmMember(id, request.userId)) {
       return sendError(reply, 403, 'not_dm_member');
     }
 
     const db = getDb();
-
-    let messageRows: (typeof schema.dmMessages.$inferSelect)[];
-
-    if (before) {
-      messageRows = db.select()
+    const messageRows = selectHistoryPage(page, schema.dmMessages, (cursor, orderBy, limit) =>
+      db.select()
         .from(schema.dmMessages)
-        .where(and(
-          eq(schema.dmMessages.dmChannelId, id),
-          lt(schema.dmMessages.id, before)
-        ))
-        .orderBy(desc(schema.dmMessages.createdAt))
+        .where(and(eq(schema.dmMessages.dmChannelId, id), cursor))
+        .orderBy(...orderBy)
         .limit(limit)
-        .all();
-    } else {
-      messageRows = db.select()
-        .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, id))
-        .orderBy(desc(schema.dmMessages.createdAt))
-        .limit(limit)
-        .all();
-    }
+        .all(),
+    );
 
-    messageRows.reverse();
-
-    if (messageRows.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    // Batch fetch users
-    const userIds = [...new Set(messageRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    // Batch fetch attachments by dmMessageId
-    const messageIds = messageRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.dmMessageId, messageIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.dmMessageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    // Batch fetch reactions
-    const reactionsMap = fetchDmReactionsForMessages(messageIds);
-
-    // Batch fetch embeds
-    const embedMap = fetchDmEmbedsForMessages(messageIds);
-
-    // Batch fetch reply-to messages, confined to this DM channel
-    const replyToMap = fetchDmReplyToMessages(id, messageRows);
-
-    const messages: DmMessageWithUser[] = messageRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is DmMessageWithUser => m !== null);
-
-    return reply.code(200).send(messages);
+    markHistoryPageHonoured(reply, page);
+    return reply.code(200).send(hydrateDmMessages(id, messageRows));
   });
 
   // POST /api/dm/space-invite — Send a space invite card to a friend via DM.

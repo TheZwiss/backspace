@@ -778,8 +778,18 @@ export interface SpaceInviteSystemPayload {
 
 export interface PaginatedQuery {
   before?: string;
+  after?: string;
   limit?: number;
 }
+
+/**
+ * Set by the message history endpoints on a response that honoured `after`.
+ * A server that predates forward paging ignores `after` and answers with the
+ * newest page, without this header. Contract: docs/systems/api.md, "Message
+ * history paging".
+ */
+export const MESSAGE_PAGING_HEADER = 'X-Backspace-Paging';
+export const MESSAGE_PAGING_AFTER = 'after';
 
 export interface ApiError {
   error: string;
