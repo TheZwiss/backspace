@@ -81,9 +81,13 @@ export async function onPeerActivated(
         .where(eq(schema.federationPeers.id, peerId))
         .get();
       if (peerRow?.origin) {
+        // The record pass asks the peer about each of its users' rows here,
+        // one lookup at a time, so it runs in the background: the presence
+        // snapshot below must not wait for it.
+        const origin = peerRow.origin;
         const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-        await backfillStubUsernamesForPeer(peerRow.origin).catch((e) => {
-          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${peerRow.origin}) failed`, e);
+        void backfillStubUsernamesForPeer(origin).catch((e: unknown) => {
+          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${origin}) failed`, e);
         });
 
         // Re-emit a fresh presence snapshot to the activating peer so its stubs
