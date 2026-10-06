@@ -321,18 +321,41 @@ cannot be worked one at a time.
 
 ### What is left open, and why
 
-Twelve OSV findings remain after the dependency pass and the Electron 43 upgrade. Every one needs a major
-upgrade that is a separate decision with its own compatibility work, so none of them
-is dismissed:
+Sixteen OSV findings are held in `osv-scanner.toml`, in two shapes. Fourteen need a
+major upgrade that is a separate decision with its own compatibility work. Two
+have no fixed release at all and sit only in build tooling. None of them is
+dismissed:
 
 | Package | Findings | Bucket | Fixed in |
 |---------|----------|--------|----------|
-| `fastify` 4.29.1 | 4 | server image | 5.x |
+| `fastify` 4.29.1 | 9 | server image | 5.x (5.12.2, one in 5.12.5) |
 | `@fastify/static` 7.0.4 | 2 | server image | 10.x |
 | `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
-| `react-router` 6.30.6 | 2 | web bundle | 7.18.0 |
-| `lodash` 4.17.23 | 2 | build-time (`electron-builder` to `@malept/flatpak-bundler`) | 4.18.0 |
 | `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
+| `postcss-selector-parser` 6.1.4 | 1 | build-time (`tailwindcss` 3 and `postcss-nested`) | 7.1.6 only; tailwindcss 3 does not accept 7.x |
+| `braces` 3.0.3 | 1 | build-time (`tailwindcss` 3 through `chokidar` and `micromatch`) | no fixed release |
+| `sprintf-js` 1.1.3 | 1 | build-time (`electron-builder` to `@electron/get` to `global-agent` to `roarr`) | no fixed release |
+
+The five fastify findings published on 2026-09-30 were each checked against the
+server rather than only deferred. Each needs a feature the server does not use:
+HTTP/2 with `reply.trailer()`, an `$async` request schema, a header schema with
+the `dependencies` keyword, a `false` request-part schema, or not-found handlers
+encapsulated under an auth hook (the server registers one, at the root, as the
+SPA fallback). A new route that uses one of those makes the matching finding
+reachable, which is a reason to do the fastify 5 upgrade first.
+
+The October 2026 pass removed four entries. The two `react-router` ones no longer
+matched anything, since `react-router-dom` is on 7.18.4. The two `lodash` ones were
+recorded as needing an upgrade, but 4.18.0 is a minor inside the `^4.17.15` range
+`@malept/flatpak-bundler` asks for, so a `lodash@^4` floor of `^4.18.0` replaced them;
+`electron-winstaller` in the same build was already on 4.18.1.
+
+The same pass cleared everything else by raising floors in `pnpm.overrides`, each
+inside the major the parent already accepts: `@fastify/busboy` 3.2.2 (through
+`@fastify/multipart`), `proxy-addr` 2.0.8 and `fast-uri` 2.4.7 and 3.1.8 (through
+fastify), `brace-expansion` 1.1.21, 2.1.7 and 5.0.12, `source-map-js` 1.2.2,
+`http-cache-semantics` 4.3.0 (the advisory covers "through 4.2.0" and lists no
+fix; 4.3.0 was published after it), and `sharp` 0.35.5, below.
 
 ### Fixed by override rather than deferred: sharp
 
@@ -360,6 +383,10 @@ Verified rather than assumed: `require('sharp').versions` reports
 miniflare running against the forced version. The override is removable the day
 miniflare moves off `0.35.2`, and removing it then is the goal.
 
+`GHSA-wq5f-xc86-pv6w` (2026-10-06, librsvg) moved the floor to 0.35.5, both in
+the override and in the two direct `sharp` ranges, by the same reasoning: a patch
+inside the minor whose content is the bundled librsvg going to 2.63.2.
+
 ## Dismissal register
 
 `.trivyignore` and `.github/codeql/codeql-config.yml` are the machine-readable half
@@ -367,9 +394,9 @@ of this. What follows is the half a human reads.
 
 ### CodeQL alerts
 
-Six alerts are dismissed. Two are in test files and are also excluded going forward
-by the CodeQL config, so they will not recur; the other four are judgements about
-shipped code.
+Seven alerts are dismissed. Two are in test files and are also excluded going forward
+by the CodeQL config, so they will not recur; the other five are judgements about
+shipped code, two of them the same finding reported again at a moved line.
 
 **#123 `js/request-forgery`, `packages/server/src/utils/ssrf.ts:70`, dismissed as a
 false positive.** This is the `fetch` inside `safeFetch`, one line after
@@ -408,12 +435,19 @@ an attacker. The one value that is not operator-supplied, the snapshot path, is
 passed positionally as `$1` and quoted at the use site rather than concatenated into
 the command text. No request reaches this function.
 
-**#124 `js/insecure-randomness`, `packages/web/src/components/ui/Avatar.tsx:57`,
-dismissed as a false positive.** `getAvatarGradient` in `packages/web/src/utils/gradients.ts`
-contains no randomness at all. It is a djb2 hash of the account id or name, taken
-modulo the number of presets, so an account renders the same fallback colour on
-every device and every reload. It selects one of seven decorative gradients and
-feeds nothing with an identity or uniqueness requirement.
+**#124 and #420 `js/insecure-randomness`, `packages/web/src/components/ui/Avatar.tsx`,
+dismissed as a false positive.** One finding reported twice: #124 at line 57, and
+#420 at line 63 after `Avatar` gained a `palette` prop that picks
+`getSpaceGradient` for a space and `getAvatarGradient` otherwise. The tainted
+source is the `Math.random()` in `CreateSpace.tsx` and `RegisterPage.tsx` that
+pre-selects one of the preset colours as the form's default, a decorative choice
+the user can change before submitting. Both selectors in
+`packages/web/src/utils/gradients.ts` contain no randomness of their own: each
+maps a stored preset name to its gradient, or falls back to a djb2 hash of the id
+or name taken modulo the number of presets, so an account or space renders the
+same colour on every device and every reload. The value picks one of a handful of
+decorative gradients and feeds nothing with an identity, secrecy or uniqueness
+requirement. If the alert moves again, it is this entry.
 
 **#348 `js/shell-command-injection-from-environment`, `packages/server/test/cors-posture.test.ts:66`,
 and #106 `js/missing-rate-limiting`, `packages/server/src/routes/federation/handlers/s2sAuth.test.ts:75`,
