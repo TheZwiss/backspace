@@ -30,6 +30,12 @@ const srcRoot = join(webRoot, 'src');
 /** Utilities that take a colour. A class starting with one of these is checked. */
 const COLOR_UTILITY = /^-?(?:text|bg|border(?:-[xytrblse])?|ring(?:-offset)?|fill|stroke|from|via|to|placeholder|divide|outline|decoration|caret|accent|shadow)-[a-z]/;
 
+/**
+ * Values of CSS's `<box>` type (`ResizeObserver`'s `box` option,
+ * `transform-box`): keywords that look like a colour class, never a class.
+ */
+const CSS_BOX_KEYWORDS = new Set(['border-box', 'content-box', 'padding-box', 'margin-box', 'fill-box', 'stroke-box', 'view-box']);
+
 interface Candidate {
   /** The utility without variants or `!`, e.g. `bg-surface-input/50`. */
   utility: string;
@@ -66,6 +72,7 @@ function classesIn(text: string, cutAtStart: boolean, cutAtEnd: boolean): string
 function colorCandidates(text: string, where: (index: number) => string, cutAtStart = false, cutAtEnd = false): Candidate[] {
   const found: Candidate[] = [];
   for (const className of classesIn(text, cutAtStart, cutAtEnd)) {
+    if (CSS_BOX_KEYWORDS.has(className)) continue;
     const utility = utilityOf(className);
     if (utility.includes('[') || !COLOR_UTILITY.test(utility)) continue;
     found.push({ utility: utility.replace(/^-/, ''), where: `${where(text.indexOf(className))}: ${className}` });
@@ -147,6 +154,8 @@ describe('colour token classes', () => {
 
   it('skips code, CSS and the class a template literal cuts', () => {
     expect(colorCandidates('.a{transform-box:fill-box}', () => 'x')).toEqual([]);
+    expect(colorCandidates('border-box', () => 'x')).toEqual([]);
+    expect(colorCandidates('fill-box', () => 'x')).toEqual([]);
     expect(colorCandidates('text-txt-primary bg-', () => 'x', false, true).map((c) => c.utility)).toEqual(['text-txt-primary']);
     expect(colorCandidates('-500 text-txt-primary', () => 'x', true).map((c) => c.utility)).toEqual(['text-txt-primary']);
   });

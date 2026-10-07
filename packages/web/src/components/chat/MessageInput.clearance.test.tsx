@@ -92,7 +92,9 @@ beforeEach(() => {
   stubVisualViewport();
   window.history.replaceState({}, '', '/channels/@me/dm-1');
   useAuthStore.setState({ user: me });
-  useSpaceStore.setState({ dmChannels: [] });
+  // dm-1 is a DM because the listing says so; an unknown channel's composer stays locked.
+  useSpaceStore.getState().reset();
+  useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me] }]);
   useComposerStore.setState({ states: new Map() });
   useChatStore.setState({ messages: new Map([['dm-1', [other]]]), replyTo: null, editingMessageId: null });
 });
@@ -103,6 +105,7 @@ afterEach(() => {
   useChatStore.getState().clearAllMessages();
   useComposerStore.setState({ states: new Map() });
   useAuthStore.setState({ user: null });
+  useSpaceStore.getState().reset();
   window.history.replaceState({}, '', '/');
 });
 
