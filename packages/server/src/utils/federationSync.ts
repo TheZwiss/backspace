@@ -31,7 +31,12 @@ import type { PeerActivationReason } from './federationPeerActivation.js';
  *   subject with a kept event holds its later pulled events behind it, and
  *   other subjects never wait for it.
  * - One peer is pulled by one caller at a time (`runForPeer`): activation, the
- *   periodic tick and the retry tick queue behind each other.
+ *   periodic tick and the retry tick queue behind each other for that peer.
+ * - A pass reads at most `SYNC_PASS_BUDGET` per context (pages and time) and
+ *   resumes from the saved cursor on the next pass. Peers are pulled side by
+ *   side (`SYNC_PEER_CONCURRENCY`) and their kept events replayed side by
+ *   side, so one slow or endless peer never holds up another, nor the retry
+ *   tick of another.
  *
  * A 401/403 from the peer's `/sync` only skips that pass: peer state belongs
  * to the outbox and recovery workers.
@@ -62,8 +67,32 @@ export const SYNC_RETRY_BACKOFF_MS: readonly number[] = [
 export const SYNC_RETRY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SYNC_FETCH_TIMEOUT_MS = 30_000;
 
+/** What one pass may spend on one context of one peer before it stops and resumes next pass. */
+export interface SyncPassBudget {
+  pages: number;
+  timeMs: number;
+}
+
+/**
+ * 20 pages (2,000 rows) and 45 seconds per context: a peer's pass ends within
+ * about two and a half minutes whatever the peer answers, and a long
+ * catch-up continues every `RESYNC_CONTINUE_DELAY_MS`.
+ */
+export const SYNC_PASS_BUDGET: SyncPassBudget = { pages: 20, timeMs: 45_000 };
+/** How many peers the periodic tick pulls at once. */
+export const SYNC_PEER_CONCURRENCY = 4;
+/** The next periodic tick comes this soon when a pass stopped at its budget. */
+export const RESYNC_CONTINUE_DELAY_MS = 60_000;
+
+/**
+ * How a context's pass ended: `ok` (read to the end of the log), `partial`
+ * (stopped at its budget; the next pass resumes from the cursor),
+ * `http_error` (the peer refused or answered nonsense) or `error` (thrown).
+ */
+export type SyncContextOutcome = 'ok' | 'partial' | 'http_error' | 'error';
+
 export interface SyncPeerResult {
-  contexts: Partial<Record<SyncContext, 'ok' | 'http_error' | 'error'>>;
+  contexts: Partial<Record<SyncContext, SyncContextOutcome>>;
   /** Events accepted by their processor. */
   applied: number;
   /** Events refused as already held (`duplicate`, or an effect already in place). */
@@ -172,7 +201,7 @@ function reconcileCursorEpoch(peer: PeerRow): void {
     .all()
     .some(row => row.epoch !== null && row.epoch !== peer.peerInstanceId);
   if (stale) {
-    console.warn(`[federation-sync] ${peer.origin} is a new incarnation; restarting its sync cursors`);
+    console.warn('[federation-sync] %s is a new incarnation; restarting its sync cursors', peer.origin);
     db.update(schema.federationSyncCursors)
       .set({ cursorTs: 0, cursorId: null })
       .where(eq(schema.federationSyncCursors.peerId, peer.id))
@@ -441,14 +470,22 @@ async function pullContext(
   context: SyncContext,
   signingSecret: string,
   stats: SyncPeerResult,
-): Promise<'ok' | 'http_error'> {
+  budget: SyncPassBudget,
+): Promise<Exclude<SyncContextOutcome, 'error'>> {
   const ourOrigin = getOurOrigin();
+  const deadline = Date.now() + budget.timeMs;
   let position = loadCursor(peer, context);
   let since = firstRequestSince(context, position, Date.now());
   let afterId: string | undefined;
   let previousRequest: string | null = null;
 
-  for (;;) {
+  for (let pages = 0; ; pages++) {
+    const remainingMs = deadline - Date.now();
+    if (pages >= budget.pages || remainingMs <= 0) {
+      console.log('[federation-sync] %s pull from %s stopped at its budget after %s pages; the next pass resumes from the cursor', context, peer.origin, pages);
+      return 'partial';
+    }
+
     const request: FederationSyncRequest = {
       sinceTimestamp: since,
       limit: SYNC_PAGE_LIMIT,
@@ -457,24 +494,36 @@ async function pullContext(
     };
     const requestKey = `${since}|${afterId ?? ''}`;
     if (requestKey === previousRequest) {
-      console.warn(`[federation-sync] ${context} pull from ${peer.origin} did not advance past ${since}; stopping this pass`);
+      console.warn('[federation-sync] %s pull from %s did not advance past %s; stopping this pass', context, peer.origin, since);
       break;
     }
     previousRequest = requestKey;
 
     const body = JSON.stringify(request);
     const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
-    const resp = await federationFetch(peer.origin, '/api/federation/sync', {
-      method: 'POST', headers, body,
-      signal: AbortSignal.timeout(SYNC_FETCH_TIMEOUT_MS),
-    }, 'approved');
-    if (!resp.ok) {
-      console.warn(`[federation-sync] ${context} pull from ${peer.origin}: HTTP ${resp.status}`);
-      return 'http_error';
+    // The pass's deadline bounds the request too, so a peer that answers
+    // slowly cannot hold the pass past its budget.
+    const passDeadline = AbortSignal.timeout(remainingMs);
+    let data: unknown;
+    try {
+      const resp = await federationFetch(peer.origin, '/api/federation/sync', {
+        method: 'POST', headers, body,
+        signal: AbortSignal.any([AbortSignal.timeout(SYNC_FETCH_TIMEOUT_MS), passDeadline]),
+      }, 'approved');
+      if (!resp.ok) {
+        console.warn('[federation-sync] %s pull from %s: HTTP %s', context, peer.origin, resp.status);
+        return 'http_error';
+      }
+      data = await resp.json();
+    } catch (err) {
+      if (passDeadline.aborted) {
+        console.log('[federation-sync] %s pull from %s stopped at its time budget waiting for a page; the next pass resumes from the cursor', context, peer.origin);
+        return 'partial';
+      }
+      throw err;
     }
-    const data: unknown = await resp.json();
     if (!isSyncResponse(data)) {
-      console.warn(`[federation-sync] ${context} pull from ${peer.origin}: malformed response`);
+      console.warn('[federation-sync] %s pull from %s: malformed response', context, peer.origin);
       return 'http_error';
     }
 
@@ -501,7 +550,7 @@ async function pullContext(
       let next = data.checkpoint - 1;
       if (next <= since) {
         next = data.checkpoint;
-        console.warn(`[federation-sync] ${context} pull from ${peer.origin}: a full page shares ${data.checkpoint}; this server cannot page within it`);
+        console.warn('[federation-sync] %s pull from %s: a full page shares %s; this server cannot page within it', context, peer.origin, data.checkpoint);
       }
       since = next;
       afterId = undefined;
@@ -521,14 +570,16 @@ export function syncPeerMutationLog(
   peerId: string,
   reason: SyncReason,
   contexts: readonly SyncContext[] = ALL_SYNC_CONTEXTS,
+  budget: SyncPassBudget = SYNC_PASS_BUDGET,
 ): Promise<SyncPeerResult | null> {
-  return runForPeer(peerId, () => pullPeer(peerId, reason, contexts));
+  return runForPeer(peerId, () => pullPeer(peerId, reason, contexts, budget));
 }
 
 async function pullPeer(
   peerId: string,
   reason: SyncReason,
   contexts: readonly SyncContext[],
+  budget: SyncPassBudget,
 ): Promise<SyncPeerResult | null> {
   if (!isFederationRelayEnabled()) return null;
   const db = getDb();
@@ -544,7 +595,7 @@ async function pullPeer(
   const stats: SyncPeerResult = { contexts: {}, applied: 0, duplicates: 0, deferred: 0, dropped: 0 };
   for (const context of contexts) {
     try {
-      stats.contexts[context] = await pullContext(peer, context, signingSecret, stats);
+      stats.contexts[context] = await pullContext(peer, context, signingSecret, stats, budget);
     } catch (err) {
       console.error('[federation-sync] %s pull from %s failed:', context, peer.origin, err);
       stats.contexts[context] = 'error';
@@ -559,8 +610,8 @@ async function pullPeer(
   }
   if (stats.applied + stats.deferred + stats.dropped > 0) {
     console.log(
-      `[federation-sync] Pulled from ${peer.origin} (${reason}): ${stats.applied} applied, ` +
-      `${stats.duplicates} already held, ${stats.deferred} kept for retry, ${stats.dropped} dropped`,
+      '[federation-sync] Pulled from %s (%s): %s applied, %s already held, %s kept for retry, %s dropped',
+      peer.origin, reason, stats.applied, stats.duplicates, stats.deferred, stats.dropped,
     );
   }
   return stats;
@@ -631,44 +682,68 @@ async function retryPeerEvents(peer: PeerRow, now: number): Promise<number> {
 
 /**
  * Replay every kept event that is due, per peer, in the peer's order; a
- * subject stops at its first event that is still refused for now.
+ * subject stops at its first event that is still refused for now. Peers are
+ * replayed side by side: each waits only for its own peer's pull.
  * Returns how many kept events were resolved (applied, already held, dropped).
  */
 export async function processSyncRetryTick(now: number = Date.now()): Promise<number> {
   if (!isFederationRelayEnabled()) return 0;
-  const db = getDb();
-  const peerIds = db.selectDistinct({ peerId: schema.federationSyncRetry.peerId })
+  const peerIds = getDb().selectDistinct({ peerId: schema.federationSyncRetry.peerId })
     .from(schema.federationSyncRetry)
     .all()
     .map(r => r.peerId);
-  let resolved = 0;
-  for (const peerId of peerIds) {
-    resolved += await runForPeer(peerId, async () => {
-      const peer = getDb().select().from(schema.federationPeers)
-        .where(eq(schema.federationPeers.id, peerId)).get();
-      if (!peer || peer.status !== 'active') return 0;
-      // Kept events belong to the incarnation they were pulled from. A peer
-      // row reactivated for a new incarnation (a reset peer that peered
-      // again) keeps its id, so its epoch is checked here as before a pull:
-      // a different epoch drops them before any is replayed.
-      reconcileCursorEpoch(peer);
-      return retryPeerEvents(peer, now);
-    });
-  }
-  return resolved;
+  const counts = await Promise.all(peerIds.map(peerId => runForPeer(peerId, async () => {
+    const peer = getDb().select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, peerId)).get();
+    if (!peer || peer.status !== 'active') return 0;
+    // Kept events belong to the incarnation they were pulled from. A peer
+    // row reactivated for a new incarnation (a reset peer that peered
+    // again) keeps its id, so its epoch is checked here as before a pull:
+    // a different epoch drops them before any is replayed.
+    reconcileCursorEpoch(peer);
+    return retryPeerEvents(peer, now);
+  }).catch((err: unknown) => {
+    console.error('[federation-sync] Retry of kept events from peer %s failed:', peerId, err);
+    return 0;
+  })));
+  return counts.reduce((sum, n) => sum + n, 0);
 }
 
-/** Pull `PERIODIC_SYNC_CONTEXTS` from every active peer, one peer at a time, then retry kept events. */
-export async function processResyncTick(): Promise<void> {
-  if (!isFederationRelayEnabled()) return;
+/** Run `fn` over `items`, at most `limit` at a time. */
+async function forEachLimited<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next]!;
+      next += 1;
+      await fn(item);
+    }
+  });
+  await Promise.all(lanes);
+}
+
+/**
+ * Pull `PERIODIC_SYNC_CONTEXTS` from every active peer, `SYNC_PEER_CONCURRENCY`
+ * at a time, each within `budget`, then retry kept events. Returns whether a
+ * pass stopped at its budget, so the next tick should come sooner.
+ */
+export async function processResyncTick(budget: SyncPassBudget = SYNC_PASS_BUDGET): Promise<boolean> {
+  if (!isFederationRelayEnabled()) return false;
   const peers = getDb().select({ id: schema.federationPeers.id })
     .from(schema.federationPeers)
     .where(eq(schema.federationPeers.status, 'active'))
     .all();
-  for (const peer of peers) {
-    await syncPeerMutationLog(peer.id, 'periodic', PERIODIC_SYNC_CONTEXTS);
-  }
+  let stoppedAtBudget = false;
+  await forEachLimited(peers, SYNC_PEER_CONCURRENCY, async (peer) => {
+    try {
+      const result = await syncPeerMutationLog(peer.id, 'periodic', PERIODIC_SYNC_CONTEXTS, budget);
+      if (result && Object.values(result.contexts).includes('partial')) stoppedAtBudget = true;
+    } catch (err) {
+      console.error('[federation-sync] Periodic pull from peer %s failed:', peer.id, err);
+    }
+  });
   await processSyncRetryTick();
+  return stoppedAtBudget;
 }
 
 // ─── Timers ─────────────────────────────────────────────────────────────────
@@ -679,9 +754,12 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleResync(delayMs: number): void {
   resyncTimer = setTimeout(() => {
     processResyncTick()
-      .catch(err => console.error('[federation-sync] Periodic pull failed:', err))
-      .finally(() => {
-        if (resyncTimer !== null) scheduleResync(RESYNC_INTERVAL_MS);
+      .catch((err: unknown) => {
+        console.error('[federation-sync] Periodic pull failed:', err);
+        return false;
+      })
+      .then((stoppedAtBudget) => {
+        if (resyncTimer !== null) scheduleResync(stoppedAtBudget ? RESYNC_CONTINUE_DELAY_MS : RESYNC_INTERVAL_MS);
       });
   }, delayMs);
 }

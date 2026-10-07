@@ -321,6 +321,101 @@ describe('syncPeerMutationLog: where the first pull after the upgrade starts', (
   });
 });
 
+describe('pass budgets', () => {
+  const SLOW = 'peer-slow';
+  const SLOW_ORIGIN = 'https://slow.example';
+
+  /** A peer whose log never ends: every page says there is more, with nothing in it. */
+  function serveEndless(): FederationSyncRequest[] {
+    const requests: FederationSyncRequest[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string) as FederationSyncRequest;
+      requests.push(body);
+      const n = requests.length;
+      return new Response(JSON.stringify({ events: [], hasMore: true, checkpoint: 1_000_000 + n, checkpointId: `row-${n}` }), { status: 200 });
+    });
+    return requests;
+  }
+
+  it('stops a pass after its page budget, keeps the cursor, and resumes from it on the next pass', async () => {
+    const { syncPeerMutationLog, FIRST_PAGE_OVERLAP_MS } = await import('./federationSync.js');
+    seedPeer({ lastSyncedAt: 42 });
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    let requests = serveEndless();
+    const result = await syncPeerMutationLog(PEER, 'periodic', ['dm'], { pages: 5, timeMs: 60_000 });
+    expect(result?.contexts.dm).toBe('partial');
+    expect(requests).toHaveLength(5);
+    expect(cursor('dm')).toEqual({ cursorTs: 1_000_005, cursorId: 'row-5' });
+    // Not a completed pull.
+    expect(testDb.select().from(schema.federationPeers).get()?.lastSyncedAt).toBe(42);
+
+    vi.restoreAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    requests = serveEndless();
+    await syncPeerMutationLog(PEER, 'periodic', ['dm'], { pages: 1, timeMs: 60_000 });
+    expect(requests[0]).toMatchObject({ sinceTimestamp: 1_000_005 - FIRST_PAGE_OVERLAP_MS });
+  });
+
+  it('stops a pass at its time budget while a page is still on its way', async () => {
+    const { syncPeerMutationLog } = await import('./federationSync.js');
+    seedPeer();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    }));
+    const started = Date.now();
+    const result = await syncPeerMutationLog(PEER, 'periodic', ['dm', 'profile'], { pages: 20, timeMs: 150 });
+    expect(result?.contexts).toEqual({ dm: 'partial', profile: 'partial' });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('a slow peer holds up neither the pull of another peer nor its retry tick', async () => {
+    const { processResyncTick, processSyncRetryTick, syncPeerMutationLog, SYNC_RETRY_BACKOFF_MS } = await import('./federationSync.js');
+    seedPeer();
+    testDb.insert(schema.federationPeers).values({
+      id: SLOW, origin: SLOW_ORIGIN, hmacSecret: 'secret', status: 'active', lastSyncedAt: 0, createdAt: 1,
+    }).run();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    // One kept event from the fast peer.
+    processRelayEvents.mockImplementation(async ([e]) => ({
+      accepted: [], rejected: [{ messageId: e!.messageId, reason: 'participant_not_found' }], undeliverable: [],
+    }));
+    serve({ dm: [{ events: [event('m1', 100)], checkpoint: 100 }] });
+    await syncPeerMutationLog(PEER, 'periodic', ['dm']);
+    vi.restoreAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    processRelayEvents.mockImplementation(async (events) => ({ accepted: events.map(e => e.messageId), rejected: [], undeliverable: [] }));
+
+    const order: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) => {
+      if (String(url).startsWith(SLOW_ORIGIN)) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            order.push('slow stopped');
+            reject(init.signal?.reason);
+          });
+        });
+      }
+      const body = JSON.parse(init?.body as string) as FederationSyncRequest;
+      if (body.contextType === 'profile') order.push('fast done');
+      return Promise.resolve(new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: body.sinceTimestamp }), { status: 200 }));
+    });
+
+    const tick = processResyncTick({ pages: 20, timeMs: 300 });
+    // While the slow peer's pass is still waiting, the fast peer's kept event is replayed.
+    expect(await processSyncRetryTick(Date.now() + SYNC_RETRY_BACKOFF_MS[0]! + 1)).toBe(1);
+    expect(order).not.toContain('slow stopped');
+
+    expect(await tick).toBe(true);
+    expect(order.indexOf('fast done')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('fast done')).toBeLessThan(order.indexOf('slow stopped'));
+    const lastSynced = Object.fromEntries(testDb.select().from(schema.federationPeers).all().map(p => [p.id, p.lastSyncedAt]));
+    expect(lastSynced[PEER]).toBeGreaterThan(0);
+    expect(lastSynced[SLOW]).toBe(0);
+  });
+});
+
 describe('syncPeerMutationLog: refused events', () => {
   it('keeps an event refused for now, moves the cursor past it, and holds only its own subject behind it', async () => {
     const { syncPeerMutationLog } = await import('./federationSync.js');
