@@ -4,6 +4,7 @@ import type {
   FederationPeerStatus,
   FederationPeerStatusReason,
   FederationRejectedReason,
+  ServerEvent,
 } from '@backspace/shared';
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
@@ -415,17 +416,24 @@ async function runEffects(e: TransitionEffects): Promise<void> {
   }
 
   if (e.refusedContexts && e.refusedContexts.size > 0 && e.reason) {
-    pushPeerRejectedEvent(e.origin, e.refusedContexts, e.reason);
+    pushPeerRejectedEvent(connectionManager, e.origin, e.refusedContexts, e.reason);
   }
+}
+
+/** The part of the WebSocket connection manager the notice needs. */
+interface UserNotifier {
+  sendToUser(userId: string, event: ServerEvent): void;
 }
 
 /**
  * Tell the local users who had something queued for a peer that it will not be
  * delivered. Sent when a peer is refused (`rejected`) or its trust broke
  * (`needs_attention` after repeated auth failures). `reasonCode` lets the
- * client show localized text; `reason` is the English fallback.
+ * client show localized text; `reason` is the English fallback. Runs inside
+ * runPeerTransitionEffects, so a failure is logged there.
  */
-export function pushPeerRejectedEvent(
+function pushPeerRejectedEvent(
+  notifier: UserNotifier,
   peerOrigin: string,
   contextMap: ReadonlyMap<string, string>,
   reasonCode: FederationPeerStatusReason,
@@ -477,9 +485,7 @@ export function pushPeerRejectedEvent(
     affectedContexts,
   };
 
-  void import('../ws/handler.js').then(({ connectionManager }) => {
-    for (const userId of affectedUserIds) connectionManager.sendToUser(userId, event);
-  });
+  for (const userId of affectedUserIds) notifier.sendToUser(userId, event);
 }
 
 // ─── Inbound handshake decision ─────────────────────────────────────────────

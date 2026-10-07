@@ -178,7 +178,6 @@ describe('transitionPeer', () => {
 
     const outcome = transitionPeer('p1', { from: ['pending'], to: 'rejected', reason: 'revoked_by_remote', cause: 'remote_refused' });
     if (outcome.applied) await outcome.done;
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(testDb.select().from(schema.federationOutbox).all()).toHaveLength(0);
     expect(sendToUser).toHaveBeenCalledWith('user-e1', expect.objectContaining({
@@ -195,10 +194,28 @@ describe('transitionPeer', () => {
 
     const outcome = transitionPeer('p1', { from: ['active'], to: 'needs_attention', reason: 'auth_failures', cause: 'auth_threshold' });
     if (outcome.applied) await outcome.done;
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(testDb.select().from(schema.federationOutbox).all()).toHaveLength(1);
     expect(sendToUser).toHaveBeenCalledWith('user-e1', expect.objectContaining({ reasonCode: 'auth_failures' }));
+  });
+
+  it('logs a failure to send the refusal notice instead of leaving it unhandled', async () => {
+    const { transitionPeer } = await import('./federationPeerState.js');
+    seedPeer({ id: 'p1', status: 'pending' });
+    seedOutboxEntry('e1', 'p1');
+    sendToUser.mockImplementation(() => { throw new Error('socket gone'); });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const outcome = transitionPeer('p1', { from: ['pending'], to: 'rejected', reason: 'denied_by_remote', cause: 'remote_refused' });
+    expect(outcome.applied).toBe(true);
+    if (outcome.applied) await expect(outcome.done).resolves.toBeUndefined();
+
+    expect(row('p1').status).toBe('rejected');
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('Effects of the peer transition'),
+      'https://p1.example', 'pending', 'rejected', expect.objectContaining({ message: 'socket gone' }),
+    );
+    consoleError.mockRestore();
   });
 });
 
