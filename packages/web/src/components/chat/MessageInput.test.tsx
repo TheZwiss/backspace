@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useUIStore } from '../../stores/uiStore';
 import { Message } from './Message';
 import { MessageInput } from './MessageInput';
 
@@ -66,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  useUIStore.setState({ toasts: [] });
   useChatStore.getState().clearAllMessages();
   useComposerStore.setState({ states: new Map() });
   useAuthStore.setState({ user: null });
@@ -147,5 +149,6 @@ describe('MessageInput slow sends', () => {
     fireEvent.change(input, { target: { value: 'new text' } });
     await act(async () => { fail(new Error('Offline')); await sending.catch(() => {}); });
     expect(input).toHaveValue('failed text\nnew text');
+    expect(useUIStore.getState().toasts).toEqual([expect.objectContaining({ message: 'Offline', type: 'warning' })]);
   });
 });

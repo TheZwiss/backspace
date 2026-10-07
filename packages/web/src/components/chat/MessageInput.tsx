@@ -20,6 +20,7 @@ import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
+import { describeError } from '../../i18n/errors';
 import {
   filterMentionCandidates,
   useChannelMentionCandidates,
@@ -316,7 +317,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     const submittedDraft = composer.draftText;
     const trimmed = submittedDraft.trim();
     if (!trimmed && composer.stagedTransferIds.length === 0) return;
-    if (isOverLimit) return;
+    if (submittedDraft.length > MAX_MESSAGE_LENGTH) return;
 
     // Block submission when ANY staged transfer is in a non-shippable state
     // (failed/aborted) — those would prevent the bubble from ever resolving.
@@ -349,8 +350,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         // Keep both the failed text and anything typed while the request was pending.
         const currentDraft = useComposerStore.getState().get(channelId).draftText;
         setDraft(channelId, submittedDraft + (currentDraft ? '\n' + currentDraft : ''));
-        const msg = err instanceof Error ? err.message : t('chat:composer.sendFailed');
-        addToast(msg, 'warning');
+        addToast(describeError(err), 'warning');
       }
       return;
     }
@@ -606,10 +606,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       // not local files, and ship as plain content.
       setActivePopover(null);
       void sendMessage(channelId, url).catch((error: unknown) => {
-        addToast(error instanceof Error ? error.message : t('chat:composer.sendFailed'), 'warning');
+        addToast(describeError(error), 'warning');
       });
     },
-    [channelId, sendMessage, addToast, t],
+    [channelId, sendMessage, addToast],
   );
 
   const togglePopover = useCallback((tab: InputPopoverTab) => {
