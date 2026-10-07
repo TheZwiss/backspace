@@ -17,8 +17,10 @@ import { PermissionBits, permissionsToString } from '@backspace/shared/src/permi
 //
 // #374: a role or member-role change tells the space's members with one
 // `space_access_changed` event instead of pushing each of them a whole
-// `ready` payload. The mock below has no `pushReadyPayload`, so a route that
-// still calls it answers 500.
+// `ready` payload (`announceSpaceAccessChange`, which also brings each member
+// whose own access may have changed the voice state they can now see). The
+// mock below has no `pushReadyPayload`, so a route that still calls it
+// answers 500.
 
 setWorkerId(1);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,11 +42,12 @@ vi.mock('../utils/auth.js', () => ({
   },
 }));
 
-const sendToSpace = vi.fn();
+const announce = vi.fn();
 vi.mock('../ws/handler.js', () => ({
   connectionManager: {
     addUserSpace: vi.fn(),
-    sendToSpace: (...args: unknown[]) => sendToSpace(...args),
+    sendToSpace: vi.fn(),
+    announceSpaceAccessChange: (...args: unknown[]) => announce(...args),
     sendToUser: vi.fn(),
     getUserSpaceEntries: () => new Map<string, Set<string>>().entries(),
   },
@@ -74,7 +77,7 @@ const now = 1_700_000_000_000;
 let app: FastifyInstance;
 
 beforeEach(async () => {
-  sendToSpace.mockClear();
+  announce.mockClear();
   sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
   applyMigrations(sqlite);
@@ -138,7 +141,8 @@ describe('PATCH /members/:uid validates roleIds', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(memberRoleIds('member')).toEqual(['r-member', 'r-mod']);
-    expect(sendToSpace).toHaveBeenCalledWith(SPACE_ID, { type: 'space_access_changed', spaceId: SPACE_ID });
+    // Only the member whose roles changed can see different voice channels.
+    expect(announce).toHaveBeenCalledWith(SPACE_ID, ['member']);
   });
 });
 
@@ -182,26 +186,35 @@ describe('role routes validate permissions', () => {
     expectCode(res, 400, 'permissions_invalid');
   });
 
-  it('create, update and delete each tell the space with space_access_changed', async () => {
+  it('create, update and delete each tell the space, naming the role\'s holders as affected', async () => {
     const created = await app.inject({ method: 'POST', url: `/api/spaces/${SPACE_ID}/roles`, payload: { name: 'New', permissions: '0' } });
     expect(created.statusCode).toBe(201);
     const roleId = created.json<{ id: string }>().id;
+    // A new role has no holders yet.
+    expect(announce).toHaveBeenLastCalledWith(SPACE_ID, []);
+    testDb.insert(schema.memberRoles).values({ spaceId: SPACE_ID, userId: 'member', roleId }).run();
     const updated = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/${roleId}`, payload: { name: 'Renamed' } });
     expect(updated.statusCode).toBe(200);
+    expect(announce).toHaveBeenLastCalledWith(SPACE_ID, ['member']);
     const deleted = await app.inject({ method: 'DELETE', url: `/api/spaces/${SPACE_ID}/roles/${roleId}` });
     expect(deleted.statusCode).toBe(200);
-    expect(sendToSpace).toHaveBeenCalledTimes(3);
-    for (const call of sendToSpace.mock.calls) {
-      expect(call).toEqual([SPACE_ID, { type: 'space_access_changed', spaceId: SPACE_ID }]);
-    }
+    // The holders as they were before the role went.
+    expect(announce).toHaveBeenLastCalledWith(SPACE_ID, ['member']);
+    expect(announce).toHaveBeenCalledTimes(3);
   });
 
-  it('the single-role routes tell the space too', async () => {
+  it('a change to @everyone names every member as affected', async () => {
+    const res = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/${SPACE_ID}`, payload: { permissions: '0' } });
+    expect(res.statusCode).toBe(200);
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect([...(announce.mock.calls[0]![1] as string[])].sort()).toEqual(['member', 'owner']);
+  });
+
+  it('the single-role routes tell the space too, naming the member', async () => {
     const added = await app.inject({ method: 'POST', url: `/api/spaces/${SPACE_ID}/members/member/roles`, payload: { roleId: 'r-member' } });
     expect(added.statusCode).toBe(200);
     const removed = await app.inject({ method: 'DELETE', url: `/api/spaces/${SPACE_ID}/members/member/roles/r-member` });
     expect(removed.statusCode).toBe(200);
-    expect(sendToSpace).toHaveBeenCalledTimes(2);
-    expect(sendToSpace).toHaveBeenLastCalledWith(SPACE_ID, { type: 'space_access_changed', spaceId: SPACE_ID });
+    expect(announce.mock.calls).toEqual([[SPACE_ID, ['member']], [SPACE_ID, ['member']]]);
   });
 });

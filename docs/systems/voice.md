@@ -23,7 +23,8 @@ A client learns who is sitting in a space's voice channels from the WS `ready`
 payload at connect time. Joining a space *without reloading* therefore needs the
 same bootstrap for the new space, or its voice channels render empty until a
 refresh. The server pushes a scoped `space_voice_state` snapshot from
-`ConnectionManager.addUserSpace` (the single join chokepoint), built by
+`ConnectionManager.addUserSpace` (the single join chokepoint), and after a role
+change to each member it may reach (`space_access_changed`), built by
 `buildSpaceVoiceState(spaceId, userId)` — the same VIEW_CHANNEL-filtered helper
 that feeds `ready`. The client applies it via `utils/voiceStateSync.applySpaceVoiceState`.
 See `docs/systems/websocket.md` → "Mid-session space join" for the full rationale

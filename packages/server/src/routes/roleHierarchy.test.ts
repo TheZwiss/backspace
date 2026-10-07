@@ -39,6 +39,7 @@ vi.mock('../ws/handler.js', () => ({
   connectionManager: {
     addUserSpace: vi.fn(),
     sendToSpace: vi.fn(),
+    announceSpaceAccessChange: vi.fn(),
     sendToUser: vi.fn(),
     getUserSpaceEntries: () => new Map<string, Set<string>>().entries(),
   },
@@ -304,12 +305,12 @@ describe('role management follows the role hierarchy', () => {
 
   it('tells the space after a move, which refreshes every open role list', async () => {
     const { connectionManager } = await import('../ws/handler.js');
-    const announce = vi.mocked(connectionManager.sendToSpace);
+    const announce = vi.mocked(connectionManager.announceSpaceAccessChange);
     announce.mockClear();
     as('owner');
     const res = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/r-member`, payload: { position: 2 } });
     expect(res.statusCode).toBe(200);
-    expect(announce).toHaveBeenCalledWith(SPACE_ID, { type: 'space_access_changed', spaceId: SPACE_ID });
+    expect(announce).toHaveBeenCalledWith(SPACE_ID, ['member']);
   });
 
   it('creates a new role at the bottom, just above @everyone', async () => {

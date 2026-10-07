@@ -162,7 +162,14 @@ instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
 only updates that space's permission entries. Every channel the detail lists
 goes through `upsertChannel`, and a channel of that space it no longer lists
 goes through the `channel_deleted` path, which also closes it when it is
-open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). These routes used to
+open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). The detail carries no
+voice presence, so the members whose own permissions the change may reach
+(the member whose roles changed; the holders of a changed or deleted role;
+everyone for @everyone; nobody for a new role) are each sent a
+`space_voice_state` right after the event, built by `pushSpaceVoiceState`
+exactly as for a mid-session join (below): a voice channel a member just
+gained shows who is in it at once (`ConnectionManager.announceSpaceAccessChange`).
+These routes used to
 push a whole `ready` instead, which every client handles as a reconnect.
 Mixed versions: an old client connected to a new server ignores the event
 and misses live role changes in that space until it reconnects; a new client
@@ -187,7 +194,7 @@ An `error` without a code is only logged.
 |------|--------|-------|
 | `voice_state_update` | channelId, userId, action: join/leave, channelElapsedSeconds? | space |
 | `voice_status_update` | userId, channelId, isMuted, isDeafened, isCameraOn, isScreenSharing | room |
-| `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session (see below). |
+| `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user, or a member whose access changed. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session, and after `space_access_changed` (see below). |
 | `voice_space_muted` | userId, channelId, spaceId, muted | space |
 | `voice_space_deafened` | userId, channelId, spaceId, deafened | space |
 | `voice_permission_muted` | userId, spaceId, muted | space |
@@ -270,4 +277,4 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 
 The `ready` payload is the **only** carrier of voice presence at connect time. When a user joins a space *mid-session* (invite, public join, or join-request approval) without reloading, they would otherwise see empty voice channels until a refresh, because `member_joined` carries no voice state and `GET /api/spaces/:id` (the channel-sidebar hydrator) has none either.
 
-To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the joining user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.
+To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — calls `pushSpaceVoiceState(userId, spaceId)`, which builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the user has no connection, or the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.

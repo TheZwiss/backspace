@@ -410,14 +410,23 @@ class ConnectionManager implements ReplicaSessionHost {
     // current voice presence. The `ready` payload only carries voice state at
     // connect time (see buildReadyPayload), so without this push, members already
     // sitting in a voice channel stay invisible in the new member's channel
-    // sidebar until a full page reload. We deliver a scoped snapshot over the same
-    // ordered WebSocket as the `voice_state_update` deltas, so there is no
-    // snapshot-vs-stream race (a join/leave that happens after this snapshot is
-    // emitted strictly afterwards on the same socket). `addUserSpace` is the single
-    // chokepoint every join path funnels through (invite, public join, join-request
-    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so this
-    // fires exactly once per genuine join. Space creation hits this too but produces
-    // an empty snapshot and is skipped below.
+    // sidebar until a full page reload. `addUserSpace` is the single chokepoint
+    // every join path funnels through (invite, public join, join-request
+    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so
+    // this fires exactly once per genuine join. Space creation hits this too but
+    // produces an empty snapshot, which is not sent.
+    this.pushSpaceVoiceState(userId, spaceId);
+  }
+
+  /**
+   * Send `userId` the voice presence of `spaceId` they can see now, as one
+   * `space_voice_state` (`buildSpaceVoiceState`, VIEW_CHANNEL-filtered). It
+   * rides the same ordered socket as the `voice_state_update` deltas, so a
+   * join or leave after it arrives after it. Nothing is sent when the user has
+   * no connection or the snapshot is empty (no one in voice, no restriction).
+   */
+  pushSpaceVoiceState(userId: string, spaceId: string): void {
+    if (this.getUserConnections(userId).size === 0) return;
     const snapshot = this.buildSpaceVoiceState(spaceId, userId);
     if (Object.keys(snapshot.voiceStates).length === 0
         && Object.keys(snapshot.spaceVoiceStates).length === 0) {
@@ -431,6 +440,22 @@ class ConnectionManager implements ReplicaSessionHost {
       voiceUserStates: snapshot.voiceUserStates,
       spaceVoiceStates: snapshot.spaceVoiceStates,
     });
+  }
+
+  /**
+   * After a change to the space's roles or to a member's roles
+   * (websocket.md, `space_access_changed`): every connected member of the
+   * space is told, and refetches the space's detail. The detail has no voice
+   * presence, so each member in `affectedUserIds` (whose own permissions may
+   * have changed) is then sent the voice state they can see now
+   * (`pushSpaceVoiceState`); a voice channel they just gained shows who is in
+   * it at once.
+   */
+  announceSpaceAccessChange(spaceId: string, affectedUserIds: Iterable<string>): void {
+    this.sendToSpace(spaceId, { type: 'space_access_changed', spaceId });
+    for (const userId of new Set(affectedUserIds)) {
+      if (this.getUserSpaces(userId).has(spaceId)) this.pushSpaceVoiceState(userId, spaceId);
+    }
   }
 
   getUserSpaces(userId: string): Set<string> {

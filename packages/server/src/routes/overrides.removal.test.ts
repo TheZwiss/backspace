@@ -39,6 +39,7 @@ vi.mock('../ws/handler.js', () => ({
   connectionManager: {
     addUserSpace: vi.fn(),
     sendToSpace: vi.fn(),
+    announceSpaceAccessChange: vi.fn(),
     sendToUser: (...args: unknown[]) => sendToUser(...args),
     getUserSpaceEntries: () => new Map([['owner', new Set(['space-1'])], ['member', new Set(['space-1'])]]).entries(),
   },

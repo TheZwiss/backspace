@@ -76,12 +76,26 @@ function generateInviteCode(): string {
  * After a change to the space's roles or to a member's roles: every connected
  * member is told with `space_access_changed` (docs/systems/websocket.md) and
  * refetches the space's detail, which carries their permissions, the channels
- * they can see, the roles and the member list. Voice permissions are
+ * they can see, the roles and the member list. `affectedUserIds` are the
+ * members whose own permissions may have changed; each is also sent the voice
+ * state they can see now (`announceSpaceAccessChange`). Voice permissions are
  * re-checked here too, since a role can carry SPEAK or STREAM.
  */
-function announceAccessChange(spaceId: string): void {
-  connectionManager.sendToSpace(spaceId, { type: 'space_access_changed', spaceId });
+function announceAccessChange(spaceId: string, affectedUserIds: readonly string[]): void {
+  connectionManager.announceSpaceAccessChange(spaceId, affectedUserIds);
   checkVoicePermissions(spaceId);
+}
+
+/** The members whose permissions a change to `roleId` reaches: its holders, or everyone for @everyone. */
+function membersHoldingRole(spaceId: string, roleId: string): string[] {
+  const db = getDb();
+  if (roleId === spaceId) {
+    return db.select({ userId: schema.spaceMembers.userId }).from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.spaceId, spaceId)).all().map((m) => m.userId);
+  }
+  return db.select({ userId: schema.memberRoles.userId }).from(schema.memberRoles)
+    .where(and(eq(schema.memberRoles.spaceId, spaceId), eq(schema.memberRoles.roleId, roleId)))
+    .all().map((m) => m.userId);
 }
 
 type RoleChangeRefusal = {
@@ -1011,7 +1025,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-    announceAccessChange(id);
+    announceAccessChange(id, [uid]);
 
     // Build response with populated roles
     const updatedMember = db.select()
@@ -1220,7 +1234,8 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    announceAccessChange(id);
+    // A new role has no holders yet, so nobody's own access changed.
+    announceAccessChange(id, []);
 
     return reply.code(201).send(role);
   });
@@ -1308,7 +1323,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    announceAccessChange(id);
+    announceAccessChange(id, membersHoldingRole(id, roleId));
 
     return reply.code(200).send(updated);
   });
@@ -1349,6 +1364,9 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, deleteRefusal);
     }
 
+    // Its holders, read before the delete takes their member_roles rows with it.
+    const holders = membersHoldingRole(id, roleId);
+
     // Overrides name their target without a foreign key, so they would
     // outlive the role: invisible in the editor and impossible to remove.
     db.transaction((tx) => {
@@ -1362,7 +1380,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     });
     normalizeRolePositions(getRawDb(), id);
 
-    announceAccessChange(id);
+    announceAccessChange(id, holders);
 
     return reply.code(200).send({ success: true });
   });
@@ -1384,7 +1402,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       roleId,
     }).onConflictDoNothing().run();
 
-    announceAccessChange(id);
+    announceAccessChange(id, [uid]);
 
     return reply.code(200).send({ success: true });
   });
@@ -1405,7 +1423,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.memberRoles.roleId, roleId)
     )).run();
 
-    announceAccessChange(id);
+    announceAccessChange(id, [uid]);
 
     return reply.code(200).send({ success: true });
   });
