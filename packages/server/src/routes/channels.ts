@@ -591,7 +591,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'channel_not_found');
     }
 
-    if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
+    // The same rule as the override reads, so who may read the rows and who
+    // may change them stay one set (utils/permissionDataView.ts).
+    if (!viewerReadsPermissionData(computePermissions(request.userId, channel.spaceId))) {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
@@ -672,7 +674,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 404, 'channel_not_found');
       }
 
-      if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
+      // The same rule as the override reads, so who may read the rows and who
+      // may change them stay one set (utils/permissionDataView.ts).
+      if (!viewerReadsPermissionData(computePermissions(request.userId, channel.spaceId))) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
       }
 
@@ -776,7 +780,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'category_not_found');
     }
 
-    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+    // The same rule as the override reads, so who may read the rows and who
+    // may change them stay one set (utils/permissionDataView.ts).
+    if (!viewerReadsPermissionData(computePermissions(request.userId, category.spaceId))) {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
@@ -856,7 +862,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 404, 'category_not_found');
       }
 
-      if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+      // The same rule as the override reads, so who may read the rows and who
+      // may change them stay one set (utils/permissionDataView.ts).
+      if (!viewerReadsPermissionData(computePermissions(request.userId, category.spaceId))) {
         return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
       }
 

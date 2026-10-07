@@ -18,7 +18,13 @@ import type { roles } from '../db/schema.js';
 
 type RoleRow = typeof roles.$inferSelect;
 
-/** Whether a viewer with these space-level permissions is sent role bits and override rows. */
+/**
+ * Whether a viewer with these space-level permissions is sent role bits and
+ * override rows. MANAGE_ROLES counts at space level only: an override that
+ * allows it on one channel does not, for that channel or any other. The
+ * override write routes check this same predicate, so who may read the rows
+ * and who may change them stay one set.
+ */
 export function viewerReadsPermissionData(viewerSpacePermissions: bigint): boolean {
   return hasPermissionBit(viewerSpacePermissions, PermissionBits.MANAGE_ROLES);
 }
