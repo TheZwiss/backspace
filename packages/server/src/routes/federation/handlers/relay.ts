@@ -8,14 +8,14 @@ import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectDeletionBroadcastTargets, tombstoneUser } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { FederationIdentityDeleteS2SRequest, FederationRelayEvent, FederationRelayRequest, FederationRelayResponse, FederationSyncRequest, FederationSyncResponse } from '@backspace/shared';
+import type { FederationIdentityDeleteS2SRequest, FederationRelayRequest, FederationRelayResponse, FederationSyncRequest, FederationSyncResponse } from '@backspace/shared';
 import type { FastifyInstance } from 'fastify';
 import { processRelayEvents } from '../events/dispatch.js';
 import { extractDomain } from '../identity.js';
 import { isRelayRateLimited } from '../rateLimits.js';
 import { markOutboxOfferedForPeer } from '../../../utils/federationOutboxQueue.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
-import { readDmSyncPage, readFriendSyncPage, readProfileSyncPage, serializeSyncRow, type SyncPosition } from './syncPage.js';
+import { buildSyncResponse, type SyncPosition } from './syncPage.js';
 
 /**
  * The rejection list as it goes on the wire to the sender of this batch.
@@ -280,7 +280,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
   // peer, which pulls it (utils/federationSync.ts) to catch up on events its
   // live relay lost. Authenticated via HMAC-SHA256 signature, same as /relay.
   // Rows are served in (mutated_at, id) order; `afterId` continues after a row
-  // (keyset), and `checkpointId` names the page's last row. See
+  // (keyset), and `checkpointId` names the last row read. See
   // docs/systems/federation.md, "Sync Endpoint".
   app.post<{ Body: FederationSyncRequest }>(
     '/api/federation/sync',
@@ -324,27 +324,12 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       // What this page serves may already sit in our outbox for the peer.
       markOutboxOfferedForPeer(peer.id, Date.now(), contextType);
 
-      const page = contextType === 'friend'
-        ? readFriendSyncPage(peer.origin, after, limit)
-        : contextType === 'profile'
-          ? readProfileSyncPage(after, limit)
-          : readDmSyncPage(peer.origin, after, limit, dmChannelIdFilter, federatedIdFilter);
-
-      const events: FederationRelayEvent[] = [];
-      for (const row of page.served) {
-        const event = serializeSyncRow(row, peer.origin, page.channelFederatedIds);
-        if (event) events.push(event);
-      }
-
-      // Pagination follows the rows READ, not the rows served: a row filtered
-      // out or not serializable still moves the requester past it.
-      const last = page.read[page.read.length - 1];
-      const syncResponse: FederationSyncResponse = {
-        events,
-        hasMore: page.read.length >= limit,
-        checkpoint: last ? last.mutated_at : body.sinceTimestamp,
-        ...(last ? { checkpointId: last.id } : {}),
-      };
+      const syncResponse: FederationSyncResponse = await buildSyncResponse(
+        peer.origin,
+        { contextType, dmChannelId: dmChannelIdFilter, federatedId: federatedIdFilter },
+        after,
+        limit,
+      );
 
       // Update peer last-seen timestamp
       db.update(schema.federationPeers)

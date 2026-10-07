@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { FederationSyncRequest, FederationSyncResponse } from '@backspace/shared';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signRequest } from '../utils/federationAuth.js';
@@ -144,9 +145,105 @@ describe('keyset pagination', () => {
     log({ id: '4000000000000000001', entityId: 'f1', mutationType: 'friend_remove', mutatedAt: 10, contextType: 'friend', contextId: 'x',
       payload: JSON.stringify({ friendship: { from: { homeUserId: 'z', homeInstance: 'elsewhere.test' }, to: { homeUserId: 'y', homeInstance: 'elsewhere.test' } } }) });
     const page = await pull({ contextType: 'friend', limit: 1 });
-    // Not orbit's, so not served, but the cursor still moves past it.
+    // Not orbit's, so not served, but the cursor still moves past it; the
+    // log holds nothing after it, so there is no more.
     expect(page.events).toEqual([]);
-    expect(page).toMatchObject({ hasMore: true, checkpoint: 10, checkpointId: '4000000000000000001' });
+    expect(page).toMatchObject({ hasMore: false, checkpoint: 10, checkpointId: '4000000000000000001' });
+  });
+});
+
+/**
+ * A server before #255 pulls with `sinceTimestamp` only, stops at the first
+ * page with no events, and then records the pull as complete. This is that
+ * loop, against this server.
+ */
+async function pullAsOlderPeer(contextType?: 'friend' | 'profile'): Promise<string[]> {
+  const received: string[] = [];
+  let since = 0;
+  for (let pages = 0; pages < 50; pages++) {
+    const page = await pull({ sinceTimestamp: since, limit: 100, ...(contextType ? { contextType } : {}) });
+    if (page.events.length === 0) break;
+    received.push(...page.events.map(e => e.messageId));
+    since = page.checkpoint;
+    if (!page.hasMore) break;
+  }
+  return received;
+}
+
+describe('an older peer pulling from this server', () => {
+  it('reaches a message behind a full page of rows of deleted messages', async () => {
+    // 250 creates and edits of messages deleted since, each in its own
+    // millisecond; their delete rows were pruned with the rest of the log.
+    for (let i = 0; i < 250; i++) {
+      log({ id: `41000000000000${String(i).padStart(5, '0')}`, entityId: `gone-${i}`, mutationType: i % 2 ? 'update' : 'create', mutatedAt: 1_000 + i });
+    }
+    testDb.insert(schema.dmMessages).values({ id: 'kept', dmChannelId: 'ch-group', userId: 'alice', content: 'hi', createdAt: 2_000 }).run();
+    log({ id: '4100000000000099999', entityId: 'kept', mutationType: 'create', mutatedAt: 2_000 });
+    expect(await pullAsOlderPeer()).toEqual(['kept']);
+  });
+
+  it('reaches a reaction behind a full page of reaction rows the current state contradicts', async () => {
+    testDb.insert(schema.dmMessages).values({ id: 'm1', dmChannelId: 'ch-group', userId: 'alice', content: 'hi', createdAt: 100 }).run();
+    const reaction = (emoji: string): string => JSON.stringify({ userId: 'alice', homeUserId: 'alice', homeInstance: HOME_ORIGIN, emoji });
+    for (let i = 0; i < 150; i++) {
+      log({ id: `42000000000000${String(i).padStart(5, '0')}`, entityId: 'm1', mutationType: 'reaction_add', mutatedAt: 1_000 + i, payload: reaction('👍') });
+    }
+    testDb.insert(schema.dmReactions).values({ id: 'r1', dmMessageId: 'm1', userId: 'alice', emoji: '🎉', createdAt: 3_000 }).run();
+    log({ id: '4200000000000099999', entityId: 'm1', mutationType: 'reaction_add', mutatedAt: 3_000, payload: reaction('🎉') });
+    const page = await pull({});
+    expect(page.events.map(e => e.reaction?.emoji)).toEqual(['🎉']);
+    expect(await pullAsOlderPeer()).toEqual(['m1']);
+  });
+
+  it('reaches a friend event behind a full page of friend events that are not its own', async () => {
+    const friendship = (from: string, fromHost: string, to: string, toHost: string): string =>
+      JSON.stringify({ friendship: { from: { homeUserId: from, homeInstance: fromHost }, to: { homeUserId: to, homeInstance: toHost } } });
+    for (let i = 0; i < 230; i++) {
+      log({ id: `43000000000000${String(i).padStart(5, '0')}`, entityId: `f-${i}`, mutationType: 'friend_remove', mutatedAt: 1_000 + i,
+        contextType: 'friend', contextId: 'x', payload: friendship('alice', HOME_ORIGIN, 'carol', 'third.test') });
+    }
+    log({ id: '4300000000000099999', entityId: 'f-orbit', mutationType: 'friend_add', mutatedAt: 5_000,
+      contextType: 'friend', contextId: 'x', payload: friendship('alice', HOME_ORIGIN, 'bob', ORBIT_ORIGIN) });
+    expect(await pullAsOlderPeer('friend')).toEqual(['f-orbit']);
+  });
+
+  it('still ends on an empty page once nothing after it is the requester\'s', async () => {
+    for (let i = 0; i < 120; i++) {
+      log({ id: `44000000000000${String(i).padStart(5, '0')}`, entityId: `gone-${i}`, mutationType: 'create', mutatedAt: 1_000 + i });
+    }
+    const page = await pull({});
+    expect(page).toMatchObject({ events: [], hasMore: false });
+  });
+});
+
+describe('membership rows about the requester\'s own users', () => {
+  const membership = (type: 'member_add' | 'member_remove', userId: string, host: string): string => JSON.stringify({
+    eventType: type, federatedId: 'fed-group', messageId: `${type}-${userId}`, encryptionVersion: 0, timestamp: 1,
+    membership: { user: { homeUserId: userId, homeInstance: host }, reason: 'kick' },
+  });
+
+  it('serves the kick of the requester\'s last member, and nothing else of that conversation', async () => {
+    // bob was orbit's only member; he has been kicked.
+    testDb.delete(schema.dmMembers).where(eq(schema.dmMembers.userId, 'bob-on-home')).run();
+    testDb.insert(schema.dmMessages).values({ id: 'm1', dmChannelId: 'ch-group', userId: 'alice', content: 'after', createdAt: 100 }).run();
+    log({ id: '4500000000000000001', entityId: 'member_remove-bob', mutationType: 'member_remove', mutatedAt: 100, payload: membership('member_remove', 'bob', ORBIT_ORIGIN) });
+    log({ id: '4500000000000000002', entityId: 'm1', mutationType: 'create', mutatedAt: 200 });
+    log({ id: '4500000000000000003', entityId: 'member_add-carol', mutationType: 'member_add', mutatedAt: 300, payload: membership('member_add', 'carol', 'third.test') });
+
+    const toOrbit = await pull({});
+    expect(toOrbit.events.map(e => `${e.eventType}:${e.messageId}`)).toEqual(['member_remove:member_remove-bob']);
+    expect(toOrbit.events[0]).toMatchObject({ federatedId: 'fed-group', membership: { user: { homeUserId: 'bob' } } });
+
+    // carol is still a member, so the conversation is third's: all of it.
+    const toThird = await pull({}, 'https://third.test');
+    expect(toThird.events.map(e => e.eventType)).toEqual(['member_remove', 'create', 'member_add']);
+  });
+
+  it('does not serve them about a detached user of a former incarnation', async () => {
+    testDb.delete(schema.dmMembers).where(eq(schema.dmMembers.userId, 'bob-on-home')).run();
+    testDb.update(schema.users).set({ federationHomeOrphaned: 1 }).where(eq(schema.users.id, 'bob-on-home')).run();
+    log({ id: '4500000000000000001', entityId: 'member_remove-bob', mutationType: 'member_remove', mutatedAt: 100, payload: membership('member_remove', 'bob', ORBIT_ORIGIN) });
+    expect((await pull({})).events).toEqual([]);
   });
 });
 

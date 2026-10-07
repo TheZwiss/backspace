@@ -1843,7 +1843,7 @@ The pull re-delivers events the live relay already delivered, often after local 
 | `update` | no-op, no broadcast (the copy already holds that `editedAt`) | an older `editedAt` is ignored; an older sender without `editedAt` applies only when the content differs |
 | `delete` of a held message | deletes it, records a tombstone | n/a |
 | `delete` of a message not held | accepted as a no-op on both paths, live and pull. When the message is homed on the signing peer, records the tombstone `dm_delete:<messageId>` for that peer in `federation_applied_events`, so a create of it arriving later is answered `duplicate`. A delete naming a message homed elsewhere records nothing: no peer can block another's messages | n/a |
-| `reaction_add` / `reaction_remove` | set semantics, broadcast only on change | the sync endpoint serves a reaction row only when the reaction's current state agrees with it. Known limit: a stale add can undo a removal made on the receiver through client federation, when a pull runs between the removal and its relay to the reaction's home |
+| `reaction_add` / `reaction_remove` | set semantics, broadcast only on change | the sync endpoint serves a reaction row only in the reaction's current state ([Sync Endpoint](#sync-endpoint-post-apifederationsync)). Known limit: a stale add can undo a removal made on the receiver through client federation, when a pull runs between the removal and its relay to the reaction's home |
 | `member_add` / `member_remove` | accepted no-op (system-message marker on `(source_instance, source_message_id)`) | older than the member's clock: accepted, changes nothing ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins)) |
 | `ownership_transfer` | accepted no-op (system-message marker) | only the current owner's instance may transfer, so a transfer from an earlier owner's instance is refused `unauthorized_source` |
 | `group_metadata_update` / `read_state_update` / `profile_update` | last-writer-wins on `metadataUpdatedAt` / `timestamp` / `profileUpdatedAt` | same |
@@ -1967,7 +1967,9 @@ HMAC-authenticated (`authenticateS2SPeer`, active requester only). Serves one pa
 { events: FederationRelayEvent[], hasMore: boolean, checkpoint: number, checkpointId?: string }
 ```
 
-**Pagination.** Rows are read in `(mutated_at, id)` order, strictly after `(sinceTimestamp, afterId)`, or after `sinceTimestamp` when `afterId` is absent. `checkpoint` / `checkpointId` are the last row READ, and `hasMore` is whether the page read `limit` rows: a row filtered out or not serializable still moves the requester past it. `checkpointId` is absent when the page read nothing (`checkpoint` is then `sinceTimestamp`). Before #255 the next page asked for `> checkpoint`, which skipped the rows of that millisecond that fell past the page.
+**Pagination.** Rows are read in `(mutated_at, id)` order, strictly after `(sinceTimestamp, afterId)`, or after `sinceTimestamp` when `afterId` is absent. `checkpoint` / `checkpointId` are the last row READ, and `hasMore` is whether the last page read held `limit` rows: a row filtered out or not serializable still moves the requester past it. `checkpointId` is absent when nothing was read (`checkpoint` is then `sinceTimestamp`). Before #255 the next page asked for `> checkpoint`, which skipped the rows of that millisecond that fell past the page.
+
+**A page is never empty while a row the requester may see follows** (`buildSyncResponse`, `handlers/syncPage.ts`). Every version before #255 stops pulling at the first page with no events and then records the pull as complete, so an empty page in the middle of the log would end its catch-up for good. Rows that would serialize to nothing are left out in SQL, where the condition is cheap (below); for the rest (friend events about other instances, a `file_rejected` for another instance), a full page that serves nothing is followed by the next page in the same request, until a page serves an event or the log ends. The request yields to the event loop between those pages.
 
 | `contextType` | Rows |
 |---|---|
@@ -1975,10 +1977,10 @@ HMAC-authenticated (`authenticateS2SPeer`, active requester only). Serves one pa
 | `'friend'` | Friend events one of whose sides is the requester's (relevance below) |
 | `'profile'` | Profile update events |
 
-**DM rows.** Shared conversations are those with a non-null `federated_id`, not soft-deleted, with at least one live member (`is_deleted = 0`, `federation_home_orphaned = 0`) homed at the requester's host. What each row becomes:
-- `create` / `update`: the message as it is now, built with `buildRelayPayload`, the live relay's builder (same `type`, author identity, `replyTo`, `mentions`), plus attachments (`sourceUrl` on `getOurOrigin()`), participants, the group `federatedId`, and an update's `target`. Not served once the message is deleted; its `delete` row follows.
+**DM rows.** Shared conversations are those with a non-null `federated_id`, not soft-deleted, with at least one live member (`is_deleted = 0`, `federation_home_orphaned = 0`) homed at the requester's host; every row of one is the requester's. In any other federated conversation, only the `member_add` and `member_remove` rows whose `membership.user` is one of the requester's live, attached users are: when the kick of the requester's last member there is lost on the live relay, the conversation is no longer shared, and the pull is the only way the kick still arrives. What each row becomes:
+- `create` / `update`: the message as it is now, built with `buildRelayPayload`, the live relay's builder (same `type`, author identity, `replyTo`, `mentions`), plus attachments (`sourceUrl` on `getOurOrigin()`), participants, the group `federatedId`, and an update's `target`. Not read once the message is deleted (left out in SQL, as before #255); its `delete` row follows.
 - `delete`: the target the delete path logged (the row is gone).
-- `reaction_add` / `reaction_remove`: see §11. Served only while the reaction's current state agrees with the row.
+- `reaction_add` / `reaction_remove`: see §11. Read only while the message exists and the reaction's current state agrees with the row (in SQL), so a replay converges on the state now instead of passing through every add and remove.
 - `member_add` / `member_remove` / `ownership_transfer`: the stored event.
 - `dm_close` / `dm_reopen`, `read_state_update`, `group_metadata_update`: the stored payload with the conversation's `federatedId`.
 - `file_rejected`: served only to the instance the rejected message came from (the requester must be the `source_instance` of this instance's copy): it is a reverse relay naming the message by that instance's id.
