@@ -4,8 +4,10 @@ import type { FederationRelayEvent, FederationSyncRequest, FederationSyncRespons
 import { getDb, schema } from '../db/index.js';
 import { buildFederationHeaders, getOurOrigin, normalizeOriginForCompare } from './federationAuth.js';
 import { federationFetch } from './federationFetch.js';
+import { dmDeleteKey, hasAppliedEvent } from './federationAppliedEvents.js';
 import { isFederationRelayEnabled } from './federationOutbox.js';
-import { classifyRejection } from './federationRejections.js';
+import { classifyPulledRejection } from './federationRejections.js';
+import { friendPairClockSubject, memberClockSubject } from './federationSubjectClock.js';
 import { generateSnowflake } from './snowflake.js';
 import type { PeerActivationReason } from './federationPeerActivation.js';
 
@@ -22,11 +24,12 @@ import type { PeerActivationReason } from './federationPeerActivation.js';
  *   absorbs a backward clock step on the peer; later pages continue by keyset
  *   (`afterId`), or from `checkpoint - 1` against a server that predates it.
  * - Every pulled event is applied as `catch_up` (`RelayDelivery`) and its
- *   outcome classified by `classifyRejection`: a `retry` refusal is kept with
- *   the whole event in `federation_sync_retry` and replayed locally with
- *   backoff; the cursor never stops. A conversation (friend pair, profile)
- *   with a kept event holds its later pulled events behind it, so the pull
- *   applies one conversation's events in the peer's order.
+ *   outcome classified by `classifyPulledRejection`: a `retry` refusal is
+ *   kept with the whole event in `federation_sync_retry` and replayed locally
+ *   with backoff; the cursor never stops. Events are ordered per subject
+ *   (`syncSubjectKey`: a message, a group member, a friend pair, ...): a
+ *   subject with a kept event holds its later pulled events behind it, and
+ *   other subjects never wait for it.
  * - One peer is pulled by one caller at a time (`runForPeer`): activation, the
  *   periodic tick and the retry tick queue behind each other.
  *
@@ -72,7 +75,11 @@ export interface SyncPeerResult {
 }
 
 type PeerRow = typeof schema.federationPeers.$inferSelect;
-type PulledOutcome = 'applied' | 'taken' | 'refused' | { retry: string };
+type PulledOutcome =
+  | { kind: 'applied' }
+  | { kind: 'taken' }
+  | { kind: 'refused'; reason: string; why: string }
+  | { kind: 'retry'; reason: string };
 
 interface CursorPosition {
   ts: number;
@@ -184,32 +191,108 @@ function markPulled(peerId: string, context: SyncContext, now: number): void {
 
 // ─── Applying a pulled event ────────────────────────────────────────────────
 
+/** An identity as a key part: home user id and normalized home origin. */
+function identityKey(identity: { homeUserId?: string; homeInstance?: string } | null | undefined): [string | null, string | null] {
+  const home = typeof identity?.homeInstance === 'string' ? normalizeOriginForCompare(identity.homeInstance) ?? identity.homeInstance : null;
+  return [identity?.homeUserId ?? null, home];
+}
+
 /**
- * The unit a pulled event is ordered within: its conversation (the peer's id
- * for it), its friend pair, or the profile's user. Events of one unit are
- * applied in the peer's order; different units never wait for each other.
+ * The subject a pulled event changes: the unit pulled events are ordered in.
+ * Events of one subject are applied in the peer's order; a kept event holds
+ * the later events of its subject behind it, and other subjects never wait
+ * for it. A member or a friend pair is keyed as its subject clock is
+ * (utils/federationSubjectClock.ts); an event too malformed to name its
+ * subject is its own.
  */
-export function syncContextKey(context: SyncContext, event: FederationRelayEvent): string {
-  if (context === 'dm' && event.dmChannelId) return `dm:${event.dmChannelId}`;
-  if (context === 'friend' && event.friendship) {
-    const side = (s: { homeUserId: string; homeInstance: string }) =>
-      `${s.homeUserId}@${normalizeOriginForCompare(s.homeInstance) ?? s.homeInstance}`;
-    return `friend:${[side(event.friendship.from), side(event.friendship.to)].sort().join('|')}`;
+export function syncSubjectKey(event: FederationRelayEvent): string {
+  const own = JSON.stringify(['event', event.eventType, event.messageId]);
+  switch (event.eventType) {
+    case 'create':
+    case 'update':
+    case 'delete':
+    case 'reaction_add':
+    case 'reaction_remove':
+      // The peer's id of the message, the same on every event about it.
+      return JSON.stringify(['message', event.messageId]);
+    case 'file_rejected':
+      // A message of this instance's, named by its id here.
+      return JSON.stringify(['message_here', event.messageId]);
+    case 'member_add':
+    case 'member_remove':
+      return memberClockSubject(event.federatedId, event.membership?.user) ?? own;
+    case 'friend_request_create':
+    case 'friend_request_update':
+    case 'friend_request_cancel':
+    case 'friend_add':
+    case 'friend_remove':
+      return friendPairClockSubject(event.friendship?.from, event.friendship?.to) ?? own;
+    case 'ownership_transfer':
+    case 'group_metadata_update':
+      return JSON.stringify(['group', event.federatedId ?? event.dmChannelId ?? null]);
+    case 'dm_close':
+    case 'dm_reopen':
+      return JSON.stringify(['closed', event.federatedId ?? event.dmChannelId ?? null, ...identityKey(event.dmCloseReopen)]);
+    case 'read_state_update':
+      return JSON.stringify(['read', event.federatedId ?? event.dmChannelId ?? null, ...identityKey(event.readState?.user)]);
+    case 'profile_update':
+      return JSON.stringify(['profile', ...identityKey(event.profileUpdate)]);
+    default:
+      return own;
   }
-  if (context === 'profile' && event.profileUpdate) {
-    return `profile:${event.profileUpdate.homeUserId}@${normalizeOriginForCompare(event.profileUpdate.homeInstance) ?? event.profileUpdate.homeInstance}`;
+}
+
+/** The message a pulled `update` or `reaction_add` names, in its home's coordinates. */
+function namedMessage(event: FederationRelayEvent, peerOrigin: string): { messageId: string; homeInstance: string } | null {
+  if (event.eventType === 'update') {
+    // Without a target, an older server names its own message by its id.
+    if (event.target === undefined) return { messageId: event.messageId, homeInstance: peerOrigin };
+    return { messageId: event.target.message.messageId, homeInstance: event.target.message.messageHomeInstance };
   }
-  return `${context}:${event.messageId}`;
+  if (event.eventType === 'reaction_add' && event.reaction) {
+    return {
+      messageId: event.reaction.messageId ?? event.messageId,
+      homeInstance: event.reaction.messageHomeInstance || peerOrigin,
+    };
+  }
+  return null;
+}
+
+/**
+ * Whether the message a pulled `update` or `reaction_add` answered
+ * `unknown_message` names can no longer arrive here, decided from what this
+ * instance knows:
+ * - it is homed here: it would be held here if it existed;
+ * - it is homed on the peer that served the event: the peer's log holds its
+ *   create before the event, and the pull serves the log in order and holds
+ *   an event behind a kept event of its message, so that create was applied
+ *   (and the message deleted since), refused for good, or lies before this
+ *   instance's cursor;
+ * - its home's delete of it was recorded (`dmDeleteKey`).
+ * A message homed on a third instance may still come from that instance, so
+ * the event is kept, for at most `SYNC_RETRY_MAX_AGE_MS`.
+ */
+function messageCannotArrive(peer: PeerRow, event: FederationRelayEvent): boolean {
+  const named = namedMessage(event, peer.origin);
+  if (!named) return true;
+  const home = normalizeOriginForCompare(named.homeInstance);
+  if (home === null) return true;
+  if (home === normalizeOriginForCompare(getOurOrigin()) || home === normalizeOriginForCompare(peer.origin)) return true;
+  return hasAppliedEvent(named.homeInstance, dmDeleteKey(named.messageId));
 }
 
 async function applyPulledEvent(peer: PeerRow, event: FederationRelayEvent): Promise<PulledOutcome> {
   const { processRelayEvents } = await import('../routes/federation.js');
   const result = await processRelayEvents([event], peer.origin, peer.origin, getDb(), { delivery: 'catch_up' });
   const rejection = result.rejected.find(r => r.messageId === event.messageId) ?? result.rejected[0];
-  if (!rejection) return 'applied';
-  const outcome = classifyRejection(event.eventType, rejection.reason);
-  if (outcome === 'retry') return { retry: rejection.reason };
-  return outcome;
+  if (!rejection) return { kind: 'applied' };
+  const outcome = classifyPulledRejection(event.eventType, rejection.reason);
+  if (outcome === 'taken') return { kind: 'taken' };
+  if (outcome === 'refused') return { kind: 'refused', reason: rejection.reason, why: 'refused' };
+  if (rejection.reason === 'unknown_message' && messageCannotArrive(peer, event)) {
+    return { kind: 'refused', reason: rejection.reason, why: 'its message was refused, deleted or never served' };
+  }
+  return { kind: 'retry', reason: rejection.reason };
 }
 
 function hasKeptEvents(peerId: string, subjectKey: string): boolean {
@@ -271,7 +354,8 @@ function keepEvent(
 
 function logDropped(peer: PeerRow, event: FederationRelayEvent, reason: string, why: string): void {
   console.warn(
-    `[federation-sync] Dropped ${event.eventType} ${event.messageId} (ts=${event.timestamp}) from ${peer.origin}: ${why} (${reason})`,
+    '[federation-sync] Dropped %s %s (ts=%s) from %s: %s (%s)',
+    event.eventType, event.messageId, event.timestamp, peer.origin, why, reason,
   );
 }
 
@@ -282,22 +366,28 @@ async function handlePulledEvent(
   stats: SyncPeerResult,
 ): Promise<void> {
   const now = Date.now();
-  const contextKey = syncContextKey(context, event);
-  if (hasKeptEvents(peer.id, contextKey)) {
-    keepEvent(peer.id, context, contextKey, event, 'held_behind_earlier_event', now, now);
+  const subjectKey = syncSubjectKey(event);
+  if (hasKeptEvents(peer.id, subjectKey)) {
+    keepEvent(peer.id, context, subjectKey, event, 'held_behind_earlier_event', now, now);
     stats.deferred += 1;
     return;
   }
   const outcome = await applyPulledEvent(peer, event);
-  if (outcome === 'applied') {
-    stats.applied += 1;
-  } else if (outcome === 'taken') {
-    stats.duplicates += 1;
-  } else if (outcome === 'refused') {
-    stats.dropped += 1;
-  } else {
-    keepEvent(peer.id, context, contextKey, event, outcome.retry, now + SYNC_RETRY_BACKOFF_MS[0]!, now);
-    stats.deferred += 1;
+  switch (outcome.kind) {
+    case 'applied':
+      stats.applied += 1;
+      break;
+    case 'taken':
+      stats.duplicates += 1;
+      break;
+    case 'refused':
+      logDropped(peer, event, outcome.reason, outcome.why);
+      stats.dropped += 1;
+      break;
+    case 'retry':
+      keepEvent(peer.id, context, subjectKey, event, outcome.reason, now + SYNC_RETRY_BACKOFF_MS[0]!, now);
+      stats.deferred += 1;
+      break;
   }
 }
 
@@ -449,25 +539,23 @@ function retryBackoffMs(attempts: number): number {
 
 async function retryPeerEvents(peer: PeerRow, now: number): Promise<number> {
   const db = getDb();
+  // The peer's order across subjects, so an event a later one needs (the
+  // member_add that bootstraps a group before a message in it) goes first.
   const rows = db.select()
     .from(schema.federationSyncRetry)
     .where(eq(schema.federationSyncRetry.peerId, peer.id))
-    .orderBy(
-      asc(schema.federationSyncRetry.subjectKey),
-      asc(schema.federationSyncRetry.eventTs),
-      asc(schema.federationSyncRetry.id),
-    )
+    .orderBy(asc(schema.federationSyncRetry.eventTs), asc(schema.federationSyncRetry.id))
     .all();
 
   let resolved = 0;
-  let blockedKey: string | null = null;
-  let headKey: string | null = null;
+  const seen = new Set<string>();
+  const blocked = new Set<string>();
   for (const row of rows) {
-    if (row.subjectKey === blockedKey) continue;
-    const isHead = row.subjectKey !== headKey;
-    headKey = row.subjectKey;
+    if (blocked.has(row.subjectKey)) continue;
+    const isHead = !seen.has(row.subjectKey);
+    seen.add(row.subjectKey);
     if (isHead && row.nextRetryAt > now) {
-      blockedKey = row.subjectKey;
+      blocked.add(row.subjectKey);
       continue;
     }
 
@@ -476,7 +564,7 @@ async function retryPeerEvents(peer: PeerRow, now: number): Promise<number> {
       event = JSON.parse(row.eventJson) as FederationRelayEvent;
     } catch {
       db.delete(schema.federationSyncRetry).where(eq(schema.federationSyncRetry.id, row.id)).run();
-      console.warn(`[federation-sync] Dropped unreadable kept event ${row.id} from ${peer.origin}`);
+      console.warn('[federation-sync] Dropped unreadable kept event %s from %s', row.id, peer.origin);
       resolved += 1;
       continue;
     }
@@ -489,25 +577,25 @@ async function retryPeerEvents(peer: PeerRow, now: number): Promise<number> {
     }
 
     const outcome = await applyPulledEvent(peer, event);
-    if (typeof outcome === 'object') {
+    if (outcome.kind === 'retry') {
       const attempts = row.attempts + 1;
       db.update(schema.federationSyncRetry)
-        .set({ attempts, lastReason: outcome.retry, nextRetryAt: now + retryBackoffMs(attempts) })
+        .set({ attempts, lastReason: outcome.reason, nextRetryAt: now + retryBackoffMs(attempts) })
         .where(eq(schema.federationSyncRetry.id, row.id))
         .run();
-      blockedKey = row.subjectKey;
+      blocked.add(row.subjectKey);
       continue;
     }
     db.delete(schema.federationSyncRetry).where(eq(schema.federationSyncRetry.id, row.id)).run();
-    if (outcome === 'refused') logDropped(peer, event, row.lastReason, 'refused on retry');
+    if (outcome.kind === 'refused') logDropped(peer, event, outcome.reason, `${outcome.why} on retry`);
     resolved += 1;
   }
   return resolved;
 }
 
 /**
- * Replay every kept event that is due, per peer, per unit, in the peer's
- * order; a unit stops at its first event that is still refused for now.
+ * Replay every kept event that is due, per peer, in the peer's order; a
+ * subject stops at its first event that is still refused for now.
  * Returns how many kept events were resolved (applied, already held, dropped).
  */
 export async function processSyncRetryTick(now: number = Date.now()): Promise<number> {

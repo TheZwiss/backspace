@@ -582,22 +582,23 @@ PK: (peerId, contextType)
 | lastPulledAt | integer | | Local time of the last completed pass |
 
 ### federation_sync_retry
-Pulled events kept for a later retry: refused for a reason that can pass (`classifyRejection` → `retry`), or held behind one in the same unit.
+Pulled events kept for a later retry: refused for a reason that can pass (federation.md "Pull sync", "Outcomes"), or held behind one of the same subject.
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
 | id | text PK | | snowflake; tiebreak for order |
 | peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
 | contextType | text NOT NULL | | dm/friend/profile |
-| contextKey | text NOT NULL | | Ordering unit (`syncContextKey`): conversation, friend pair, or profile |
+| subjectKey | text NOT NULL | | The subject the event changes (`syncSubjectKey`): a message, a group member, a friend pair, ... |
 | eventType | text NOT NULL | | |
 | messageId | text NOT NULL | | The event's `messageId` |
 | eventTs | integer NOT NULL | | The event's `timestamp` (peer clock); replay order |
+| eventHash | text NOT NULL | | sha256 of the event's canonical JSON (keys sorted): one row per distinct event |
 | eventJson | text NOT NULL | | The whole event, replayed locally |
 | lastReason | text NOT NULL | | Last refusal, or `held_behind_earlier_event` |
 | attempts | integer NOT NULL | 1 | |
 | firstFailedAt | integer NOT NULL | | Dropped 7 days after this |
-| nextRetryAt | integer NOT NULL | | When the unit's head is next tried |
-Indexes: `idx_sync_retry_event` UNIQUE (peerId, eventType, messageId, eventTs); `idx_sync_retry_order` (peerId, contextKey, eventTs)
+| nextRetryAt | integer NOT NULL | | When the subject's first row is next tried |
+Indexes: `idx_sync_retry_event` UNIQUE (peerId, eventHash); `idx_sync_retry_subject` (peerId, subjectKey); `idx_sync_retry_order` (peerId, eventTs)
 
 ### federation_applied_events
 Ledger of relay events applied here, for events a processor cannot recognize as applied from state alone (federation.md "Receiver guarantees").

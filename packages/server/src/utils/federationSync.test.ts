@@ -252,25 +252,26 @@ describe('syncPeerMutationLog: cursors', () => {
 });
 
 describe('syncPeerMutationLog: refused events', () => {
-  it('keeps an event refused for now, moves the cursor past it, and holds its conversation behind it', async () => {
+  it('keeps an event refused for now, moves the cursor past it, and holds only its own subject behind it', async () => {
     const { syncPeerMutationLog } = await import('./federationSync.js');
     seedPeer();
     processRelayEvents.mockImplementation(async ([e]) => (
-      e!.messageId === 'm1'
+      e!.messageId === 'm1' && e!.eventType === 'create'
         ? { accepted: [], rejected: [{ messageId: 'm1', reason: 'channel_not_found' }], undeliverable: [] }
         : { accepted: [e!.messageId], rejected: [], undeliverable: [] }
     ));
-    serve({ dm: [{ events: [event('m1', 100), event('m2', 200), event('other', 250, 'ch-2')], checkpoint: 250, checkpointId: 'r3' }] });
+    const editOfM1: FederationRelayEvent = { ...event('m1', 150), eventType: 'update' };
+    serve({ dm: [{ events: [event('m1', 100), editOfM1, event('m2', 200), event('other', 250, 'ch-2')], checkpoint: 250, checkpointId: 'r3' }] });
     const result = await syncPeerMutationLog(PEER, 'periodic', ['dm']);
 
-    expect(result).toMatchObject({ applied: 1, deferred: 2, dropped: 0 });
+    expect(result).toMatchObject({ applied: 2, deferred: 2, dropped: 0 });
     expect(cursor('dm')).toEqual({ cursorTs: 250, cursorId: 'r3' });
     expect(keptEvents()).toEqual([
       { messageId: 'm1', lastReason: 'channel_not_found', attempts: 1 },
-      { messageId: 'm2', lastReason: 'held_behind_earlier_event', attempts: 1 },
+      { messageId: 'm1', lastReason: 'held_behind_earlier_event', attempts: 1 },
     ]);
-    // m2 was not applied ahead of m1; the other conversation was not held.
-    expect(processRelayEvents.mock.calls.map(c => c[0][0]!.messageId)).toEqual(['m1', 'other']);
+    // The edit of m1 waited for m1; m2 in the same conversation did not.
+    expect(processRelayEvents.mock.calls.map(c => c[0][0]!.messageId)).toEqual(['m1', 'm2', 'other']);
   });
 
   it('counts a duplicate as held and drops a refusal for good', async () => {
@@ -334,12 +335,15 @@ describe('processSyncRetryTick', () => {
     processRelayEvents.mockImplementation(async ([e]) => ({
       accepted: [], rejected: [{ messageId: e!.messageId, reason: 'participant_not_found' }], undeliverable: [],
     }));
-    serve({ dm: [{ events: [event('m1', 100), event('m2', 200)], checkpoint: 200 }] });
+    // A create and an edit of one message: one subject.
+    serve({ dm: [{ events: [event('m1', 100), { ...event('m1', 200), eventType: 'update' }], checkpoint: 200 }] });
     await syncPeerMutationLog(PEER, 'periodic', ['dm']);
-    expect(keptEvents().map(k => k.messageId)).toEqual(['m1', 'm2']);
+    expect(keptEvents().map(k => k.lastReason)).toEqual(['participant_not_found', 'held_behind_earlier_event']);
   }
 
-  it('replays kept events in order once due, and a unit stops at its first event still refused', async () => {
+  const replayed = (): string[] => processRelayEvents.mock.calls.map(c => c[0][0]!.eventType);
+
+  it('replays kept events in order once due, and a subject stops at its first event still refused', async () => {
     const { processSyncRetryTick, SYNC_RETRY_BACKOFF_MS } = await import('./federationSync.js');
     seedPeer();
     await keepTwo();
@@ -353,14 +357,32 @@ describe('processSyncRetryTick', () => {
       accepted: [], rejected: [{ messageId: e!.messageId, reason: 'participant_not_found' }], undeliverable: [],
     }));
     expect(await processSyncRetryTick(later)).toBe(0);
-    expect(processRelayEvents.mock.calls.map(c => c[0][0]!.messageId)).toEqual(['m1']);
+    expect(replayed()).toEqual(['create']);
     expect(keptEvents()[0]).toMatchObject({ messageId: 'm1', attempts: 2 });
 
     processRelayEvents.mockReset();
     processRelayEvents.mockImplementation(async (events) => ({ accepted: events.map(e => e.messageId), rejected: [], undeliverable: [] }));
     expect(await processSyncRetryTick(later + SYNC_RETRY_BACKOFF_MS[1]! + 1)).toBe(2);
-    expect(processRelayEvents.mock.calls.map(c => c[0][0]!.messageId)).toEqual(['m1', 'm2']);
+    expect(replayed()).toEqual(['create', 'update']);
     expect(keptEvents()).toEqual([]);
+  });
+
+  it('replays kept events of different subjects in the peer\'s order', async () => {
+    const { syncPeerMutationLog, processSyncRetryTick, SYNC_RETRY_BACKOFF_MS } = await import('./federationSync.js');
+    seedPeer();
+    processRelayEvents.mockImplementation(async ([e]) => ({
+      accepted: [], rejected: [{ messageId: e!.messageId, reason: 'channel_not_found' }], undeliverable: [],
+    }));
+    const memberAdd: FederationRelayEvent = {
+      eventType: 'member_add', dmChannelId: 'ch-1', federatedId: 'fed-1', messageId: 'add-1', encryptionVersion: 0, timestamp: 200,
+      membership: { user: { homeUserId: 'dave', homeInstance: 'https://local.example' } },
+    };
+    serve({ dm: [{ events: [event('m1', 100), memberAdd], checkpoint: 200 }] });
+    await syncPeerMutationLog(PEER, 'periodic', ['dm']);
+    processRelayEvents.mockReset();
+    processRelayEvents.mockImplementation(async (events) => ({ accepted: events.map(e => e.messageId), rejected: [], undeliverable: [] }));
+    expect(await processSyncRetryTick(Date.now() + SYNC_RETRY_BACKOFF_MS[0]! + 1)).toBe(2);
+    expect(replayed()).toEqual(['create', 'member_add']);
   });
 
   it('drops a kept event after seven days with a warning, and moves on to the next', async () => {
@@ -374,11 +396,11 @@ describe('processSyncRetryTick', () => {
     const firstFailed = testDb.select().from(schema.federationSyncRetry).all()[0]!.firstFailedAt;
     testDb.update(schema.federationSyncRetry)
       .set({ firstFailedAt: firstFailed - SYNC_RETRY_MAX_AGE_MS - 1 })
-      .where(eq(schema.federationSyncRetry.messageId, 'm1'))
+      .where(eq(schema.federationSyncRetry.eventType, 'create'))
       .run();
     expect(await processSyncRetryTick(Date.now() + 120_000)).toBe(2);
-    expect(processRelayEvents.mock.calls.map(c => c[0][0]!.messageId)).toEqual(['m2']);
-    expect(warn.mock.calls.some(c => String(c[0]).includes('Dropped create m1'))).toBe(true);
+    expect(replayed()).toEqual(['update']);
+    expect(warn.mock.calls.some(c => c[1] === 'create' && c[2] === 'm1' && String(c[5]).includes('7 days'))).toBe(true);
   });
 
   it('drops kept events without replaying them when the peer is a new incarnation', async () => {
@@ -409,14 +431,80 @@ describe('processSyncRetryTick', () => {
   });
 });
 
-describe('syncContextKey', () => {
-  it('orders DM events by conversation, friend events by pair, profiles by user', async () => {
-    const { syncContextKey } = await import('./federationSync.js');
-    expect(syncContextKey('dm', event('m', 1, 'ch-9'))).toBe('dm:ch-9');
+describe('syncSubjectKey', () => {
+  it('keys events by the message, the group member, or the friend pair they change', async () => {
+    const { syncSubjectKey } = await import('./federationSync.js');
+    const reaction: FederationRelayEvent = { ...event('m', 2, 'ch-9'), eventType: 'reaction_add' };
+    expect(syncSubjectKey(event('m', 1, 'ch-9'))).toBe(syncSubjectKey(reaction));
+    expect(syncSubjectKey(event('m', 1, 'ch-9'))).not.toBe(syncSubjectKey(event('n', 1, 'ch-9')));
+
+    const member = (type: 'member_add' | 'member_remove', user: string, host: string): FederationRelayEvent => ({
+      eventType: type, federatedId: 'fed-1', messageId: `${type}-${user}`, encryptionVersion: 0, timestamp: 1,
+      membership: { user: { homeUserId: user, homeInstance: host } },
+    });
+    expect(syncSubjectKey(member('member_add', 'dave', 'https://b.example'))).toBe(syncSubjectKey(member('member_remove', 'dave', 'b.example')));
+    expect(syncSubjectKey(member('member_add', 'dave', 'https://b.example'))).not.toBe(syncSubjectKey(member('member_add', 'erin', 'https://b.example')));
+
     const friend = (from: string, to: string): FederationRelayEvent => ({
       eventType: 'friend_add', messageId: 'x', encryptionVersion: 0, timestamp: 1,
       friendship: { from: { homeUserId: from, homeInstance: 'https://a.example' }, to: { homeUserId: to, homeInstance: 'a.example' }, createdAt: 1 },
     });
-    expect(syncContextKey('friend', friend('u1', 'u2'))).toBe(syncContextKey('friend', friend('u2', 'u1')));
+    expect(syncSubjectKey(friend('u1', 'u2'))).toBe(syncSubjectKey(friend('u2', 'u1')));
+  });
+});
+
+describe('syncPeerMutationLog: unknown_message for an edit or a reaction', () => {
+  const THIRD = 'https://third.example';
+  function edit(messageId: string, home: string, at: number): FederationRelayEvent {
+    return {
+      eventType: 'update', dmChannelId: 'ch-1', messageId, encryptionVersion: 0, timestamp: at,
+      target: {
+        federatedId: 'fed-1',
+        message: { messageId, messageHomeInstance: home },
+        actor: { homeUserId: 'author', homeInstance: home },
+      },
+    };
+  }
+
+  beforeEach(() => {
+    processRelayEvents.mockImplementation(async ([e]) => ({
+      accepted: [], rejected: [{ messageId: e!.messageId, reason: 'unknown_message' }], undeliverable: [],
+    }));
+  });
+
+  it('drops an edit of the peer\'s own message: its create was refused or is gone', async () => {
+    const { syncPeerMutationLog } = await import('./federationSync.js');
+    seedPeer();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    serve({ dm: [{ events: [edit('m1', PEER_ORIGIN, 100), { ...edit('m2', PEER_ORIGIN, 200), target: undefined }], checkpoint: 200 }] });
+    const result = await syncPeerMutationLog(PEER, 'periodic', ['dm']);
+    expect(result).toMatchObject({ dropped: 2, deferred: 0 });
+    expect(keptEvents()).toEqual([]);
+    expect(warn.mock.calls.some(c => String(c[1]) === 'update' && String(c[5]).includes('never served'))).toBe(true);
+  });
+
+  it('drops a reaction on a message homed here', async () => {
+    const { syncPeerMutationLog } = await import('./federationSync.js');
+    seedPeer();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const reaction: FederationRelayEvent = {
+      eventType: 'reaction_add', dmChannelId: 'ch-1', messageId: 'copy-1', encryptionVersion: 0, timestamp: 100,
+      reaction: { messageId: 'mine', messageHomeInstance: 'https://local.example', userId: 'u', homeUserId: 'u', homeInstance: PEER_ORIGIN, emoji: '👍', createdAt: 100 },
+    };
+    serve({ dm: [{ events: [reaction], checkpoint: 100 }] });
+    expect(await syncPeerMutationLog(PEER, 'periodic', ['dm'])).toMatchObject({ dropped: 1, deferred: 0 });
+  });
+
+  it('keeps an edit of a message homed on a third instance, until that instance\'s delete of it is known', async () => {
+    const { syncPeerMutationLog, processSyncRetryTick, SYNC_RETRY_BACKOFF_MS } = await import('./federationSync.js');
+    seedPeer();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    serve({ dm: [{ events: [edit('c1', THIRD, 100)], checkpoint: 100 }] });
+    expect(await syncPeerMutationLog(PEER, 'periodic', ['dm'])).toMatchObject({ dropped: 0, deferred: 1 });
+    expect(keptEvents()).toEqual([{ messageId: 'c1', lastReason: 'unknown_message', attempts: 1 }]);
+
+    testDb.insert(schema.federationAppliedEvents).values({ sourceOrigin: 'third.example', eventKey: 'dm_delete:c1', appliedAt: Date.now() }).run();
+    expect(await processSyncRetryTick(Date.now() + SYNC_RETRY_BACKOFF_MS[0]! + 1)).toBe(1);
+    expect(keptEvents()).toEqual([]);
   });
 });

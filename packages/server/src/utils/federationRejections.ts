@@ -15,8 +15,14 @@
  *   sender retries on its backoff until the row expires; the pull keeps it in
  *   `federation_sync_retry`.
  *
- * A reason this build does not know (a newer receiver's) is `retry`: waiting
- * is safe, dropping or rolling back on a guess is not.
+ * Every reason this build's processors give is listed below as refused or
+ * retry. What an unlisted reason means depends on who gave it:
+ * - the outbox reads a peer's answer, and an unlisted reason is a newer
+ *   receiver's: `retry` (`classifyRejection`), since waiting until the row
+ *   expires is safe and dropping or rolling back on a guess is not;
+ * - the pull reads this instance's own answer, so an unlisted reason is one
+ *   this build forgot to classify: `refused` with a warning
+ *   (`classifyPulledRejection`), so it cannot park events for days.
  */
 export type RejectionOutcome = 'taken' | 'refused' | 'retry';
 
@@ -61,6 +67,28 @@ const REFUSED_REASONS = new Set<string>([
 ]);
 
 /**
+ * Reasons that wait for something that can still arrive. A pulled event kept
+ * for one of them is dropped after `SYNC_RETRY_MAX_AGE_MS`
+ * (utils/federationSync.ts); the outbox retries it until the row expires.
+ */
+const RETRY_REASONS = new Set<string>([
+  'channel_not_found',     // this instance's copy of the group is not bootstrapped yet (member_add)
+  'participant_not_found', // a participant or member is not known here yet
+  'author_not_found',      // the message author is not known here yet
+  'user_not_found',        // the reacting or reading user is not known here yet
+  'sender_not_found',      // the friend request's sender is not known here yet
+  'actor_not_found',       // the metadata actor is not known here yet
+  'attribution_unproven',  // the proof comes from the user's client
+  'unknown_message',       // the message is not here yet; see UNKNOWN_MESSAGE_TAKEN, and the pull's own rule in federationSync.ts
+  'unauthorized_source',   // the sender is not the conversation's owner instance here yet; a transfer may arrive
+  'max_members_exceeded',  // a removal may free a place
+  'processing_error',      // the processor threw; a transient failure passes
+]);
+
+/** Every reason this build classifies, for the test that keeps the lists complete. */
+export const CLASSIFIED_REASONS: ReadonlySet<string> = new Set(['duplicate', ...REFUSED_REASONS, ...RETRY_REASONS]);
+
+/**
  * Event types whose `unknown_message` answer means the effect is already in
  * place: a delete of a message the receiver does not hold, or a reaction
  * removed from one. Receivers of this build accept those outright; an older
@@ -70,11 +98,25 @@ const REFUSED_REASONS = new Set<string>([
  */
 const UNKNOWN_MESSAGE_TAKEN = new Set<string>(['delete', 'reaction_remove']);
 
-export function classifyRejection(eventType: string | null, reason: string): RejectionOutcome {
+function classifyListed(eventType: string | null, reason: string): RejectionOutcome | null {
   if (reason === 'duplicate') return 'taken';
   if (reason === 'unknown_message' && eventType !== null && UNKNOWN_MESSAGE_TAKEN.has(eventType)) return 'taken';
   if (REFUSED_REASONS.has(reason)) return 'refused';
-  return 'retry';
+  if (RETRY_REASONS.has(reason)) return 'retry';
+  return null;
+}
+
+/** A peer's answer to an event this instance sent (the outbox); an unlisted reason is `retry`. */
+export function classifyRejection(eventType: string | null, reason: string): RejectionOutcome {
+  return classifyListed(eventType, reason) ?? 'retry';
+}
+
+/** This instance's own answer to an event it pulled; an unlisted reason is `refused`. */
+export function classifyPulledRejection(eventType: string | null, reason: string): RejectionOutcome {
+  const outcome = classifyListed(eventType, reason);
+  if (outcome !== null) return outcome;
+  console.warn('[federation-sync] Unclassified rejection reason %s for %s; dropping the pulled event', reason, eventType ?? 'unknown');
+  return 'refused';
 }
 
 /** Whether the sender stops delivering the event (`taken` or `refused`). */
