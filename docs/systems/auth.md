@@ -100,11 +100,13 @@ There is **no token blocklist**. The only revocation mechanism is the `passwordC
 | Field | Rules |
 |-------|-------|
 | `username` | Required string. Trimmed, lowercased. |
-| `password` | Required string. Minimum 8 characters. |
+| `password` | Required string. At least `PASSWORD_MIN_LENGTH` (8) characters, from `packages/shared/src/constants.ts`; shorter is `400 password_too_short` with `details.min`. |
 | `displayName` | Optional. Trimmed or null. |
 | `avatarColor` | Optional. Must be in `AVATAR_COLORS` array, else random. |
 | `homeInstance` | Optional (federation only). Max 253 chars, alphanumeric + `.` `-` `_`. |
 | `homeUserId` | Optional (federation only). Stored if `homeInstance` is present. |
+
+**Password minimum, one source:** `PASSWORD_MIN_LENGTH` in `packages/shared/src/constants.ts` is the only definition. The register route (`routes/auth.ts`), the change-password route (`routes/users.ts`), the registration page (`RegisterPage.tsx`, step 1) and the Account settings panel (`AccountPanel.tsx`, check and placeholder) all import it, so the client can never accept a password at one step that the server then refuses (#397). Admin-issued temporary passwords (16 chars) and federation credential secrets are generated well above it.
 
 ### Username Validation (Two Paths)
 
@@ -321,7 +323,7 @@ Detach is sovereign but not permanent: the legitimate owner who re-created their
 | Detached (`homeInstance` set, `federationHomeOrphaned === 1`) | Required | Follows the **local** rule — the home is gone, so nothing external verified the change; the local hash is the sole authority (detach design §4.4) |
 
 **Steps:**
-1. Validate `newPassword` is string, min 8 chars
+1. Validate `newPassword` is a string of at least `PASSWORD_MIN_LENGTH` (8) characters, else `400 password_too_short` with `details.min`
 2. Load user from DB
 3. If local **or detached** (`!homeInstance || federationHomeOrphaned === 1`): require and verify `currentPassword`
 4. Hash new password
@@ -606,7 +608,7 @@ completes (`authStore.deleteAccount` has already reset by then).
 
 **Step 1 -- Credentials:**
 - Fields: username, password, confirm password
-- Client-side validation: 3-32 chars, `/^[a-z0-9_]+$/`, passwords match, min 6 chars
+- Client-side validation: 3-32 chars, `/^[a-z0-9_]+$/`, passwords match, at least `PASSWORD_MIN_LENGTH` chars
 - Debounced username availability check (500ms delay, abort on new input)
 - Continue button disabled if username taken or invalid
 

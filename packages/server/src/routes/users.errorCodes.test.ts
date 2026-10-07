@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signJwt, hashPassword } from '../utils/auth.js';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 
 setWorkerId(25);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +168,24 @@ describe('user routes send error codes', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('federation_credential_remote_only');
+  });
+
+  it('POST change-password under the shared minimum is password_too_short with the minimum', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/users/@me/change-password', headers: auth(),
+      payload: { currentPassword: LOCAL_PASSWORD, newPassword: 'a'.repeat(PASSWORD_MIN_LENGTH - 1) },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'password_too_short', details: { min: PASSWORD_MIN_LENGTH } });
+  });
+
+  it('POST change-password accepts a new password of exactly the shared minimum', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/users/@me/change-password', headers: auth(),
+      payload: { currentPassword: LOCAL_PASSWORD, newPassword: 'a'.repeat(PASSWORD_MIN_LENGTH) },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.json().token).toBe('string');
   });
 
   it('PATCH @me with an avatar that is neither an upload nor a URL is avatar_url_invalid', async () => {

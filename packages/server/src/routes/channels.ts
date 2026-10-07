@@ -17,6 +17,7 @@ import { connectionManager } from '../ws/handler.js';
 import { checkVoicePermissions } from '../ws/events.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
+import { checkChannelTopic } from '../utils/channelTopic.js';
 import { canActOnMemberInSpace, canManageRoleInSpace } from '../utils/roleHierarchy.js';
 import type {
   CreateChannelRequest,
@@ -267,6 +268,15 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'channel_type_invalid');
     }
 
+    let storedTopic: string | null = null;
+    if (topic !== undefined) {
+      const checked = checkChannelTopic(topic);
+      if (!checked.ok) {
+        return sendError(reply, 400, checked.code, checked.details);
+      }
+      storedTopic = checked.topic;
+    }
+
     // Validate categoryId if provided
     let validCategoryId: string | null = null;
     if (categoryId) {
@@ -295,7 +305,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       spaceId: id,
       name: trimmedName,
       type,
-      topic: topic?.trim() || null,
+      topic: storedTopic,
       position: maxPosition + 1,
       categoryId: validCategoryId,
       createdAt: now,
@@ -366,7 +376,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (topic !== undefined) {
-      updates.topic = topic.trim() || null;
+      const checked = checkChannelTopic(topic);
+      if (!checked.ok) {
+        return sendError(reply, 400, checked.code, checked.details);
+      }
+      updates.topic = checked.topic;
     }
 
     if (position !== undefined) {

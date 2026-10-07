@@ -1,0 +1,434 @@
+{
+  "interfaceScale": {
+    "label": "Escala da interface",
+    "description": "Redimensiona textos, botões e painéis. Salva neste navegador ou app, neste dispositivo.",
+    "reset": "Redefinir para 100%"
+  },
+  "voice": {
+    "input": {
+      "title": "Dispositivo de entrada",
+      "checkingAccess": "Verificando acesso ao microfone…",
+      "accessDenied": {
+        "title": "Acesso ao microfone negado",
+        "description": "Conceda permissão de microfone para escolher um dispositivo de entrada.",
+        "retry": "Tentar novamente"
+      },
+      "permissionPrompt": {
+        "description": "É necessária permissão de microfone para listar e escolher um dispositivo de entrada.",
+        "enable": "Ativar acesso ao microfone"
+      },
+      "device": {
+        "systemDefault": "Padrão do sistema",
+        "currentlyUsing": "Em uso: {{label}}",
+        "none": "Nenhum microfone detectado."
+      },
+      "volume": {
+        "label": "Volume de entrada"
+      },
+      "meter": {
+        "hint": "O medidor de nível é ativado quando você entra em um canal de voz."
+      }
+    },
+    "output": {
+      "title": "Dispositivo de saída",
+      "checkingAccess": "Verificando acesso ao áudio…",
+      "device": {
+        "systemDefault": "Padrão do sistema",
+        "unsupported": "Este navegador não permite escolher um dispositivo de saída. O áudio é reproduzido no padrão do sistema."
+      },
+      "permissionPrompt": {
+        "description": "Conceda permissão de microfone para listar os dispositivos de saída (os navegadores só mostram os nomes dos dispositivos de saída com acesso ao microfone).",
+        "enable": "Ativar acesso ao áudio"
+      },
+      "volume": {
+        "label": "Volume de saída"
+      },
+      "testSound": "Reproduzir som de teste"
+    },
+    "video": {
+      "title": "Vídeo",
+      "checkingAccess": "Verificando acesso à câmera…",
+      "accessDenied": {
+        "title": "Acesso à câmera negado",
+        "description": "Conceda permissão de câmera para escolher uma câmera.",
+        "retry": "Tentar novamente"
+      },
+      "blocked": {
+        "browser": "Câmera bloqueada no nível do navegador. Clique no ícone de câmera na barra de endereço do navegador, redefina a permissão e depois clique em Tentar novamente.",
+        "mac": "Conceda acesso à câmera em Ajustes do Sistema → Privacidade e Segurança → Câmera e reinicie o app.",
+        "windows": "Conceda acesso à câmera em Configurações → Privacidade e segurança → Câmera e reinicie o app.",
+        "other": "A permissão de câmera foi negada. Redefina-a no aviso do navegador/Chromium e tente novamente."
+      },
+      "permissionPrompt": {
+        "description": "É necessária permissão de câmera para escolher uma câmera e ver a pré-visualização.",
+        "enable": "Ativar pré-visualização da câmera"
+      },
+      "camera": {
+        "label": "Câmera",
+        "auto": "Automático (padrão do sistema)",
+        "fallbackName": "Câmera {{number}}",
+        "detectedFallback": "câmera detectada",
+        "currentlyUsing": "Em uso: {{label}}",
+        "none": "Nenhuma câmera detectada."
+      },
+      "preview": {
+        "testAria": "Testar câmera",
+        "testHint": "Clique para testar a câmera",
+        "stop": "Parar pré-visualização",
+        "retry": "Tentar novamente"
+      },
+      "previewError": {
+        "inUse": "A câmera está sendo usada por outro aplicativo.",
+        "unavailable": "A câmera selecionada não está disponível.",
+        "notFound": "Nenhuma câmera detectada.",
+        "generic": "Não foi possível iniciar a pré-visualização da câmera."
+      }
+    },
+    "title": "Voz e vídeo",
+    "volume": {
+      "sectionTitle": "Volume",
+      "soundEffects": {
+        "label": "Volume dos efeitos sonoros"
+      },
+      "messageSound": {
+        "label": "Tocar som a cada mensagem",
+        "description": "Desligado (padrão): somente DMs e mensagens que mencionam você. Ligado: todos os canais."
+      }
+    },
+    "pip": {
+      "sectionTitle": "Janela flutuante",
+      "showOnSwitch": {
+        "label": "Mostrar janela flutuante durante chamadas",
+        "description": "Enquanto você estiver em um canal de voz ou chamada e olhar para outra coisa, uma pequena janela mantém a chamada à vista."
+      }
+    },
+    "processing": {
+      "sectionTitle": "Processamento de voz",
+      "noiseSuppression": {
+        "label": "Supressão de ruído com IA",
+        "description": "Remoção de ruído baseada em aprendizado de máquina (RNNoise). Filtra teclado, ventiladores e ruído de fundo."
+      },
+      "echoCancellation": {
+        "label": "Cancelamento de eco",
+        "description": "Cancela o eco dos seus alto-falantes que volta para o microfone. Sempre ativado em canais de voz e chamadas."
+      },
+      "autoGain": {
+        "label": "Controle automático de ganho",
+        "description": "Ajusta automaticamente o volume do microfone. Pode causar redução do volume da voz durante transmissões."
+      }
+    }
+  },
+  "nav": {
+    "userSettings": "Configurações do usuário",
+    "appSettings": "Configurações do app",
+    "administration": "Administração",
+    "tabs": {
+      "account": "Conta",
+      "appearance": "Aparência",
+      "voice": "Voz e vídeo",
+      "privacy": "Privacidade",
+      "connections": "Conexões",
+      "keybinds": "Atalhos",
+      "desktop": "Desktop",
+      "instance": "Instância"
+    },
+    "logOut": "Sair",
+    "backToMenu": "Voltar ao menu de configurações"
+  },
+  "appearance": {
+    "title": "Aparência"
+  },
+  "account": {
+    "title": "Minha conta",
+    "detached": {
+      "notice": "Esta conta está desvinculada da instância de origem.",
+      "explanation": "{{homeInstance}} foi redefinida ou não está mais disponível, então esta conta agora funciona localmente nesta instância. Seu perfil e sua senha são gerenciados aqui.",
+      "reattachHint": "Como {{username}} em {{homeInstance}}, você pode vincular esta conta novamente. O perfil e a presença voltarão a ser sincronizados a partir de lá.",
+      "reattachButton": "Revincular a {{homeInstance}}",
+      "reattachConfirm": "Confirmar revinculação como {{username}}",
+      "reattaching": "Revinculando…",
+      "reattachFailed": "Falha ao revincular",
+      "reattached": "Conta revinculada com {{username}}"
+    },
+    "profile": {
+      "sectionTitle": "Personalização do perfil",
+      "avatar": {
+        "label": "Avatar",
+        "alt": "Seu avatar",
+        "change": "Alterar avatar",
+        "uploadFailed": "Falha ao enviar o avatar",
+        "cropTitle": "Recortar avatar"
+      },
+      "banner": {
+        "label": "Banner",
+        "change": "Alterar banner",
+        "uploadFailed": "Falha ao enviar o banner",
+        "cropTitle": "Recortar banner"
+      },
+      "avatarColor": {
+        "label": "Cor do avatar"
+      },
+      "bannerColor": {
+        "label": "Cor do banner",
+        "hexPlaceholder": "#hex"
+      },
+      "bio": {
+        "label": "Sobre mim",
+        "placeholder": "Conte ao mundo sobre você…",
+        "counter": "{{used}}/{{max}}"
+      }
+    },
+    "details": {
+      "sectionTitle": "Conta",
+      "status": {
+        "label": "Status",
+        "homeUnavailable": "Seu status fica guardado em {{host}}. Conecte-se a {{host}} para alterá-lo."
+      },
+      "customStatus": {
+        "label": "Status personalizado",
+        "placeholder": "O que você está fazendo?"
+      }
+    },
+    "password": {
+      "current": {
+        "label": "Senha atual",
+        "placeholder": "Digite a senha atual"
+      },
+      "new": {
+        "label": "Nova senha",
+        "placeholder": "Mínimo de {{min}} caracteres"
+      },
+      "confirm": {
+        "label": "Confirmar nova senha",
+        "placeholder": "Confirme a nova senha"
+      },
+      "show": "Mostrar senha",
+      "hide": "Ocultar senha",
+      "tooShort": "A nova senha deve ter pelo menos {{min}} caracteres",
+      "mismatch": "As senhas não coincidem",
+      "changed": "Senha alterada",
+      "changeFailed": "Falha ao alterar a senha",
+      "submit": "Alterar senha",
+      "submitting": "Alterando…"
+    },
+    "danger": {
+      "description": "Depois que você excluir sua conta, não há como voltar atrás. Suas mensagens permanecerão, mas serão atribuídas a “Usuário excluído”.",
+      "deleteButton": "Excluir conta"
+    },
+    "save": {
+      "updated": "Perfil atualizado",
+      "failed": "Falha ao atualizar o perfil"
+    },
+    "deletion": {
+      "title": "Excluir conta",
+      "warning": {
+        "headline": "Isso excluirá sua conta permanentemente.",
+        "spaces": "Todas as participações em espaços serão removidas",
+        "friends": "Todas as conexões de amizade serão removidas",
+        "dms": "Todas as participações em DMs serão removidas",
+        "messages": "Suas mensagens permanecerão, mas serão atribuídas a “Usuário excluído”"
+      },
+      "ownedSpaces": {
+        "prompt_one": "Você possui {{count}} espaço. Resolva cada um antes de continuar:",
+        "prompt_many": "Você possui {{count}} espaços. Resolva cada um antes de continuar:",
+        "prompt_other": "Você possui {{count}} espaços. Resolva cada um antes de continuar:",
+        "transfer": "Transferir",
+        "delete": "Excluir espaço",
+        "selectOwner": "Selecione o novo dono…"
+      },
+      "processing": "Processando…",
+      "confirm": {
+        "permanent": "Esta ação é permanente e não pode ser desfeita.",
+        "usernamePrompt": "Digite seu nome de usuário <username>{{username}}</username> para confirmar",
+        "passwordPlaceholder": "Digite sua senha",
+        "submit": "Excluir minha conta",
+        "deleting": "Excluindo…"
+      },
+      "federation": {
+        "removing": "Removendo sua conta das instâncias conectadas…",
+        "deleteAnyway": "Excluir conta agora"
+      },
+      "complete": {
+        "title": "Conta excluída",
+        "redirecting": "Redirecionando para o login…"
+      },
+      "errors": {
+        "usernameMismatch": "O nome de usuário não corresponde",
+        "spacesFailed": "Falha ao processar os espaços",
+        "deleteFailed": "Falha ao excluir a conta"
+      }
+    }
+  },
+  "privacy": {
+    "title": "Privacidade",
+    "discovery": {
+      "sectionTitle": "Descoberta",
+      "label": "Permitir que outras pessoas encontrem meu perfil",
+      "description": "Quando ativado, seu perfil aparece em Descobrir pessoas. Outras pessoas sempre podem adicionar você pelo nome de usuário exato."
+    },
+    "activity": {
+      "sectionTitle": "Status de atividade",
+      "label": "Compartilhar status de atividade",
+      "description": "Permite que outras pessoas vejam o que você está fazendo, como jogos que você está jogando ou músicas que está ouvindo."
+    }
+  },
+  "connections": {
+    "title": "Conexões"
+  },
+  "instance": {
+    "tabs": {
+      "general": "Geral",
+      "registration": "Cadastro",
+      "federation": "Federação",
+      "streaming": "Transmissão",
+      "storage": "Armazenamento",
+      "users": "Usuários",
+      "updates": "Atualizações",
+      "telemetry": "Oi"
+    }
+  },
+  "keybinds": {
+    "portal": {
+      "description": "No Wayland, a área de trabalho gerencia todos os atalhos do Backspace. Atribua, altere ou remova teclas nas configurações de atalhos de teclado do sistema, em Backspace. Atalhos locais do navegador/X11 não são usados aqui.",
+      "idle": "Preparando o primeiro registro de todas as ações disponíveis.",
+      "pending": "Conectando ao portal da área de trabalho. Se aparecer uma caixa de diálogo do sistema, escolha os atalhos das ações que você quer usar.",
+      "ready": "O Backspace está registrado. Abra as configurações de atalhos de teclado do sistema para alterar ou remover atribuições. A lista abaixo é somente leitura e é atualizada quando você volta ao Backspace.",
+      "unavailable": "O portal está indisponível, a permissão foi negada ou a sessão terminou. É necessário um backend do portal de Atalhos Globais. Os atalhos locais ficam desativados no Wayland.",
+      "retry": "Registrar ou reconectar atalhos",
+      "assigned": "Atalho do sistema: {{shortcut}}",
+      "notAssigned": "Nenhuma atribuição ativa no sistema"
+    },
+    "title": "Atalhos",
+    "note": {
+      "webOnly": "Os atalhos funcionam enquanto esta aba estiver em foco. Para atalhos globais que funcionam em outros apps, use o app para desktop."
+    },
+    "section": {
+      "voice": "Atalhos de voz"
+    },
+    "action": {
+      "toggleMute": "Alternar silenciamento do microfone",
+      "toggleDeafen": "Alternar ensurdecimento",
+      "pushToTalk": "Aperte para falar",
+      "toggleCamera": "Alternar câmera",
+      "toggleScreenShare": "Alternar compartilhamento de tela",
+      "disconnect": "Desconectar"
+    },
+    "row": {
+      "recordingPrompt": "Pressione uma combinação de teclas…",
+      "notBound": "Sem atalho",
+      "record": "Gravar",
+      "escToCancel": "ESC para cancelar"
+    },
+    "key": {
+      "shift": "Shift",
+      "ctrl": "Ctrl",
+      "alt": "Alt",
+      "option": "Option",
+      "cmd": "Cmd",
+      "win": "Win",
+      "space": "Espaço",
+      "middleClick": "Clique do meio",
+      "mouse4": "Mouse 4",
+      "mouse5": "Mouse 5",
+      "mouseGeneric": "Mouse {{button}}"
+    },
+    "accessibility": {
+      "title": "Permissão de acessibilidade necessária",
+      "description": "O Backspace precisa da permissão de Acessibilidade para que os atalhos globais funcionem fora do app.",
+      "grant": "Conceder permissão"
+    },
+    "hookError": {
+      "title": "Atalhos globais indisponíveis",
+      "description": "Falha ao iniciar o monitor de entrada. No Linux, seu usuário pode precisar estar no grupo <code>input</code>."
+    },
+    "conflict": {
+      "message": "<strong>{{combo}}</strong> já está atribuído a <strong>{{action}}</strong>. Substituir?",
+      "overwrite": "Substituir"
+    }
+  },
+  "desktop": {
+    "title": "Desktop",
+    "autoLaunch": {
+      "openAtLogin": {
+        "label": "Iniciar com o sistema",
+        "description": "Abrir o Backspace automaticamente quando você fizer login"
+      },
+      "startMinimized": {
+        "label": "Iniciar minimizado",
+        "description": "Iniciar oculto na bandeja do sistema em vez de mostrar a janela"
+      }
+    },
+    "updates": {
+      "appName": "Backspace Desktop",
+      "versionLabel": "Versão {{version}}",
+      "checking": "Verificando atualizações…",
+      "checkingShort": "Verificando…",
+      "checkNow": "Verificar atualizações",
+      "downloading": "Baixando {{version}}, {{percent}}%",
+      "downloadingWithRate": "Baixando {{version}}, {{percent}}% a {{rate}}",
+      "rateMegabytes": "{{value}} MB/s",
+      "rateKilobytes": "{{value}} KB/s",
+      "upToDate": "Você está na versão mais recente",
+      "available": "A versão {{version}} está disponível",
+      "readyToInstall": "A versão {{version}} está pronta para instalar",
+      "installFailed": "Não foi possível instalar a versão {{version}}",
+      "checkFailed": "A última verificação de atualizações falhou",
+      "idle": "Verificar novas versões do app para desktop",
+      "external": "As atualizações são instaladas pelo seu gerenciador de software do Flatpak",
+      "download": "Baixar",
+      "restart": "Reiniciar",
+      "manualNote": "Esta versão não consegue instalar atualizações sozinha, então as novas versões são baixadas do GitHub e substituem o app manualmente. Consulte as notas de versão para ver os passos da sua plataforma.",
+      "externalNote": "O Flatpak aplica as atualizações de forma atômica, fora do app. Use seu gerenciador de software ou o comando <code>flatpak update</code> para atualizar o Backspace."
+    },
+    "instance": {
+      "current": "Instância conectada no momento",
+      "change": "Trocar instância"
+    }
+  },
+  "desktopDownload": {
+    "title": "Desktop",
+    "intro": "Atalhos globais, início com o sistema e ícone na bandeja do sistema.",
+    "unsupported": "O app para desktop roda no Windows, Linux e macOS.",
+    "name": {
+      "windows": "Windows",
+      "mac": "macOS",
+      "linux": "Linux"
+    },
+    "tag": {
+      "windows": "Este PC",
+      "mac": "Este Mac",
+      "linux": "Esta máquina"
+    },
+    "covers": {
+      "windows": "x64 ou arm64",
+      "mac": "Funciona em Macs com Apple Silicon e Intel",
+      "linux": "AppImage ou pacote deb, x64 ou arm64"
+    },
+    "download": {
+      "windows": "Baixar para Windows",
+      "mac": "Baixar para macOS",
+      "linux": "Baixar para Linux"
+    },
+    "picker": {
+      "architecture": "Arquitetura",
+      "format": "Formato do pacote"
+    },
+    "arch": {
+      "appleSilicon": "Apple Silicon",
+      "intel": "Intel",
+      "x64": "x64",
+      "arm64": "arm64"
+    },
+    "kind": {
+      "appimage": "AppImage",
+      "deb": "deb"
+    },
+    "archGuessed": {
+      "windows": "Seu navegador não informou qual processador este PC tem, então x64 foi pré-selecionado.",
+      "mac": "Seu navegador não informou qual chip este Mac tem, então Apple Silicon foi pré-selecionado.",
+      "linux": "Seu navegador não informou qual processador esta máquina tem, então x64 foi pré-selecionado."
+    },
+    "version": "Versão {{version}}",
+    "allReleases": "Todas as versões no GitHub"
+  }
+}

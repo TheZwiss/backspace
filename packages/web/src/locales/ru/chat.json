@@ -91,7 +91,6 @@
     "sendMessage": "Отправить сообщение",
     "uploadFailed": "Не удалось загрузить {{file}}: {{reason}}",
     "uploadFailedReason": "Ошибка загрузки",
-    "sendFailed": "Не удалось отправить сообщение",
     "typing": {
       "named_one": "{{names}} печатает",
       "named_few": "{{names}} печатают",

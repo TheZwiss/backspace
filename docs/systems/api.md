@@ -159,6 +159,8 @@ DELETE /channels/:id                                     → { success }  [MANAG
 PATCH  /spaces/:id/channels/reorder  { order }           → reordered  [MANAGE_CHANNELS]
 ```
 
+`topic` is a string of at most `CHANNEL_TOPIC_MAX_LENGTH` (1024) characters after `normalizeChannelTopic`; on PATCH, `null` or a blank string clears it. A non-string answers `400 channel_topic_invalid`, a longer topic `400 channel_topic_length` with `{ max }` (spaces.md, "Create Channel").
+
 ### Channel Overrides
 ```
 GET    /channels/:id/overrides                                   → { overrides[] }  [MANAGE_ROLES]

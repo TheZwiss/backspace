@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
 import { resolveSpaceLayout, type ResolvedSpaceLayoutItem } from '../../utils/spaceLayout';
+import { spaceInviteUrl } from '../../utils/inviteParser';
 import { activeHomeNavItem } from '../../utils/homeNav';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -647,9 +648,7 @@ export function SpaceSidebar() {
         onClick: async () => {
           try {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
-            const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
-            const url = `${origin}/invite/${code}`;
-            await navigator.clipboard.writeText(url);
+            await navigator.clipboard.writeText(spaceInviteUrl((space as TaggedSpace)._instanceOrigin, code));
             useUIStore.getState().addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
           } catch {
             useUIStore.getState().addToast(t('spaces:sidebar.space.inviteFailed'), 'warning', 3000);

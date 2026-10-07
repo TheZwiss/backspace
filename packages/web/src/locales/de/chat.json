@@ -87,7 +87,6 @@
     "sendMessage": "Nachricht senden",
     "uploadFailed": "{{file}} konnte nicht hochgeladen werden: {{reason}}",
     "uploadFailedReason": "Upload fehlgeschlagen",
-    "sendFailed": "Nachricht konnte nicht gesendet werden",
     "typing": {
       "named_one": "{{names}} schreibt",
       "named_other": "{{names}} schreiben",

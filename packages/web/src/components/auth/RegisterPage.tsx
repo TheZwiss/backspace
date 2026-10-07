@@ -6,6 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { ImageCropModal } from '../ui/ImageCropModal';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
 import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@backspace/shared';
 import { api, HttpError, RateLimitError } from '../../api/client';
 import { useTransferStore } from '../../stores/transferStore';
@@ -19,7 +20,6 @@ const INVITE_URL_REGEX = /[?&]invite=([A-Za-z0-9_-]{22})/;
 
 const USERNAME_MIN_LENGTH = 3;
 const USERNAME_MAX_LENGTH = 32;
-const PASSWORD_MIN_LENGTH = 6;
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 

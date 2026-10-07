@@ -248,6 +248,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const markUnread = useChatStore((s) => s.markUnread);
 
+  // The reply belongs to the channel this message is in; its composer shows it.
+  const startReply = (): void => {
+    if (channelKey) setReplyTo(channelKey, message);
+  };
+
   const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
   const _rawMsgUser = message.user ?? null;
   const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER, messageOrigin);
@@ -385,7 +390,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       canAddReactions,
       canSendMessages,
       canManageMessages,
-      onReply: () => setReplyTo(message),
+      onReply: startReply,
       onEdit: startEditing,
       onDelete: () => deleteMessage(message.id, channelKey),
       onReaction: (emoji: string) => toggleReaction(emoji),
@@ -789,7 +794,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             </div>
           )}
           <button
-            onClick={() => setReplyTo(message)}
+            onClick={startReply}
             className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
             title={t('common:actions.reply')}
           >

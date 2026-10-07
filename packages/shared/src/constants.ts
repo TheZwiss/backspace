@@ -53,6 +53,25 @@ export function normalizeChannelName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+/**
+ * The longest channel topic (the channel's description) the server stores,
+ * counted in UTF-16 code units after `normalizeChannelTopic`, the same unit a
+ * textarea's `maxLength` counts in. Longer topics are refused, never cut.
+ */
+export const CHANNEL_TOPIC_MAX_LENGTH = 1024;
+
+/**
+ * The form a channel topic is stored in: line endings unified to `\n` and the
+ * whole value trimmed. A topic that trims to nothing is stored as `null`, which
+ * is also how a topic is cleared. The server applies it on create and update,
+ * and the client applies it to tell whether an edit changes anything and to
+ * count characters the way the server will.
+ */
+export function normalizeChannelTopic(topic: string): string | null {
+  const normalized = topic.replace(/\r\n?/g, '\n').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export const CATEGORY_NAME_MIN_LENGTH = 1;
 export const CATEGORY_NAME_MAX_LENGTH = 100;
 
@@ -67,3 +86,13 @@ export const GROUP_DM_NAME_MAX_LENGTH = 50;
 export const GROUP_DM_NAME_MIN_LENGTH = 1;
 export const GROUP_DM_ICON_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
+
+// ─── Account Constants ───────────────────────────────────────────────────────
+
+/**
+ * The fewest characters a password may have. The server refuses a shorter one
+ * at registration and password change (`password_too_short`, with this value
+ * as `details.min`), and the client checks it before sending so its message
+ * and the server's never disagree.
+ */
+export const PASSWORD_MIN_LENGTH = 8;

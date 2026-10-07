@@ -7,6 +7,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { extractDomain } from './federation.js';
 import { fetchPeerEpoch } from '../utils/federationEpoch.js';
@@ -18,7 +19,6 @@ import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 32;
 const FEDERATED_USERNAME_MAX = 100;
-const PASSWORD_MIN = 8;
 
 /**
  * The availability check answers `{ available, reason }` rather than the
@@ -113,8 +113,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    if (password.length < PASSWORD_MIN) {
-      return sendError(reply, 400, 'password_too_short', { min: PASSWORD_MIN });
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      return sendError(reply, 400, 'password_too_short', { min: PASSWORD_MIN_LENGTH });
     }
 
     const db = getDb();
