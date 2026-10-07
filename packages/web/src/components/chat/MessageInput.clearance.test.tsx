@@ -96,7 +96,7 @@ beforeEach(() => {
   useSpaceStore.getState().reset();
   useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me] }]);
   useComposerStore.setState({ states: new Map() });
-  useChatStore.setState({ messages: new Map([['dm-1', [other]]]), replyTo: null, editingMessageId: null });
+  useChatStore.setState({ messages: new Map([['dm-1', [other]]]), replyTargets: new Map(), editingMessageId: null });
 });
 
 afterEach(() => {
@@ -134,8 +134,8 @@ describe('composer clearance (issue #361)', () => {
   it('is never dropped when a reply starts or ends', () => {
     const { region, writes } = renderInRegion();
 
-    act(() => { useChatStore.getState().setReplyTo(other); });
-    act(() => { useChatStore.getState().setReplyTo(null); });
+    act(() => { useChatStore.getState().setReplyTo('dm-1', other); });
+    act(() => { useChatStore.getState().setReplyTo('dm-1', null); });
 
     expect(writes).not.toContain(null);
     expect(region.style.getPropertyValue('--composer-clearance')).toMatch(/^\d+px$/);

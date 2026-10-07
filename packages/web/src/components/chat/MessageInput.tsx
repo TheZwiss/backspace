@@ -96,7 +96,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   const sendMessage = useChatStore((s) => s.sendMessage);
   const returnToPresent = useChatStore((s) => s.returnToPresent);
-  const chatReplyTo = useChatStore((s) => s.replyTo);
+  // This channel's reply only: reply state is per channel (#390).
+  const chatReplyTo = useChatStore((s) => s.replyTargets.get(channelId) ?? null);
   const chatSetReplyTo = useChatStore((s) => s.setReplyTo);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
   const setEditingMessage = useChatStore((s) => s.setEditingMessage);
@@ -155,7 +156,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     setMentionState(null);
   }, [channelId]);
 
-  // Sync chatStore.replyTo into composerStore so reload restores it.
+  // Sync this channel's chatStore reply target into composerStore so reload restores it.
   // chatStore holds the live MessageWithUser; composerStore stores a flat snapshot.
   //
   // First-mirror-per-channel guard: chatStore is not persisted, so on a fresh
@@ -334,10 +335,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     if (stagedTransfers.length === 0) {
       // Text-only path — preserve the legacy optimistic-message flow
       try {
+        // sendMessage consumes this channel's reply, and gives it back if the
+        // send fails.
         await sendMessage(channelId, trimmed);
-        // Clear draft + reply for this channel
+        // Clear the draft for this channel
         clearComposer(channelId);
-        chatSetReplyTo(null);
         // Reset textarea height + focus
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
@@ -381,7 +383,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     // Detach the staged transfers from the composer (they're now owned by the bubble)
     // and clear the draft + reply for this channel.
     clearComposer(channelId);
-    chatSetReplyTo(null);
+    chatSetReplyTo(channelId, null);
 
     // Reset textarea height + focus
     if (textareaRef.current) {
@@ -849,7 +851,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             </span>
           </div>
           <button
-            onClick={() => chatSetReplyTo(null)}
+            onClick={() => chatSetReplyTo(channelId, null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={t('chat:composer.cancelReply')}
           >

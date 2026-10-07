@@ -59,7 +59,7 @@ beforeEach(() => {
   useComposerStore.setState({ states: new Map() });
   useChatStore.setState({
     messages: new Map([['dm-1', [ownMessage]]]),
-    replyTo: null,
+    replyTargets: new Map(),
     editingMessageId: null,
   });
 });

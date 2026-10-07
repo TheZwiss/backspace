@@ -215,7 +215,14 @@ interface ChatState {
   typingUsers: Map<string, TypingUser[]>;
   hasMore: Map<string, boolean>;
   loadStates: Map<string, ChannelLoadState>;
-  replyTo: MessageWithUser | null;
+  /**
+   * The message each channel's composer is replying to, keyed by channel or
+   * DM channel id. A reply can only target a message in the channel it is
+   * posted into (the server refuses anything else with
+   * `reply_target_invalid`), so the target belongs to its channel and never
+   * follows the user to another one.
+   */
+  replyTargets: Map<string, MessageWithUser>;
   editingMessageId: string | null;
   readStates: Map<string, string>;
   unreadChannels: Set<string>;
@@ -251,7 +258,8 @@ interface ChatState {
   reactionAddsInFlight: Map<string, number>;
   setCurrentChannel: (channelId: string | null) => void;
   saveScrollPosition: (channelId: string, anchor: ScrollAnchor) => void;
-  setReplyTo: (message: MessageWithUser | null) => void;
+  /** Start (or, with null, cancel) a reply in `channelId`'s composer. */
+  setReplyTo: (channelId: string, message: MessageWithUser | null) => void;
   setEditingMessage: (messageId: string | null) => void;
   /**
    * Load the channel's newest page. Resolves true when the cache holds the
@@ -424,13 +432,35 @@ function withReaction(message: MessageWithUser, reaction: Reaction): MessageWith
   return held ? message : { ...message, reactions: [...current, reaction] };
 }
 
+/** `targets` with `channelId`'s reply set to `message`, or removed for null. */
+function withReplyTarget(
+  targets: Map<string, MessageWithUser>,
+  channelId: string,
+  message: MessageWithUser | null,
+): Map<string, MessageWithUser> {
+  if (message ? targets.get(channelId) === message : !targets.has(channelId)) return targets;
+  const next = new Map(targets);
+  if (message) next.set(channelId, message);
+  else next.delete(channelId);
+  return next;
+}
+
+/**
+ * Whether a failed send gives its reply back to the composer. Not when the
+ * server refused the reply target itself: it is gone or not in the channel,
+ * and every retry with it would be refused the same way.
+ */
+function shouldRestoreReplyTarget(error: unknown): boolean {
+  return !(error instanceof HttpError && error.code === 'reply_target_invalid');
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: new Map(),
   currentChannelId: null,
   typingUsers: new Map(),
   hasMore: new Map(),
   loadStates: new Map(),
-  replyTo: null,
+  replyTargets: new Map(),
   editingMessageId: null,
   readStates: new Map(),
   unreadChannels: new Set(),
@@ -497,7 +527,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
   },
-  setReplyTo: (message) => set({ replyTo: message }),
+  setReplyTo: (channelId, message) => set((state) => ({
+    replyTargets: withReplyTarget(state.replyTargets, channelId, message),
+  })),
   setEditingMessage: (messageId) => set({ editingMessageId: messageId }),
 
   clearAllMessages: () => set({
@@ -514,7 +546,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     reactionAddsInFlight: new Map(),
     loadStates: new Map(),
     currentChannelId: null,
-    replyTo: null,
+    replyTargets: new Map(),
     editingMessageId: null,
   }),
 
@@ -703,7 +735,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (channelId: string, content: string, attachmentIds?: string[]) => {
-    const replyToId = get().replyTo?.id;
+    // Only this channel's reply: a target from another channel would be
+    // refused by the server and the send rolled back.
+    const replyTarget = get().replyTargets.get(channelId) ?? null;
+    const replyToId = replyTarget?.id;
     const isDm = isDmChannel(channelId);
     const origin = getChannelOrigin(channelId);
     // The user's row as the channel's instance issues it: the optimistic
@@ -730,7 +765,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         attachments: [],
         embeds: [],
         reactions: [],
-        replyTo: get().replyTo ?? undefined,
+        replyTo: replyTarget ?? undefined,
       };
       if (isDm) {
         (optimisticMessage as any).dmChannelId = channelId;
@@ -747,7 +782,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
 
-    set({ replyTo: null });
+    // The send consumes the reply; a failed send gives it back below.
+    if (replyTarget) get().setReplyTo(channelId, null);
 
     try {
       if (isDm) {
@@ -756,9 +792,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await client.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       }
       // Real message will arrive via WebSocket and replace the temp one
-    } catch {
+    } catch (error) {
       // Rollback: remove the optimistic message on failure
       get().removeMessage(tempId, channelId);
+      if (replyTarget && shouldRestoreReplyTarget(error)) {
+        // Give the reply back unless the user has started another one in
+        // this channel since.
+        set((state) => (state.replyTargets.has(channelId)
+          ? state
+          : { replyTargets: withReplyTarget(state.replyTargets, channelId, replyTarget) }));
+      }
     }
   },
 
@@ -918,13 +961,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   removeMessage: (messageId: string, channelId: string) => {
     set((state) => {
       const detachedChannels = mapHeldMessage(state.detachedChannels, messageId, () => null);
+      // A reply to a removed message could only be refused by the server.
+      const replyTargets = state.replyTargets.get(channelId)?.id === messageId
+        ? withReplyTarget(state.replyTargets, channelId, null)
+        : state.replyTargets;
       const current = state.messages.get(channelId);
-      if (!current) return detachedChannels === state.detachedChannels ? state : { detachedChannels };
+      if (!current) {
+        return detachedChannels === state.detachedChannels && replyTargets === state.replyTargets
+          ? state
+          : { detachedChannels, replyTargets };
+      }
       const newMessages = new Map(state.messages);
       newMessages.set(channelId, current.filter(m => m.id !== messageId));
       return {
         messages: newMessages,
         detachedChannels,
+        replyTargets,
         editingMessageId: state.editingMessageId === messageId ? null : state.editingMessageId,
       };
     });
