@@ -140,7 +140,7 @@ A jump that ends without scrolling takes the anchor from the layout (`deriveAnch
 
 ## Reconnects and refresh readies
 
-The WebSocket `ready` handler clears the message cache of the origin's channels and force-reloads the open channel only on the first `ready` of a socket, which may follow a gap in which messages were missed. A later `ready` on the same socket is a state refresh (instances up to 1.7.0 send one to every member as a permission refresh after role changes) and leaves the cache and the open view alone (`useWebSocket.ts`, `readyDelivered` in `connectToOrigin`). After a real reconnect the open view keeps its anchor through the rows-changed path above.
+The WebSocket `ready` handler clears the message cache of the origin's channels and force-reloads the open channel only on the first `ready` of a socket, home or remote, which may follow a gap in which messages were missed. A later `ready` on the same socket is a state refresh (instances up to 1.7.0 send one to every member as a permission refresh after role changes) and leaves the cache and the open view alone (`useWebSocket.ts`, `readyDelivered` in `connectToOrigin`); a remote instance's refresh still reloads the open space's details. After a real reconnect the open view keeps its anchor through the rows-changed path above.
 
 ## Embed renderer contract
 

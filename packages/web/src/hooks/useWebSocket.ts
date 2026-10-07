@@ -262,23 +262,23 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       }
 
       // For remote instances: if user was viewing one of these servers, load its details
-      // (fixes race condition on page reload — route params effect fires before remote WS connects)
+      // (fixes race condition on page reload — route params effect fires before remote WS connects).
+      // Its open channel's messages are loaded by the session rule below.
       if (!isHome) {
         const { currentSpaceId: curSpaceId, loadSpaceDetail: loadDetail } = useSpaceStore.getState();
         if (curSpaceId && event.spaces.some((s: any) => s.id === curSpaceId)) {
           loadDetail(curSpaceId);
-          const { currentChannelId, loadMessages } = useChatStore.getState();
-          if (currentChannelId) {
-            loadMessages(currentChannelId, true);
-          }
         }
       }
 
-      // A new session may have missed messages while disconnected: clear the
-      // message cache for all channels on this origin so the next visit does a
-      // fresh fetch, and force-reload the open channel now (its view keeps its
-      // anchor, docs/systems/message-list.md). A refresh ready on a live socket
-      // missed nothing, so the cache and the open view stay as they are.
+      // A new session, home or remote, may have missed messages while
+      // disconnected: clear the message cache for all channels on this origin
+      // so the next visit does a fresh fetch, and force-reload the open
+      // channel now (its view keeps its anchor, docs/systems/message-list.md).
+      // On a page reload this is also the first load of a remote channel
+      // opened before its origin's socket was ready. A refresh ready on a
+      // live socket missed nothing, so the cache and the open view stay as
+      // they are.
       if (!readyAlreadyDelivered) {
         const chatState = useChatStore.getState();
         const { channelOriginMap } = useSpaceStore.getState();

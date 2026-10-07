@@ -53,6 +53,7 @@ vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:heartbeat
 const { connectInstance, disconnectInstance } = await import('./useWebSocket');
 const { useAuthStore } = await import('../stores/authStore');
 const { useChatStore } = await import('../stores/chatStore');
+const { useSpaceStore } = await import('../stores/spaceStore');
 
 function user(fields: Partial<User> & Pick<User, 'id'>): User {
   return {
@@ -74,11 +75,11 @@ function user(fields: Partial<User> & Pick<User, 'id'>): User {
   } as User;
 }
 
-function ready(readyUser: User): Record<string, unknown> {
+function ready(readyUser: User, spaces: unknown[] = []): Record<string, unknown> {
   return {
     type: 'ready',
     user: readyUser,
-    spaces: [],
+    spaces,
     dmChannels: [],
     folders: [],
     spaceLayout: null,
@@ -109,6 +110,50 @@ function homeSocket(): FakeWebSocket {
   return ws;
 }
 
+const REMOTE = 'https://orbit.example';
+const REMOTE_SPACE = 'space-orbit';
+const REMOTE_CHANNEL = 'chan-orbit';
+const remoteCached = [{ id: '77', channelId: REMOTE_CHANNEL, userId: 'u-bob', content: 'hi' }] as unknown as MessageWithUser[];
+const loadSpaceDetail = vi.fn(() => Promise.resolve());
+
+/** The remote space the user has open, as its instance lists it in `ready`. */
+const remoteSpace = {
+  id: REMOTE_SPACE,
+  name: 'Orbit',
+  icon: null,
+  banner: null,
+  ownerId: 'u-owner',
+  inviteCode: 'abc',
+  createdAt: 1,
+  myPermissions: '0',
+  channels: [{ id: REMOTE_CHANNEL, spaceId: REMOTE_SPACE, name: 'general', type: 'text', position: 0, categoryId: null, createdAt: 1 }],
+  categories: [],
+};
+
+function remoteSocket(): FakeWebSocket {
+  connectInstance(REMOTE, 'token-remote');
+  const ws = FakeWebSocket.all.at(-1)!;
+  ws.open();
+  return ws;
+}
+
+function remoteCacheKept(): boolean {
+  return useChatStore.getState().messages.get(REMOTE_CHANNEL) === remoteCached;
+}
+
+function openRemoteChannel(): void {
+  useSpaceStore.setState({
+    currentSpaceId: REMOTE_SPACE,
+    channelOriginMap: new Map([[REMOTE_CHANNEL, REMOTE]]),
+    loadSpaceDetail,
+  });
+  useChatStore.setState({
+    currentChannelId: REMOTE_CHANNEL,
+    messages: new Map([[REMOTE_CHANNEL, remoteCached]]),
+    hasMore: new Map([[REMOTE_CHANNEL, false]]),
+  });
+}
+
 function dmCacheKept(): boolean {
   return useChatStore.getState().messages.get(DM) === cached;
 }
@@ -119,6 +164,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   useAuthStore.setState({ user: jannis, trueHomeStatus: null });
   loadMessages.mockClear();
+  loadSpaceDetail.mockClear();
   useChatStore.setState({
     currentChannelId: DM,
     messages: new Map([[DM, cached]]),
@@ -129,6 +175,7 @@ beforeEach(() => {
 
 afterEach(() => {
   disconnectInstance('');
+  disconnectInstance(REMOTE);
   useAuthStore.setState({ user: null, trueHomeStatus: null });
   useChatStore.getState().clearAllMessages();
   vi.restoreAllMocks();
@@ -168,5 +215,54 @@ describe('ready on a socket (issue #374)', () => {
 
     expect(dmCacheKept()).toBe(false);
     expect(loadMessages).toHaveBeenCalledWith(DM, true);
+  });
+});
+
+describe('ready on a remote instance socket', () => {
+  it('reloads the open channel on the first ready of the connection', () => {
+    openRemoteChannel();
+    const remote = remoteSocket();
+    remote.deliver(ready(jannis, [remoteSpace]));
+
+    expect(loadSpaceDetail).toHaveBeenCalledWith(REMOTE_SPACE);
+    expect(remoteCacheKept()).toBe(false);
+    expect(loadMessages).toHaveBeenCalledWith(REMOTE_CHANNEL, true);
+  });
+
+  it('keeps the open channel and its cache on a later ready of the same connection', () => {
+    openRemoteChannel();
+    const remote = remoteSocket();
+    remote.deliver(ready(jannis, [remoteSpace]));
+    useChatStore.setState({
+      messages: new Map([[REMOTE_CHANNEL, remoteCached]]),
+      hasMore: new Map([[REMOTE_CHANNEL, false]]),
+    });
+    loadMessages.mockClear();
+    loadSpaceDetail.mockClear();
+
+    // A permission refresh from an instance still on 1.7.0.
+    remote.deliver(ready(jannis, [remoteSpace]));
+
+    expect(loadSpaceDetail).toHaveBeenCalledWith(REMOTE_SPACE);
+    expect(remoteCacheKept()).toBe(true);
+    expect(loadMessages).not.toHaveBeenCalled();
+  });
+
+  it('reloads again after the remote connection is re-established', () => {
+    openRemoteChannel();
+    const first = remoteSocket();
+    first.deliver(ready(jannis, [remoteSpace]));
+    disconnectInstance(REMOTE);
+    useChatStore.setState({
+      messages: new Map([[REMOTE_CHANNEL, remoteCached]]),
+      hasMore: new Map([[REMOTE_CHANNEL, false]]),
+    });
+    loadMessages.mockClear();
+
+    const second = remoteSocket();
+    second.deliver(ready(jannis, [remoteSpace]));
+
+    expect(remoteCacheKept()).toBe(false);
+    expect(loadMessages).toHaveBeenCalledWith(REMOTE_CHANNEL, true);
   });
 });
