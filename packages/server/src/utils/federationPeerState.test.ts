@@ -310,6 +310,20 @@ describe('decideInboundHandshake', () => {
       .toEqual({ kind: 'refuse_denied' });
   });
 
+  it.each(['repeer_incomplete', 'peer_reset_detected', 'auth_failures', 'not_a_reason'])(
+    'answers a rejected row whose reason (%s) is not a remote refusal as a row without a reason',
+    async (reason) => {
+      const { decideInboundHandshake } = await import('./federationPeerState.js');
+      // A needs_attention row our admin denied before the upgrade: 403, as before.
+      expect(decideInboundHandshake({ ...base, autoAccept: false, row: r('rejected', { statusReason: reason }) }))
+        .toEqual({ kind: 'refuse_denied' });
+      expect(decideInboundHandshake({ ...base, autoAccept: false, row: r('rejected', { statusReason: reason, initiatedBy: 'admin' }) }))
+        .toEqual({ kind: 'refuse_denied' });
+      expect(decideInboundHandshake({ ...base, row: r('rejected', { statusReason: reason }) }))
+        .toEqual({ kind: 'activate', from: 'rejected', cause: 'accept_rejected_override' });
+    },
+  );
+
   it('activates a pending row, gated on admin provenance with auto-accept off', async () => {
     const { decideInboundHandshake } = await import('./federationPeerState.js');
     expect(decideInboundHandshake({ ...base, row: r('pending') }))

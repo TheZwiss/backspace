@@ -493,6 +493,18 @@ export type InboundHandshakeDecision =
   | { kind: 'refuse_denied' }
   | { kind: 'refuse_in_progress' };
 
+/**
+ * The rejected reasons that record the remote refusing us (or holding an older
+ * peering with us). Only these let a remote's handshake through on a rejected
+ * row; any other value is read as unknown provenance.
+ */
+const REMOTE_REJECTED_REASONS: ReadonlySet<FederationPeerStatusReason> = new Set<FederationRejectedReason>([
+  'denied_by_remote',
+  'revoked_by_remote',
+  'expired_on_remote',
+  'stale_peering_on_remote',
+]);
+
 export interface InboundHandshakeInput {
   row: Pick<PeerRow, 'status' | 'statusReason' | 'initiatedBy' | 'approvalToken'> | null;
   autoAccept: boolean;
@@ -547,14 +559,15 @@ export function decideInboundHandshake(input: InboundHandshakeInput): InboundHan
     case 'rejected': {
       const reason = peerStatusReasonOf(row);
       if (reason === 'denied_by_local_admin') return { kind: 'refuse_denied' };
-      if (reason === null) {
-        // A row from before the reason was recorded: which side refused is
-        // unknown, so it keeps the behaviour it had.
-        return autoAccept ? { kind: 'activate', from: 'rejected', cause: 'accept_rejected_override' } : { kind: 'refuse_denied' };
+      if (reason !== null && REMOTE_REJECTED_REASONS.has(reason)) {
+        // The remote refused us, or held an older peering with us; its
+        // handshake now is the remote acting on that.
+        return acceptUncompleted('rejected', 'accept_rejected_override');
       }
-      // The remote refused us, or held an older peering with us; its handshake
-      // now is the remote acting on that.
-      return acceptUncompleted('rejected', 'accept_rejected_override');
+      // No reason (a row from before the reason was recorded), or one that is
+      // not a rejected reason: which side refused is unknown, so the row keeps
+      // the behaviour it had.
+      return autoAccept ? { kind: 'activate', from: 'rejected', cause: 'accept_rejected_override' } : { kind: 'refuse_denied' };
     }
   }
 }

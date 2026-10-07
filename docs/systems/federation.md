@@ -124,7 +124,7 @@ A `federation_peers` row's state is its `status` plus `status_reason`. One modul
 | `rejected` | `revoked_by_remote` | The remote's row for us is revoked (`403 PEER_REVOKED`) | purged | `rejected` | 403 |
 | `rejected` | `expired_on_remote` | Our request expired unanswered on the remote (`/peer/denied`, reason `expired`) | purged | `rejected` | 403 |
 | `rejected` | `stale_peering_on_remote` | The remote holds an older peering with us (`409 PEER_EXISTS_RESET_REQUIRED`); its admin has to reset it | purged | `rejected` | 403 |
-| `rejected` | NULL | A row from before migration `0023`: which side refused is unknown | purged | `rejected` | 403 |
+| `rejected` | NULL | A row from before migration `0023` (which clears any reason it carried): which side refused is unknown | purged | `rejected` | 403 |
 | `revoked` | none | Our admin revoked the peering | purged | `rejected` | 403 |
 
 `/api/federation/epoch` answers any row that is not `revoked`, signed with that row's secret; `/peer/rotate` and the relay require `active`.
@@ -163,12 +163,12 @@ A `federation_peers` row's state is its `status` plus `status_reason`. One modul
 |---|---|---|
 | none | create `active` (`initiated_by = 'remote'`) | 202, queued for our admin |
 | `pending` | activate with the caller's secret | activate if `initiated_by = 'admin'`, else 202 queued |
-| `rejected` with a remote-side reason | activate | activate if `initiated_by = 'admin'`, else 202 queued |
+| `rejected` with a remote-side reason (`denied_by_remote`, `revoked_by_remote`, `expired_on_remote`, `stale_peering_on_remote`) | activate | activate if `initiated_by = 'admin'`, else 202 queued |
 | `awaiting_approval` | activate (token or not) | valid approval token and an admin row: activate; else 202 queued |
 | `active`, `unreachable`, `needs_attention` | `409 PEER_EXISTS_RESET_REQUIRED`; reset detection on a changed epoch | same |
 | `revoked` | `403 PEER_REVOKED` (error text unchanged for older initiators) | same |
 | `rejected` / `denied_by_local_admin` | `403 PEERING_REQUIRES_APPROVAL` | same |
-| `rejected`, NULL reason (legacy) | activate | `403 PEERING_REQUIRES_APPROVAL` |
+| `rejected`, NULL reason (legacy) or any value that is not a rejected reason | activate | `403 PEERING_REQUIRES_APPROVAL` |
 
 An established peering (`active`, `unreachable`, `needs_attention`) is never re-keyed by this unauthenticated endpoint: an unreachable peer's handshake is answered like an active one's (409), and a changed epoch runs reset detection. Our admin's own refusals (`revoked`, `denied_by_local_admin`) hold whatever the auto-accept setting.
 
