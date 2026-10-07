@@ -1066,27 +1066,26 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
 
     const reactionId = generateSnowflake();
     const now = Date.now();
-    try {
-      db.insert(schema.reactions).values({
-        id: reactionId,
-        messageId,
-        userId,
-        emoji,
-        createdAt: now,
-      }).run();
+    // The unique index on (message_id, user_id, emoji) keeps one reaction per
+    // user and emoji. A repeat inserts nothing and announces nothing.
+    const inserted = db.insert(schema.reactions).values({
+      id: reactionId,
+      messageId,
+      userId,
+      emoji,
+      createdAt: now,
+    }).onConflictDoNothing().run();
+    if (inserted.changes === 0) return;
 
-      // Include user object so remote clients can use isSelf() for identity resolution
-      const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-      const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
+    // Include user object so remote clients can use isSelf() for identity resolution
+    const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
 
-      connectionManager.sendToChannel(spaceId, message.channelId, {
-        type: 'reaction_added',
-        messageId,
-        reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
-      });
-    } catch (err) {
-      // Unique constraint violation (already reacted)
-    }
+    connectionManager.sendToChannel(spaceId, message.channelId, {
+      type: 'reaction_added',
+      messageId,
+      reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
+    });
     return;
   }
 
@@ -1101,50 +1100,50 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
 
   const reactionId = generateSnowflake();
   const now = Date.now();
-  try {
-    db.insert(schema.dmReactions).values({
-      id: reactionId,
-      dmMessageId: messageId,
-      userId,
-      emoji,
-      createdAt: now,
-    }).run();
+  // The unique index on (dm_message_id, user_id, emoji) keeps one reaction per
+  // user and emoji. A repeat inserts nothing, announces nothing and relays
+  // nothing.
+  const inserted = db.insert(schema.dmReactions).values({
+    id: reactionId,
+    dmMessageId: messageId,
+    userId,
+    emoji,
+    createdAt: now,
+  }).onConflictDoNothing().run();
+  if (inserted.changes === 0) return;
 
-    // Include user object so remote clients can use isSelf() for identity resolution
-    const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-    const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
+  // Include user object so remote clients can use isSelf() for identity resolution
+  const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
 
-    connectionManager.sendToDmMembers(dmMsg.dmChannelId, {
-      type: 'reaction_added',
-      messageId,
-      reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
-    });
+  connectionManager.sendToDmMembers(dmMsg.dmChannelId, {
+    type: 'reaction_added',
+    messageId,
+    reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
+  });
 
-    // Federation: log reaction mutation and queue for relay. The relay names
-    // the message in shared coordinates; `messageId` is only local here.
-    const target = dmMessageFederationRef(dmMsg);
-    appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
+  // Federation: log reaction mutation and queue for relay. The relay names
+  // the message in shared coordinates; `messageId` is only local here.
+  const target = dmMessageFederationRef(dmMsg);
+  appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
+    userId,
+    homeUserId: reactionUser?.homeUserId || userId,
+    homeInstance: reactionUser?.homeInstance || getOurOrigin(),
+    emoji,
+    createdAt: now,
+  }));
+  const reactionAddTargetOrigins = getGroupDmTargetOrigins(dmMsg.dmChannelId);
+  queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
+    reaction: {
+      messageId: target.messageId,
+      messageHomeInstance: target.messageHomeInstance,
       userId,
       homeUserId: reactionUser?.homeUserId || userId,
       homeInstance: reactionUser?.homeInstance || getOurOrigin(),
       emoji,
       createdAt: now,
-    }));
-    const reactionAddTargetOrigins = getGroupDmTargetOrigins(dmMsg.dmChannelId);
-    queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
-      reaction: {
-        messageId: target.messageId,
-        messageHomeInstance: target.messageHomeInstance,
-        userId,
-        homeUserId: reactionUser?.homeUserId || userId,
-        homeInstance: reactionUser?.homeInstance || getOurOrigin(),
-        emoji,
-        createdAt: now,
-      },
-    }), reactionAddTargetOrigins);
-  } catch (err) {
-    // Unique constraint violation (already reacted)
-  }
+    },
+  }), reactionAddTargetOrigins);
 }
 
 function handleReactionRemove(event: Record<string, unknown>, userId: string): void {

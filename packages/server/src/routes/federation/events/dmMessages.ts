@@ -745,29 +745,14 @@ export function processReactionAddEvent(
   }
   const reactingUser = reactor.user;
 
-  // Dedup: check if this user already reacted with this emoji
-  const existingReaction = db
-    .select()
-    .from(schema.dmReactions)
-    .where(
-      and(
-        eq(schema.dmReactions.dmMessageId, localMsg.id),
-        eq(schema.dmReactions.userId, reactingUser.id),
-        eq(schema.dmReactions.emoji, event.reaction.emoji),
-      ),
-    )
-    .get();
-
-  if (existingReaction) {
-    // Already exists — treat as accepted (idempotent)
-    accepted.push(event.messageId);
-    return;
-  }
-
   const reactionId = generateSnowflake();
   const now = event.reaction.createdAt || Date.now();
 
-  db.insert(schema.dmReactions)
+  // The unique index on (dm_message_id, user_id, emoji) keeps one reaction
+  // per user and emoji. A reaction this instance already holds (a redelivery,
+  // or the same event pulled again by the catch-up sync) inserts nothing and
+  // is accepted, so the sender stops retrying it.
+  const inserted = db.insert(schema.dmReactions)
     .values({
       id: reactionId,
       dmMessageId: localMsg.id,
@@ -775,7 +760,13 @@ export function processReactionAddEvent(
       emoji: event.reaction.emoji,
       createdAt: now,
     })
+    .onConflictDoNothing()
     .run();
+
+  if (inserted.changes === 0) {
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Broadcast to local clients
   connectionManager.sendToDmMembers(localMsg.dmChannelId, {
