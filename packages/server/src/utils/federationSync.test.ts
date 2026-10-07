@@ -381,6 +381,22 @@ describe('processSyncRetryTick', () => {
     expect(warn.mock.calls.some(c => String(c[0]).includes('Dropped create m1'))).toBe(true);
   });
 
+  it('drops kept events without replaying them when the peer is a new incarnation', async () => {
+    const { processSyncRetryTick, SYNC_RETRY_BACKOFF_MS } = await import('./federationSync.js');
+    seedPeer({ peerInstanceId: 'epoch-a' });
+    await keepTwo();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // The same peer row, reactivated for a reset peer.
+    testDb.update(schema.federationPeers).set({ peerInstanceId: 'epoch-b' }).where(eq(schema.federationPeers.id, PEER)).run();
+    processRelayEvents.mockReset();
+    expect(await processSyncRetryTick(Date.now() + SYNC_RETRY_BACKOFF_MS[0]! + 1)).toBe(0);
+    expect(processRelayEvents).not.toHaveBeenCalled();
+    expect(keptEvents()).toEqual([]);
+    expect(cursor('dm')).toEqual({ cursorTs: 0, cursorId: null });
+    expect(warn.mock.calls.some(c => String(c[0]).includes('new incarnation'))).toBe(true);
+  });
+
   it('leaves kept events of a peer that is not active', async () => {
     const { processSyncRetryTick } = await import('./federationSync.js');
     seedPeer();

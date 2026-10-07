@@ -117,7 +117,8 @@ const INITIAL_CURSOR_TS = 0;
 /**
  * Restart every cursor of `peer` at 0, and drop its kept events, when the
  * peer is a new incarnation (its instance id differs from the one the cursors
- * were taken against): its log is a different log.
+ * were taken against): its log is a different log, and its kept events were
+ * another instance's word. Runs before every pull and every retry run.
  */
 function reconcileCursorEpoch(peer: PeerRow): void {
   if (!peer.peerInstanceId) return;
@@ -522,6 +523,11 @@ export async function processSyncRetryTick(now: number = Date.now()): Promise<nu
       const peer = getDb().select().from(schema.federationPeers)
         .where(eq(schema.federationPeers.id, peerId)).get();
       if (!peer || peer.status !== 'active') return 0;
+      // Kept events belong to the incarnation they were pulled from. A peer
+      // row reactivated for a new incarnation (a reset peer that peered
+      // again) keeps its id, so its epoch is checked here as before a pull:
+      // a different epoch drops them before any is replayed.
+      reconcileCursorEpoch(peer);
       return retryPeerEvents(peer, now);
     });
   }
