@@ -126,3 +126,10 @@ export function seedRolePayloadSpaces(db: FixtureDb): void {
   ]).run();
 }
 
+
+/** The stored permissions string of a fixture role, as a manager receives it. */
+export function storedBitsOf(roleId: string): string {
+  const bits = ROLE_BITS[roleId];
+  if (bits === undefined) throw new Error(`no fixture role ${roleId}`);
+  return permissionsToString(bits);
+}

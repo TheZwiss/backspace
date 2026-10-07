@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SpaceWithChannelsAndMembers } from '@backspace/shared';
-import { PermissionBits, permissionsToString, stringToPermissions } from '@backspace/shared/src/permissions.js';
+import { PermissionBits, stringToPermissions } from '@backspace/shared/src/permissions.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import * as schema from '../db/schema.js';
 import {
-  ROLE_BITS,
+  storedBitsOf,
   SPACE_ID,
   PRIVATE_ID,
   GENERAL_ID,
@@ -99,7 +99,7 @@ describe('ready payload: roles by audience', () => {
     const space = await readySpace(userId);
     expect(displayOf(space)).toEqual(DISPLAY);
     for (const role of space.roles) {
-      expect(role.permissions).toBe(permissionsToString(ROLE_BITS[role.id]));
+      expect(role.permissions).toBe(storedBitsOf(role.id));
     }
   });
 
@@ -118,6 +118,6 @@ describe('ready payload: roles by audience', () => {
     expect((await readySpace(USERS.member)).roles.some(r => 'permissions' in r)).toBe(false);
     testDb.insert(schema.memberRoles).values({ spaceId: SPACE_ID, userId: USERS.member, roleId: 'r-mod' }).run();
     const after = await readySpace(USERS.member);
-    expect(after.roles.every(r => r.permissions === permissionsToString(ROLE_BITS[r.id]))).toBe(true);
+    expect(after.roles.every(r => r.permissions === storedBitsOf(r.id))).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import {
   PRIVATE_ID,
   REQUEST_SPACE_ID,
   ROLE_BITS,
+  storedBitsOf,
   SPACE_ID,
   USERS,
   VIP_OVERRIDE_ALLOW,
@@ -99,7 +100,7 @@ function expectNoBits(roles: readonly Role[]): void {
 
 function expectStoredBits(roles: readonly Role[]): void {
   expect(roles.length).toBeGreaterThan(0);
-  for (const role of roles) expect(role.permissions).toBe(permissionsToString(ROLE_BITS[role.id]));
+  for (const role of roles) expect(role.permissions).toBe(storedBitsOf(role.id));
 }
 
 const MANAGERS = [
@@ -247,7 +248,7 @@ describe('non-members: explore, invite preview, joins', () => {
     const res = await app.inject({ method: 'POST', url: `/api/spaces/${SPACE_ID}/public-join` });
     const space = res.json<SpaceWithChannelsAndMembers>();
     expect(space.roles.find(r => r.id === SPACE_ID)?.permissions).toBe(permissionsToString(EVERYONE_BITS | PermissionBits.MANAGE_ROLES));
-    expect(space.roles.find(r => r.id === 'r-vip')?.permissions).toBe(permissionsToString(ROLE_BITS['r-vip']));
+    expect(space.roles.find(r => r.id === 'r-vip')?.permissions).toBe(storedBitsOf('r-vip'));
   });
 
   it('sends join_request_accepted with display fields only', async () => {
