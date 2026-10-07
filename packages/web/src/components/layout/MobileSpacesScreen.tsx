@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getMyUserIdForOrigin, getChannelOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
 import { resolveSpaceLayout } from '../../utils/spaceLayout';
+import { spaceInviteUrl } from '../../utils/inviteParser';
 import { useChatStore } from '../../stores/chatStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -344,10 +345,7 @@ export function MobileSpacesScreen() {
         onClick: async () => {
           try {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
-            const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
-            // Match the public join route used by the invite modal.
-            const url = `${origin}/join/${code}`;
-            await navigator.clipboard.writeText(url);
+            await navigator.clipboard.writeText(spaceInviteUrl((space as TaggedSpace)._instanceOrigin, code));
             addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
           } catch {
             addToast(t('spaces:sidebar.space.inviteFailed'), 'warning', 3000);

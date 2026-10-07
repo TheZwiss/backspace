@@ -11,6 +11,7 @@ import { api, HttpError } from '../../api/client';
 import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
+import { spaceInviteUrl } from '../../utils/inviteParser';
 import type { MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
 
 type SendStatus =
@@ -178,7 +179,7 @@ export function InviteModal() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const inviteUrl = inviteCode
-    ? `${instanceOrigin || window.location.origin}/join/${inviteCode}`
+    ? spaceInviteUrl(instanceOrigin, inviteCode)
     : '';
 
   // Fetch / generate the per-space invite code on open.
