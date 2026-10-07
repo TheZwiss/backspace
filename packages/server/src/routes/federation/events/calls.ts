@@ -298,8 +298,9 @@ export function processDmCallAcceptEvent(
     if (meta.state === 'ringing') {
       connectionManager.activateDmRoom(dmChannelId!);
 
-      // Join caller to room
-      connectionManager.leaveCurrentRoom(meta.callerId);
+      // Join caller to room. Whatever room they sat in is left first, and
+      // told: a call they leave empty ends there and then.
+      connectionManager.leaveCurrentRoomAnnounced(meta.callerId, dmChannelId!);
       connectionManager.joinRoom(dmChannelId!, meta.callerId);
 
       connectionManager.sendToDmMembers(dmChannelId!, {
@@ -310,12 +311,21 @@ export function processDmCallAcceptEvent(
       });
     }
 
-    // Seat the acceptor in the room, so the call knows it still has a
-    // participant while they are in it and their leave, relayed later, is
-    // the one that can end it.
-    const acceptor = resolveRelayActor(event.call.acceptor, db);
-    if (acceptor.kind === 'found' && isDmMember(dmChannelId!, acceptor.user.id)) {
+    // Seat the acceptor of a group call in the room, so the call knows it
+    // still has a participant while they are in it and their leave, relayed
+    // later, is the one that can end it. Only a sender that says it applies
+    // the group rules (`perMember`) relays that leave, also when the member
+    // just goes away; an acceptor from a peer up to 1.8.0, or in a 1-on-1,
+    // is not seated, so the call ends with its last seated participant as
+    // in 1.8.0.
+    const acceptor = meta.group && event.call.perMember === true
+      ? resolveRelayActor(event.call.acceptor, db)
+      : undefined;
+    if (acceptor?.kind === 'found' && isDmMember(dmChannelId!, acceptor.user.id)) {
       const acceptorId = acceptor.user.id;
+      // A seat in another room here (another call this peer's member sat in)
+      // is left first, and told, so that room does not keep them.
+      connectionManager.leaveCurrentRoomAnnounced(acceptorId, dmChannelId!);
       connectionManager.joinRoom(dmChannelId!, acceptorId);
       meta.remoteParticipants.set(acceptorId, sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`);
       meta.declinedUserIds.delete(acceptorId);

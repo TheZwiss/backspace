@@ -237,6 +237,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   voice_disabled: 'Voice/video is not configured on this server',
   voice_connect_forbidden: 'Missing CONNECT permission',
   dm_call_in_progress: 'A call is already running in this conversation',
+  dm_call_not_found: 'This call has already ended',
   file_not_found: 'File not found',
   directory_disabled: 'The directory is not configured on this instance',
   directory_unreachable: 'The directory could not be reached',

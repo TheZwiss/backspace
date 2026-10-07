@@ -146,15 +146,17 @@ function seedDm(id: string, ownerId: string | null, federatedId: string | null, 
 
 /**
  * A relayed call event from PEER. `perMember` marks a sender of this version
- * (an end or decline of that member only); a peer up to 1.8.0 omits it.
+ * applying the group rules (an accept it will relay the leave of, an end or
+ * decline of that member only); a peer up to 1.8.0 omits it.
  */
 function relay(
   eventType: 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end',
   actor: { homeUserId: string; homeInstance: string },
   perMember?: boolean,
+  federatedId: string = FED_GROUP_FID,
 ): FederationRelayEvent {
   const flag = perMember ? { perMember: true } : {};
-  const call = eventType === 'dm_call_accept' ? { acceptor: actor }
+  const call = eventType === 'dm_call_accept' ? { acceptor: actor, ...flag }
     : eventType === 'dm_call_reject' ? { rejector: actor, ...flag }
       : { endedBy: actor, ...flag };
   return {
@@ -162,7 +164,7 @@ function relay(
     messageId: `msg-${Math.random().toString(36).slice(2, 10)}`,
     encryptionVersion: 0,
     timestamp: Date.now(),
-    federatedId: FED_GROUP_FID,
+    federatedId,
     call,
   };
 }
@@ -179,7 +181,7 @@ function relayedFrom(process: typeof processDmCallEndEvent, event: FederationRel
 
 /** Let the fire-and-forget fan-out promises settle. */
 async function settle(): Promise<void> {
-  for (let i = 0; i < 5; i++) await Promise.resolve();
+  for (let i = 0; i < 50; i++) await Promise.resolve();
 }
 
 beforeAll(() => {
@@ -453,7 +455,7 @@ describe('group call hosted here with members on a peer', () => {
   async function callWith(...remote: Array<typeof DAVE>): Promise<void> {
     connectionManager.createDmRoom(FED_GROUP, 'alice');
     connectionManager.setVoiceWs('alice', ws('alice'));
-    for (const actor of remote) relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', actor));
+    for (const actor of remote) relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', actor, true));
     await settle();
   }
 
@@ -528,8 +530,9 @@ describe('group call hosted here with members on a peer', () => {
     expect(received('alice', 'dm_call_rejected')).toEqual([]);
   });
 
-  it('takes every participant of a 1.8.0 peer out when one of them hangs up', async () => {
-    // A 1.8.0 peer ends the call for all of its members on one member's end.
+  it('takes every participant a peer seated out when its end carries no perMember', async () => {
+    // A sender that ends without perMember ends the call for all of its own
+    // members, so none of the seats it holds here is still in the call.
     await callWith(DAVE, ERIN);
     clearReceived();
 
@@ -540,29 +543,46 @@ describe('group call hosted here with members on a peer', () => {
     expect(received('bob', 'dm_call_ended')).toEqual([]);
   });
 
-  it('ends the call a 1.8.0 peer\'s end leaves empty', async () => {
-    await callWith(DAVE, ERIN);
-    await end({ dmChannelId: FED_GROUP }, 'alice');
-    clearReceived();
-    fetchMock.mockClear();
+  it('does not seat an acceptor from a 1.8.0 peer, which never relays that member\'s leave', async () => {
+    connectionManager.createDmRoom(FED_GROUP, 'alice');
+    connectionManager.setVoiceWs('alice', ws('alice'));
 
-    relayedFrom(processDmCallEndEvent, relay('dm_call_end', ERIN));
-    await settle();
-
-    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
-    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
-    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end' })]);
-  });
-
-  it('takes the participants of a 1.8.0 peer out on a decline from it, and keeps the call', async () => {
-    await callWith(DAVE);
-    clearReceived();
-
-    relayedFrom(processDmCallRejectEvent, relay('dm_call_reject', ERIN));
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE));
     await settle();
 
     expect(participants(FED_GROUP)).toEqual(['alice']);
     expect(connectionManager.getRoom(FED_GROUP)?.metadata).toMatchObject({ state: 'active' });
+  });
+
+  it('ends the call with its last member here when a 1.8.0 peer\'s member joined it', async () => {
+    connectionManager.createDmRoom(FED_GROUP, 'alice');
+    connectionManager.setVoiceWs('alice', ws('alice'));
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE));
+    await settle();
+    clearReceived();
+    fetchMock.mockClear();
+
+    await end({ dmChannelId: FED_GROUP }, 'alice');
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+  });
+
+  it('keeps the call for the members here on a 1.8.0 peer\'s end or decline', async () => {
+    connectionManager.createDmRoom(FED_GROUP, 'alice');
+    connectionManager.setVoiceWs('alice', ws('alice'));
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE));
+    await accept({ dmChannelId: FED_GROUP }, 'bob', ws('bob'));
+    clearReceived();
+
+    relayedFrom(processDmCallEndEvent, relay('dm_call_end', DAVE));
+    relayedFrom(processDmCallRejectEvent, relay('dm_call_reject', ERIN));
+    await settle();
+
+    expect(participants(FED_GROUP)).toEqual(['alice', 'bob']);
+    expect(connectionManager.getRoom(FED_GROUP)?.metadata).toMatchObject({ state: 'active' });
+    expect(received('bob', 'dm_call_ended')).toEqual([]);
   });
 
   it('drops the participants of a peer that went away and ends the call they leave empty', async () => {

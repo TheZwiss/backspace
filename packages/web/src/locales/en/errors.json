@@ -214,6 +214,7 @@
   "voice_disabled": "Voice and video are not set up on this instance.",
   "voice_connect_forbidden": "You are not allowed to join this voice channel.",
   "dm_call_in_progress": "A call is already running in this conversation.",
+  "dm_call_not_found": "This call has already ended.",
   "file_not_found": "That file could not be found.",
   "directory_disabled": "This instance is not connected to a directory.",
   "directory_unreachable": "Outer Space is not reachable right now. Inner Space still works.",
