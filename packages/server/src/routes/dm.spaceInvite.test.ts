@@ -41,16 +41,16 @@ vi.mock('../ws/handler.js', () => ({
   },
 }));
 
+// The route runs the real relay writers: the relay is asserted on the
+// persisted `federation_outbox` rows (as dm.kick does), not on a stub.
+// `federationOutbox`'s own imports load routes/dm.ts while this factory runs,
+// so a stub of a relay function here never reaches the route.
 vi.mock('../utils/federationOutbox.js', async () => {
   const actual = await vi.importActual<typeof import('../utils/federationOutbox.js')>('../utils/federationOutbox.js');
   return {
     ...actual,
-    isFederationRelayEnabled: () => false,
     queueDmCloseRelay: vi.fn(),
     sendTypingRelay: vi.fn(),
-    queueDmRelay: vi.fn(),
-    queueOutboxEvent: vi.fn(),
-    appendMutationLog: vi.fn(),
   };
 });
 
@@ -84,6 +84,8 @@ interface UserSeed {
   id: string;
   username: string;
   displayName?: string | null;
+  homeInstance?: string | null;
+  homeUserId?: string | null;
 }
 
 function seedUser(u: UserSeed): void {
@@ -96,8 +98,8 @@ function seedUser(u: UserSeed): void {
     isAdmin: 0,
     isDeleted: 0,
     discoverable: 1,
-    homeInstance: null,
-    homeUserId: null,
+    homeInstance: u.homeInstance ?? null,
+    homeUserId: u.homeUserId ?? null,
     createdAt: Date.now(),
   }).run();
 }
@@ -127,6 +129,13 @@ describe('POST /api/dm/space-invite', () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
+    // Relay on, as on a federating instance. The outbox caches this setting
+    // per module, so every test seeds the same value.
+    testDb.insert(schema.instanceSettings).values({
+      id: 1,
+      federationRelayEnabled: 1,
+      updatedAt: Date.now(),
+    }).run();
     seedUser({ id: 'alice', username: 'alice' });
     seedUser({ id: 'bob', username: 'bob' });
     seedFriendship('alice', 'bob');
@@ -499,5 +508,78 @@ describe('POST /api/dm/space-invite', () => {
       .get();
     const parsed = JSON.parse(stored!.content!);
     expect(parsed.spaceInstanceOrigin).toBe('https://other.example');
+  });
+
+  describe('federation relay (#391)', () => {
+    const snapshot = {
+      spaceId: 'S1',
+      spaceName: 'Aether',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 3,
+      instanceName: 'Backspace',
+    };
+
+    function seedActivePeer(origin: string): void {
+      testDb.insert(schema.federationPeers).values({
+        id: `peer-${origin}`,
+        origin,
+        hmacSecret: 'secret',
+        status: 'active',
+        createdAt: Date.now(),
+      }).run();
+    }
+
+    /** The peer origins a message's `create` relay was queued to. */
+    function relayedTo(messageId: string): string[] {
+      const peers = new Map(testDb.select().from(schema.federationPeers).all().map((p) => [p.id, p.origin]));
+      return testDb.select().from(schema.federationOutbox).all()
+        .filter((row) => row.entityId === messageId && row.eventType === 'create')
+        .map((row) => peers.get(row.peerId) ?? '')
+        .sort();
+    }
+
+    async function invite(targetUserId: string): Promise<{ statusCode: number; messageId: string }> {
+      (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(snapshot);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/dm/space-invite',
+        payload: { target: { userId: targetUserId }, spaceId: 'S1', spaceInstanceOrigin: '', inviteCode: 'abc' },
+      });
+      const body = JSON.parse(res.body) as { messageId?: string };
+      return { statusCode: res.statusCode, messageId: body.messageId ?? '' };
+    }
+
+    it("relays to the sender's home when the sender is a federated account and the recipient is native here", async () => {
+      // erin@home.test acting on this instance through her federated account.
+      // The conversation's other copy is at her home, the one she reads there,
+      // and the invite must reach it like any other message she sends here.
+      seedActivePeer('https://home.test');
+      seedUser({ id: 'erin', username: 'erin@home.test', homeInstance: 'home.test', homeUserId: 'erin-home' });
+      seedFriendship('erin', 'bob');
+      currentUserId = 'erin';
+
+      const res = await invite('bob');
+      expect(res.statusCode).toBe(200);
+      expect(relayedTo(res.messageId)).toEqual(['https://home.test']);
+    });
+
+    it("relays to the recipient's home when the recipient is homed on another instance", async () => {
+      seedActivePeer('https://remote.test');
+      seedUser({ id: 'tess', username: 'tester@remote.test', homeInstance: 'remote.test', homeUserId: 'tess-home' });
+      seedFriendship('alice', 'tess');
+
+      const res = await invite('tess');
+      expect(res.statusCode).toBe(200);
+      expect(relayedTo(res.messageId)).toEqual(['https://remote.test']);
+    });
+
+    it('relays nothing for a pair homed here', async () => {
+      seedActivePeer('https://remote.test');
+      const res = await invite('bob');
+      expect(res.statusCode).toBe(200);
+      expect(relayedTo(res.messageId)).toEqual([]);
+    });
   });
 });

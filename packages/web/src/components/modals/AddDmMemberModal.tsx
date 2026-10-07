@@ -7,19 +7,28 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, dmCopyOnOrigin } from '../../stores/spaceStore';
 import { useSelfIdentity } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
-import { api } from '../../api/client';
-import { isMine, parseFederatedUsername, personRequest, userKey, type IdentityFields } from '../../utils/identity';
+import { getFriendsHomeOrigin } from '../../stores/instanceStore';
+import { getApiForOrigin } from '../../utils/crossStoreResolvers';
+import { isMine, parseFederatedUsername, personRequest, userKey, type IdentityFields, type PersonTarget } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { GroupDmUserIdentity, User } from '@backspace/shared';
 
 /**
- * A member of a group DM create request to the page's own instance: the row
- * as `origin` issued it, with the home identity home resolves it by
- * (`personRequest`), or its id alone for a person native to home.
+ * How the instance at `to` is told about the person `row` names (issued by
+ * `origin`): their id there when they are native to it, else their home
+ * identity (`personRequest`). Null for a legacy stub another instance issued,
+ * which cannot be named to `to`.
  */
-function groupMemberRef(row: IdentityFields, origin: string): GroupDmUserIdentity {
-  const { target } = personRequest(row, origin);
+function memberTarget(row: IdentityFields, origin: string, to: string): PersonTarget | null {
+  const request = personRequest(row, origin, to);
+  return request.origin === to ? request.target : null;
+}
+
+/** A member of a group DM create request to `to` (`memberTarget`). */
+function groupMemberRef(row: IdentityFields, origin: string, to: string): GroupDmUserIdentity | null {
+  const target = memberTarget(row, origin, to);
+  if (!target) return null;
   return { id: target.userId ?? row.id, homeUserId: target.homeUserId ?? null, homeInstance: target.homeInstance ?? null };
 }
 
@@ -182,14 +191,19 @@ export function AddDmMemberModal() {
     if (!dmChannelId || !dmChannel || isAdding || selectedFriends.length === 0) return;
     setError('');
     setIsAdding(true);
-    // Both requests go to the home instance, which knows the conversation
-    // only as its own copy: its id and its members. The row may be pinned to
-    // another instance's copy, whose ids mean nothing there.
-    const homeCopy = dmCopyOnOrigin(dmChannelId, '');
+    // Both requests go to the user's home (`getFriendsHomeOrigin`), the
+    // instance whose friend list they are checked against; on a session
+    // signed in to another instance that is a secondary connection, not the
+    // page's own instance. Home knows the conversation only as its own copy:
+    // its id and its members. The row may be pinned to another instance's
+    // copy, whose ids mean nothing there.
+    const home = getFriendsHomeOrigin();
+    const homeApi = getApiForOrigin(home);
+    const homeCopy = dmCopyOnOrigin(dmChannelId, home);
     try {
       if (!dmChannel.ownerId) {
         // 1-on-1 DM → create a new group DM with all selected + existing other member
-        const partnerOrigin = homeCopy ? '' : viewer.origin;
+        const partnerOrigin = homeCopy ? home : viewer.origin;
         const partner = (homeCopy ?? dmChannel).members.find(m => !isMine(m, partnerOrigin, self));
         if (!partner) {
           setError(t('dm:addMember.noOtherMember'));
@@ -198,25 +212,32 @@ export function AddDmMemberModal() {
         }
         // Home's own row for the partner when it holds the conversation;
         // otherwise the partner by their home identity, which home resolves.
-        const users = [
-          groupMemberRef(partner, partnerOrigin),
-          ...selectedFriends.map((f) => groupMemberRef(f, f._instanceOrigin)),
+        const refs = [
+          groupMemberRef(partner, partnerOrigin, home),
+          ...selectedFriends.map((f) => groupMemberRef(f, f._instanceOrigin, home)),
         ];
-        // Home checks the source 1-on-1 by its own id; without a home copy
-        // there is none to name.
-        const newChannel = await api.dm.createGroup({ users, fromDmChannelId: homeCopy?.id });
-        const rowId = upsertDmCopy('', newChannel, 'stated');
-        closeModal();
-        navigate(`/channels/@me/${rowId}`);
-      } else {
-        // Existing group DM → add each friend sequentially, on home's copy.
-        if (!homeCopy) {
+        const users = refs.filter((ref): ref is GroupDmUserIdentity => ref !== null);
+        if (users.length !== refs.length) {
           setError(t('dm:addMember.failed'));
           setIsAdding(false);
           return;
         }
-        for (const friend of selectedFriends) {
-          await api.dm.addMember(homeCopy.id, personRequest(friend, friend._instanceOrigin).target);
+        // Home checks the source 1-on-1 by its own id; without a home copy
+        // there is none to name.
+        const newChannel = await homeApi.dm.createGroup({ users, fromDmChannelId: homeCopy?.id });
+        const rowId = upsertDmCopy(home, newChannel, 'stated');
+        closeModal();
+        navigate(`/channels/@me/${rowId}`);
+      } else {
+        // Existing group DM → add each friend sequentially, on home's copy.
+        const targets = selectedFriends.map((f) => memberTarget(f, f._instanceOrigin, home));
+        if (!homeCopy || targets.some((target) => target === null)) {
+          setError(t('dm:addMember.failed'));
+          setIsAdding(false);
+          return;
+        }
+        for (const target of targets) {
+          if (target) await homeApi.dm.addMember(homeCopy.id, target);
         }
         closeModal();
       }

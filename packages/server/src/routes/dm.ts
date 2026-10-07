@@ -2088,10 +2088,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
     broadcastDmMessage(dmChannelId, message);
 
-    // 7. Federation relay if the recipient is on a remote instance.
-    if (isFederationRelayEnabled() && targetUser.homeInstance && targetUser.homeInstance !== ourOrigin) {
-      queueDmRelay(message, dmChannelId, 'create');
-    }
+    // 7. Federation relay, as for every DM message: to each instance that
+    // hosts a participant (`queueDmRelay` derives the targets from the
+    // conversation's members, and relays nothing for a pair homed here). The
+    // sender's own home is one of them when the sender is a federated account
+    // acting on this instance, which is how the invite reaches the copy of
+    // the conversation the sender reads at home.
+    queueDmRelay(message, dmChannelId, 'create');
 
     const response: SpaceInviteResponse = { dmChannelId, messageId, message };
     return reply.code(200).send(response);

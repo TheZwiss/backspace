@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useEffect } from 'react';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -39,10 +39,13 @@ vi.mock('../audio/AudioManager', () => ({
 }));
 vi.mock('../stores/authStore', async () =>
   (await import('../test/authStoreMock')).authStoreMock(() => auth.state));
+// The origin of the user's home session (`getFriendsHomeOrigin`): `''` (the
+// page's instance) unless a test connects the true home.
+const friendsHome = vi.hoisted(() => ({ origin: '' }));
 vi.mock('../stores/instanceStore', async () => {
   const { create } = await import('zustand');
   const store = create<{ instances: unknown[] }>()(() => ({ instances: [] }));
-  return { useInstanceStore: store };
+  return { useInstanceStore: store, getFriendsHomeOrigin: () => friendsHome.origin };
 });
 vi.mock('../utils/mutuals', () => ({
   loadFederatedMutuals: vi.fn().mockResolvedValue({ mutualFriends: [], mutualSpaces: [] }),
@@ -70,7 +73,8 @@ vi.mock('../api/client', async (importOriginal) => ({
 }));
 
 import { useSpaceStore } from '../stores/spaceStore';
-import { setOriginFromHostnameResolver } from '../utils/crossStoreResolvers';
+import { setApiForOriginResolver, setOriginFromHostnameResolver } from '../utils/crossStoreResolvers';
+import type { BackspaceApiClient } from '../api/client';
 import { useChatStore } from '../stores/chatStore';
 import { useUIStore } from '../stores/uiStore';
 import { useSocialStore, type TaggedFriend } from '../stores/socialStore';
@@ -129,6 +133,7 @@ function renderAt(node: React.ReactNode, path = '/channels/@me') {
 }
 
 beforeEach(() => {
+  friendsHome.origin = '';
   auth.state.user = { id: 'alice-home', username: 'alice', homeInstance: null, homeUserId: null };
   setOriginFromHostnameResolver((host) => (host === 'remote.example' ? REMOTE : ''));
   // alice's account on REMOTE, as REMOTE's ready registers it.
@@ -215,9 +220,10 @@ describe('a DM created from each UI entry point lands in the conversation\'s one
 
 describe('the add-member modal names the 1-on-1 by the id of the instance it asks', () => {
   it('sends home\'s copy id when the row is pinned to another instance\'s copy', async () => {
-    // alice's account is homed on REMOTE, so REMOTE's copy is the pinned row;
-    // the group is created through the browsed instance, which knows the
-    // conversation only by its own id.
+    // alice's account is homed on REMOTE, so REMOTE's copy is the pinned row.
+    // This client holds no live session on REMOTE (`getFriendsHomeOrigin` is
+    // `''`), so the group is created through the browsed instance, which
+    // knows the conversation only by its own id.
     auth.state.user = { id: 'alice-home', username: 'alice', homeInstance: 'remote.example', homeUserId: 'alice-true' };
     useSpaceStore.getState().reset();
     useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(bobDmRemote)]);
@@ -277,7 +283,8 @@ describe('the add-member modal adds to a group through home\'s copy of it', () =
   const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _instanceOrigin: '' } as TaggedFriend;
 
   beforeEach(() => {
-    // alice's account is homed on REMOTE, so REMOTE's copy is the pinned row.
+    // alice's account is homed on REMOTE, so REMOTE's copy is the pinned row;
+    // with no live session on REMOTE the add goes to the browsed instance.
     auth.state.user = { id: 'alice-home', username: 'alice', homeInstance: 'remote.example', homeUserId: 'alice-true' };
     useSpaceStore.getState().reset();
     useSocialStore.setState({ friends: [carol] });
@@ -355,5 +362,117 @@ describe('the add-member modal knows who is in a DM pinned to another instance',
 
     await userEvent.click(screen.getByText('dave'));
     expect(screen.getByText('Add 1 Friend')).toBeInTheDocument();
+  });
+});
+
+describe('the add-member modal asks the user\'s home when the session is signed in to another instance (#391)', () => {
+  // erin is homed on REMOTE and signed in to the page's instance with her
+  // federated account; REMOTE is connected as a secondary session. Her
+  // friendships with REMOTE's own users exist only on REMOTE, so the page's
+  // instance would refuse them as "not a friend".
+  const PAGE_HOST = window.location.host;
+  const erinPage = user('erin-page', 'erin-true', 'remote.example', 'erin@remote.example');
+  const erinHome = user('erin-true', null, null, 'erin');
+  const tessPage = user('tess-page', null, null, 'tess');
+  /** tess as REMOTE knows her: a replicated row naming the page's instance. */
+  const tessOnHome = user('tess-on-home', 'tess-page', PAGE_HOST, 'tess');
+  const bobHome = user('bob-home', null, null, 'bob');
+  const bobFriend: TaggedFriend = { ...bobHome, _instanceOrigin: REMOTE } as TaggedFriend;
+  const FID_ERIN_TESS = '2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b';
+  const FID_GROUP = '3c3c3c3c-0000-4000-8000-000000000000';
+
+  const remoteCreateGroup = vi.fn();
+  const remoteAddMember = vi.fn();
+  const remoteApi = { dm: { createGroup: remoteCreateGroup, addMember: remoteAddMember } } as unknown as BackspaceApiClient;
+
+  beforeEach(() => {
+    auth.state.user = { id: 'erin-page', username: 'erin@remote.example', homeInstance: 'remote.example', homeUserId: 'erin-true' };
+    auth.state.myRowIds = new Map([[REMOTE, 'erin-true']]);
+    friendsHome.origin = REMOTE;
+    setApiForOriginResolver((origin) => (origin === REMOTE ? remoteApi : api));
+    remoteCreateGroup.mockReset();
+    remoteAddMember.mockReset();
+    useSpaceStore.getState().reset();
+    useSocialStore.setState({ friends: [bobFriend] });
+  });
+
+  afterEach(() => {
+    setApiForOriginResolver(() => api);
+  });
+
+  it('creates the group from a 1-on-1 on the home, naming its copy and its rows', async () => {
+    useSpaceStore.getState().populateFromReady('', [], [], [copyDm(wireDm({
+      id: 'dm-tess-page', federatedId: FID_ERIN_TESS, createdAt: 1, members: [erinPage, tessPage],
+    }))]);
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(wireDm({
+      id: 'dm-tess-home', federatedId: FID_ERIN_TESS, createdAt: 2, members: [erinHome, tessOnHome],
+    }))]);
+    const [rowId] = rowIds();
+    remoteCreateGroup.mockResolvedValue(wireDm({
+      id: 'dm-group-home', federatedId: FID_GROUP, ownerId: 'erin-true', createdAt: 9, members: [erinHome, tessOnHome, bobHome],
+    }));
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: rowId });
+    renderAt(<AddDmMemberModal />);
+
+    await userEvent.click(screen.getByText('bob'));
+    await act(async () => {
+      await userEvent.click(screen.getByText('Add 1 Friend'));
+    });
+
+    await waitFor(() => expect(remoteCreateGroup).toHaveBeenCalled());
+    expect(api.dm.createGroup).not.toHaveBeenCalled();
+    const request = vi.mocked(remoteCreateGroup).mock.calls[0]![0];
+    expect(request.fromDmChannelId).toBe('dm-tess-home');
+    expect(request.users).toEqual([
+      // The partner as REMOTE knows her, named by her home identity.
+      { id: 'tess-on-home', homeUserId: 'tess-page', homeInstance: PAGE_HOST },
+      // REMOTE's own user, by REMOTE's id.
+      { id: 'bob-home', homeUserId: null, homeInstance: null },
+    ]);
+    // The answer is REMOTE's copy, and the UI opens it.
+    await waitFor(() => expect(currentPath).toBe('/channels/@me/dm-group-home'));
+    expect(rowIds()).toContain('dm-group-home');
+  });
+
+  it('adds to an existing group through the home\'s copy', async () => {
+    useSpaceStore.getState().populateFromReady('', [], [], [copyDm(wireDm({
+      id: 'dm-group-page', federatedId: FID_GROUP, ownerId: 'erin-page', createdAt: 3, members: [erinPage, tessPage],
+    }))]);
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(wireDm({
+      id: 'dm-group-home', federatedId: FID_GROUP, ownerId: 'erin-true', createdAt: 4, members: [erinHome, tessOnHome],
+    }))]);
+    const [rowId] = rowIds();
+    remoteAddMember.mockResolvedValue(wireDm({
+      id: 'dm-group-home', federatedId: FID_GROUP, ownerId: 'erin-true', createdAt: 4, members: [erinHome, tessOnHome, bobHome],
+    }));
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: rowId });
+    renderAt(<AddDmMemberModal />);
+
+    await userEvent.click(screen.getByText('bob'));
+    await userEvent.click(screen.getByText('Add 1 Friend'));
+
+    await waitFor(() => expect(remoteAddMember).toHaveBeenCalled());
+    expect(api.dm.addMember).not.toHaveBeenCalled();
+    expect(remoteAddMember.mock.calls[0]![0]).toBe('dm-group-home');
+    expect(remoteAddMember.mock.calls[0]![1]).toEqual({ userId: 'bob-home' });
+  });
+
+  it('refuses a friend it cannot name to the home instead of sending another instance\'s id', async () => {
+    // A legacy stub (home instance, no home id) the page's instance issued:
+    // its id means nothing on REMOTE.
+    const legacy: TaggedFriend = { ...user('legacy-page', null, 'third.example', 'old'), _instanceOrigin: '' } as TaggedFriend;
+    useSocialStore.setState({ friends: [legacy] });
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(wireDm({
+      id: 'dm-group-home', federatedId: FID_GROUP, ownerId: 'erin-true', createdAt: 4, members: [erinHome, tessOnHome],
+    }))]);
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-home' });
+    renderAt(<AddDmMemberModal />);
+
+    await userEvent.click(screen.getByText('old'));
+    await userEvent.click(screen.getByText('Add 1 Friend'));
+
+    expect(await screen.findByText('Failed to add members')).toBeInTheDocument();
+    expect(remoteAddMember).not.toHaveBeenCalled();
+    expect(api.dm.addMember).not.toHaveBeenCalled();
   });
 });

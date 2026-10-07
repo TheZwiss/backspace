@@ -170,16 +170,22 @@ export interface PersonTarget {
 /**
  * Where to send a request about the person `row` names (issued by `origin`),
  * and how to name them there. A person with an identity is asked about on
- * the page's own instance (`''`): by their id when they are native to it,
- * otherwise by their home identity, which that server resolves or creates the
- * row for. A legacy stub has no identity to send, so it is named by its own
- * id on the instance that issued it.
+ * the instance `to` (default `''`, the page's own instance): by their id when
+ * `to` issued the row and they are native to it, otherwise by their home
+ * identity, which that server resolves or creates the row for. A legacy stub
+ * has no identity to send, so it is named by its own id on the instance that
+ * issued it; the returned `origin` then differs from `to` whenever `to` did
+ * not issue the row, and the person cannot be named to `to` at all.
  */
-export function personRequest(row: IdentityFields, origin: string): { origin: string; target: PersonTarget } {
+export function personRequest(
+  row: IdentityFields,
+  origin: string,
+  to = '',
+): { origin: string; target: PersonTarget } {
   const identity = homeIdentityOf(row, origin);
   if (!identity) return { origin, target: { userId: row.id } };
-  if (origin === '' && !row.homeInstance) return { origin: '', target: { userId: row.id } };
-  return { origin: '', target: { homeUserId: identity.userId, homeInstance: identity.host } };
+  if (origin === to && !row.homeInstance) return { origin: to, target: { userId: row.id } };
+  return { origin: to, target: { homeUserId: identity.userId, homeInstance: identity.host } };
 }
 
 /**

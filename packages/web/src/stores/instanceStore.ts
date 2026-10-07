@@ -202,19 +202,44 @@ export function isSelfOrigin(origin: string): boolean {
  * client holds no session there: the primary connection when we are browsing
  * that domain natively, else a connected secondary instance.
  *
- * Shared by `maybeAutoReattach` (proof minting) and `resolveCredentialHomeApi`
- * (per-remote credential issuance) so both agree on what "a session on the home
- * instance" means.
+ * `origin` is the session's origin string as the rest of the client keys it:
+ * `''` for the primary connection, the connected instance's origin otherwise.
+ *
+ * Shared by `maybeAutoReattach` (proof minting), `resolveCredentialHomeApi`
+ * (per-remote credential issuance) and `getFriendsHomeOrigin` (friend-only
+ * requests) so all agree on what "a session on the home instance" means.
  */
-export function resolveSessionApiForHome(homeDomain: string): { api: BackspaceApiClient; username: string } | null {
+export function resolveSessionApiForHome(
+  homeDomain: string,
+): { api: BackspaceApiClient; username: string; origin: string } | null {
   const primaryUser = useAuthStore.getState().user;
   if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
-    return { api, username: primaryUser.username };
+    return { api, username: primaryUser.username, origin: '' };
   }
   const conn = useInstanceStore.getState().instances.find(
     (i) => i.status === 'connected' && new URL(i.origin).hostname.toLowerCase() === homeDomain,
   );
-  return conn ? { api: conn.api, username: conn.username } : null;
+  return conn ? { api: conn.api, username: conn.username, origin: conn.origin } : null;
+}
+
+/**
+ * The origin the user's friend-only requests go to: creating a group DM,
+ * adding someone to one, and sending a space invite. Each is checked against
+ * the friend list of the instance that receives it, and the list that holds
+ * all of the user's friends is their home's: friend requests are only
+ * accepted there (`not_authoritative_for_sender`), and a federated account
+ * on another instance holds only the friendships relayed into it, so a friend
+ * native to the home is "not a friend" there (#391).
+ *
+ * `''` when the page's own account owns its friendships (a native account, or
+ * a detached one, sovereign here), and also when the true home has no live
+ * session in this client: the page's instance then answers with the
+ * friendships it holds. Otherwise the true home's connected origin.
+ */
+export function getFriendsHomeOrigin(): string {
+  const user = useAuthStore.getState().user;
+  if (!user?.homeInstance || user.federationHomeOrphaned) return '';
+  return resolveSessionApiForHome(homeHostOf(user.homeInstance))?.origin ?? '';
 }
 
 /**

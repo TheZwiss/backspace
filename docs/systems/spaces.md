@@ -145,6 +145,10 @@ If the parsed origin matches `window.location.origin`, it is treated as a bare c
 
 The endpoint lives on the **caller's home instance**, not the space's home. The caller's instance fetches the snapshot server-to-server from the space's `GET /api/spaces/invite/:code/preview` endpoint, then inserts a `type='system'` DM message with `event: 'space_invite'` content. Three-way federation (sender on X, recipient on Y, space on Z) is supported without new federation event kinds.
 
+`InviteModal` sends the request to `getFriendsHomeOrigin()` (`instanceStore.ts`, see [client-federation.md](client-federation.md) §5): the page's instance for a native account, and the connected true home for a federated account signed in to another instance, whose friends are checked there (#391). Each friend is named as that instance knows them (`personRequest(friend, origin, home)`), and the space's origin is translated for it: `''` only when the space is on the receiving instance, else the space's absolute origin (the page's own `window.location.origin` for a space on the page's instance). With no live session on the true home it falls back to the page's instance.
+
+The invite is relayed like every DM message (`queueDmRelay`), to each instance that hosts a participant: the recipient's home when they are homed elsewhere, and the sender's home when the sender is a federated account acting on this instance, which is where the sender reads the conversation. Up to 1.8.0 the route relayed only when the recipient was homed elsewhere, so an invite sent through a federated account reached the recipient but never the sender's own copy of the conversation.
+
 The friend-picker surface in `InviteModal` uses the same per-space invite code as the link-share footer — there is exactly one invite code per space at any time, and revocation (when implemented) invalidates all outstanding cards atomically.
 
 ### Invite Preview

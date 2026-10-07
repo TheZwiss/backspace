@@ -123,7 +123,7 @@ interface GroupDmUserIdentity {
    - Else: direct ID lookup, falling back to `resolveLocalUser()` for remote snowflake IDs
 4. No duplicate resolved IDs
 5. Caller cannot include themselves
-6. All target users must be friends with the caller (exception: existing DM members when `fromDmChannelId` references a 1-on-1 DM the caller belongs to)
+6. All target users must be friends with the caller (exception: existing DM members when `fromDmChannelId` references a 1-on-1 DM the caller belongs to). The check reads this instance's `friends` table, so the client sends the request to the user's home when it holds a session there ("Add DM Member Modal" below)
 
 **Creation transaction:**
 1. Insert `dm_channels` with `ownerId = caller`
@@ -806,7 +806,7 @@ System messages (`type = 'system'` in `dm_messages`) record group lifecycle even
 
 ### `space_invite` (user-initiated, federated via processCreateEvent)
 
-Sent by `POST /api/dm/space-invite` (see `docs/systems/spaces.md`). Unlike membership-event system messages, this one is user-initiated content — the inviter authored it deliberately. It travels through the standard DM message create relay (`processCreateEvent`), not a dedicated event kind.
+Sent by `POST /api/dm/space-invite` (see `docs/systems/spaces.md`). Unlike membership-event system messages, this one is user-initiated content — the inviter authored it deliberately. It travels through the standard DM message create relay (`processCreateEvent`), not a dedicated event kind. The route hands every invite to `queueDmRelay`, as the message routes do, so it reaches each instance that hosts a participant, the sender's own home included when the sender is a federated account acting on this instance (a homeward relay, `attributionRefusal` case 2).
 
 JSON content shape:
 
@@ -951,9 +951,10 @@ When the owner's instance is not connected, or does not list the conversation, t
 - Shows the caller's friends list, filtered by search query
 - Excludes current DM members (shown as "Already in this DM")
 - Enforces 10-member cap in the UI (`remainingSlots` calculation)
+- Both requests go to `getFriendsHomeOrigin()` (`instanceStore.ts`): the instance whose friend list the server checks them against. That is the page's instance for a native account, and the connected true home for a federated account signed in to another instance (`erin@nova` on orbit), whose friendships with the home's own users exist only at home (#391; before, the request went to the page's instance, which answered `not_a_friend`). With no live session on the true home it is the page's instance, which applies the friendships it holds. The conversation is named by that instance's copy (`dmCopyOnOrigin`) and each person as that instance knows them (`personRequest(row, origin, home)`); a friend it cannot name (a legacy stub another instance issued) fails the request with "Failed to add members" before anything is sent. A created group is added as that instance's copy (`upsertDmCopy(home, …)`).
 - Two creation paths:
-  - **1-on-1 DM upgrade:** If `dmChannel.ownerId` is null, calls `api.dm.createGroup()` with the existing other member + selected friends + `fromDmChannelId`
-  - **Existing group DM:** Calls `api.dm.addMember()` sequentially for each selected friend
+  - **1-on-1 DM upgrade:** If `dmChannel.ownerId` is null, calls `createGroup()` with the existing other member + selected friends + `fromDmChannelId` (the home's copy, when it holds one)
+  - **Existing group DM:** Calls `addMember()` sequentially for each selected friend on the home's copy; without one it fails with "Failed to add members"
 
 ---
 

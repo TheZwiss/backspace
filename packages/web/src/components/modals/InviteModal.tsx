@@ -7,8 +7,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useSelfIdentity } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
-import { api, HttpError } from '../../api/client';
-import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { HttpError } from '../../api/client';
+import { getFriendsHomeOrigin } from '../../stores/instanceStore';
+import { getApiForOrigin } from '../../utils/crossStoreResolvers';
+import { isMine, parseFederatedUsername, personRequest, userKey } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
 import type { MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
@@ -19,6 +21,40 @@ type SendStatus =
   | { kind: 'failure'; reason: string };
 
 type InviteT = TFunction<['spaces', 'common']>;
+
+/**
+ * The person a friend row names (`userKey`). Friends come from every
+ * connected instance, whose row ids can coincide, so selection and results
+ * are keyed by person.
+ */
+function friendKey(friend: TaggedFriend): string {
+  return userKey(friend, friend._instanceOrigin);
+}
+
+/**
+ * How the instance at `to` is told who the invite is for: the friend's id
+ * there when they are native to it, else their home identity
+ * (`personRequest`). Null for a legacy stub another instance issued, which
+ * cannot be named to `to`.
+ */
+function inviteTarget(friend: TaggedFriend, to: string): SpaceInviteRequest['target'] | null {
+  const request = personRequest(friend, friend._instanceOrigin, to);
+  if (request.origin !== to) return null;
+  const { userId, homeUserId, homeInstance } = request.target;
+  if (homeUserId && homeInstance) return { homeUserId, homeInstance };
+  return userId ? { userId } : null;
+}
+
+/**
+ * The space's instance as the instance at `to` reads it. `''` on the wire
+ * means the receiving server's own space, so it is sent only when the space
+ * is on `to`; a space on the page's own instance (`spaceOrigin` `''`) is
+ * named by the page's origin when the invite goes elsewhere.
+ */
+function spaceOriginFor(spaceOrigin: string, to: string): string {
+  if (spaceOrigin === to) return '';
+  return spaceOrigin || window.location.origin;
+}
 
 /**
  * Row-sized copy for each way a space invite can fail. Keyed on the server's
@@ -98,7 +134,7 @@ function InviteSelectFriendRow({
   isSelected: boolean;
   alreadyMember: boolean;
   sending: boolean;
-  onToggle: (id: string, friend: TaggedFriend) => void;
+  onToggle: (key: string, friend: TaggedFriend) => void;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
   const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
@@ -106,7 +142,7 @@ function InviteSelectFriendRow({
   const dn = canonical.displayName ?? baseName;
   return (
     <button
-      onClick={() => onToggle(friend.id, friend)}
+      onClick={() => onToggle(friendKey(friend), friend)}
       disabled={alreadyMember || sending}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
         alreadyMember
@@ -233,26 +269,26 @@ export function InviteModal() {
     });
   }, [friends, query, self]);
 
-  const toggleFriend = (friendId: string, friend: TaggedFriend) => {
+  const toggleFriend = (key: string, friend: TaggedFriend) => {
     if (isFriendAlreadyMember(friend)) return;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(friendId)) next.delete(friendId);
-      else next.add(friendId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const removeFriend = (friendId: string) => {
+  const removeFriend = (key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.delete(friendId);
+      next.delete(key);
       return next;
     });
   };
 
   const selectedFriends = useMemo(
-    () => friends.filter((f) => selected.has(f.id)),
+    () => friends.filter((f) => selected.has(friendKey(f))),
     [friends, selected],
   );
 
@@ -263,22 +299,30 @@ export function InviteModal() {
     // Mark all targets as pending in the results map (preserving prior successes).
     setResults((prev) => {
       const next = new Map(prev);
-      for (const f of targets) next.set(f.id, { kind: 'pending' });
+      for (const f of targets) next.set(friendKey(f), { kind: 'pending' });
       return next;
     });
 
+    // Invites go to the user's home (`getFriendsHomeOrigin`), whose friend
+    // list they are checked against and whose copy of each 1-on-1 the user
+    // reads; on a session signed in to another instance that is a secondary
+    // connection, not the page's own instance.
+    const home = getFriendsHomeOrigin();
+    const homeApi = getApiForOrigin(home);
+    const spaceInstanceOrigin = spaceOriginFor(instanceOrigin, home);
     const calls = targets.map(async (friend) => {
-      const target: SpaceInviteRequest['target'] = friend.homeInstance
-        ? {
-            homeUserId: friend.homeUserId ?? friend.id,
-            homeInstance: friend.homeInstance,
-          }
-        : { userId: friend.id };
+      const target = inviteTarget(friend, home);
+      if (!target) {
+        return {
+          friend,
+          status: { kind: 'failure' as const, reason: t('spaces:invite.failure.invalidTarget') },
+        };
+      }
       try {
-        await api.dm.spaceInvite({
+        await homeApi.dm.spaceInvite({
           target,
           spaceId: currentSpace.id,
-          spaceInstanceOrigin: instanceOrigin,
+          spaceInstanceOrigin,
           inviteCode,
         });
         return { friend, status: { kind: 'success' as const } };
@@ -294,12 +338,12 @@ export function InviteModal() {
     setResults((prev) => {
       const next = new Map(prev);
       for (const s of settled) {
-        if (s.status === 'fulfilled') next.set(s.value.friend.id, s.value.status);
+        if (s.status === 'fulfilled') next.set(friendKey(s.value.friend), s.value.status);
       }
       // If all targets succeeded, close the modal silently. Toast infra does
       // not exist in this codebase yet — see plan Task 12 / Step 2.
       const allSucceeded = targets.every(
-        (f) => next.get(f.id)?.kind === 'success',
+        (f) => next.get(friendKey(f))?.kind === 'success',
       );
       if (allSucceeded) {
         // Defer close until after this state batch settles.
@@ -314,7 +358,7 @@ export function InviteModal() {
 
   const onRetryFailed = () => {
     const failed = selectedFriends.filter(
-      (f) => results.get(f.id)?.kind === 'failure',
+      (f) => results.get(friendKey(f))?.kind === 'failure',
     );
     sendInvitesTo(failed);
   };
@@ -337,7 +381,7 @@ export function InviteModal() {
       : t('spaces:invite.send', { count: selectedFriends.length });
   const hasFailures =
     inResultsView &&
-    selectedFriends.some((f) => results.get(f.id)?.kind === 'failure');
+    selectedFriends.some((f) => results.get(friendKey(f))?.kind === 'failure');
 
   return (
     <Modal
@@ -369,12 +413,12 @@ export function InviteModal() {
           <div className="flex gap-1.5 flex-wrap">
             {selectedFriends.map((f) => (
               <span
-                key={f.id}
+                key={friendKey(f)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
                 <button
-                  onClick={() => removeFriend(f.id)}
+                  onClick={() => removeFriend(friendKey(f))}
                   className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
                   aria-label={t('spaces:invite.removeSelected', { name: f.displayName ?? f.username })}
                 >
@@ -402,9 +446,9 @@ export function InviteModal() {
           {inResultsView ? (
             selectedFriends.map((f) => (
               <InviteResultFriendRow
-                key={f.id}
+                key={friendKey(f)}
                 friend={f}
-                status={results.get(f.id)}
+                status={results.get(friendKey(f))}
               />
             ))
           ) : (
@@ -418,9 +462,9 @@ export function InviteModal() {
               )}
               {filteredFriends.map((friend) => (
                 <InviteSelectFriendRow
-                  key={friend.id}
+                  key={friendKey(friend)}
                   friend={friend}
-                  isSelected={selected.has(friend.id)}
+                  isSelected={selected.has(friendKey(friend))}
                   alreadyMember={isFriendAlreadyMember(friend)}
                   sending={sending}
                   onToggle={toggleFriend}

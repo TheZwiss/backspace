@@ -143,6 +143,29 @@ describe('personRequest', () => {
     expect(personRequest({ id: 'r', homeInstance: 'x.example' }, 'https://orbit.ddns.net'))
       .toEqual({ origin: 'https://orbit.ddns.net', target: { userId: 'r' } });
   });
+
+  describe('to another connected instance', () => {
+    const ORBIT = 'https://orbit.ddns.net';
+
+    it('names that instance\'s own native user by their id there', () => {
+      expect(personRequest({ id: 'bob' }, ORBIT, ORBIT)).toEqual({ origin: ORBIT, target: { userId: 'bob' } });
+    });
+
+    it('names a page-native user by their identity at the page\'s host, never by the page\'s id alone', () => {
+      expect(personRequest({ id: 'a' }, '', ORBIT))
+        .toEqual({ origin: ORBIT, target: { homeUserId: 'a', homeInstance: 'nova.ddns.net' } });
+    });
+
+    it('names a replicated row that instance issued by the home identity it carries', () => {
+      expect(personRequest({ id: 'r', homeUserId: 'a', homeInstance: 'nova.ddns.net' }, ORBIT, ORBIT))
+        .toEqual({ origin: ORBIT, target: { homeUserId: 'a', homeInstance: 'nova.ddns.net' } });
+    });
+
+    it('cannot name a legacy stub another instance issued: the origin it returns is not the one asked', () => {
+      expect(personRequest({ id: 'r', homeInstance: 'x.example' }, '', ORBIT))
+        .toEqual({ origin: '', target: { userId: 'r' } });
+    });
+  });
 });
 
 describe('isFederationGlobeApplicable', () => {
