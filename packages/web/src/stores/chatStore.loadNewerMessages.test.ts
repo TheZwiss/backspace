@@ -227,7 +227,8 @@ describe('live messages on a detached window', () => {
 
 describe('sending from a detached window', () => {
   it('returns the channel to the present and keeps the message being sent', async () => {
-    useAuthStore.setState({ user: author });
+    // The channel is orbit's; its ready named the user's row there.
+    useAuthStore.setState({ user: author, myRowIds: new Map([[ORIGIN, 'u1-on-orbit']]) });
     detachedWindow();
     let resolveNewest: (page: MessageWithUser[]) => void = () => {};
     channelsMessages.mockReturnValue(new Promise((r) => { resolveNewest = r; }));
