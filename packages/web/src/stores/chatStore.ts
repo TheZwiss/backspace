@@ -3,7 +3,7 @@ import type { MessageWithUser, Reaction, ReadState, User } from '@backspace/shar
 import { wsSend } from '../hooks/useWebSocket';
 import { HttpError } from '../api/client';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
-import { myRowForOrigin } from './authStore';
+import { isMe, myRowForOrigin } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { updateIsAboutRowId, withUserUpdate, type IdentityFields } from '../utils/identity';
 import { usePendingMessageStore } from './pendingMessageStore';
@@ -235,6 +235,13 @@ interface ChatState {
    * newest message when it changes.
    */
   presentReturns: Map<string, number>;
+  /**
+   * The `reaction_add`s this client sent and has not seen answered, keyed by
+   * `reactionKey`, with the time each was sent. The server answers a stored
+   * reaction with `reaction_added` and a refused one with nothing, so an
+   * entry counts only for `REACTION_ADD_IN_FLIGHT_MS`.
+   */
+  reactionAddsInFlight: Map<string, number>;
   setCurrentChannel: (channelId: string | null) => void;
   saveScrollPosition: (channelId: string, anchor: ScrollAnchor) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
@@ -266,9 +273,16 @@ interface ChatState {
   addRealtimeMessage: (channelId: string, message: MessageWithUser) => void;
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
+  /**
+   * Whether the signed-in user holds `emoji` on the message: a stored
+   * reaction of theirs, or an add of theirs still in flight. Reads the
+   * store at call time.
+   */
+  hasOwnReaction: (messageId: string, emoji: string) => boolean;
+  /** Send a `reaction_add`, unless the user already holds the reaction (`hasOwnReaction`). */
   addReaction: (messageId: string, emoji: string) => void;
   removeReaction: (messageId: string, emoji: string) => void;
-  onReactionAdded: (messageId: string, reaction: any) => void;
+  onReactionAdded: (messageId: string, reaction: Reaction) => void;
   onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
   loadMessagesAround: (channelId: string, messageId: string) => Promise<LoadAroundResult>;
   setTyping: (channelId: string, userId: string, username: string) => void;
@@ -349,14 +363,53 @@ function newestPageState(state: ChatState, channelId: string, page: MessageWithU
   return next;
 }
 
-/** Find which channel a message belongs to by scanning the message cache. */
-function findChannelForMessage(messages: Map<string, MessageWithUser[]>, messageId: string): string | null {
-  for (const [channelId, msgs] of messages) {
-    if (msgs.some(m => m.id === messageId)) {
-      return channelId;
+/** A message the store holds, loaded or held by a detached window, with its channel. */
+function findHeldMessage(
+  state: Pick<ChatState, 'messages' | 'detachedChannels'>,
+  messageId: string,
+): { channelId: string; message: MessageWithUser } | null {
+  for (const source of [state.messages, state.detachedChannels]) {
+    for (const [channelId, msgs] of source) {
+      const message = msgs.find(m => m.id === messageId);
+      if (message) return { channelId, message };
     }
   }
   return null;
+}
+
+/**
+ * How long an unanswered `reaction_add` counts as in flight. The server sends
+ * nothing back for an add it refuses, so an entry is not held for ever.
+ */
+export const REACTION_ADD_IN_FLIGHT_MS = 10_000;
+
+/** One user's reaction on one message: the key the server keeps unique. */
+function reactionKey(messageId: string, emoji: string): string {
+  return JSON.stringify([messageId, emoji]);
+}
+
+/** Whether `reaction`, on a message of `channelId`, is the signed-in user's. */
+function isOwnReactionIn(channelId: string, reaction: Pick<Reaction, 'userId' | 'user'>): boolean {
+  return isMe(reaction.user ?? { id: reaction.userId }, getChannelOrigin(channelId));
+}
+
+/** `inFlight` without `key`, or `inFlight` itself when it has no such entry. */
+function withoutInFlight(inFlight: Map<string, number>, key: string): Map<string, number> {
+  if (!inFlight.has(key)) return inFlight;
+  const next = new Map(inFlight);
+  next.delete(key);
+  return next;
+}
+
+/**
+ * `reactions` with `reaction` appended, or unchanged when they already hold
+ * it: the same row, or the same user's reaction with the same emoji (the
+ * server stores one per user, emoji and message).
+ */
+function withReaction(reactions: readonly Reaction[] | undefined, reaction: Reaction): Reaction[] {
+  const current = reactions ?? [];
+  const held = current.some(r => r.id === reaction.id || (r.userId === reaction.userId && r.emoji === reaction.emoji));
+  return held ? [...current] : [...current, reaction];
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -374,6 +427,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   scrollPositions: new Map(),
   detachedChannels: new Map(),
   presentReturns: new Map(),
+  reactionAddsInFlight: new Map(),
 
   saveScrollPosition: (channelId, anchor) => {
     set((state) => {
@@ -445,6 +499,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     scrollPositions: new Map(),
     detachedChannels: new Map(),
     presentReturns: new Map(),
+    reactionAddsInFlight: new Map(),
     loadStates: new Map(),
     currentChannelId: null,
     replyTo: null,
@@ -863,24 +918,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  hasOwnReaction: (messageId: string, emoji: string) => {
+    const state = get();
+    const sentAt = state.reactionAddsInFlight.get(reactionKey(messageId, emoji));
+    if (sentAt !== undefined && Date.now() - sentAt < REACTION_ADD_IN_FLIGHT_MS) return true;
+    const held = findHeldMessage(state, messageId);
+    if (!held) return false;
+    return (held.message.reactions ?? []).some(r => r.emoji === emoji && isOwnReactionIn(held.channelId, r));
+  },
+
   addReaction: (messageId: string, emoji: string) => {
+    // A second add of a reaction the user holds, or has an add in flight
+    // for, is never sent: the server keeps one per user and emoji.
+    if (get().hasOwnReaction(messageId, emoji)) return;
     // Resolve the channel from our message cache so the UI doesn't need to pass it
-    const channelId = findChannelForMessage(get().messages, messageId);
+    const channelId = findHeldMessage(get(), messageId)?.channelId;
     const origin = channelId ? getChannelOrigin(channelId) : '';
+    set((state) => {
+      const reactionAddsInFlight = new Map(state.reactionAddsInFlight);
+      reactionAddsInFlight.set(reactionKey(messageId, emoji), Date.now());
+      return { reactionAddsInFlight };
+    });
     wsSend({ type: 'reaction_add', messageId, emoji }, origin);
   },
 
   removeReaction: (messageId: string, emoji: string) => {
-    const channelId = findChannelForMessage(get().messages, messageId);
+    const channelId = findHeldMessage(get(), messageId)?.channelId;
     const origin = channelId ? getChannelOrigin(channelId) : '';
+    // The server applies the add before this removal, so the add's answer no
+    // longer matters here.
+    set((state) => {
+      const reactionAddsInFlight = withoutInFlight(state.reactionAddsInFlight, reactionKey(messageId, emoji));
+      return reactionAddsInFlight === state.reactionAddsInFlight ? state : { reactionAddsInFlight };
+    });
     wsSend({ type: 'reaction_remove', messageId, emoji }, origin);
   },
 
   onReactionAdded: (messageId: string, reaction: Reaction) => {
     set((state) => {
+      const held = findHeldMessage(state, messageId);
+      const reactionAddsInFlight = held && isOwnReactionIn(held.channelId, reaction)
+        ? withoutInFlight(state.reactionAddsInFlight, reactionKey(messageId, reaction.emoji))
+        : state.reactionAddsInFlight;
       const detachedChannels = mapHeldMessage(state.detachedChannels, messageId, (m) => ({
         ...m,
-        reactions: [...(m.reactions || []), reaction],
+        reactions: withReaction(m.reactions, reaction),
       }));
       const newMessages = new Map(state.messages);
       for (const [channelId, msgs] of newMessages.entries()) {
@@ -890,13 +972,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const oldMsg = newMsgs[msgIndex]!;
           newMsgs[msgIndex] = {
             ...oldMsg,
-            reactions: [...(oldMsg.reactions || []), reaction],
+            reactions: withReaction(oldMsg.reactions, reaction),
           };
           newMessages.set(channelId, newMsgs);
           break;
         }
       }
-      return { messages: newMessages, detachedChannels };
+      return { messages: newMessages, detachedChannels, reactionAddsInFlight };
     });
   },
 

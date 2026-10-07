@@ -36,7 +36,6 @@ import {
 import { useTransferStore } from '../../stores/transferStore';
 import { useMessageJump } from './messageJumpContext';
 import { ReactionPill } from './ReactionPill';
-import { isOwnReaction } from './reactionSummary';
 import { memberNameColor } from '../../utils/memberGroups';
 
 interface MessageProps {
@@ -149,11 +148,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  // The reaction picker, and what it hangs off: the "+" of the hover bar, or
+  // the message row when the message menu opened it (the long-press sheet on
+  // mobile, where there is no hover bar).
+  const [reactionPicker, setReactionPicker] = useState<'button' | 'row' | null>(null);
+  const showReactionPicker = reactionPicker !== null;
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -251,7 +255,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const toggleReaction = (emoji: string) => {
     // Read-only: a dead 1-on-1 DM accepts no reaction mutations (add OR remove).
     if (isDeadDmThread) return;
-    const hasReacted = message.reactions?.some(r => isOwnReaction(r, messageOrigin, self) && r.emoji === emoji);
+    // Read from the store at call time: the context menu keeps the handlers
+    // of the render that opened it, whose `message` is older than a reaction
+    // added since. An add still in flight counts as held.
+    const hasReacted = useChatStore.getState().hasOwnReaction(message.id, emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);
     } else if (canAddReactions) {
@@ -296,7 +303,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     const handler = (e: MouseEvent) => {
       if (reactionPickerRef.current?.contains(e.target as Node)) return;
       if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
-      setShowReactionPicker(false);
+      setReactionPicker(null);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -306,7 +313,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   useEffect(() => {
     if (!showReactionPicker) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowReactionPicker(false);
+      if (e.key === 'Escape') setReactionPicker(null);
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
@@ -314,7 +321,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
     addReaction(message.id, emoji.native);
-    setShowReactionPicker(false);
+    setReactionPicker(null);
   }, [addReaction, message.id]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -376,9 +383,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       onDelete: () => deleteMessage(message.id, channelKey),
       onReaction: (emoji: string) => toggleReaction(emoji),
       onOpenEmojiPicker: () => {
-        // Close the context menu, then show the reaction picker
+        // Close the context menu, then show the reaction picker at the row
         useContextMenuStore.getState().close();
-        setShowReactionPicker(true);
+        setReactionPicker('row');
       },
       onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
     });
@@ -443,6 +450,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const content = (
     <div
+      ref={rowRef}
       id={`msg-${message.id}`}
       role="article"
       aria-label={t('chat:message.rowLabel', { author: displayName, time: formatMessageTimestamp(t, fmt, message.createdAt) })}
@@ -708,11 +716,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       </div>
 
       {/* Reaction emoji picker */}
-      {showInteractions && showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
+      {showInteractions && reactionPicker && canAddReactions && (() => {
+        const anchor = reactionPicker === 'button' ? reactionPickerBtnRef.current : rowRef.current;
+        if (!anchor) return null;
         const PICKER_HEIGHT = 400;
         const PICKER_WIDTH = 360;
         const MARGIN = 8;
-        const btnRect = layoutRect(reactionPickerBtnRef.current!.getBoundingClientRect());
+        const btnRect = layoutRect(anchor.getBoundingClientRect());
         const spaceBelow = layoutPixels(window.innerHeight) - btnRect.bottom;
         const spaceAbove = btnRect.top;
         const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
@@ -738,7 +748,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       })()}
 
       {/* Action buttons on hover */}
-      {showInteractions && (isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
+      {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
@@ -753,7 +763,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               ))}
               <button
                 ref={reactionPickerBtnRef}
-                onClick={() => setShowReactionPicker((v) => !v)}
+                onClick={() => setReactionPicker((v) => (v ? null : 'button'))}
                 className={`p-1 hover:bg-interactive-hover rounded transition-colors text-[14px] leading-none ${
                   showReactionPicker ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}

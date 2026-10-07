@@ -191,7 +191,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     items.push({
       key: 'quick-reactions',
       type: 'custom',
-      render: () => (
+      render: (close) => (
         <div className="flex items-center gap-1 px-2 py-1.5">
           {QUICK_EMOJIS.map(emoji => (
             <button
@@ -199,6 +199,9 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
               onClick={(e) => {
                 e.stopPropagation();
                 onReaction(emoji);
+                // The menu closes like the picker does, so the reaction shows
+                // on the message instead of behind the menu's backdrop.
+                close();
               }}
               className="glass-pill w-9 h-9 flex items-center justify-center text-lg hover:bg-interactive-hover rounded-lg transition-colors"
             >

@@ -195,7 +195,7 @@
   },
   "packages/server/src/ws/events.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 8
+      "count": 6
     }
   },
   "packages/server/src/ws/handler.ts": {
@@ -508,7 +508,7 @@
   },
   "packages/web/src/stores/chatStore.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "packages/web/src/stores/directoryStore.test.ts": {
