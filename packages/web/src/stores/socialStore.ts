@@ -11,6 +11,22 @@ export type TaggedFriend = Friend & { _instanceOrigin: string };
 export type TaggedFriendRequest = FriendRequest & { _instanceOrigin: string };
 export type TaggedUser = User & { _instanceOrigin: string };
 
+/**
+ * Whether `request` was sent to the user. Its ids are the ids of the instance
+ * that holds it, and `user` is the other party as that instance issued it, so
+ * the request is incoming when the other party is its sender. Never compare
+ * `fromId` with the session row's id: on any other instance that is someone
+ * else's id.
+ */
+export function isIncomingRequest(request: FriendRequest): boolean {
+  return !!request.user && request.user.id === request.fromId;
+}
+
+/** Whether the user sent `request`: the other party is its recipient (see `isIncomingRequest`). */
+export function isOutgoingRequest(request: FriendRequest): boolean {
+  return !!request.user && request.user.id === request.toId;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getApiForOrigin(origin: string) {

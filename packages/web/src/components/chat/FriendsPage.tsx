@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User } from '@backspace/shared';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
+import { isIncomingRequest, isOutgoingRequest, useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
 import { useTranslation, Trans } from 'react-i18next';
@@ -145,8 +145,8 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
   const onlineFriends = friends.filter(f => f.status !== 'offline');
-  const pendingIncoming = requests.filter(r => r.status === 'pending' && r.user?.id === r.fromId);
-  const pendingOutgoing = requests.filter(r => r.status === 'pending' && r.user?.id === r.toId);
+  const pendingIncoming = requests.filter(r => r.status === 'pending' && isIncomingRequest(r));
+  const pendingOutgoing = requests.filter(r => r.status === 'pending' && isOutgoingRequest(r));
 
   const handleOpenDm = async (person: IdentityFields, origin: string) => {
     try {
@@ -500,11 +500,11 @@ function AddFriendTab({
         if (isFriend) {
           return { ...user, relationship: 'friends' as const, mutualFriendCount: 0, mutualSpaceCount: 0 };
         }
-        const outbound = requests.find(r => r.status === 'pending' && r.user?.id === r.toId && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
+        const outbound = requests.find(r => r.status === 'pending' && isOutgoingRequest(r) && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
         if (outbound) {
           return { ...user, relationship: 'outbound_pending' as const, requestId: outbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
         }
-        const inbound = requests.find(r => r.status === 'pending' && r.user?.id === r.fromId && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
+        const inbound = requests.find(r => r.status === 'pending' && isIncomingRequest(r) && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
         if (inbound) {
           return { ...user, relationship: 'inbound_pending' as const, requestId: inbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
         }

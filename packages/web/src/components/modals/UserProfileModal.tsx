@@ -10,7 +10,7 @@ import { ProfileBio } from '../ui/ProfileBio';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { isOutgoingRequest, useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useSelfIdentity } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isMine, userKey, type SelfIdentity } from '../../utils/identity';
@@ -54,9 +54,7 @@ function getFriendshipStatus(
 
   const request = requests.find(r => r.user && userKey(r.user, r._instanceOrigin) === key);
   if (request?.user) {
-    // request.user is the OTHER party. If their ID === toId, then I am fromId (outbound)
-    const isOutbound = request.user.id === request.toId;
-    return isOutbound
+    return isOutgoingRequest(request)
       ? { state: 'outbound_pending', request }
       : { state: 'inbound_pending', request };
   }
