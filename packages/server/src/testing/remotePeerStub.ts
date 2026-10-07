@@ -7,14 +7,15 @@ import { buildFederationHeaders } from '../utils/federationAuth.js';
  * `accept(body)`. `/api/federation/epoch` answers the way a remote that adopted
  * that secret does: its body `{ instanceId }` signed with the secret, so the
  * sender's verify-before-activate check (`probeEpoch`) passes. Pass
- * `epoch: 'mismatch'` for a remote that holds some other secret (401), or
- * `epoch: 'none'` for one that holds no row for us (403).
+ * `epoch: 'mismatch'` for a remote that holds some other secret (401),
+ * `epoch: 'none'` for one that holds no row for us (403), or
+ * `epoch: 'unavailable'` for one whose check fails without an answer (503).
  */
 export function remotePeerStub(opts: {
   accept: (body: Record<string, unknown>) => Response | Promise<Response>;
   instanceId?: string;
   origin?: string;
-  epoch?: 'adopted' | 'mismatch' | 'none';
+  epoch?: 'adopted' | 'mismatch' | 'none' | 'unavailable';
 }): typeof globalThis.fetch & { acceptBodies: Array<Record<string, unknown>> } {
   let adoptedSecret = '';
   const acceptBodies: Array<Record<string, unknown>> = [];
@@ -29,6 +30,7 @@ export function remotePeerStub(opts: {
     if (u.endsWith('/api/federation/epoch')) {
       if (opts.epoch === 'mismatch') return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
       if (opts.epoch === 'none') return new Response(JSON.stringify({ error: 'Not peered' }), { status: 403 });
+      if (opts.epoch === 'unavailable') return new Response('Service Unavailable', { status: 503 });
       const body = JSON.stringify({ instanceId: opts.instanceId ?? 'remote-epoch' });
       const headers = buildFederationHeaders(body, adoptedSecret, opts.origin ?? 'https://remote.example');
       return new Response(body, { status: 200, headers });

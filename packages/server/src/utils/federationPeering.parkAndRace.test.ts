@@ -225,6 +225,37 @@ describe('verify-before-activate on the auto-peering path', () => {
     expect(peerRow()?.statusReason).toBe('repeer_incomplete');
   });
 
+  it('parks a 200 whose /epoch says the remote holds no peering with us', async () => {
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true }), epoch: 'none' }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(peerRow()?.status).toBe('needs_attention');
+    expect(peerRow()?.statusReason).toBe('repeer_incomplete');
+  });
+
+  it('keeps a 200 whose /epoch check gets no answer pending with our secret, and the next attempt activates it', async () => {
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true }), epoch: 'unavailable' }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const first = await ensurePeered(REMOTE, { kind: 'system' });
+
+    // Nothing was queued on the row, and it is still kept: the remote took its secret.
+    expect(first.status).toBe('failed');
+    expect(peerRow()?.status).toBe('pending');
+    expect(peerRow()?.statusReason).toBeNull();
+    expect(peerRow()?.hmacSecret).toBe('our-secret');
+    expect(peerRow()?.probeAttempts).toBe(1);
+
+    vi.stubGlobal('fetch', remotePeerStub({ accept: existsAnswer, instanceId: 'remote-epoch' }));
+    const second = await ensurePeered(REMOTE, { kind: 'system' });
+
+    expect(second.status).toBe('active');
+    expect(peerRow()?.status).toBe('active');
+    expect(peerRow()?.peerInstanceId).toBe('remote-epoch');
+  });
+
   it('stores the verified epoch as the baseline, not the unverified one in the 200 body', async () => {
     vi.stubGlobal('fetch', remotePeerStub({
       accept: () => jsonResponse({ accepted: true, instanceId: 'body-epoch' }),

@@ -167,12 +167,13 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
   });
 
   it('handshake sourceOrigin equals getOurOrigin() (honors PUBLIC_ORIGIN), not https://DOMAIN', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
       new Response(
         JSON.stringify({ accepted: true, instanceName: 'Remote' }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
-    );
+      'remote-epoch',
+    ));
 
     const response = await app.inject({
       method: 'POST',

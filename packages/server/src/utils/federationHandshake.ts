@@ -209,8 +209,10 @@ function activateVerified(
  * the outcome.
  *
  * Trust contract: a 200 is only believed after a signed /epoch round-trip with
- * the secret we sent verifies. Without that the row parks in `needs_attention`
- * (`repeer_incomplete`) rather than going active on a secret nobody proved.
+ * the secret we sent verifies. When the remote answers that check with a
+ * refusal the row parks in `needs_attention` (`repeer_incomplete`) rather than
+ * going active on a secret nobody proved; when the check gets no answer the
+ * row stays `pending` for the next attempt.
  */
 export async function runOutboundHandshake(opts: OutboundHandshakeOptions): Promise<HandshakeOutcome> {
   const answer = await requestPeerAccept(opts.origin, {
@@ -317,6 +319,21 @@ async function settleAccepted(opts: OutboundHandshakeOptions, instanceName: stri
       }
       return outcomeForRow(readPeerState(opts.peerId), 'The peer changed while the handshake was in flight');
     }
+    if (probe.kind === 'unknown') {
+      // The signed check got no answer it could read (a timeout, a 5xx, a
+      // network error). The remote answered 200, so it may well hold our
+      // secret: the row stays pending with that secret, whatever this sender
+      // does with a failed attempt, and the attempt is counted. The next
+      // attempt meets 409 PEER_EXISTS_RESET_REQUIRED, whose probe activates
+      // the row once the remote verifiably holds the secret.
+      recordPeerAttempt(opts.peerId, { from: ['pending'], startedAt: opts.startedAt });
+      return outcomeForRow(
+        readPeerState(opts.peerId),
+        'The remote accepted the handshake, but the signed check of the new secret did not answer; the next attempt completes the peering',
+      );
+    }
+    // The remote answered the check and does not hold the secret it accepted
+    // (401) or holds no peering with us (403).
     const parked = transitionPeer(opts.peerId, {
       from: ['pending'],
       expectSecret: opts.hmacSecret,
@@ -355,7 +372,7 @@ async function settleAccepted(opts: OutboundHandshakeOptions, instanceName: stri
 // ─── Admin-initiated handshakes ─────────────────────────────────────────────
 
 export type AdminRowPreparation =
-  | { kind: 'ready'; peerId: string; hmacSecret: string; created: boolean }
+  | { kind: 'ready'; peerId: string; hmacSecret: string; onFailure: OutboundHandshakeOptions['onFailure'] }
   | { kind: 'already_active'; peerId: string }
   | { kind: 'busy'; error: string };
 
@@ -365,8 +382,15 @@ export type AdminRowPreparation =
  *
  * - `initiate` (`/peer/initiate`): an existing peering is returned as it is;
  *   a `pending` row local traffic created becomes the admin's (kept with its
- *   secret and queued entries); a pending row an admin or the remote created, or an
- *   `awaiting_approval` row, is busy; any other row is replaced.
+ *   secret and queued entries); an admin's own `pending` row (an earlier
+ *   attempt that did not settle) is retried with its secret; a pending row the
+ *   remote created, or an `awaiting_approval` row, is busy; any other row is
+ *   replaced.
+ *
+ * `onFailure` says what a transient failure does to the prepared row: a row
+ * created here goes away unless traffic queued on it, a claimed traffic row
+ * goes back to traffic, and an admin's own row is kept (the remote may hold
+ * its secret).
  * - `approve` (an approval request): as `initiate`, except that an
  *   `awaiting_approval` row is replaced (the approval carries the remote's
  *   token) and a `needs_attention` row is busy until an admin resets it.
@@ -384,6 +408,10 @@ export function prepareAdminHandshakeRow(
       case 'unreachable':
         return { kind: 'already_active', peerId: existing.id };
       case 'pending': {
+        if (existing.initiatedBy === 'admin') {
+          // The origin's claim is held, so no exchange of ours runs on it.
+          return { kind: 'ready', peerId: existing.id, hmacSecret: existing.hmacSecret, onFailure: 'keep' };
+        }
         if (existing.initiatedBy !== 'auto') {
           return { kind: 'busy', error: 'A peering handshake with this instance is already in progress' };
         }
@@ -395,7 +423,7 @@ export function prepareAdminHandshakeRow(
           fields: { initiatedBy: 'admin' },
         });
         if (!claimed.applied) return { kind: 'busy', error: 'The peer changed; try again' };
-        return { kind: 'ready', peerId: existing.id, hmacSecret: existing.hmacSecret, created: false };
+        return { kind: 'ready', peerId: existing.id, hmacSecret: existing.hmacSecret, onFailure: 'release_to_traffic' };
       }
       case 'awaiting_approval':
         if (mode === 'initiate') {
@@ -422,5 +450,5 @@ export function prepareAdminHandshakeRow(
   const hmacSecret = generateHmacSecret();
   const inserted = insertPeer({ origin, hmacSecret, initiatedBy: 'admin', status: 'pending', instanceName });
   if (!inserted) return { kind: 'busy', error: 'The peer changed; try again' };
-  return { kind: 'ready', peerId: inserted.row.id, hmacSecret, created: true };
+  return { kind: 'ready', peerId: inserted.row.id, hmacSecret, onFailure: 'remove_unless_queued' };
 }

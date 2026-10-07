@@ -293,12 +293,15 @@ describe('POST /api/federation/peer/initiate — verifies the handshake before p
     expect(sentBody.instanceId).toBe(LOCAL_EPOCH);
   });
 
-  it('parks in needs_attention when the /epoch verification cannot complete (legacy/unverifiable peer)', async () => {
-    // Remote returns 200 on /peer/accept but has no verifiable /epoch endpoint
-    // (404 → legacy). Without a signed round-trip we refuse to false-activate.
-    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => {
+  it('keeps the row pending, with the attempt counted, when the /epoch check gets no answer it can read', async () => {
+    // Remote returns 200 on /peer/accept but its /epoch answers 404 (or a 5xx,
+    // or times out): the check has no answer, so nothing is activated and
+    // nothing is parked. The row keeps the secret the remote accepted.
+    let sentSecret = '';
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
       if (u.endsWith('/api/federation/peer/accept')) {
+        sentSecret = (JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret;
         return new Response(JSON.stringify({ accepted: true, instanceName: 'Remote' }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -314,12 +317,62 @@ describe('POST /api/federation/peer/initiate — verifies the handshake before p
       payload: { remoteOrigin: 'https://remote.example' },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect((response.json() as { verified?: boolean }).verified).toBe(false);
+    expect(response.statusCode).toBe(502);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
-    expect(row?.status).toBe('needs_attention');
-    expect(row?.statusReason).toBe('repeer_incomplete');
+    expect(row?.status).toBe('pending');
+    expect(row?.statusReason).toBeNull();
+    expect(row?.initiatedBy).toBe('admin');
+    expect(row?.hmacSecret).toBe(sentSecret);
+    expect(row?.probeAttempts).toBe(1);
     expect(row?.peerInstanceId).toBeNull();
+  });
+
+  it("an admin's retry reuses the secret of its unsettled row and activates once the remote verifies it", async () => {
+    let epochAnswers = false;
+    const acceptSecrets: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/api/federation/peer/accept')) {
+        acceptSecrets.push((JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret);
+        // The first handshake is taken; the remote then holds a row for us.
+        return acceptSecrets.length === 1
+          ? new Response(JSON.stringify({ accepted: true }), { status: 200, headers: { 'content-type': 'application/json' } })
+          : new Response(JSON.stringify({ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error: 'exists' }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          });
+      }
+      if (u.endsWith('/api/federation/epoch')) {
+        if (!epochAnswers) return new Response('unavailable', { status: 503 });
+        const body = JSON.stringify({ instanceId: 'remote-epoch-9' });
+        return new Response(body, { status: 200, headers: buildFederationHeaders(body, acceptSecrets[0] ?? '', 'https://remote.example') });
+      }
+      throw new Error(`unexpected fetch ${u}`);
+    }));
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+    expect(first.statusCode).toBe(502);
+
+    epochAnswers = true;
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(second.statusCode).toBe(200);
+    expect((second.json() as { verified?: boolean }).verified).toBe(true);
+    expect(acceptSecrets).toHaveLength(2);
+    expect(acceptSecrets[1]).toBe(acceptSecrets[0]);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(row?.status).toBe('active');
+    expect(row?.hmacSecret).toBe(acceptSecrets[0]);
+    expect(row?.peerInstanceId).toBe('remote-epoch-9');
   });
 });

@@ -106,9 +106,7 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
           trust: 'approved',
           activation: 'initiate_accepted',
           startedAt,
-          // A row this request created goes away unless traffic queued on it;
-          // a row it took over goes back to local traffic.
-          onFailure: prepared.created ? 'remove_unless_queued' : 'release_to_traffic',
+          onFailure: prepared.onFailure,
         });
         const peer = outcome.peerId ? readPeerRow(outcome.peerId) : null;
         const sanitized = peer ? sanitizePeer(peer) : null;

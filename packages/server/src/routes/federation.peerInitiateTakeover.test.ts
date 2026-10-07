@@ -321,8 +321,8 @@ describe('POST /api/federation/peer/initiate — pending rows the admin or the r
     sqlite.close();
   });
 
-  it.each(['admin', 'remote'] as const)('answers 409 for a %s-created pending row and leaves it alone', async (initiatedBy) => {
-    seedPendingRow(initiatedBy);
+  it('answers 409 for a remote-created pending row and leaves it alone', async () => {
+    seedPendingRow('remote');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -332,7 +332,29 @@ describe('POST /api/federation/peer/initiate — pending rows the admin or the r
     expect(fetchMock).not.toHaveBeenCalled();
     const rows = peerRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.initiatedBy).toBe(initiatedBy);
+    expect(rows[0]!.initiatedBy).toBe('remote');
     expect(rows[0]!.hmacSecret).toBe(AUTO_SECRET);
+  });
+
+  it("retries an admin's own pending row with its secret and keeps the row on a transient failure", async () => {
+    seedPendingRow('admin');
+    const sentSecrets: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/api/federation/peer/accept')) {
+        sentSecrets.push((JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret);
+      }
+      throw new TypeError('fetch failed');
+    }));
+
+    const response = await initiate(app);
+
+    expect(response.statusCode).toBe(502);
+    expect(sentSecrets).toEqual([AUTO_SECRET]);
+    const rows = peerRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('pending');
+    expect(rows[0]!.initiatedBy).toBe('admin');
+    expect(rows[0]!.hmacSecret).toBe(AUTO_SECRET);
+    expect(rows[0]!.probeAttempts).toBe(1);
   });
 });

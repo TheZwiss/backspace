@@ -128,7 +128,7 @@ async function runApprovalHandshake(
       trust: 'asserted',
       activation: 'approval_handshake',
       startedAt,
-      onFailure: prepared.created ? 'remove_unless_queued' : 'release_to_traffic',
+      onFailure: prepared.onFailure,
     });
   } finally {
     releaseAdminHandshake(approvalReq.origin);
