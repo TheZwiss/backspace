@@ -250,6 +250,7 @@ export const ERROR_CODES = [
   // misc
   'voice_disabled',
   'voice_connect_forbidden',
+  'dm_call_in_progress',
   'file_not_found',
 
   // Directory

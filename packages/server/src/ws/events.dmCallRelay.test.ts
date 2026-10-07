@@ -93,6 +93,8 @@ function makeFedCall(partial: Partial<FedCallEntry> = {}): FedCallEntry {
     livekitUrl: 'wss://pi.example/lk',
     tokens: new Map([['acceptor@vm', 'token']]),
     ringedUserIds: ['acceptor-user'],
+    joinedUserIds: [],
+    group: false,
     state: 'ringing',
     startedAt: Date.now(),
     ...partial,

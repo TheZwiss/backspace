@@ -9,6 +9,8 @@ import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
 import type { DmRoomMeta, FederatedCallEntry } from '../../../ws/handler.js';
 import type { DmCallUndeliverableFailure, FederationCallPayload, FederationRelayEvent, ServerEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
+import { isGroupConversation } from '../../../utils/dmConversation.js';
+import { isDmMember } from '../../../utils/permissions.js';
 
 /**
  * The call's tokens by the local user each is for. A token names its holder
@@ -54,10 +56,12 @@ export function processDmCallStartEvent(
   }
 
   // Find local DM channel by federatedId
-  const channel = db.select({ id: schema.dmChannels.id })
+  const channel = db.select({ id: schema.dmChannels.id, ownerId: schema.dmChannels.ownerId })
     .from(schema.dmChannels)
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
+  // Without a local copy the key alone tells a group from a 1-on-1.
+  const group = isGroupConversation({ owner_id: channel?.ownerId ?? null, federated_id: event.federatedId });
 
   // Resolve caller to local stub. The call payload carries only a display
   // name, which is not a handle, so no username hint: a caller met here first
@@ -131,6 +135,8 @@ export function processDmCallStartEvent(
       livekitUrl: event.call.livekitUrl,
       tokens,
       ringedUserIds,
+      joinedUserIds: [],
+      group,
       state: 'ringing',
       startedAt: Date.now(),
     };
@@ -214,6 +220,8 @@ export function processDmCallStartEvent(
       livekitUrl: event.call.livekitUrl,
       tokens,
       ringedUserIds,
+      joinedUserIds: [],
+      group,
       state: 'ringing',
       startedAt: Date.now(),
     };
@@ -264,6 +272,23 @@ export function processDmCallAcceptEvent(
         type: 'voice_state_update',
         channelId: dmChannelId!,
         userId: meta.callerId,
+        action: 'join',
+      });
+    }
+
+    // Seat the acceptor in the room, so the call knows it still has a
+    // participant while they are in it and their leave, relayed later, is
+    // the one that can end it.
+    const acceptor = resolveRelayActor(event.call.acceptor, db);
+    if (acceptor.kind === 'found' && isDmMember(dmChannelId!, acceptor.user.id)) {
+      const acceptorId = acceptor.user.id;
+      connectionManager.joinRoom(dmChannelId!, acceptorId);
+      meta.remoteParticipants.set(acceptorId, sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`);
+      meta.declinedUserIds.delete(acceptorId);
+      connectionManager.sendToDmMembers(dmChannelId!, {
+        type: 'voice_state_update',
+        channelId: dmChannelId!,
+        userId: acceptorId,
         action: 'join',
       });
     }
@@ -338,18 +363,29 @@ export function processDmCallRejectEvent(
     const meta = room.metadata as DmRoomMeta;
     const hostCallerId = meta.callerId;
     const localDmId = dmChannelId!;
-    connectionManager.clearVoiceWs(meta.callerId);
-    connectionManager.destroyRoom(localDmId);
-
-    connectionManager.sendToDmMembers(localDmId, {
-      type: 'dm_call_rejected',
-      dmChannelId: localDmId,
-    });
-
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    // In a 1-on-1 the decline ends the call, and the instance that sent it
+    // already knows. In a group it only removes the decliner; when that
+    // leaves nobody to answer, the call ends for every peer, the sender too,
+    // whose other members may still be ringing.
+    let excludeOrigin: string | undefined = normalizedSource;
+    if (meta.group) {
+      const rejector = resolveRelayActor(event.call.rejector, db);
+      const outcome = rejector.kind === 'found' && isDmMember(localDmId, rejector.user.id)
+        ? connectionManager.declineGroupDmCall(localDmId, rejector.user.id)
+        : 'ignored';
+      if (outcome !== 'ended') {
+        accepted.push(event.messageId);
+        return;
+      }
+      excludeOrigin = undefined;
+    } else {
+      connectionManager.endDmRoom(localDmId, 'dm_call_rejected');
+    }
+
     void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.rejector },
-    }, normalizedSource, db).then(failures => {
+    }, excludeOrigin, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'reject', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end (reject) threw:', err),
@@ -399,22 +435,30 @@ export function processDmCallEndEvent(
     const meta = room.metadata as DmRoomMeta;
     const hostCallerId = meta.callerId;
     const localDmId = dmChannelId!;
-    connectionManager.clearVoiceWs(meta.callerId);
-    for (const pid of room.participants) {
-      connectionManager.clearVoiceUserStatus(pid);
-      connectionManager.clearVoiceWs(pid);
-    }
-    connectionManager.destroyRoom(localDmId);
-
-    connectionManager.sendToDmMembers(localDmId, {
-      type: 'dm_call_ended',
-      dmChannelId: localDmId,
-    });
-
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    // In a 1-on-1 either side's end ends the call, and the instance that sent
+    // it already knows. In a group it takes only that member out; when they
+    // were the last one in, the call ends for every peer, the sender too,
+    // whose other members may still be ringing. A member who is not in the
+    // call (a peer up to 1.8.0 relays every end) changes nothing.
+    let excludeOrigin: string | undefined = normalizedSource;
+    if (meta.group) {
+      const ender = resolveRelayActor(event.call.endedBy, db);
+      const outcome = ender.kind === 'found' && isDmMember(localDmId, ender.user.id)
+        ? connectionManager.leaveGroupDmCall(localDmId, ender.user.id)
+        : 'ignored';
+      if (outcome !== 'ended') {
+        accepted.push(event.messageId);
+        return;
+      }
+      excludeOrigin = undefined;
+    } else {
+      connectionManager.endDmRoom(localDmId, 'dm_call_ended');
+    }
+
     void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.endedBy },
-    }, normalizedSource, db).then(failures => {
+    }, excludeOrigin, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'end', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end threw:', err),

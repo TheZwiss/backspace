@@ -25,6 +25,7 @@ vi.mock('../ws/handler.js', () => ({
     sendToUser: vi.fn(),
     sendToDmMembers: vi.fn(),
     evictFederatedCallsForHost: vi.fn().mockReturnValue(0),
+    dropRemoteCallParticipants: vi.fn().mockReturnValue(0),
     getAllFederatedCalls: vi.fn(() => new Map()),
   },
 }));
@@ -230,6 +231,8 @@ function makeFedCall(partial: Partial<FedCallEntry>): FedCallEntry {
     livekitUrl: 'wss://lk.example',
     tokens: new Map(),
     ringedUserIds: [],
+    joinedUserIds: [],
+    group: false,
     state: 'active',
     startedAt: Date.now(),
     ...partial,

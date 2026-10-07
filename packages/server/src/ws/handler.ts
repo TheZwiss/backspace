@@ -31,6 +31,8 @@ import { ownsChosenStatus, type ChosenUserStatus } from '@backspace/shared';
 import { attachReplicaSessionHost, showReplicaStatusOnConnect, showReplicaStatusOnDisconnect, type ReplicaSessionHost } from './replicaPresence.js';
 import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
+import { isGroupConversation } from '../utils/dmConversation.js';
+import { normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { utcDay } from '../telemetry/day.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
@@ -57,6 +59,20 @@ export interface DmRoomMeta {
   type: 'dm';
   callerId: string;
   state: 'ringing' | 'active';
+  /**
+   * The call is in a group conversation (`isGroupConversation`). A group
+   * member's end or decline removes only that member; in a 1-on-1 either
+   * side ends the call (voice.md, "DM Call State Machine").
+   */
+  group: boolean;
+  /** Members who declined while the call rang. Read only for group calls. */
+  declinedUserIds: Set<string>;
+  /**
+   * Participants homed on a peer, added by a relayed accept: local row id to
+   * the origin of the peer that relayed it. They are in `participants` like
+   * any other member; this map lets a peer that goes away take them along.
+   */
+  remoteParticipants: Map<string, string>;
 }
 
 /** In-memory registry for federated calls on REMOTE instances. */
@@ -69,6 +85,10 @@ export interface FederatedCallEntry {
   livekitUrl: string;
   tokens: Map<string, string>;    // local userId → LiveKit token minted for them (`callTokensByLocalUser`)
   ringedUserIds: string[];        // local userIds that received dm_call_incoming
+  /** Local users who joined the call through this instance (relayed accept to the host). */
+  joinedUserIds: string[];
+  /** A group conversation: a member's end or decline removes only that member. */
+  group: boolean;
   state: 'ringing' | 'active';
   startedAt: number;
 }
@@ -243,16 +263,8 @@ class ConnectionManager implements ReplicaSessionHost {
         this.sendToSpace(meta.spaceId, {
           type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
         });
-      } else {
-        this.sendToDmMembers(left.roomId, {
-          type: 'voice_state_update', channelId: left.roomId, userId, action: 'leave',
-        });
-        const updatedRoom = this.voiceRooms.get(left.roomId);
-        if (updatedRoom && updatedRoom.participants.size === 0
-            && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
-          this.destroyRoom(left.roomId);
-          this.sendToDmMembers(left.roomId, { type: 'dm_call_ended', dmChannelId: left.roomId });
-        }
+      } else if (this.afterDmCallLeave(left.roomId, userId) === 'ended') {
+        this.fanOutCallEnd(left.roomId, userId);
       }
     }
 
@@ -261,8 +273,8 @@ class ConnectionManager implements ReplicaSessionHost {
       const meta = room.metadata as DmRoomMeta;
       if (meta.state === 'ringing' && meta.callerId === userId
           && (!expectedRoomId || expectedRoomId === roomId)) {
-        this.destroyRoom(roomId);
-        this.sendToDmMembers(roomId, { type: 'dm_call_ended', dmChannelId: roomId });
+        this.endDmRoom(roomId, 'dm_call_ended');
+        this.fanOutCallEnd(roomId, userId);
       }
     }
   }
@@ -560,43 +572,176 @@ class ConnectionManager implements ReplicaSessionHost {
     return true;
   }
 
-  /** Register a fan-out callback invoked when a ringing DM room hits its 60s timeout. */
+  /**
+   * Register the fan-out callback for a DM call this instance ends on its own:
+   * the 60s ring timeout, the last participant's voice grace running out, or
+   * the participants of a peer that went away. It relays `dm_call_end` to the
+   * peers so their ringing and joined members leave the call too.
+   */
   setRingTimeoutFanoutHook(fn: (dmChannelId: string, callerId: string) => Promise<void>): void {
     this.ringTimeoutFanoutHook = fn;
   }
 
+  private fanOutCallEnd(dmChannelId: string, endedByUserId: string): void {
+    if (!this.ringTimeoutFanoutHook) return;
+    this.ringTimeoutFanoutHook(dmChannelId, endedByUserId).catch(err =>
+      console.error('[ws] call-end fan-out error:', err),
+    );
+  }
+
   /** Create a DM room in ringing state with 60s auto-cleanup. */
   createDmRoom(dmChannelId: string, callerId: string): boolean {
+    const row = getDb().select({ ownerId: schema.dmChannels.ownerId, federatedId: schema.dmChannels.federatedId })
+      .from(schema.dmChannels)
+      .where(eq(schema.dmChannels.id, dmChannelId))
+      .get();
     const created = this.createRoom(dmChannelId, 'dm', {
       type: 'dm',
       callerId,
       state: 'ringing',
+      group: row ? isGroupConversation({ owner_id: row.ownerId, federated_id: row.federatedId }) : false,
+      declinedUserIds: new Set(),
+      remoteParticipants: new Map(),
     });
     if (!created) return false;
 
-    // 60s ringing timeout — auto-destroy if still ringing
+    // 60s ringing timeout: nobody but the caller joined, so the call ends.
     const timeout = setTimeout(() => {
       this.ringingTimeouts.delete(dmChannelId);
       const room = this.voiceRooms.get(dmChannelId);
       if (room && room.roomType === 'dm' && (room.metadata as DmRoomMeta).state === 'ringing') {
         const ringedCallerId = (room.metadata as DmRoomMeta).callerId;
-        this.destroyRoom(dmChannelId);
-        this.sendToDmMembers(dmChannelId, {
-          type: 'dm_call_ended',
-          dmChannelId,
-        });
+        this.endDmRoom(dmChannelId, 'dm_call_ended');
         // Fan dm_call_end out to remote peers so stranded Path-A/B ringees exit the ring.
         // Without this, an accept-relay failure → Alice's 60s auto-clean leaves Bob's FederatedCallEntry lingering with no terminal event.
-        if (this.ringTimeoutFanoutHook) {
-          this.ringTimeoutFanoutHook(dmChannelId, ringedCallerId).catch(err =>
-            console.error('[ws] ring-timeout fan-out error:', err),
-          );
-        }
+        this.fanOutCallEnd(dmChannelId, ringedCallerId);
       }
     }, 60_000);
     this.ringingTimeouts.set(dmChannelId, timeout);
 
     return true;
+  }
+
+  /**
+   * End a DM call hosted here: unbind the voice sessions it holds, destroy the
+   * room, tell the DM members that each participant left, then send `kind`
+   * (`dm_call_ended`, or `dm_call_rejected` for a call every ringee declined).
+   * Local only: the caller relays `dm_call_end` to the peers. Returns false
+   * when there is no such room.
+   */
+  endDmRoom(dmChannelId: string, kind: 'dm_call_ended' | 'dm_call_rejected'): boolean {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (!room || room.roomType !== 'dm') return false;
+    const meta = room.metadata as DmRoomMeta;
+    const participants = Array.from(room.participants);
+    // The caller of a ringing call holds no seat but owns the voice binding,
+    // unless they have since joined some other room.
+    const callerRoom = this.userToRoom.get(meta.callerId);
+    if (callerRoom === undefined || callerRoom === dmChannelId) this.clearVoiceWs(meta.callerId);
+    for (const participantId of participants) {
+      this.clearVoiceUserStatus(participantId);
+      this.clearVoiceWs(participantId);
+    }
+    this.destroyRoom(dmChannelId);
+    for (const participantId of participants) {
+      this.sendToDmMembers(dmChannelId, {
+        type: 'voice_state_update', channelId: dmChannelId, userId: participantId, action: 'leave',
+      });
+    }
+    this.sendToDmMembers(dmChannelId, { type: kind, dmChannelId });
+    return true;
+  }
+
+  /**
+   * After `userId` left the DM call `dmChannelId` (already out of its
+   * participants): tell the DM members, and end the call when it is active
+   * and nobody is left in it. Returns 'ended' when the call ended, so the
+   * caller relays the end to the peers.
+   */
+  afterDmCallLeave(dmChannelId: string, userId: string): 'left' | 'ended' {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (room && room.roomType === 'dm') (room.metadata as DmRoomMeta).remoteParticipants.delete(userId);
+    this.sendToDmMembers(dmChannelId, {
+      type: 'voice_state_update', channelId: dmChannelId, userId, action: 'leave',
+    });
+    if (room && room.roomType === 'dm' && room.participants.size === 0
+        && (room.metadata as DmRoomMeta).state === 'active') {
+      this.endDmRoom(dmChannelId, 'dm_call_ended');
+      return 'ended';
+    }
+    return 'left';
+  }
+
+  /**
+   * A member hangs up or cancels a group call hosted here (`dm_call_end`,
+   * local or relayed). The caller of a call nobody has joined yet ends it;
+   * a participant leaves it, and the call ends with the last one out; anyone
+   * else is not in the call and changes nothing.
+   */
+  leaveGroupDmCall(dmChannelId: string, userId: string): 'ignored' | 'left' | 'ended' {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (!room || room.roomType !== 'dm') return 'ignored';
+    const meta = room.metadata as DmRoomMeta;
+    if (meta.state === 'ringing' && meta.callerId === userId) {
+      this.endDmRoom(dmChannelId, 'dm_call_ended');
+      return 'ended';
+    }
+    if (!room.participants.has(userId)) return 'ignored';
+    this.leaveRoom(dmChannelId, userId);
+    this.clearVoiceUserStatus(userId);
+    this.clearVoiceWs(userId);
+    return this.afterDmCallLeave(dmChannelId, userId);
+  }
+
+  /**
+   * A member declines a group call hosted here (`dm_call_reject`, local or
+   * relayed). The decliner stops ringing; the call goes on for everyone else.
+   * When the call is still ringing and every member but the caller has
+   * declined, nobody is left to answer and it ends as rejected. The caller
+   * and participants cannot decline. Membership is the caller's to check.
+   */
+  declineGroupDmCall(dmChannelId: string, userId: string): 'ignored' | 'declined' | 'ended' {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (!room || room.roomType !== 'dm') return 'ignored';
+    const meta = room.metadata as DmRoomMeta;
+    if (meta.callerId === userId || room.participants.has(userId)) return 'ignored';
+    meta.declinedUserIds.add(userId);
+    if (meta.state !== 'ringing') return 'declined';
+    const ringees = getDb().select({ userId: schema.dmMembers.userId })
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+      .all()
+      .filter(m => m.userId !== meta.callerId);
+    if (ringees.some(m => !meta.declinedUserIds.has(m.userId))) return 'declined';
+    this.endDmRoom(dmChannelId, 'dm_call_rejected');
+    return 'ended';
+  }
+
+  /**
+   * A peer stopped being active: the participants it relayed into calls
+   * hosted here can no longer tell us they left, so they leave now. A call
+   * left empty ends and the end is relayed to the remaining peers. Returns
+   * how many participants were removed.
+   */
+  dropRemoteCallParticipants(peerOrigin: string): number {
+    const peerKey = normalizeOriginForCompare(peerOrigin);
+    if (peerKey === null) return 0;
+    let removed = 0;
+    for (const [roomId, room] of Array.from(this.voiceRooms)) {
+      if (room.roomType !== 'dm') continue;
+      const meta = room.metadata as DmRoomMeta;
+      for (const [userId, origin] of Array.from(meta.remoteParticipants)) {
+        if (normalizeOriginForCompare(origin) !== peerKey) continue;
+        if (!this.voiceRooms.has(roomId)) break;
+        this.leaveRoom(roomId, userId);
+        removed += 1;
+        if (this.afterDmCallLeave(roomId, userId) === 'ended') {
+          this.fanOutCallEnd(roomId, userId);
+          break;
+        }
+      }
+    }
+    return removed;
   }
 
   /** Transition a DM room from ringing → active. Returns false if not found or not ringing. */

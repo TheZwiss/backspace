@@ -316,6 +316,13 @@ export async function onPeerDeactivated(
         );
       }
 
+      // The other direction: members of this peer who joined calls hosted
+      // here. Their leave can no longer be relayed, so they leave now.
+      const droppedParticipants = connectionManager.dropRemoteCallParticipants(peer.origin);
+      if (droppedParticipants > 0) {
+        console.log('[federation] onPeerDeactivated(%s, %s) removed %s call participant(s) homed on %s', peerId, reason, droppedParticipants, peer.origin);
+      }
+
       // Mark every stub whose home is this peer as offline locally, and
       // broadcast a presence_update WS event to friends/DM-mates/space-co-members
       // so connected users see them go offline immediately, instead of seeing

@@ -770,7 +770,9 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  | { type: 'error'; message: string; code?: ErrorCode }
+  // `dmChannelId` names the DM of a refused `dm_call_start`; a client calling
+  // that DM drops its calling state (voice.md, "DM Call State Machine").
+  | { type: 'error'; message: string; code?: ErrorCode; dmChannelId?: string }
   // The space's roles or a member's roles changed: what the receiver may see
   // or do there, and how its roles and members look, may be different now.
   // The client refetches that space's detail (docs/systems/websocket.md).

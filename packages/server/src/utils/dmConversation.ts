@@ -132,6 +132,16 @@ export function mayBeOneOnOneRow(row: { owner_id: string | null; federated_id: s
 }
 
 /**
+ * Whether a conversation is a group for call purposes (voice.md, "DM Call
+ * State Machine"): every row that may not be a 1-on-1. A conversation known
+ * here only by its key (a federated call with no local copy) passes
+ * `{ owner_id: null, federated_id: key }`, so a UUID key counts as a group.
+ */
+export function isGroupConversation(row: { owner_id: string | null; federated_id: string | null }): boolean {
+  return !mayBeOneOnOneRow(row);
+}
+
+/**
  * Give one 1-on-1 row (`mayBeOneOnOneRow`, exactly two members, not
  * soft-deleted) the key of its two members' current home identities. Groups
  * and any other row are a noop. When the row's key is already right this is a noop too.

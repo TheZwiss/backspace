@@ -49,6 +49,8 @@ function makeFedCall(partial: Partial<FedCallEntry> = {}): FedCallEntry {
     livekitUrl: 'wss://lk.example',
     tokens: new Map([['caller-home', 'tok']]),
     ringedUserIds: ['user-1', 'user-2'],
+    joinedUserIds: [],
+    group: false,
     state: 'active',
     startedAt: Date.now(),
     ...partial,
