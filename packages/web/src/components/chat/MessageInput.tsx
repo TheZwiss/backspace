@@ -20,6 +20,7 @@ import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
+import { describeError } from '../../i18n/errors';
 import {
   filterMentionCandidates,
   useChannelMentionCandidates,
@@ -311,9 +312,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   }, []);
 
   const handleSubmit = async (): Promise<void> => {
-    const trimmed = draftText.trim();
-    if (!trimmed && stagedTransfers.length === 0) return;
-    if (isOverLimit) return;
+    // Read the live draft: another Enter may arrive before React re-renders.
+    const composer = useComposerStore.getState().get(channelId);
+    const submittedDraft = composer.draftText;
+    const trimmed = submittedDraft.trim();
+    if (!trimmed && composer.stagedTransferIds.length === 0) return;
+    if (submittedDraft.length > MAX_MESSAGE_LENGTH) return;
 
     // Block submission when ANY staged transfer is in a non-shippable state
     // (failed/aborted) — those would prevent the bubble from ever resolving.
@@ -332,20 +336,21 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
 
     if (stagedTransfers.length === 0) {
-      // Text-only path — preserve the legacy optimistic-message flow
+      // Consume the draft synchronously; network completion must not erase newer typing.
+      clearComposer(channelId);
       try {
-        await sendMessage(channelId, trimmed);
-        // Clear draft + reply for this channel
-        clearComposer(channelId);
-        chatSetReplyTo(null);
+        const sending = sendMessage(channelId, trimmed);
         // Reset textarea height + focus
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
           textareaRef.current.focus();
         }
+        await sending;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : t('chat:composer.sendFailed');
-        addToast(msg, 'warning');
+        // Keep both the failed text and anything typed while the request was pending.
+        const currentDraft = useComposerStore.getState().get(channelId).draftText;
+        setDraft(channelId, submittedDraft + (currentDraft ? '\n' + currentDraft : ''));
+        addToast(describeError(err), 'warning');
       }
       return;
     }
@@ -600,9 +605,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       // GIF picks bypass the staged-transfer pipeline — they're remote URLs,
       // not local files, and ship as plain content.
       setActivePopover(null);
-      void sendMessage(channelId, url);
+      void sendMessage(channelId, url).catch((error: unknown) => {
+        addToast(describeError(error), 'warning');
+      });
     },
-    [channelId, sendMessage],
+    [channelId, sendMessage, addToast],
   );
 
   const togglePopover = useCallback((tab: InputPopoverTab) => {

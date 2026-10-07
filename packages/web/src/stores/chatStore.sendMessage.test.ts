@@ -15,13 +15,16 @@ vi.mock('../audio/AudioManager', () => ({
   },
 }));
 
-// The send never answers: these tests read the optimistic rows it leaves.
-const pendingSend = () => new Promise<never>(() => {});
+// By default the send never answers: most tests read the optimistic rows it
+// leaves. A test that needs the request to settle overrides `send` once.
+const { send } = vi.hoisted(() => ({
+  send: vi.fn((): Promise<void> => new Promise<never>(() => {})),
+}));
 vi.mock('../utils/crossStoreResolvers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../utils/crossStoreResolvers')>()),
   getApiForOrigin: () => ({
-    channels: { sendMessage: pendingSend },
-    dm: { sendMessage: pendingSend },
+    channels: { sendMessage: send },
+    dm: { sendMessage: send },
   }),
 }));
 
@@ -65,6 +68,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  send.mockClear();
   useChatStore.setState({ messages: new Map() });
   useSpaceStore.setState({ spaceChannelIndex: new Map(), channelOriginMap: new Map(), dmChannels: [] });
   useAuthStore.setState({ user: null, myRowIds: new Map() });
@@ -125,5 +129,19 @@ describe('sendMessage optimistic rows on the page instance', () => {
     const [temp] = cached(CHANNEL);
     expect(temp!.userId).toBe('n-1');
     expect(temp!.user).toBe(me);
+  });
+});
+
+describe('sendMessage when the request fails', () => {
+  it('removes the optimistic message and rejects so the composer can keep the text', async () => {
+    send.mockRejectedValueOnce(new Error('Offline'));
+    await expect(useChatStore.getState().sendMessage(CHANNEL, 'hello')).rejects.toThrow('Offline');
+    expect(cached(CHANNEL)).toEqual([]);
+  });
+
+  it('resolves once the request is accepted, leaving the optimistic message for its event to replace', async () => {
+    send.mockResolvedValueOnce(undefined);
+    await expect(useChatStore.getState().sendMessage(CHANNEL, 'hello')).resolves.toBeUndefined();
+    expect(cached(CHANNEL).map((m) => m.content)).toEqual(['hello']);
   });
 });

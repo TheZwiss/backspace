@@ -1,0 +1,20 @@
+{
+  "transfers": {
+    "title": "Transferências",
+    "count_one": "{{count}} transferência",
+    "count_many": "{{count}} transferências",
+    "count_other": "{{count}} transferências",
+    "clearCompleted": "Limpar concluídas",
+    "empty": "Nenhuma transferência ativa.",
+    "status": {
+      "done": "Concluída",
+      "failed": "Falhou: {{reason}}",
+      "aborted": "Abortada",
+      "progress": "{{loaded}} / {{total}}"
+    }
+  },
+  "crop": {
+    "title": "Recortar imagem",
+    "applying": "Aplicando…"
+  }
+}

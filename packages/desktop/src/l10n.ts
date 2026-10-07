@@ -16,9 +16,9 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
-export type DesktopLanguage = 'en' | 'ru' | 'de' | 'zh';
+export type DesktopLanguage = 'en' | 'ru' | 'de' | 'pt' | 'zh';
 
-const DESKTOP_LANGUAGES: readonly DesktopLanguage[] = ['en', 'ru', 'de', 'zh'];
+const DESKTOP_LANGUAGES: readonly DesktopLanguage[] = ['en', 'ru', 'de', 'pt', 'zh'];
 
 const en = {
   'tray.show': 'Show Backspace',
@@ -100,7 +100,26 @@ const zh: Catalog = {
   'update.download': '下载更新…',
 };
 
-export const DESKTOP_CATALOGS: Record<DesktopLanguage, Catalog> = { en, ru, de, zh };
+const pt: Catalog = {
+  'tray.show': 'Mostrar Backspace',
+  'tray.hide': 'Ocultar',
+  'tray.changeInstance': 'Mudar instância',
+  'tray.sourceCode': 'Código-fonte (AGPL)',
+  'tray.quit': 'Sair',
+  'menu.edit': 'Editar',
+  'menu.window': 'Janela',
+  'update.check': 'Verificar atualizações…',
+  'update.checkAfterFailure': 'Verificar atualizações… (última tentativa falhou)',
+  'update.checking': 'Verificando atualizações…',
+  'update.downloading': 'Baixando atualização…',
+  'update.ready': 'Atualização pronta',
+  'update.available': 'Atualização disponível',
+  'update.restartToInstall': 'Reiniciar para instalar',
+  'update.downloadVersion': 'Baixar Backspace {version}…',
+  'update.download': 'Baixar atualização…',
+};
+
+export const DESKTOP_CATALOGS: Record<DesktopLanguage, Catalog> = { en, ru, de, pt, zh };
 
 export function isDesktopLanguage(value: unknown): value is DesktopLanguage {
   return typeof value === 'string' && (DESKTOP_LANGUAGES as readonly string[]).includes(value);

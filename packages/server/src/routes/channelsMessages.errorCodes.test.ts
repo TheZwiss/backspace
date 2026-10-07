@@ -13,6 +13,7 @@ import {
   permissionsToString,
 } from '@backspace/shared/src/permissions.js';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
+import { CHANNEL_TOPIC_MAX_LENGTH } from '@backspace/shared/src/constants.js';
 
 setWorkerId(3);
 
@@ -47,6 +48,7 @@ vi.mock('../ws/handler.js', () => ({
     getRoom: () => undefined,
     getAllRooms: () => new Map(),
     getAllOnlineUserIds: () => [],
+    getUserSpaceEntries: () => new Map<string, Set<string>>(),
   },
 }));
 
@@ -297,6 +299,91 @@ describe('channel and message routes send error codes', () => {
       const res = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { name: '  Game   Night ' } });
       expect(res.statusCode).toBe(200);
       expect((JSON.parse(res.body) as { name: string }).name).toBe('game-night');
+    });
+
+    it('creating a channel with a topic over the limit → channel_topic_length with the bound, nothing stored', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/spaces/${SPACE}/channels`,
+        payload: { name: 'long-topic', type: 'text', topic: 'x'.repeat(CHANNEL_TOPIC_MAX_LENGTH + 1) },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body) as ErrorBody;
+      expect(body.code).toBe('channel_topic_length');
+      expect(body.details).toEqual({ max: CHANNEL_TOPIC_MAX_LENGTH });
+      const stored = testDb.select().from(schema.channels).all().filter((c) => c.name === 'long-topic');
+      expect(stored).toHaveLength(0);
+    });
+
+    it('creating a channel stores the normalized topic', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/spaces/${SPACE}/channels`,
+        payload: { name: 'rules', type: 'text', topic: '  Be kind.\r\nNo spam.  ' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect((JSON.parse(res.body) as { topic: string | null }).topic).toBe('Be kind.\nNo spam.');
+    });
+
+    it('creating a channel with a non-string topic → channel_topic_invalid', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/spaces/${SPACE}/channels`,
+        payload: { name: 'bad-topic', type: 'text', topic: 7 },
+      });
+      expect(res.statusCode).toBe(400);
+      expect((JSON.parse(res.body) as ErrorBody).code).toBe('channel_topic_invalid');
+    });
+
+    it('editing a topic stores the normalized value; a topic at the limit is accepted', async () => {
+      currentUserId = 'owner';
+      const edited = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: '  Announcements only  ' } });
+      expect(edited.statusCode).toBe(200);
+      expect((JSON.parse(edited.body) as { topic: string | null }).topic).toBe('Announcements only');
+
+      const atLimit = 'y'.repeat(CHANNEL_TOPIC_MAX_LENGTH);
+      const full = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: `  ${atLimit}  ` } });
+      expect(full.statusCode).toBe(200);
+      expect((JSON.parse(full.body) as { topic: string | null }).topic).toBe(atLimit);
+    });
+
+    it('editing a topic to null or blank clears it', async () => {
+      currentUserId = 'owner';
+      await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: 'Something' } });
+      const cleared = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: null } });
+      expect(cleared.statusCode).toBe(200);
+      expect((JSON.parse(cleared.body) as { topic: string | null }).topic).toBeNull();
+
+      await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: 'Again' } });
+      const blank = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: '   \n  ' } });
+      expect(blank.statusCode).toBe(200);
+      expect((JSON.parse(blank.body) as { topic: string | null }).topic).toBeNull();
+    });
+
+    it('editing a topic over the limit → channel_topic_length and the stored topic is kept', async () => {
+      currentUserId = 'owner';
+      await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: 'Kept' } });
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/channels/${GENERAL}`,
+        payload: { topic: 'z'.repeat(CHANNEL_TOPIC_MAX_LENGTH + 1) },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body) as ErrorBody;
+      expect(body.code).toBe('channel_topic_length');
+      expect(body.details).toEqual({ max: CHANNEL_TOPIC_MAX_LENGTH });
+      const row = testDb.select().from(schema.channels).all().find((c) => c.id === GENERAL);
+      expect(row?.topic).toBe('Kept');
+    });
+
+    it('editing a topic with a non-string value → channel_topic_invalid', async () => {
+      currentUserId = 'owner';
+      const res = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: ['a'] } });
+      expect(res.statusCode).toBe(400);
+      expect((JSON.parse(res.body) as ErrorBody).code).toBe('channel_topic_invalid');
     });
 
     it('creating a channel in a category of another space → category_not_in_space with the id', async () => {

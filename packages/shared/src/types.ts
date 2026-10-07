@@ -641,7 +641,8 @@ export interface CreateChannelRequest {
 
 export interface UpdateChannelRequest {
   name?: string;
-  topic?: string;
+  /** `null` or a value that trims to nothing clears the topic. */
+  topic?: string | null;
   position?: number;
   categoryId?: string | null;
 }

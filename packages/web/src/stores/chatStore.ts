@@ -756,9 +756,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await client.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       }
       // Real message will arrive via WebSocket and replace the temp one
-    } catch {
-      // Rollback: remove the optimistic message on failure
+    } catch (error) {
+      // Roll back locally, but let the composer expose failure and retain the draft.
       get().removeMessage(tempId, channelId);
+      throw error;
     }
   },
 
