@@ -104,3 +104,18 @@ export function buildInstanceJoinUrl(domain: string, qualifiedCode: string): str
 
   return target.toString();
 }
+
+/**
+ * The public link that joins a space by its invite code: `/join/{code}` on
+ * the instance that hosts the space (docs/systems/spaces.md, "Invite links").
+ *
+ * `instanceOrigin` is the space's `_instanceOrigin`: `''` for a space on the
+ * page's own instance, else the remote instance's origin. The code is issued
+ * by that instance, so the link must point there and not at the page's host.
+ * Every surface that hands out an invite link builds it here, so the route
+ * cannot drift between them.
+ */
+export function spaceInviteUrl(instanceOrigin: string, inviteCode: string): string {
+  const base = instanceOrigin || window.location.origin;
+  return new URL(`/join/${encodeURIComponent(inviteCode)}`, base).toString();
+}
