@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, DmMessageWithUser, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { userKey, isIssuedByHome, type IdentityFields, type PresenceSubject } from '../utils/identity';
+import { userKey, isIssuedByHome, withUserUpdate, type IdentityFields, type PresenceSubject } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type PeerDmChannel } from '../utils/dmConversationKey';
@@ -433,7 +433,12 @@ interface SpaceState {
    * `userKey` (their home identity), never by a raw row id.
    */
   updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => void;
-  updateUserEverywhere: (user: User) => void;
+  /**
+   * Apply a `user_updated` row issued by `origin` to the roster and DM member
+   * rows it is about (`withUserUpdate`): that instance's row with its id, and
+   * other instances' rows of the same person when it is their home's row.
+   */
+  updateUserEverywhere: (user: User, origin: string) => void;
   /** A member joined `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
   addMember: (spaceId: string, member: MemberWithUser) => void;
   /** A member left `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
@@ -1111,17 +1116,28 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     });
   },
 
-  updateUserEverywhere: (user: User) => {
-    set((state) => ({
-      members: state.members.map(m =>
-        m.userId === user.id ? { ...m, user: { ...m.user, ...user } } : m
-      ),
+  updateUserEverywhere: (user: User, origin: string) => {
+    set((state) => {
+      // A roster row is issued by its space's origin.
+      const spaceOrigins = new Map(state.spaces.map(s => [s.id, s._instanceOrigin ?? '']));
+      let changed = false;
+      const members = state.members.map(m => {
+        const updated = withUserUpdate(m.user, spaceOrigins.get(m.spaceId) ?? '', user, origin);
+        if (updated === m.user) return m;
+        changed = true;
+        return { ...m, user: updated };
+      });
+      return changed ? { members } : state;
+    });
+    commitDmOperation(patchEveryCopy(get().dmConversations, (dm, dmOrigin) => {
+      let changed = false;
+      const members = dm.members.map(m => {
+        const updated = withUserUpdate(m, dmOrigin, user, origin);
+        if (updated !== m) changed = true;
+        return updated;
+      });
+      return changed ? { ...dm, members } : dm;
     }));
-    commitDmOperation(patchEveryCopy(get().dmConversations, (dm) =>
-      dm.members.some(m => m.id === user.id)
-        ? { ...dm, members: dm.members.map(m => (m.id === user.id ? { ...m, ...user } : m)) }
-        : dm,
-    ));
   },
 
   addMember: (spaceId: string, member: MemberWithUser) => {

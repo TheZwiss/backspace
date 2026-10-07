@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
+import type { MessageWithUser, Reaction, ReadState, User } from '@backspace/shared';
 import { wsSend } from '../hooks/useWebSocket';
 import { HttpError } from '../api/client';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
 import { myRowForOrigin } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
+import { withUserUpdate } from '../utils/identity';
 import { usePendingMessageStore } from './pendingMessageStore';
 import type { ScrollAnchor } from '../components/chat/scrollAnchor';
 
@@ -282,7 +283,11 @@ interface ChatState {
   onMarkUnread: (channelId: string, messageId: string) => void;
   removeChannelStates: (channelIds: Set<string>) => void;
   rekeyChannelState: (oldId: string, newId: string) => void;
-  updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
+  /**
+   * Apply a `user_updated` row issued by `origin` to the authors it is about
+   * (`withUserUpdate`); each channel's rows are its origin's.
+   */
+  updateUserInMessages: (user: User, origin: string) => void;
   clearTypingForUser: (userId: string) => void;
 }
 
@@ -1169,20 +1174,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  updateUserInMessages: (user: { id: string; homeUserId?: string | null; [key: string]: any }) => {
+  updateUserInMessages: (user: User, origin: string) => {
     set((state) => {
       const newMessages = new Map(state.messages);
       let changed = false;
       for (const [channelId, msgs] of newMessages) {
+        const channelOrigin = getChannelOrigin(channelId);
         let channelChanged = false;
         const updated = msgs.map(m => {
-          const matches = m.userId === user.id ||
-            (user.homeUserId && m.user?.homeUserId && m.user.homeUserId === user.homeUserId);
-          if (matches) {
-            channelChanged = true;
-            return { ...m, user: { ...m.user, ...user } };
-          }
-          return m;
+          if (!m.user) return m;
+          const author = withUserUpdate(m.user, channelOrigin, user, origin);
+          if (author === m.user) return m;
+          channelChanged = true;
+          return { ...m, user: author };
         });
         if (channelChanged) { newMessages.set(channelId, updated); changed = true; }
       }

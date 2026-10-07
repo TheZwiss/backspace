@@ -3,7 +3,7 @@ import type { Friend, FriendRequest, SendFriendRequest, User } from '@backspace/
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
-import { userKey, type PresenceSubject } from '../utils/identity';
+import { profileFieldsOf, userKey, userUpdateReach, type PresenceSubject } from '../utils/identity';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
@@ -62,7 +62,8 @@ interface SocialState {
   addOutboundRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (subject: PresenceSubject, origin: string, status: string) => void;
-  updateFriendProfile: (user: User) => void;
+  /** Apply a `user_updated` row issued by `origin` to the friend rows it is about (`userUpdateReach`); profile fields only. */
+  updateFriendProfile: (user: User, origin: string) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
   removeRequestById: (requestId: string, origin: string, userId?: string) => void;
   removeRequestsForUser: (userId: string) => void;
@@ -433,17 +434,16 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   // Called from WS handler on user_updated to keep friend profile data live
-  updateFriendProfile: (user: User) => {
-    set((state) => ({
-      friends: state.friends.map(f =>
-        f.id === user.id
-          ? { ...f, displayName: user.displayName, avatar: user.avatar,
-              banner: user.banner, accentColor: user.accentColor,
-              avatarColor: user.avatarColor, bio: user.bio,
-              customStatus: user.customStatus, status: user.status }
-          : f
-      ),
-    }));
+  updateFriendProfile: (user: User, origin: string) => {
+    set((state) => {
+      let changed = false;
+      const friends = state.friends.map(f => {
+        if (!userUpdateReach(f, f._instanceOrigin, user, origin)) return f;
+        changed = true;
+        return { ...f, ...profileFieldsOf(user) };
+      });
+      return changed ? { friends } : state;
+    });
   },
 
   reset: () => set({ friends: [], requests: [], isLoading: false, error: null }),

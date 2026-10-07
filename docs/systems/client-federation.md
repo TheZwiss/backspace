@@ -390,6 +390,8 @@ A user row means something only together with the instance that issued it: row i
 
 `isIssuedByHome(row, origin)` is whether the issuing instance is the home the row names (the "home view" tier of `userViews`).
 
+A `user_updated` row reaches stored rows through `userUpdateReach(row, rowOrigin, user, origin)`: `'row'` for the issuing instance's own row with that id (every field applies, `withUserUpdate`), `'person'` for another instance's row of the same person when the event is their home's row (only `profileFieldsOf`, so the row keeps its id, username and identity fields), otherwise nothing. `spaceStore.updateUserEverywhere` (roster and DM member rows, each with its space's or DM copy's origin), `socialStore.updateFriendProfile` and `chatStore.updateUserInMessages` (each channel's origin) all apply it.
+
 ### Naming a person in a request: `personRequest` and `openDirectMessage`
 
 `personRequest(row, origin)` says where to send a request about a person and how to name them: a person native to the page's instance by `{ userId }` on `''`; anyone with an identity by `{ homeUserId, homeInstance }` on `''`, which the server resolves or creates the row for; a legacy stub by `{ userId }` on the instance that issued it. `friendRequestTarget` and the group-DM member list of `AddDmMemberModal` build on it.

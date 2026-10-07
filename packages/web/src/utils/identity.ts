@@ -1,3 +1,5 @@
+import type { User } from '@backspace/shared';
+
 /**
  * Splits a potentially federated username into base name and domain.
  * "erin@nova.ddns.net" → { baseName: "erin", domain: "nova.ddns.net" }
@@ -256,4 +258,59 @@ export function ownRowAt<T extends IdentityFields>(session: T, origin: string, r
     return { ...session, id: rowId, homeInstance: null, homeUserId: null };
   }
   return { ...session, id: rowId, homeInstance: identity.host, homeUserId: identity.userId };
+}
+
+// ─── Applying a user_updated row ─────────────────────────────────────────────
+
+/** The fields of a user row that describe the person rather than the row. */
+export type ProfileFields = Pick<User, 'displayName' | 'avatar' | 'banner' | 'accentColor' | 'avatarColor' | 'bio' | 'customStatus' | 'status'>;
+
+/** The profile fields of `user`, for a row of the same person that is not `user` itself. */
+export function profileFieldsOf(user: ProfileFields): ProfileFields {
+  return {
+    displayName: user.displayName,
+    avatar: user.avatar,
+    banner: user.banner,
+    accentColor: user.accentColor,
+    avatarColor: user.avatarColor,
+    bio: user.bio,
+    customStatus: user.customStatus,
+    status: user.status,
+  };
+}
+
+/**
+ * What a `user_updated` row `user`, issued by `origin`, says about `row`,
+ * issued by `rowOrigin`:
+ *
+ * - `'row'`: it is the same row (the same instance's row with that id); every
+ *   field applies.
+ * - `'person'`: `row` is another instance's row of the same person
+ *   (`userKey`) and `user` is their home's own row, so its profile fields
+ *   apply. A copy never overwrites another row: a stale replicated row must
+ *   not undo the home's profile, as in `upsertUserView`.
+ * - null: anyone else, including a row that only has the same id on another
+ *   instance (#353).
+ */
+export function userUpdateReach(
+  row: IdentityFields,
+  rowOrigin: string,
+  user: IdentityFields,
+  origin: string,
+): 'row' | 'person' | null {
+  if (rowOrigin === origin) return row.id === user.id ? 'row' : null;
+  if (!isIssuedByHome(user, origin) || !homeIdentityOf(row, rowOrigin)) return null;
+  return userKey(row, rowOrigin) === userKey(user, origin) ? 'person' : null;
+}
+
+/**
+ * `row` (issued by `rowOrigin`) with the `user_updated` row `user` (issued by
+ * `origin`) applied as `userUpdateReach` says; `row` itself when it does not
+ * apply, so callers can tell nothing changed.
+ */
+export function withUserUpdate<T extends IdentityFields>(row: T, rowOrigin: string, user: User, origin: string): T {
+  const reach = userUpdateReach(row, rowOrigin, user, origin);
+  if (reach === 'row') return { ...row, ...user };
+  if (reach === 'person') return { ...row, ...profileFieldsOf(user) };
+  return row;
 }

@@ -508,7 +508,7 @@
   },
   "packages/web/src/stores/chatStore.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 3
     }
   },
   "packages/web/src/stores/directoryStore.test.ts": {

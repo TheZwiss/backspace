@@ -637,9 +637,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
     case 'user_updated': {
       if (!isHome) normalizeUserAssets(event.user, origin);
       upsertUserView(event.user, origin);
-      useSpaceStore.getState().updateUserEverywhere(event.user);
-      useSocialStore.getState().updateFriendProfile(event.user);
-      useChatStore.getState().updateUserInMessages(event.user);
+      useSpaceStore.getState().updateUserEverywhere(event.user, origin);
+      useSocialStore.getState().updateFriendProfile(event.user, origin);
+      useChatStore.getState().updateUserInMessages(event.user, origin);
       // If this is the current user (other tab changed profile), update authStore
       const myId = isHome
         ? useAuthStore.getState().user?.id
