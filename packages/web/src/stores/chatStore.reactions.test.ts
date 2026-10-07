@@ -171,6 +171,33 @@ describe('onReactionAdded', () => {
     expect(reactionsHeld().map(r => r.id)).toEqual(['r1']);
   });
 
+  it('leaves the message and the store as they are for a reaction it already holds', () => {
+    useChatStore.getState().onReactionAdded(MESSAGE, reaction('r1', orbitMe, '👍'));
+    const before = useChatStore.getState();
+    const heldMessage = before.messages.get(CHANNEL)![0];
+
+    useChatStore.getState().onReactionAdded(MESSAGE, reaction('r1', orbitMe, '👍'));
+    useChatStore.getState().onReactionAdded(MESSAGE, reaction('r2', orbitMe, '👍'));
+
+    const after = useChatStore.getState();
+    expect(after.messages).toBe(before.messages);
+    expect(after.messages.get(CHANNEL)![0]).toBe(heldMessage);
+    expect(after.detachedChannels).toBe(before.detachedChannels);
+  });
+
+  it('leaves a detached window as it is for a reaction it already holds', () => {
+    useChatStore.setState({
+      messages: new Map(),
+      detachedChannels: new Map([[CHANNEL, [message([reaction('r1', orbitMe, '👍')])]]]),
+    });
+    const before = useChatStore.getState().detachedChannels;
+    useChatStore.getState().onReactionAdded(MESSAGE, reaction('r1', orbitMe, '👍'));
+    expect(useChatStore.getState().detachedChannels).toBe(before);
+
+    useChatStore.getState().onReactionAdded(MESSAGE, reaction('r2', orbitMira, '👍'));
+    expect(useChatStore.getState().detachedChannels.get(CHANNEL)![0]!.reactions!.map(r => r.id)).toEqual(['r1', 'r2']);
+  });
+
   it('keeps one reaction per user and emoji, as the server stores them', () => {
     const { onReactionAdded } = useChatStore.getState();
     onReactionAdded(MESSAGE, reaction('r1', orbitMe, '👍'));

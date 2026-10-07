@@ -97,7 +97,11 @@ function unconfirmedSends(previous: readonly MessageWithUser[] | undefined, page
   return temps.filter((m) => !contents.has(m.content || null));
 }
 
-/** Apply `fn` to the held live messages of every detached channel holding `messageId`. */
+/**
+ * Apply `fn` to the held live messages of every detached channel holding
+ * `messageId`. `fn` returns the message itself to leave it as it is; when
+ * nothing changes, `detached` itself is returned.
+ */
 function mapHeldMessage(
   detached: Map<string, MessageWithUser[]>,
   messageId: string,
@@ -107,14 +111,17 @@ function mapHeldMessage(
   for (const [channelId, held] of detached) {
     if (!held.some((m) => m.id === messageId)) continue;
     const updated: MessageWithUser[] = [];
+    let changed = false;
     for (const message of held) {
       if (message.id !== messageId) {
         updated.push(message);
         continue;
       }
       const mapped = fn(message);
+      if (mapped !== message) changed = true;
       if (mapped) updated.push(mapped);
     }
+    if (!changed) continue;
     if (next === detached) next = new Map(detached);
     next.set(channelId, updated);
   }
@@ -406,14 +413,15 @@ function withoutInFlight(inFlight: Map<string, number>, key: string): Map<string
 }
 
 /**
- * `reactions` with `reaction` appended, or unchanged when they already hold
- * it: the same row, or the same user's reaction with the same emoji (the
- * server stores one per user, emoji and message).
+ * `message` with `reaction` added to its reactions, or `message` itself when
+ * they already hold it: the same row, or the same user's reaction with the
+ * same emoji (the server stores one per user, emoji and message). Returning
+ * the same object lets a repeated `reaction_added` leave the row as it is.
  */
-function withReaction(reactions: readonly Reaction[] | undefined, reaction: Reaction): Reaction[] {
-  const current = reactions ?? [];
+function withReaction(message: MessageWithUser, reaction: Reaction): MessageWithUser {
+  const current = message.reactions ?? [];
   const held = current.some(r => r.id === reaction.id || (r.userId === reaction.userId && r.emoji === reaction.emoji));
-  return held ? [...current] : [...current, reaction];
+  return held ? message : { ...message, reactions: [...current, reaction] };
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -965,25 +973,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const reactionAddsInFlight = held && isOwnReactionIn(held.channelId, reaction)
         ? withoutInFlight(state.reactionAddsInFlight, reactionKey(messageId, reaction.emoji))
         : state.reactionAddsInFlight;
-      const detachedChannels = mapHeldMessage(state.detachedChannels, messageId, (m) => ({
-        ...m,
-        reactions: withReaction(m.reactions, reaction),
-      }));
-      const newMessages = new Map(state.messages);
-      for (const [channelId, msgs] of newMessages.entries()) {
+      const detachedChannels = mapHeldMessage(state.detachedChannels, messageId, (m) => withReaction(m, reaction));
+      let messages = state.messages;
+      for (const [channelId, msgs] of state.messages) {
         const msgIndex = msgs.findIndex(m => m.id === messageId);
-        if (msgIndex !== -1) {
+        if (msgIndex === -1) continue;
+        const oldMsg = msgs[msgIndex]!;
+        const newMsg = withReaction(oldMsg, reaction);
+        if (newMsg !== oldMsg) {
           const newMsgs = [...msgs];
-          const oldMsg = newMsgs[msgIndex]!;
-          newMsgs[msgIndex] = {
-            ...oldMsg,
-            reactions: withReaction(oldMsg.reactions, reaction),
-          };
-          newMessages.set(channelId, newMsgs);
-          break;
+          newMsgs[msgIndex] = newMsg;
+          messages = new Map(state.messages);
+          messages.set(channelId, newMsgs);
         }
+        break;
       }
-      return { messages: newMessages, detachedChannels, reactionAddsInFlight };
+      if (
+        messages === state.messages
+        && detachedChannels === state.detachedChannels
+        && reactionAddsInFlight === state.reactionAddsInFlight
+      ) return state;
+      return { messages, detachedChannels, reactionAddsInFlight };
     });
   },
 
