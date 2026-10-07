@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SpaceWithChannelsAndMembers } from '@backspace/shared';
-import { PermissionBits, stringToPermissions } from '@backspace/shared/src/permissions.js';
+import { PermissionBits, permissionsToString, stringToPermissions } from '@backspace/shared/src/permissions.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import * as schema from '../db/schema.js';
 import {
@@ -101,6 +101,17 @@ describe('ready payload: roles by audience', () => {
     for (const role of space.roles) {
       expect(role.permissions).toBe(storedBitsOf(role.id));
     }
+  });
+
+  it('gives no bits to a member whose MANAGE_ROLES comes only from a channel override', async () => {
+    testDb.insert(schema.channelOverrides).values({
+      channelId: GENERAL_ID, targetType: 'role', targetId: 'r-channels',
+      allow: permissionsToString(PermissionBits.MANAGE_ROLES), deny: '0',
+    }).run();
+    const space = await readySpace(USERS.channelManager);
+    const general = space.channels.find(c => c.id === GENERAL_ID);
+    expect(stringToPermissions(general?.myPermissions) & PermissionBits.MANAGE_ROLES).toBe(PermissionBits.MANAGE_ROLES);
+    for (const role of space.roles) expect(role).not.toHaveProperty('permissions');
   });
 
   it('lists member roles with display fields only, for a manager too', async () => {

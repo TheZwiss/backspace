@@ -548,6 +548,11 @@ and category Permissions tabs, and every one of those needs `MANAGE_ROLES`
 | Member without `MANAGE_ROLES` (a `MANAGE_CHANNELS` holder and a member whose role has overrides included) | every role: `id`, `spaceId`, `name`, `color`, `position`, `isEveryone`, `createdAt`; no `permissions` field | display fields only | refused (`403 missing_permission`) | `myPermissions` on the space and on each channel it can see; `isPrivate` on channels and categories |
 | Member who holds `MANAGE_ROLES` in the space (the owner, instance admins and `ADMINISTRATOR` holders hold it) | every role with its display fields and `permissions` | display fields only | `GET /channels/:id/overrides`, `GET /categories/:id/overrides` | the same |
 
+`MANAGE_ROLES` counts at space level only: a member whose role is allowed it
+by an override on one channel holds it on that channel (it shows in that
+channel's `myPermissions`) but gets no role bits, and that channel's override
+rows are refused to them for reading, `PUT` and `DELETE` alike.
+
 Member rows list a member's roles to name, colour, group and rank them, so they
 never carry bits; a manager reads the bits from the space's role list.
 

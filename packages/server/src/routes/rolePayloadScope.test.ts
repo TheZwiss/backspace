@@ -9,6 +9,7 @@ import { setWorkerId } from '../utils/snowflake.js';
 import {
   CATEGORY_ID,
   EVERYONE_BITS,
+  GENERAL_ID,
   PRIVATE_ID,
   REQUEST_SPACE_ID,
   ROLE_BITS,
@@ -210,6 +211,42 @@ describe('channel and category override rows', () => {
     const category = await app.inject({ method: 'GET', url: `/api/categories/${CATEGORY_ID}/overrides` });
     expect(category.statusCode).toBe(200);
     expect(category.json<{ targetId: string }[]>()).toHaveLength(2);
+  });
+});
+
+describe('MANAGE_ROLES allowed only by a channel override', () => {
+  // MANAGE_ROLES counts at space level only (utils/permissionDataView.ts).
+  beforeEach(() => {
+    testDb.insert(schema.channelOverrides).values({
+      channelId: GENERAL_ID, targetType: 'role', targetId: 'r-channels',
+      allow: permissionsToString(PermissionBits.MANAGE_ROLES), deny: '0',
+    }).run();
+  });
+
+  it('brings no role bits, though the channel lists the bit in its own permissions', async () => {
+    const { body } = await getDetail(USERS.channelManager);
+    const general = body.channels.find(c => c.id === GENERAL_ID);
+    expect(stringToPermissions(general?.myPermissions) & PermissionBits.MANAGE_ROLES).toBe(PermissionBits.MANAGE_ROLES);
+    expect(stringToPermissions(body.myPermissions) & PermissionBits.MANAGE_ROLES).toBe(0n);
+    expectNoBits(body.roles);
+  });
+
+  it('does not open that channel\'s override rows for reading or for writing', async () => {
+    as(USERS.channelManager);
+    const read = await app.inject({ method: 'GET', url: `/api/channels/${GENERAL_ID}/overrides` });
+    expect(read.statusCode).toBe(403);
+    expect(read.json<{ code: string }>().code).toBe('missing_permission');
+
+    const write = await app.inject({
+      method: 'PUT', url: `/api/channels/${GENERAL_ID}/overrides`,
+      payload: { targetType: 'role', targetId: 'r-vip', allow: '0', deny: '0' },
+    });
+    expect(write.statusCode).toBe(403);
+    expect(write.json<{ code: string }>().code).toBe('missing_permission');
+
+    const remove = await app.inject({ method: 'DELETE', url: `/api/channels/${GENERAL_ID}/overrides/role/r-channels` });
+    expect(remove.statusCode).toBe(403);
+    expect(remove.json<{ code: string }>().code).toBe('missing_permission');
   });
 });
 
