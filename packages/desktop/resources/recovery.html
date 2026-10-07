@@ -161,7 +161,7 @@
 
     const $ = (id) => document.getElementById(id);
 
-    // Strings for the three shipped languages. The main process passes the
+    // Strings for every shipped language. The main process passes the
     // language as ?lang= when it loads this page, because this page is shown
     // precisely when the renderer (and its catalogs) is unavailable. Keep in
     // step with packages/desktop/src/l10n.ts and the web `desktop` namespace.
@@ -264,6 +264,39 @@
         hintStalledDownloading: 'Die App wurde nicht fertig geladen. Ein Update wird heruntergeladen, warte, bis es fertig ist, und starte dann neu.',
         hintStalled: 'Die App wurde nicht rechtzeitig geladen. Lade neu, oder suche nach einem Update, wenn das nicht hilft.',
         hintGeneric: 'Etwas ist schiefgelaufen. Lade neu.',
+      },
+      pt: {
+        title: 'Não foi possível carregar o Backspace.',
+        loading: 'Carregando…',
+        reload: 'Recarregar',
+        restartToInstall: 'Reiniciar para instalar a atualização',
+        checkForUpdates: 'Verificar atualizações',
+        checking: 'Verificando…',
+        downloading: 'Baixando atualização…',
+        updateReady: 'Atualização pronta',
+        updateAvailable: 'Atualização disponível',
+        updatesExternal: 'Atualizações gerenciadas pelo Flatpak',
+        changeInstance: 'Mudar instância',
+        openReleases: 'Abrir página de versões',
+        downloadVersion: 'Baixar Backspace {version}',
+        downloadUpdate: 'Baixar a atualização',
+        diagnostics: 'Informações de diagnóstico',
+        quit: 'Sair do Backspace',
+        upToDate: 'Você está na versão mais recente',
+        checkFailed: 'Falha ao verificar atualizações',
+        bridgeUnavailable: 'A ponte de recuperação não está disponível. Feche e reinstale o Backspace.',
+        stateLoadFailed: 'Não foi possível carregar o estado de recuperação: {message}',
+        hintExternal: 'Tente recarregar o aplicativo ou mudar a instância conectada. As atualizações são gerenciadas pelo Flatpak.',
+        hintLoadFailed: 'Não foi possível acessar sua instância. Verifique sua conexão ou tente outra instância.',
+        hintCrashReady: 'Algo falhou dentro do aplicativo. Uma atualização está pronta: clique em “Reiniciar para instalar a atualização”.',
+        hintCrashManual: 'Algo falhou dentro do aplicativo. Há uma versão mais nova disponível, mas esta versão não consegue instalá-la sozinha. Baixe-a e substitua o aplicativo.',
+        hintCrashDownloading: 'Algo falhou dentro do aplicativo. Uma atualização está sendo baixada: aguarde terminar e depois reinicie.',
+        hintCrash: 'Algo falhou dentro do aplicativo. Tente recarregar ou verifique se há atualizações.',
+        hintStalledReady: 'O aplicativo não terminou de carregar. Uma atualização está pronta: clique em “Reiniciar para instalar a atualização”.',
+        hintStalledManual: 'O aplicativo não terminou de carregar. Há uma versão mais nova disponível, mas esta versão não consegue instalá-la sozinha. Baixe-a e substitua o aplicativo.',
+        hintStalledDownloading: 'O aplicativo não terminou de carregar. Uma atualização está sendo baixada: aguarde terminar e depois reinicie.',
+        hintStalled: 'O aplicativo não carregou a tempo. Tente recarregar ou, se isso não ajudar, verifique se há atualizações.',
+        hintGeneric: 'Algo deu errado. Tente recarregar.',
       },
       zh: {
         title: 'Backspace 无法加载。',

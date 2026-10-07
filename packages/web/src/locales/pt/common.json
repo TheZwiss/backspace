@@ -1,0 +1,137 @@
+{
+  "appName": "Backspace",
+  "actions": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "close": "Fechar",
+    "delete": "Excluir",
+    "confirm": "Confirmar",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "retry": "Tentar de novo",
+    "back": "Voltar",
+    "done": "Concluir",
+    "edit": "Editar",
+    "remove": "Remover",
+    "add": "Adicionar",
+    "apply": "Aplicar",
+    "reset": "Redefinir",
+    "continue": "Continuar",
+    "dismiss": "Dispensar",
+    "ok": "OK",
+    "search": "Pesquisar",
+    "clear": "Limpar",
+    "change": "Alterar",
+    "refresh": "Atualizar",
+    "openLink": "Abrir link",
+    "tryAgain": "Tentar novamente",
+    "reply": "Responder",
+    "addReaction": "Adicionar reação",
+    "share": "Compartilhar",
+    "accept": "Aceitar",
+    "decline": "Recusar",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "abort": "Abortar",
+    "dismissAll": "Dispensar tudo",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "sortBy": "Ordenar por",
+    "leave": "Sair",
+    "invitePeople": "Convidar pessoas",
+    "previous": "Anterior",
+    "next": "Próximo",
+    "preview": "Pré-visualizar",
+    "logIn": "Entrar"
+  },
+  "states": {
+    "loading": "Carregando…",
+    "saving": "Salvando…",
+    "saved": "Salvo",
+    "unknown": "Desconhecido",
+    "none": "Nenhum",
+    "enabled": "Ativado",
+    "disabled": "Desativado",
+    "on": "Ligado",
+    "off": "Desligado",
+    "yes": "Sim",
+    "no": "Não",
+    "optional": "Opcional",
+    "required": "Obrigatório",
+    "default": "Padrão",
+    "recommended": "Recomendado",
+    "online": "Online",
+    "idle": "Ausente",
+    "doNotDisturb": "Não perturbe",
+    "offline": "Offline",
+    "loadingSettings": "Carregando configurações…",
+    "loadSettingsFailed": "Não foi possível carregar as configurações.",
+    "settingsSaved": "Configurações salvas",
+    "saveFailed": "Falha ao salvar",
+    "scanning": "Verificando…",
+    "pleaseWait": "Aguarde…"
+  },
+  "labels": {
+    "username": "Nome de usuário",
+    "password": "Senha",
+    "displayName": "Nome de exibição",
+    "friends": "Amigos",
+    "members": "Membros",
+    "settings": "Configurações",
+    "dangerZone": "Zona de perigo",
+    "searchMembers": "Pesquisar membros…",
+    "noMembersFound": "Nenhum membro encontrado",
+    "or": "ou",
+    "nameAZ": "Nome (A-Z)"
+  },
+  "time": {
+    "today": "Hoje às {{time}}",
+    "yesterday": "Ontem às {{time}}",
+    "never": "Nunca",
+    "justNow": "Agora mesmo",
+    "minutesShort": "{{minutes}} min",
+    "hoursMinutesShort": "{{hours}} h {{minutes}} min",
+    "elapsed": "{{duration}} decorridos"
+  },
+  "units": {
+    "ms": "{{value}} ms",
+    "percent": "{{value}}%",
+    "kbps": "{{value}} kbps",
+    "mbps": "{{value}} Mbps"
+  },
+  "colors": {
+    "mint": "Menta",
+    "sky": "Céu",
+    "lavender": "Lavanda",
+    "coral": "Coral",
+    "rose": "Rosa",
+    "teal": "Verde-azulado",
+    "amber": "Âmbar",
+    "peach": "Pêssego"
+  },
+  "language": {
+    "label": "Idioma",
+    "description": "Menus, botões e mensagens do sistema aparecem neste idioma. As mensagens de outras pessoas continuam como foram escritas."
+  },
+  "crash": {
+    "title": "Algo deu errado",
+    "reload": "Recarregar página",
+    "details": "Detalhes do erro"
+  },
+  "app": {
+    "loading": "Carregando o Backspace"
+  },
+  "chrome": {
+    "toggleMemberList": "Alternar lista de membros",
+    "closeSettings": "Fechar configurações"
+  },
+  "sourceCode": {
+    "label": "Código-fonte (AGPL)",
+    "labelWithBuild": "Código-fonte (AGPL) · {{build}}",
+    "title": "Ver o código-fonte da versão que esta instância está executando (AGPL-3.0)"
+  },
+  "devices": {
+    "newAudioInput": "{{label}} detectado. Escolha-o nas configurações de voz para trocar.",
+    "unnamedAudioInput": "Novo dispositivo de áudio"
+  }
+}

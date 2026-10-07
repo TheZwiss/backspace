@@ -55,5 +55,19 @@
   "x64",
   "arm64",
   "AppImage",
-  "deb"
+  "deb",
+  "{{height}}p {{fps}}fps",
+  "Online — {{n}}",
+  "Offline — {{n}}",
+  "via {{host}}",
+  "Volume",
+  "Mouse {{button}}",
+  "Mouse 5",
+  "Mouse 4",
+  "Local",
+  "{{value}} ms",
+  "Coral",
+  "GIF",
+  "Emoji",
+  "commit {{commit}} · "
 ]
