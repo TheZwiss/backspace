@@ -10,7 +10,6 @@ vi.mock('../audio/AudioManager', () => ({
 
 import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore } from '../stores/spaceStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from './crossStoreResolvers';
 import { useChannelMentionCandidates, useChannelUser, useSelfIdInChannel } from './channelUser';
 
 function makeUser(id: string, username: string, displayName: string | null): User {
@@ -37,7 +36,7 @@ const kai = makeUser('kai', 'kai', 'Kai');
 afterEach(() => {
   useAuthStore.setState({ user: null });
   useSpaceStore.getState().reset();
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
 });
 
 // The channel lookup maps are updated in place by `upsertChannel` and several
@@ -65,7 +64,7 @@ describe('channelUser hooks and in-place lookup map updates', () => {
 
   it("follows a channel's origin set in place", () => {
     useAuthStore.setState({ user: me });
-    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
     useSpaceStore.setState({ currentSpaceId: 'space-9' });
     const { result } = renderHook(() => useSelfIdInChannel('chan-orbit'));
     expect(result.current).toBe(me.id);

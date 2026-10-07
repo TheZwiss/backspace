@@ -6,6 +6,7 @@ vi.mock('livekit-client', () => ({
   Track: { Source: { ScreenShare: 'screen_share', ScreenShareAudio: 'screen_share_audio', Camera: 'camera' } },
   BackupCodecPolicy: { SIMULCAST: 0 },
   AudioPresets: { musicHighQualityStereo: { maxBitrate: 128_000 } },
+  ConnectionState: { Connected: 'connected', Reconnecting: 'reconnecting', Disconnected: 'disconnected' },
 }));
 vi.mock('./voice', () => ({ broadcastVoiceStatus: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));

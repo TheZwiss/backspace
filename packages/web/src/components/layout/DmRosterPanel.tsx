@@ -4,10 +4,10 @@ import type { User } from '@backspace/shared';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
-import { api } from '../../api/client';
+import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
+import { kickFromGroupDm, transferGroupDmOwnership } from '../../utils/groupDmOwnerActions';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmMemberRow, type DmMemberRowAction } from './DmMemberRow';
 import { visualPixels } from '../../platform/interfaceScale';
@@ -33,7 +33,6 @@ export function DmRosterPanel() {
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const showDms = useUIStore((s) => s.showDms);
 
-  const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
   const removeFriendStore = useSocialStore((s) => s.removeFriend);
 
@@ -41,6 +40,7 @@ export function DmRosterPanel() {
     () => dmChannels.find((dm) => dm.id === currentChannelId) ?? null,
     [dmChannels, currentChannelId],
   );
+  const viewer = useDmViewer(dmChannel?.id);
 
   // Confirm-state for destructive actions. Two separate slots — kick + transfer
   // — so we can keep simple state without a discriminated union.
@@ -61,7 +61,7 @@ export function DmRosterPanel() {
   }
 
   const ownerId = dmChannel.ownerId;
-  const callerIsOwner = !!authUser && ownerId === authUser.id;
+  const callerIsOwner = !!ownerId && isMine({ id: ownerId }, viewer.origin, viewer.self);
 
   // ── Section grouping ────────────────────────────────────────────────────
   // Owner first (always exactly one row), then online and offline groups
@@ -85,10 +85,9 @@ export function DmRosterPanel() {
 
   // ── Per-row helpers ────────────────────────────────────────────────────
   const isFriendOfCaller = (m: User): boolean => {
-    // Federation-safe: friends can be replicated locally, so the local id
-    // is the right comparison target — Friend.id is always the local id on
-    // the current instance, mirroring MessageList's WelcomeHeader pattern.
-    return friends.some((f) => f.id === m.id);
+    // The same person, whichever instance's row each list holds (`userKey`).
+    const key = userKey(m, viewer.origin);
+    return friends.some((f) => userKey(f, f._instanceOrigin) === key);
   };
 
   const handleMenuAction = async (action: DmMemberRowAction, member: User) => {
@@ -97,7 +96,7 @@ export function DmRosterPanel() {
       // MemberSidebar pattern). This branch only fires on the unlikely
       // fallback path where the row couldn't compute its bounding rect —
       // in that case, anchor to the top-left of the roster column.
-      openUserProfile(member, pointAnchor(visualPixels(100), visualPixels(100)));
+      openUserProfile(member, viewer.origin, pointAnchor(visualPixels(100), visualPixels(100)));
       return;
     }
     if (action === 'kick') {
@@ -125,17 +124,9 @@ export function DmRosterPanel() {
     if (!pendingKick) return;
     setSubmitting(true);
     try {
-      // Pass federated identity when the target is a federated user.
-      // `pendingKick.id` may be the home id (when the home view is in the
-      // userViews cache) OR a local id from any instance — neither is
-      // guaranteed to match the OWNER instance's local replicated id. The
-      // owner instance resolves home id + home instance via
-      // `resolveOrCreateReplicatedUser`, which is the only deterministic
-      // way to find the right `dm_members.userId` row across instances.
-      const federated = pendingKick.homeUserId && pendingKick.homeInstance
-        ? { homeUserId: pendingKick.homeUserId, homeInstance: pendingKick.homeInstance }
-        : undefined;
-      await api.dm.kickMember(dmChannel.id, pendingKick.id, federated);
+      // Sent to the owner's instance, naming the conversation and the
+      // member as its copy does (`groupDmOwnerActions`).
+      await kickFromGroupDm(dmChannel.id, pendingKick);
       addToast(
         t('dm:kick.success', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
@@ -157,11 +148,7 @@ export function DmRosterPanel() {
     if (!pendingTransfer) return;
     setSubmitting(true);
     try {
-      // See confirmKick for the rationale on federated identity.
-      const federated = pendingTransfer.homeUserId && pendingTransfer.homeInstance
-        ? { homeUserId: pendingTransfer.homeUserId, homeInstance: pendingTransfer.homeInstance }
-        : undefined;
-      await api.dm.transferOwnership(dmChannel.id, pendingTransfer.id, federated);
+      await transferGroupDmOwnership(dmChannel.id, pendingTransfer);
       addToast(
         t('dm:transfer.success', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',
@@ -205,7 +192,8 @@ export function DmRosterPanel() {
             <DmMemberRow
               member={ownerMember}
               isOwner
-              isSelf={!!authUser && isSelf(ownerMember, authUser)}
+              isSelf={isMine(ownerMember, viewer.origin, viewer.self)}
+              origin={viewer.origin}
               callerIsOwner={callerIsOwner}
               isFriend={isFriendOfCaller(ownerMember)}
               showKebab
@@ -224,7 +212,8 @@ export function DmRosterPanel() {
                 key={m.id}
                 member={m}
                 isOwner={false}
-                isSelf={!!authUser && isSelf(m, authUser)}
+                isSelf={isMine(m, viewer.origin, viewer.self)}
+                origin={viewer.origin}
                 callerIsOwner={callerIsOwner}
                 isFriend={isFriendOfCaller(m)}
                 showKebab
@@ -244,7 +233,8 @@ export function DmRosterPanel() {
                 key={m.id}
                 member={m}
                 isOwner={false}
-                isSelf={!!authUser && isSelf(m, authUser)}
+                isSelf={isMine(m, viewer.origin, viewer.self)}
+                origin={viewer.origin}
                 callerIsOwner={callerIsOwner}
                 isFriend={isFriendOfCaller(m)}
                 showKebab

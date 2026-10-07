@@ -95,9 +95,12 @@ interface VoiceState {
   streamMutes: Map<string, boolean>;        // userId → muted?
   watchingStreams: Set<string>;             // userIds we're watching
   unwatchedCameras: Set<string>;           // userIds whose cameras we've opted out of
-  streamWatchers: Map<string, Set<string>>;  // streamerUserId → set of watcher LiveKit identities (in-memory only)
-  recordStreamWatch: (streamerUserId: string, watcherIdentity: string, watching: boolean) => void;
-  clearStreamWatchers: (streamerUserId: string) => void;
+  // Sharer's LiveKit identity → watcher LiveKit identities (in-memory only).
+  // Identities, not user ids: a user id differs per instance, the identity is
+  // the one string every client in the room knows a participant by.
+  streamWatchers: Map<string, Set<string>>;
+  recordStreamWatch: (sharerIdentity: string, watcherIdentity: string, watching: boolean) => void;
+  clearStreamWatchers: (sharerIdentity: string) => void;
   evictWatcher: (watcherIdentity: string) => void;
   soundEffectVolume: number;                 // 0-200 (100 = default)
   setSoundEffectVolume: (volume: number) => void;
@@ -288,23 +291,23 @@ export const useVoiceStore = create<VoiceState>()(
       watchingStreams: new Set(),
       unwatchedCameras: new Set(),
       streamWatchers: new Map(),
-      recordStreamWatch: (streamerUserId, watcherIdentity, watching) => {
+      recordStreamWatch: (sharerIdentity, watcherIdentity, watching) => {
         set((state) => {
           const newMap = new Map(state.streamWatchers);
-          const existing = newMap.get(streamerUserId);
+          const existing = newMap.get(sharerIdentity);
           const next = new Set(existing ?? []);
           if (watching) next.add(watcherIdentity);
           else next.delete(watcherIdentity);
-          if (next.size === 0) newMap.delete(streamerUserId);
-          else newMap.set(streamerUserId, next);
+          if (next.size === 0) newMap.delete(sharerIdentity);
+          else newMap.set(sharerIdentity, next);
           return { streamWatchers: newMap };
         });
       },
-      clearStreamWatchers: (streamerUserId) => {
+      clearStreamWatchers: (sharerIdentity) => {
         set((state) => {
-          if (!state.streamWatchers.has(streamerUserId)) return state;
+          if (!state.streamWatchers.has(sharerIdentity)) return state;
           const newMap = new Map(state.streamWatchers);
-          newMap.delete(streamerUserId);
+          newMap.delete(sharerIdentity);
           return { streamWatchers: newMap };
         });
       },

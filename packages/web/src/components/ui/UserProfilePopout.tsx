@@ -6,15 +6,17 @@ import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ProfileBio } from './ProfileBio';
-import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
+import { useSelfIdentity } from '../../stores/authStore';
+import { openDirectMessage } from '../../utils/openDirectMessage';
 import { describeError } from '../../i18n/errors';
 import { useUIStore, type ProfileMemberContext } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
-import { parseFederatedUsername } from '../../utils/identity';
+import { isMine, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
 import { useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
@@ -26,6 +28,8 @@ const ANCHOR_OFFSET = 8;
 
 interface UserProfilePopoutProps {
   user: User;
+  /** The instance that issued `user` ('' = the page's own). */
+  origin: string;
   onClose: () => void;
   /** Rect of the element the card was opened from. */
   anchor: AnchorRect;
@@ -34,26 +38,23 @@ interface UserProfilePopoutProps {
   member?: ProfileMemberContext | null;
 }
 
-export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right', member = null }: UserProfilePopoutProps) {
+export function UserProfilePopout({ user: propUser, origin, onClose, anchor, placement = 'right', member = null }: UserProfilePopoutProps) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['social', 'common']);
   const navigate = useNavigate();
   const f = useFormatters();
-  const upsertDmCopy = useSpaceStore((s) => s.upsertDmCopy);
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
-  // Resolve to the best-known view of this user from the userViews cache.
-  // The prop frequently arrives as a federated stub (when the carrying DM
-  // came from a sibling instance that won the populateFromReady dedup race);
-  // routing through the cache surfaces the home view when one is loaded.
-  // Identity fields (id, homeUserId, homeInstance) are preserved across
-  // canonicalization, so write-payload code paths below remain correct.
-  const user = useCanonicalUserView(propUser);
+  // How this person looks at best (the userViews cache). The prop can be a
+  // copy from another instance; the cache surfaces their home's view. The
+  // row's identity fields and `origin` stay what every request below uses.
+  const user = useCanonicalUserView(propUser, origin);
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
-  const shownStatus = useShownStatus(user, user.status);
+  const shownStatus = useShownStatus(user, origin, user.status);
+  const self = useSelfIdentity();
+  const isYou = isMine(user, origin, self);
 
-  const origin = resolveUserOrigin(user);
-  const userApi = getApiForOrigin(origin);
   const roles = useProfileMemberRoles(member);
   const isMobile = useUIStore((s) => s.isMobile);
   // Edit Roles opens the member role editor, which is desktop-only. It is
@@ -110,20 +111,7 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
 
   const handleSendMessage = async () => {
     try {
-      const existing = useSpaceStore.getState().findExistingDmForUser(user);
-      if (existing) {
-        useUIStore.getState().setShowDms(true);
-        onClose();
-        navigate(`/channels/@me/${existing.dm.id}`);
-        return;
-      }
-      const channel = await api.dm.create({
-        userId: user.homeInstance ? undefined : user.id,
-        homeUserId: user.homeUserId ?? undefined,
-        homeInstance: user.homeInstance ?? undefined,
-      });
-      // The answer joins its conversation; open the conversation's row.
-      const rowId = upsertDmCopy('', channel, 'stated');
+      const rowId = await openDirectMessage(user, origin);
       useUIStore.getState().setShowDms(true);
       onClose();
       navigate(`/channels/@me/${rowId}`);
@@ -148,9 +136,10 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
     handleViewFullProfile();
   };
 
-  // Banner display
+  // Banner display. Another instance's assets arrive as absolute URLs
+  // (`normalizeUserAssets`); a bare filename is the page's own instance's.
   const bannerSrc = user.banner
-    ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : userApi.uploads.url(user.banner))
+    ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : api.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
     ? mutedGradient(user.accentColor, adjustColor(user.accentColor, -40))
@@ -258,13 +247,15 @@ export function UserProfilePopout({ user: propUser, onClose, anchor, placement =
           )}
         </div>
 
-        {/* Actions */}
-        <button
-          onClick={handleSendMessage}
-          className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
-        >
-          {t('social:profile.sendMessage')}
-        </button>
+        {/* Actions. Nobody sends themselves a message. */}
+        {!isYou && (
+          <button
+            onClick={handleSendMessage}
+            className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
+          >
+            {t('social:profile.sendMessage')}
+          </button>
+        )}
         {canEditRoles && (
           <button
             onClick={handleEditRoles}

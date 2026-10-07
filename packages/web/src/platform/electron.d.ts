@@ -29,6 +29,12 @@ type RecoveryAction =
   | 'open-releases'
   | 'quit';
 
+/**
+ * Whether a System Audio share on this OS build carries Backspace's own
+ * playback to viewers. See packages/desktop/src/systemAudioCapability.ts.
+ */
+type OwnAudioInSystemAudio = 'excluded' | 'included' | 'unavailable' | 'unknown';
+
 interface ElectronScreenSource {
   id: string;                      // "screen:0:0" or "window:12345:0"
   name: string;                    // "Entire Screen" or "Firefox"
@@ -135,6 +141,11 @@ interface BackspaceElectronAPI {
   getScreenSharePickerMode?: () => Promise<'app' | 'system'>;
   /** System-picker captures carry no preselection; this tells main whether to add loopback audio. */
   setScreenShareAudioPreference?: (shareAudio: boolean) => void;
+  /**
+   * Optional: older desktop builds lack it, and the stream settings
+   * then keep their generic per-platform System Audio note.
+   */
+  getSystemAudioCapability?: () => Promise<OwnAudioInSystemAudio>;
 
   // Instance URL management
   getInstanceUrl: () => Promise<string | null>;

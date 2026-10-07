@@ -71,3 +71,23 @@ describe('a 429 answer', () => {
     expect(err.retryAfter).toBe(60);
   });
 });
+
+describe('history after a cursor', () => {
+  const client = createApiClient('https://home.test', () => null);
+
+  it('sends the cursor and reports a page the server cut after it', async () => {
+    answer(200, JSON.stringify([{ id: '11' }, { id: '12' }]), { 'x-backspace-paging': 'after' });
+    const page = await client.channels.messagesAfter('chan-1', '10', 50);
+    expect(page).toEqual({ messages: [{ id: '11' }, { id: '12' }], forward: true });
+    const url = String((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]);
+    expect(url).toBe('https://home.test/api/channels/chan-1/messages?after=10&limit=50');
+  });
+
+  it('reports the newest page of a server that ignored the cursor', async () => {
+    answer(200, JSON.stringify([{ id: '90' }]));
+    const page = await client.dm.messagesAfter('dm-1', '10', 50);
+    expect(page).toEqual({ messages: [{ id: '90' }], forward: false });
+    const url = String((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]);
+    expect(url).toBe('https://home.test/api/dm/dm-1/messages?after=10&limit=50');
+  });
+});

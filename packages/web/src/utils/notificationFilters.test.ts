@@ -5,8 +5,8 @@ describe('isMessageAlert', () => {
   it('does not alert for my token inside code in a space channel', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds: new Set(['local-snowflake']),
+        authoredBySelf: false,
+        myId: 'local-snowflake',
         isDmChannel: false,
         content: 'the syntax is `<@local-snowflake>`',
         allChannels: false,
@@ -14,25 +14,13 @@ describe('isMessageAlert', () => {
     ).toBe(false);
   });
 
-  const myIds = new Set(['local-snowflake', 'home-uid-42']);
+  const myId = 'local-snowflake';
 
-  it('suppresses messages authored by self (local id)', () => {
+  it('suppresses messages the user wrote', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'local-snowflake',
-        myIds,
-        isDmChannel: true,
-        content: 'hi',
-        allChannels: false,
-      }),
-    ).toBe(false);
-  });
-
-  it('suppresses messages authored by self (home id)', () => {
-    expect(
-      isMessageAlert({
-        authorUserId: 'home-uid-42',
-        myIds,
+        authoredBySelf: true,
+        myId,
         isDmChannel: true,
         content: 'hi',
         allChannels: false,
@@ -43,8 +31,8 @@ describe('isMessageAlert', () => {
   it('plays for DM messages from others', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: true,
         content: 'yo',
         allChannels: false,
@@ -55,8 +43,8 @@ describe('isMessageAlert', () => {
   it('suppresses non-DM, non-mention messages from others', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: false,
         content: 'general chatter',
         allChannels: false,
@@ -64,25 +52,13 @@ describe('isMessageAlert', () => {
     ).toBe(false);
   });
 
-  it('plays when content mentions me by local id', () => {
+  it('plays when content mentions my id on the channel\'s instance', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: false,
         content: 'hey <@local-snowflake> look',
-        allChannels: false,
-      }),
-    ).toBe(true);
-  });
-
-  it('plays when content mentions me by home id (federated)', () => {
-    expect(
-      isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
-        isDmChannel: false,
-        content: 'cc <@home-uid-42>',
         allChannels: false,
       }),
     ).toBe(true);
@@ -91,8 +67,8 @@ describe('isMessageAlert', () => {
   it('does not play for mentions of someone else', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: false,
         content: 'pinging <@third-party>',
         allChannels: false,
@@ -103,8 +79,8 @@ describe('isMessageAlert', () => {
   it('plays for any non-self message when allChannels=true', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: false,
         content: 'general chatter',
         allChannels: true,
@@ -115,8 +91,8 @@ describe('isMessageAlert', () => {
   it('still suppresses self-authored even when allChannels=true', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'local-snowflake',
-        myIds,
+        authoredBySelf: true,
+        myId,
         isDmChannel: false,
         content: 'my own message',
         allChannels: true,
@@ -127,8 +103,8 @@ describe('isMessageAlert', () => {
   it('handles null content (attachment-only) gracefully', () => {
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: true,
         content: null,
         allChannels: false,
@@ -136,8 +112,8 @@ describe('isMessageAlert', () => {
     ).toBe(true);
     expect(
       isMessageAlert({
-        authorUserId: 'someone-else',
-        myIds,
+        authoredBySelf: false,
+        myId,
         isDmChannel: false,
         content: null,
         allChannels: false,

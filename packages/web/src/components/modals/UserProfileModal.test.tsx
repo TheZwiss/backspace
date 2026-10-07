@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { User } from '@backspace/shared';
@@ -13,7 +13,6 @@ vi.mock('../../stores/spaceStore', () => ({
     { getState: () => ({ upsertDmCopy: vi.fn(), findExistingDmForUser: vi.fn(), upsertUserView: vi.fn() }) },
   ),
   getApiForOrigin: () => ({ uploads: { url: (k: string) => `/uploads/${k}` }, users: { get: vi.fn() } }),
-  resolveUserOrigin: () => 'local',
 }));
 // authStore imports voiceStore, which imports AudioManager and with it an
 // AudioWorklet module jsdom cannot evaluate.
@@ -28,6 +27,7 @@ import { UserProfileModal } from './UserProfileModal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { api, HttpError } from '../../api/client';
+import { useAuthStore } from '../../stores/authStore';
 
 function makeUser(overrides: Partial<User>): User {
   return {
@@ -108,4 +108,42 @@ describe('UserProfileModal', () => {
     expect(useUIStore.getState().activeModal).toBe('userProfile');
     create.mockRestore();
   });
+
+  describe('the signed-in user (#325)', () => {
+    const pageHost = window.location.host;
+    /** erin@nova signed in directly on this page's instance: a replicated row. */
+    const erinHere = makeUser({ id: 'erin-here', username: 'erin@nova.example', homeInstance: 'nova.example', homeUserId: 'erin-nova' });
+
+    afterEach(() => {
+      useAuthStore.setState({ user: null, myRowIds: new Map() });
+    });
+
+    it('offers no messaging or friend actions on the own profile', () => {
+      useAuthStore.setState({ user: erinHere, myRowIds: new Map() });
+      useSocialStore.setState({ friends: [], requests: [] });
+      useUIStore.getState().openModal('userProfile', { userId: erinHere.id, user: erinHere, origin: '' });
+
+      render(<MemoryRouter><UserProfileModal /></MemoryRouter>);
+
+      expect(screen.queryByText('Send Message')).toBeNull();
+      expect(screen.queryByText('Add Friend')).toBeNull();
+    });
+
+    it('never takes a different person with the same name for the signed-in user', () => {
+      // The page's own native erin, as nova lists her: erin@<page host>, a
+      // different person from the signed-in erin@nova.
+      const otherErin = makeUser({
+        id: 'erin-native-seen-on-nova', username: `erin@${pageHost}`, homeInstance: pageHost, homeUserId: 'erin-native',
+      });
+      useAuthStore.setState({ user: erinHere, myRowIds: new Map() });
+      useSocialStore.setState({ friends: [], requests: [] });
+      useUIStore.getState().openModal('userProfile', { userId: otherErin.id, user: otherErin, origin: 'https://nova.example' });
+
+      render(<MemoryRouter><UserProfileModal /></MemoryRouter>);
+
+      expect(screen.getByText('Send Message')).toBeInTheDocument();
+      expect(screen.getByText('Add Friend')).toBeInTheDocument();
+    });
+  });
 });
+

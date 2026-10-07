@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { generateSnowflake } from './snowflake.js';
+import { insertDmMember, setDmMemberClosed } from './dmMemberClosed.js';
 
 /**
  * DM conversation identity (docs/decisions/0002-dm-conversation-identity.md).
@@ -45,6 +46,47 @@ export function oneOnOneKey(a: HomeIdentified, b: HomeIdentified): string {
 /** A new group key. Minted once per group and never recomputed. */
 export function mintGroupKey(): string {
   return crypto.randomUUID();
+}
+
+// ─── Read pointers ───────────────────────────────────────────────────────────
+
+/**
+ * Move one person's read pointer from (`from.userId`, `from.channelId`) to
+ * (`to.userId`, `to.channelId`), for when their membership moves between rows
+ * or local ids. Where `to` already has a pointer the newer of the two is kept
+ * (message ids are snowflakes and compare as numbers, as the read-state
+ * handlers compare them); `from`'s row is removed either way. A noop when
+ * `from` has no pointer or is `to`.
+ */
+export function keepNewerReadPointer(
+  rawDb: Database.Database,
+  from: { userId: string; channelId: string },
+  to: { userId: string; channelId: string },
+): void {
+  if (from.userId === to.userId && from.channelId === to.channelId) return;
+  const read = rawDb.prepare(`SELECT last_read_message_id AS last, updated_at AS updatedAt FROM read_states WHERE user_id = ? AND channel_id = ?`);
+  const moving = read.get(from.userId, from.channelId) as { last: string; updatedAt: number } | undefined;
+  if (!moving) return;
+  rawDb.prepare(`DELETE FROM read_states WHERE user_id = ? AND channel_id = ?`).run(from.userId, from.channelId);
+  const held = read.get(to.userId, to.channelId) as { last: string; updatedAt: number } | undefined;
+  if (!held) {
+    rawDb.prepare(`INSERT INTO read_states (user_id, channel_id, last_read_message_id, updated_at) VALUES (?, ?, ?, ?)`)
+      .run(to.userId, to.channelId, moving.last, moving.updatedAt);
+    return;
+  }
+  if (isNewerMessageId(moving.last, held.last)) {
+    rawDb.prepare(`UPDATE read_states SET last_read_message_id = ?, updated_at = ? WHERE user_id = ? AND channel_id = ?`)
+      .run(moving.last, Math.max(moving.updatedAt, held.updatedAt), to.userId, to.channelId);
+  }
+}
+
+/** Whether message id `a` is newer than `b`. Ids that are not numbers compare as text. */
+function isNewerMessageId(a: string, b: string): boolean {
+  try {
+    return BigInt(a) > BigInt(b);
+  } catch {
+    return a > b;
+  }
 }
 
 // ─── Keeping every 1-on-1 row on its key ─────────────────────────────────────
@@ -102,7 +144,8 @@ export function mayBeOneOnOneRow(row: { owner_id: string | null; federated_id: s
  *   into that one and deleted. Messages move; a member whose home identity the
  *   target already has is dropped rather than added, so the merged 1-on-1 keeps
  *   two members, and a member who had this row open has the target open;
- *   read states are deduplicated on their composite key; the row's federation
+ *   each read pointer moves with its person, the newer kept where two meet
+ *   (`keepNewerReadPointer`); the row's federation
  *   mutation log and outbox entries are re-pointed to the target.
  *
  * Idempotent. Must run inside a transaction.
@@ -145,23 +188,28 @@ export function reconcileDmChannelFederatedId(
 
   // Members: one row per home identity. A person the target already holds
   // (under this local id or another) keeps the target's row, opened when this
-  // row was open for them; anyone else moves over.
-  const reopen = rawDb.prepare(`UPDATE dm_members SET closed = 0 WHERE dm_channel_id = ? AND user_id = ?`);
+  // row was open for them; anyone else moves over. Each read pointer follows
+  // its person to the local id they keep (`keepNewerReadPointer`).
   const drop = rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`);
   const move = rawDb.prepare(`UPDATE dm_members SET dm_channel_id = ? WHERE dm_channel_id = ? AND user_id = ?`);
+  const keptIdOf = new Map<string, string>();
   for (const member of members) {
     const held = targetMembers.find(t => identityOfRow(t) === identityOfRow(member));
     if (held) {
-      if (member.closed === 0 && held.closed !== 0) reopen.run(targetId, held.user_id);
+      if (member.closed === 0 && held.closed !== 0) setDmMemberClosed(rawDb, targetId, held.user_id, false);
       drop.run(channelId, member.user_id);
+      keptIdOf.set(member.user_id, held.user_id);
     } else {
       move.run(targetId, channelId, member.user_id);
     }
   }
 
-  // read_states: keyed by channel_id; dedupe on (user_id, channel_id), then repoint.
-  rawDb.prepare(`DELETE FROM read_states WHERE channel_id = ? AND user_id IN (SELECT user_id FROM read_states WHERE channel_id = ?)`).run(channelId, targetId);
-  rawDb.prepare(`UPDATE read_states SET channel_id = ? WHERE channel_id = ?`).run(targetId, channelId);
+  // read_states are keyed by (user_id, channel_id): every pointer on this row
+  // moves to the target, under the local id its person keeps there.
+  const pointers = rawDb.prepare(`SELECT user_id FROM read_states WHERE channel_id = ?`).all(channelId) as Array<{ user_id: string }>;
+  for (const { user_id: userId } of pointers) {
+    keepNewerReadPointer(rawDb, { userId, channelId }, { userId: keptIdOf.get(userId) ?? userId, channelId: targetId });
+  }
   // The federation mutation log and outbox name a DM by its local channel id.
   // They follow the messages, so the peer catch-up sync (which reads the log
   // by the ids of live channels) and pending deliveries still find them.
@@ -253,6 +301,12 @@ export interface OneOnOneResult {
   channelId: string;
   /** True when this call inserted the row. */
   created: boolean;
+  /**
+   * Other rows this call re-keyed or merged on the way (a row that held the
+   * pair's key under other members). Their members' DM lists are stale until
+   * the caller hands these to `announceDmReconcile`.
+   */
+  reconciled: DmReconcileResult[];
 }
 
 function channelHoldingKey(rawDb: Database.Database, key: string): string | undefined {
@@ -286,10 +340,12 @@ function collapseToOneRowPerPerson(rawDb: Database.Database, channelId: string, 
     if (rows.length < 2) continue;
     const kept = rows.find(r => r.user_id === a.id || r.user_id === b.id) ?? rows[0]!;
     for (const row of rows) {
-      if (row !== kept) rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, row.user_id);
+      if (row === kept) continue;
+      rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, row.user_id);
+      keepNewerReadPointer(rawDb, { userId: row.user_id, channelId }, { userId: kept.user_id, channelId });
     }
     if (kept.closed !== 0 && rows.some(r => r.closed === 0)) {
-      rawDb.prepare(`UPDATE dm_members SET closed = 0 WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, kept.user_id);
+      setDmMemberClosed(rawDb, channelId, kept.user_id, false);
     }
   }
 }
@@ -307,10 +363,11 @@ function alignToPair(rawDb: Database.Database, channelId: string, a: HomeIdentif
     const underOtherId = members.find(m => m.user_id !== a.id && m.user_id !== b.id && identityOfRow(m) === homeIdentityOf(party));
     if (underOtherId) {
       rawDb.prepare(`UPDATE dm_members SET user_id = ? WHERE dm_channel_id = ? AND user_id = ?`).run(party.id, channelId, underOtherId.user_id);
+      keepNewerReadPointer(rawDb, { userId: underOtherId.user_id, channelId }, { userId: party.id, channelId });
       continue;
     }
-    const closed = options.open === 'first' && party === b ? 1 : 0;
-    rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`).run(channelId, party.id, closed);
+    const closed = options.open === 'first' && party === b;
+    insertDmMember(rawDb, channelId, party.id, { closed });
   }
 }
 
@@ -343,9 +400,15 @@ export function findOrCreateOneOnOne(
   const key = oneOnOneKey(a, b);
 
   return rawDb.transaction((): OneOnOneResult => {
+    const reconciled: DmReconcileResult[] = [];
+    const reconcile = (channelId: string): DmReconcileResult => {
+      const result = reconcileDmChannelFederatedId(rawDb, channelId);
+      if (result.action !== 'noop') reconciled.push(result);
+      return result;
+    };
     let keyed = channelHoldingKey(rawDb, key);
     if (keyed && !holdsOnlyThePair(membersWithIdentity(rawDb, keyed), a, b)) {
-      reconcileDmChannelFederatedId(rawDb, keyed);
+      reconcile(keyed);
       keyed = channelHoldingKey(rawDb, key);
       if (keyed && !holdsOnlyThePair(membersWithIdentity(rawDb, keyed), a, b)) {
         throw new Error(`DM channel ${keyed} holds the 1-on-1 key of ${a.id} and ${b.id} but other members, and cannot be re-keyed`);
@@ -354,7 +417,7 @@ export function findOrCreateOneOnOne(
     if (keyed) {
       collapseToOneRowPerPerson(rawDb, keyed, a, b);
       alignToPair(rawDb, keyed, a, b, options);
-      return { channelId: keyed, created: false };
+      return { channelId: keyed, created: false, reconciled };
     }
 
     const byMembers = (rawDb.prepare(`
@@ -367,14 +430,13 @@ export function findOrCreateOneOnOne(
     `).all(a.id, b.id) as Array<{ id: string; owner_id: string | null; federated_id: string | null }>)
       .find(mayBeOneOnOneRow);
     if (byMembers) {
-      return { channelId: reconcileDmChannelFederatedId(rawDb, byMembers.id).targetChannelId, created: false };
+      return { channelId: reconcile(byMembers.id).targetChannelId, created: false, reconciled };
     }
 
     const channelId = generateSnowflake();
     rawDb.prepare(`INSERT INTO dm_channels (id, owner_id, federated_id, created_at) VALUES (?, NULL, ?, ?)`).run(channelId, key, Date.now());
-    const insertMember = rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`);
-    insertMember.run(channelId, a.id, 0);
-    insertMember.run(channelId, b.id, options.open === 'first' ? 1 : 0);
-    return { channelId, created: true };
+    insertDmMember(rawDb, channelId, a.id);
+    insertDmMember(rawDb, channelId, b.id, { closed: options.open === 'first' });
+    return { channelId, created: true, reconciled };
   })();
 }

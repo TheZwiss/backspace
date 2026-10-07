@@ -250,3 +250,52 @@ describe('outbox: a relay whose first attempt fails (#367)', () => {
     expect(dndRelaysFor(erinOnA.id)).toBe(2);
   });
 });
+
+describe('outbox: a batch the peer applied but whose answer was lost (#372)', () => {
+  // B applies the create; while its answer is held, the author edits or
+  // deletes the message; then A gets a 502 instead of the answer. A cannot
+  // know B has the message, so the edit or delete must still reach B.
+  it('delivers an edit made while a create B applied was on the wire, when its answer is lost', async () => {
+    const original = `lost-answer-edit-original-${Date.now()}`;
+    const edited = `lost-answer-edit-edited-${Date.now()}`;
+    let messageId = '';
+    await withDeliveryInFlight(
+      async () => {
+        tapB.loseRelayAnswer(batch => batch.events.some(e => e.eventType === 'create' && e.message?.content === original));
+        const sent = await sendDmMessage(A, u1.token, dmId, { content: original });
+        expect(sent.status).toBe(201);
+        messageId = sent.id!;
+      },
+      () => dmMessageContents(B).includes(original),
+      'the original message on B (the batch whose answer is lost)',
+      async () => { expect(await messageRequest('PATCH', messageId, { content: edited })).toBe(200); },
+    );
+    await waitForRelay(() => dmMessageContents(B).includes(edited), {
+      ...relay,
+      what: 'the edited text on B, queued behind a create whose answer was lost',
+    });
+    expect(dmMessageContents(B)).not.toContain(original);
+    // The create's answer really was lost, and A sent the create again.
+    expect(tapB.relayEvents().filter(e => e.messageId === messageId).map(e => e.eventType)).toEqual(['create', 'create', 'update']);
+  });
+
+  it('delivers a delete made while a create B applied was on the wire, when its answer is lost', async () => {
+    const content = `lost-answer-delete-${Date.now()}`;
+    let messageId = '';
+    await withDeliveryInFlight(
+      async () => {
+        tapB.loseRelayAnswer(batch => batch.events.some(e => e.eventType === 'create' && e.message?.content === content));
+        const sent = await sendDmMessage(A, u1.token, dmId, { content });
+        expect(sent.status).toBe(201);
+        messageId = sent.id!;
+      },
+      () => dmMessageContents(B).includes(content),
+      'the message on B (the batch whose answer is lost)',
+      async () => { expect(await messageRequest('DELETE', messageId)).toBe(200); },
+    );
+    await waitForRelay(() => !dmMessageContents(B).includes(content), {
+      ...relay,
+      what: 'the message gone from B, deleted while its create was on the wire and its answer lost',
+    });
+  });
+});

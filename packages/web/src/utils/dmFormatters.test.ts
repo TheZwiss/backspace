@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from './dmFormatters';
+import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm, type DmViewer } from './dmFormatters';
+import { userKey, type SelfIdentity } from './identity';
 import { setLanguage } from '../i18n';
 import type { DmChannel, DmLastMessagePreview, User } from '@backspace/shared';
 
@@ -195,6 +196,14 @@ describe('formatDmPreview', () => {
   });
 });
 
+/** The DM seen by the user whose row on the page's instance is `id`. */
+function viewerAs(id: string): DmViewer {
+  const self: SelfIdentity = { key: userKey({ id }, ''), rowIds: new Map([['', id]]) };
+  return { self, origin: '' };
+}
+
+const OTHER_VIEWER = viewerAs('OTHER');
+
 // ─── System message previews — exercised via formatDmSidebarPreview ──────────
 
 const actor: User = {
@@ -231,7 +240,7 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       content: JSON.stringify({ event: 'name_changed', oldName: null, newName: 'Cool Group' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi renamed the group');
+    expect(formatDmSidebarPreview(dm, OTHER_VIEWER)).toBe('Heidi renamed the group');
   });
 
   it('newName=null (cleared) → "<actor> cleared the group name"', () => {
@@ -241,7 +250,7 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       content: JSON.stringify({ event: 'name_changed', oldName: 'Old', newName: null }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi cleared the group name');
+    expect(formatDmSidebarPreview(dm, OTHER_VIEWER)).toBe('Heidi cleared the group name');
   });
 
   it('unresolvable actor → "Unknown renamed the group"', () => {
@@ -251,7 +260,19 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       content: JSON.stringify({ event: 'name_changed', oldName: null, newName: 'X' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown renamed the group');
+    expect(formatDmSidebarPreview(dm, OTHER_VIEWER)).toBe('Unknown renamed the group');
+  });
+});
+
+describe('formatDmSidebarPreview: system content it does not know', () => {
+  it('an unknown event → the generic label', () => {
+    const dm = makeGroupDm({ type: 'system', userId: 'U1', content: JSON.stringify({ event: 'call_started' }), createdAt: 1 });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('System message');
+  });
+
+  it('an event with missing fields → the generic label', () => {
+    const dm = makeGroupDm({ type: 'system', userId: 'U1', content: JSON.stringify({ event: 'member_added', targetUserId: 'U2' }), createdAt: 1 });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('System message');
   });
 });
 
@@ -301,7 +322,7 @@ function make1on1Dm(other: User): DmChannel {
   } as DmChannel;
 }
 
-const SELF = { id: 'SELF', username: 'self' };
+const SELF = viewerAs('SELF');
 
 describe('formatDmHeaderName', () => {
   it('group with `dm.name` set → returns dm.name verbatim', () => {
@@ -403,10 +424,10 @@ describe('deleted 1-on-1 partner', () => {
   const dm = { id: 'd', ownerId: null, members: [me, deleted], createdAt: 0 } as unknown as DmChannel;
 
   it('header shows Deleted User', () => {
-    expect(formatDmHeaderName(dm, me)).toBe('Deleted User');
+    expect(formatDmHeaderName(dm, viewerAs('me'))).toBe('Deleted User');
   });
   it('input label points at Deleted User', () => {
-    expect(formatDmInputLabel(dm, me)).toBe('@Deleted User');
+    expect(formatDmInputLabel(dm, viewerAs('me'))).toBe('@Deleted User');
   });
 });
 
@@ -418,7 +439,7 @@ describe('formatDmSidebarPreview — icon_changed system message', () => {
       content: JSON.stringify({ event: 'icon_changed' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi updated the group icon');
+    expect(formatDmSidebarPreview(dm, OTHER_VIEWER)).toBe('Heidi updated the group icon');
   });
 
   it('unresolvable actor → "Unknown updated the group icon"', () => {
@@ -428,7 +449,7 @@ describe('formatDmSidebarPreview — icon_changed system message', () => {
       content: JSON.stringify({ event: 'icon_changed' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown updated the group icon');
+    expect(formatDmSidebarPreview(dm, OTHER_VIEWER)).toBe('Unknown updated the group icon');
   });
 });
 
@@ -436,21 +457,21 @@ describe('isDeletedPartnerDm', () => {
   const me = { id: 'me', username: 'me' } as User;
   it('true for a 1-on-1 whose only other member is deleted', () => {
     const dm = { ownerId: null, members: [me, { id: 'x', username: 'Deleted User', isDeleted: true } as User] };
-    expect(isDeletedPartnerDm(dm as any, me)).toBe(true);
+    expect(isDeletedPartnerDm(dm as any, viewerAs('me'))).toBe(true);
   });
   it('false for a live partner', () => {
     const dm = { ownerId: null, members: [me, { id: 'x', username: 'p', isDeleted: false } as User] };
-    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
+    expect(isDeletedPartnerDm(dm as any, viewerAs('me'))).toBe(false);
   });
   it('false for a group even with a deleted member', () => {
     const dm = { ownerId: 'me', members: [me, { id: 'x', isDeleted: true } as User] };
-    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
+    expect(isDeletedPartnerDm(dm as any, viewerAs('me'))).toBe(false);
   });
   it('false when there are zero other members', () => {
-    expect(isDeletedPartnerDm({ ownerId: null, members: [me] } as any, me)).toBe(false);
+    expect(isDeletedPartnerDm({ ownerId: null, members: [me] } as any, viewerAs('me'))).toBe(false);
   });
   it('false when others are mixed (one deleted, one live)', () => {
     const dm = { ownerId: null, members: [me, { id: 'x', isDeleted: true } as User, { id: 'y', isDeleted: false } as User] };
-    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
+    expect(isDeletedPartnerDm(dm as any, viewerAs('me'))).toBe(false);
   });
 });

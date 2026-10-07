@@ -225,16 +225,35 @@
       inset 0 1px 0 var(--glass-highlight);
   }
 
-  /* Modal glass — center-screen dialogs with backdrop */
+  /* Modal glass — center-screen dialogs with backdrop.
+     The blur and the tint sit on a layer behind the dialog's content
+     (::before), not on the dialog itself. An element with backdrop-filter
+     is the backdrop root for everything inside it, so a glass control
+     inside the dialog (a Save/Discard pill over scrolling rows) would blur
+     nothing. With the filter on the layer, nested glass works: see
+     design-system.md, "Nested glass". `position: relative` places the layer
+     and loses to a `fixed`/`absolute` utility on the dialog; `isolation`
+     keeps the layer behind the content without making the dialog a
+     backdrop root. */
   .glass-modal {
-    -webkit-backdrop-filter: blur(20px) saturate(120%);
-    backdrop-filter: blur(20px) saturate(120%);
-    background: var(--glass-modal-bg);
+    position: relative;
+    isolation: isolate;
     border: 1px solid var(--glass-border);
     box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.30),
       0 12px 40px rgba(0, 0, 0, 0.20),
       inset 0 1px 0 var(--glass-highlight);
+  }
+  .glass-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-modal-bg);
   }
 
   /* Reaction pill glass — lighter blur for small inline elements */
@@ -355,7 +374,7 @@
     backdrop-filter: none;
     background: rgb(var(--bg-elevated));
   }
-  .glass-modal {
+  .glass-modal::before {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgb(var(--bg-elevated));

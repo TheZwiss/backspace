@@ -2,11 +2,10 @@ import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { authenticate, requireAdmin } from '../../../utils/auth.js';
 import { buildFederationHeaders, generateHmacSecret } from '../../../utils/federationAuth.js';
-import { onPeerDeactivated } from '../../../utils/federationPeerActivation.js';
+import { recordPeerAttempt, removePeer, transitionPeer } from '../../../utils/federationPeerState.js';
 import { probePeerReachable, recoverOrDetectReset } from '../../../utils/federationRecovery.js';
 import { federationFetch } from '../../../utils/federationFetch.js';
 import { homeInstanceMatch } from '../../../utils/federationReset.js';
-import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { resolveLocalOrigin, sanitizePeer } from '../origin.js';
@@ -142,20 +141,13 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
         return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
       }
 
-      // Revoke the peer
-      db.update(schema.federationPeers)
-        .set({ status: 'revoked' })
-        .where(eq(schema.federationPeers.id, id))
-        .run();
-
-      onPeerDeactivated(id, 'admin_revoked').catch(err =>
-        console.error('[federation] onPeerDeactivated from admin revoke failed:', err),
-      );
-
-      // Delete all outbox entries for this peer
-      db.delete(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, id))
-        .run();
+      // Revoke the peer. Entering revoked purges its outbox and, when it was
+      // active, runs the deactivation hook.
+      transitionPeer(id, {
+        from: ['pending', 'awaiting_approval', 'active', 'unreachable', 'needs_attention', 'rejected'],
+        to: 'revoked',
+        cause: 'admin_revoked',
+      });
 
       return reply.code(200).send({ success: true });
     },
@@ -190,11 +182,9 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
       }
 
       // Cascade-delete handles federation_outbox entries (FK onDelete: 'cascade').
-      db.delete(schema.federationPeers)
-        .where(eq(schema.federationPeers.id, id))
-        .run();
-
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      if (!removePeer(id, { from: ['needs_attention'] })) {
+        return reply.code(409).send({ error: 'The peer changed; reload and try again', statusCode: 409 });
+      }
 
       return reply.code(200).send({ success: true });
     },
@@ -237,15 +227,18 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
           // to active until an admin re-peers through the authenticated path.
           return reply.code(200).send({ recovered: false, status: 'needs_attention' });
         }
+        if (outcome === 'unchanged') {
+          // The row left `unreachable` while the probe ran (revoked, or reset detected).
+          const now = db.select({ status: schema.federationPeers.status }).from(schema.federationPeers)
+            .where(eq(schema.federationPeers.id, peer.id)).get();
+          return reply.code(200).send({ recovered: false, status: now?.status ?? 'removed' });
+        }
         return reply.code(200).send({ recovered: true, status: 'active' });
       }
 
       // Probe failed — advance pacing so a manual attempt stays consistent with
       // the recovery worker's schedule.
-      db.update(schema.federationPeers)
-        .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: Date.now() })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
+      recordPeerAttempt(peer.id, { from: ['unreachable'], startedAt: Date.now() });
 
       return reply.code(200).send({ recovered: false, status: 'unreachable' });
     },
@@ -300,7 +293,7 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
   );
 
   // ─── DELETE /api/federation/peers/:id/permanent ─────────────────────────────
-  // Admin-only: permanently delete a revoked peer record.
+  // Admin-only: permanently delete a revoked or rejected peer record.
   app.delete<{ Params: { id: string } }>(
     '/api/federation/peers/:id/permanent',
     { preHandler: [authenticate, requireAdmin] },
@@ -318,16 +311,15 @@ export function registerPeerAdminRoutes(app: FastifyInstance): void {
         return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
       }
 
-      if (peer.status !== 'revoked') {
+      // A revoked or rejected row carries no live peering; either can go.
+      if (peer.status !== 'revoked' && peer.status !== 'rejected') {
         return reply.code(400).send({
-          error: 'Only revoked peers can be permanently deleted. Revoke the peer first.',
+          error: 'Only revoked or rejected peers can be permanently deleted. Revoke the peer first.',
           statusCode: 400,
         });
       }
 
-      db.delete(schema.federationPeers)
-        .where(eq(schema.federationPeers.id, id))
-        .run();
+      removePeer(id, { from: ['revoked', 'rejected'] });
 
       return reply.code(200).send({ success: true });
     },

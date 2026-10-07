@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import { StreamQualityControls, StreamHostSubtitle } from './StreamQualityControls';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { resetSystemAudioCapabilityForTests } from '../../utils/systemAudioNote';
 
 vi.mock('../../audio/AudioManager', () => ({
   AudioManager: { getInstance: () => ({}) },
@@ -152,5 +153,42 @@ describe('StreamQualityControls System Audio while live', () => {
     render(<StreamQualityControls />);
     expect(audioSwitch()).toHaveAttribute('aria-checked', 'true');
     expect(audioSwitch()).toBeEnabled();
+  });
+});
+
+describe('the System Audio note in the desktop app', () => {
+  // Whether System Audio carries the voice chat to viewers depends on the OS
+  // build, which only the desktop app's main process can tell.
+  function asDesktop(platform: string, capability?: OwnAudioInSystemAudio) {
+    const api: Partial<BackspaceElectronAPI> = { platform };
+    if (capability) api.getSystemAudioCapability = () => Promise.resolve(capability);
+    window.backspace = api as BackspaceElectronAPI;
+  }
+
+  beforeEach(() => { resetSystemAudioCapabilityForTests(); });
+  afterEach(() => {
+    delete (window as { backspace?: BackspaceElectronAPI }).backspace;
+    resetSystemAudioCapabilityForTests();
+  });
+
+  it('warns on Windows 10 before System Audio is turned on', async () => {
+    asDesktop('win32', 'included');
+    render(<StreamQualityControls />);
+    expect(await screen.findByText(/viewers will hear their own voices/)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'System Audio' })).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('says the voice chat is left out on Windows 11 once System Audio is on', async () => {
+    asDesktop('win32', 'excluded');
+    useVoiceStore.setState({ screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, shareAudio: true } });
+    render(<StreamQualityControls />);
+    expect(await screen.findByText(/but not the voice chat/)).toBeInTheDocument();
+  });
+
+  it('keeps the older note with a desktop app that cannot tell', async () => {
+    asDesktop('win32');
+    useVoiceStore.setState({ screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, shareAudio: true } });
+    render(<StreamQualityControls />);
+    expect(await screen.findByText(/Windows loopback may capture call audio/)).toBeInTheDocument();
   });
 });

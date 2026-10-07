@@ -31,6 +31,7 @@ import { activeHomeNavItem } from '../../utils/homeNav';
 import { BackspaceMark } from '../projectHub/BackspaceMark';
 import { HubUpdateDot } from '../projectHub/HubUpdateDot';
 import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
+import type { UserSettingsTab } from '../modals/UserSettings';
 
 export function ChannelSidebar() {
   const { t } = useTranslation(['spaces', 'common', 'project']);
@@ -872,7 +873,7 @@ function UserAreaPanel({
   isPermissionMuted: boolean;
   onMicToggle: () => void;
   onDeafenToggle: () => void;
-  onSettingsClick: (tab?: string) => void;
+  onSettingsClick: (tab?: UserSettingsTab) => void;
 }) {
   const { t } = useTranslation(['spaces', 'common', 'admin']);
   const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
@@ -881,7 +882,7 @@ function UserAreaPanel({
   const setInputDevice = useVoiceStore((s) => s.setInputDevice);
   const setOutputDevice = useVoiceStore((s) => s.setOutputDevice);
   const updateBadge = useInstanceUpdateBadge();
-  const shownStatus = useShownStatus(user, user.status);
+  const shownStatus = useShownStatus(user, '', user.status);
 
   // Shared hook drives lists, permission state, and live devicechange refresh.
   const { permState, inputs: inputDevices, outputs: outputDevices, inputLabels, outputLabels, requestPermission } = useAudioDevices();
@@ -1169,7 +1170,7 @@ function UserAreaPanel({
       <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
         <div className="p-1 hover:bg-interactive-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
-          <ProfileAvatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={shownStatus} user={user} />
+          <ProfileAvatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={shownStatus} user={user} origin="" />
           <div className="flex-1 min-w-0">
             <div className="text-[13.5px] font-semibold text-txt-primary truncate leading-tight">{user.displayName ?? user.username}</div>
             <div className="text-[11px] text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary">@{user.username}</div>
@@ -1296,7 +1297,7 @@ function ChannelItem({
     isDragOver: boolean;
     isValidTarget: boolean;
   };
-  channelPermissions: Map<string, string>;
+  channelPermissions: ReadonlyMap<string, string>;
   handleVoiceJoin: (channelId: string) => void;
 }) {
   const chPerms = channelPermissions.get(channel.id);

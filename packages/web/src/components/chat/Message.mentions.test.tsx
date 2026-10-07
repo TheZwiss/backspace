@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DmChannel, MessageWithUser, User } from '@backspace/shared';
 import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from '../../utils/crossStoreResolvers';
 import { Message } from './Message';
 
 vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn() }));
@@ -73,7 +72,7 @@ function rowOf(message: MessageWithUser): HTMLElement {
 
 beforeEach(() => {
   useAuthStore.setState({ user: me });
-  setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+  useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
   useSpaceStore.setState({
     dmChannels: [remoteDm],
     channelOriginMap: new Map([[remoteDm.id, ORBIT]]),
@@ -83,7 +82,7 @@ beforeEach(() => {
 afterEach(() => {
   useAuthStore.setState({ user: null });
   useSpaceStore.setState({ dmChannels: [], channelOriginMap: new Map() });
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
 });
 
 describe('Message mention highlight (#332)', () => {

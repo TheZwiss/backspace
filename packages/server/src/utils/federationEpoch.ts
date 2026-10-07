@@ -32,20 +32,35 @@ export interface PeerForEpoch {
 }
 
 /**
- * Fetch a peer's authenticated instance epoch via `POST /api/federation/epoch`.
+ * What a signed `POST /api/federation/epoch` round-trip says about the secret
+ * it was signed with:
  *
- * The request is HMAC-signed with the shared secret (so only an established
- * peer can make the call), and the peer's response body is HMAC-verified with
- * the same secret before its value is trusted — a poisoned baseline can drive a
- * spurious heal on a live peer (design §9), so the epoch we newly trust is
- * signed, not TLS-only.
+ * - `verified`: the peer holds this secret (it verified our request and its
+ *   signed answer verifies with the same secret). Carries the peer's epoch.
+ * - `not_peered`: the peer answered 403, so it holds no row for us, or has
+ *   revoked it. A handshake can reach a fresh slot there.
+ * - `secret_mismatch`: the peer answered 401, so it holds a row for us under a
+ *   different secret.
+ * - `unknown`: anything else (network error, timeout, 404 from a build without
+ *   the endpoint, 5xx, an answer whose signature does not verify).
  *
- * Fails safe: any failure — a 404 from a not-yet-upgraded peer, a bad/absent
- * response signature, or a network/timeout error — returns `null`. Callers
- * treat `null` as "retry on the next tick," never as an error to surface. No
- * exception escapes this function.
+ * Every released Backspace version serves `/api/federation/epoch` (it shipped
+ * before v1.0.0), and the endpoint answers any peer row that is not revoked.
  */
-export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null> {
+export type EpochProbe =
+  | { kind: 'verified'; instanceId: string }
+  | { kind: 'not_peered' }
+  | { kind: 'secret_mismatch' }
+  | { kind: 'unknown' };
+
+/**
+ * Sign an epoch request with `peer.hmacSecret` and classify the answer (see
+ * EpochProbe). The response body is HMAC-verified with the same secret before
+ * its value is trusted: a poisoned baseline can drive a spurious heal on a
+ * live peer (design §9), so the epoch we newly trust is signed, not TLS-only.
+ * No exception escapes this function.
+ */
+export async function probeEpoch(peer: PeerForEpoch): Promise<EpochProbe> {
   const body = JSON.stringify({});
   const headers = buildFederationHeaders(body, peer.hmacSecret, getOurOrigin());
 
@@ -58,18 +73,18 @@ export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null>
       signal: AbortSignal.timeout(10000),
     }, 'approved');
   } catch {
-    // Network error / timeout — benign no-op, retry later.
-    return null;
+    return { kind: 'unknown' };
   }
 
-  // 404 = peer not yet upgraded (endpoint absent); any other non-2xx = error.
-  if (res.status === 404 || !res.ok) return null;
+  if (res.status === 403) return { kind: 'not_peered' };
+  if (res.status === 401) return { kind: 'secret_mismatch' };
+  if (!res.ok) return { kind: 'unknown' };
 
   let text: string;
   try {
     text = await res.text();
   } catch {
-    return null;
+    return { kind: 'unknown' };
   }
 
   // Verify the response signature with the SAME secret and arg order the peer's
@@ -78,14 +93,27 @@ export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null>
   const ts = Number(res.headers.get('x-federation-timestamp'));
   const nonce = res.headers.get('x-federation-nonce');
   if (!sig || !Number.isFinite(ts) || !verifySignature(text, sig, peer.hmacSecret, ts, nonce)) {
-    return null;
+    return { kind: 'unknown' };
   }
 
   try {
-    return (JSON.parse(text) as { instanceId?: string }).instanceId ?? null;
+    const instanceId = (JSON.parse(text) as { instanceId?: unknown }).instanceId;
+    return typeof instanceId === 'string' && instanceId.length > 0
+      ? { kind: 'verified', instanceId }
+      : { kind: 'unknown' };
   } catch {
-    return null;
+    return { kind: 'unknown' };
   }
+}
+
+/**
+ * The peer's authenticated instance epoch, or `null` when `probeEpoch` could
+ * not verify one. Callers treat `null` as "retry on the next tick," never as
+ * an error to surface.
+ */
+export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null> {
+  const probe = await probeEpoch(peer);
+  return probe.kind === 'verified' ? probe.instanceId : null;
 }
 
 /**

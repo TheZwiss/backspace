@@ -11,7 +11,7 @@ vi.mock('../../audio/AudioManager', () => ({
 }));
 
 import { MemberSidebar } from './MemberSidebar';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ALL_PERMISSIONS, PermissionBits, permissionsToString } from '../../utils/permissions';
@@ -99,7 +99,7 @@ describe('MemberSidebar: a click on a member', () => {
       [member('owner', 'Olga', []), member('lead-local', 'Lena', [LEADS]), member('helper', 'Hugo', [HELPERS])],
       PermissionBits.MANAGE_ROLES,
     );
-    setMyUserIdForOrigin(ORBIT, 'lead-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
     await clickMember('Lena');
 
     expect(useUIStore.getState().activeModal).toBeNull();

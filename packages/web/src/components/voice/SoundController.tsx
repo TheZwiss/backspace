@@ -3,10 +3,12 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore, addedRealtimeMessageEvents } from '../../stores/chatStore';
 import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import { homeIdentityOf } from '../../utils/identity';
 import { AudioManager } from '../../audio/AudioManager';
 import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
 import { getSfxVolume } from '../../utils/sfx';
 import { alertsAllowed, messageAlertsUser, playAlertSound } from '../../utils/alerts';
+import type { ParticipantInfo } from '../../hooks/useLiveKit';
 
 /**
  * Replicates the `useLiveKit` effective-mute formula on demand. Returns whether
@@ -31,21 +33,38 @@ function computeEffectiveSelfState(state: ReturnType<typeof useVoiceStore.getSta
   return { muted, deafened };
 }
 
+/**
+ * Our own share as the participant list shows it. Found by `isLocal`, not by an
+ * account id: the local participant is listed under whatever id the room's
+ * instance knows us by (another instance's id in a remote space's channel, the
+ * DM member's id in a federated call), while the LiveKit identity is the key
+ * every viewer's `stream_watch` ping is filed under (`streamWatchKey`).
+ */
+function localShareOf(participants: readonly ParticipantInfo[]): { identity: string | null; sharing: boolean } {
+  const self = participants.find((p) => p.isLocal);
+  return { identity: self?.identity ?? null, sharing: self?.isScreenSharing ?? false };
+}
+
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
-  // Federation-aware self-check: in federated calls, the participant userId
-  // can flip between localSnowflake (when activeDmCall resolves identity) and
-  // homeUserId (when activeDmCall is cleared during disconnect). We must
-  // recognize BOTH as "self" to prevent phantom join/leave sounds.
-  const myIds = new Set<string>();
-  if (currentUser?.id) myIds.add(currentUser.id);
-  if (currentUser?.homeUserId) myIds.add(currentUser.homeUserId);
-  const isSelf = (id: string) => myIds.has(id);
+  // A participant id is either the call's instance's row id or, in a
+  // federated call while the DM is not resolved (e.g. during disconnect), the
+  // LiveKit identity's home user id. Both name the signed-in user when they
+  // are the id that instance gave them or the id of their home identity.
+  const isSelf = (id: string): boolean => {
+    const voice = useVoiceStore.getState();
+    const callChannelId = voice.currentVoiceChannelId ?? voice.activeDmCall?.dmChannelId ?? null;
+    const callOrigin = callChannelId ? getChannelOrigin(callChannelId) : '';
+    if (id === getMyUserIdForOrigin(callOrigin)) return true;
+    const user = useAuthStore.getState().user;
+    return !!user && id === homeIdentityOf(user, '')?.userId;
+  };
 
   const isInitialMount = useRef(true);
   const initialState = useVoiceStore.getState();
   const initialEff = computeEffectiveSelfState(initialState);
+  const initialSelf = localShareOf(initialState.participants);
 
   // All previous-sample state lives in one ref so the subscriber callback updates atomically.
   const prev = useRef({
@@ -57,6 +76,9 @@ export function SoundController() {
     screenShareUserIds: new Set(
       initialState.participants.filter((p) => p.isScreenSharing).map((p) => p.userId),
     ),
+    /** Our own participant's LiveKit identity while listed: the key of our watcher set. */
+    selfIdentity: initialSelf.identity,
+    selfSharing: initialSelf.sharing,
     selfWatchers: new Set<string>(),
   });
 
@@ -163,16 +185,16 @@ export function SoundController() {
         state.participants.filter((p) => p.isScreenSharing).map((p) => p.userId),
       );
 
-      const myStreamerId = currentUser?.id;
-      const selfIsSharing = myStreamerId ? currentScreenShareUserIds.has(myStreamerId) : false;
-      const selfStreamJustStarted =
-        !!myStreamerId &&
-        currentScreenShareUserIds.has(myStreamerId) &&
-        !prev.current.screenShareUserIds.has(myStreamerId);
-      const selfStreamJustEnded =
-        !!myStreamerId &&
-        !currentScreenShareUserIds.has(myStreamerId) &&
-        prev.current.screenShareUserIds.has(myStreamerId);
+      // Our own share. While we are not listed (the participant list is empty
+      // after a disconnect) the identity we were listed under still names the
+      // watcher set that has to be cleared.
+      const self = localShareOf(state.participants);
+      const selfIdentity = self.identity ?? prev.current.selfIdentity;
+      const selfIsSharing = self.sharing;
+      const selfStreamJustStarted = selfIsSharing && !prev.current.selfSharing;
+      const selfStreamJustEnded = !selfIsSharing && prev.current.selfSharing;
+      prev.current.selfIdentity = selfIdentity;
+      prev.current.selfSharing = selfIsSharing;
 
       // Suppress join/leave + stream sounds on the connect tick. On
       // justConnected, prev.participantIds is the empty/initial set, so the
@@ -217,12 +239,12 @@ export function SoundController() {
       // re-entered subscriber tick silent. This eliminates the race where a
       // late "Stop Watching" ping arriving between a deferred clear's schedule
       // and execution would fire phantom stream_user_joined / left.
-      if (myStreamerId && (selfStreamJustStarted || selfStreamJustEnded)) {
-        useVoiceStore.getState().clearStreamWatchers(myStreamerId);
+      if (selfIdentity && (selfStreamJustStarted || selfStreamJustEnded)) {
+        useVoiceStore.getState().clearStreamWatchers(selfIdentity);
       }
 
-      if (myStreamerId && state.isLiveKitConnected && !justDisconnected && selfIsSharing) {
-        const live = new Set(state.streamWatchers.get(myStreamerId) ?? []);
+      if (selfIdentity && state.isLiveKitConnected && !justDisconnected && selfIsSharing) {
+        const live = new Set(state.streamWatchers.get(selfIdentity) ?? []);
         const past = prev.current.selfWatchers;
 
         live.forEach((identity) => {

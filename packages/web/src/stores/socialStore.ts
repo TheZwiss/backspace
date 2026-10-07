@@ -3,13 +3,29 @@ import type { Friend, FriendRequest, SendFriendRequest, User } from '@backspace/
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
-import { activityKey, type PresenceSubject } from '../utils/identity';
+import { profileFieldsOf, updateIsAbout, updateIsAboutRowId, userKey, userUpdateReach, type IdentityFields, type PresenceSubject } from '../utils/identity';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
 export type TaggedFriend = Friend & { _instanceOrigin: string };
 export type TaggedFriendRequest = FriendRequest & { _instanceOrigin: string };
 export type TaggedUser = User & { _instanceOrigin: string };
+
+/**
+ * Whether `request` was sent to the user. Its ids are the ids of the instance
+ * that holds it, and `user` is the other party as that instance issued it, so
+ * the request is incoming when the other party is its sender. Never compare
+ * `fromId` with the session row's id: on any other instance that is someone
+ * else's id.
+ */
+export function isIncomingRequest(request: FriendRequest): boolean {
+  return !!request.user && request.user.id === request.fromId;
+}
+
+/** Whether the user sent `request`: the other party is its recipient (see `isIncomingRequest`). */
+export function isOutgoingRequest(request: FriendRequest): boolean {
+  return !!request.user && request.user.id === request.toId;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,10 +62,12 @@ interface SocialState {
   addOutboundRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (subject: PresenceSubject, origin: string, status: string) => void;
-  updateFriendProfile: (user: User) => void;
+  /** Apply a `user_updated` row issued by `origin` to the friend rows it is about (`userUpdateReach`); profile fields only. */
+  updateFriendProfile: (user: User, origin: string) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
   removeRequestById: (requestId: string, origin: string, userId?: string) => void;
-  removeRequestsForUser: (userId: string) => void;
+  /** Drop the friends and pending requests the deleted user's `user_updated` row (issued by `origin`) is about (`updateIsAbout`). */
+  removeDeletedUser: (user: IdentityFields, origin: string) => void;
   reset: () => void;
 }
 
@@ -397,37 +415,42 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }));
   },
 
-  // Called when a user is deleted — remove all pending requests involving them
-  removeRequestsForUser: (userId: string) => {
-    set((state) => ({
-      requests: state.requests.filter(r => r.fromId !== userId && r.toId !== userId),
-    }));
+  removeDeletedUser: (user: IdentityFields, origin: string) => {
+    set((state) => {
+      const friends = state.friends.filter(f => !updateIsAbout(f, f._instanceOrigin, user, origin));
+      const requests = state.requests.filter(r => {
+        const rowOrigin = r._instanceOrigin;
+        if (r.user && updateIsAbout(r.user, rowOrigin, user, origin)) return false;
+        return !updateIsAboutRowId(r.fromId, rowOrigin, user, origin) && !updateIsAboutRowId(r.toId, rowOrigin, user, origin);
+      });
+      if (friends.length === state.friends.length && requests.length === state.requests.length) return state;
+      return { friends, requests };
+    });
   },
 
   // Called from WS handler on presence_update to keep friend status live.
-  // Matched by the same key as activities (activityKey), so a delivery from
+  // Matched by the same key as activities (userKey), so a delivery from
   // any instance reaches the friend it is about and no other.
   updateFriendPresence: (subject: PresenceSubject, origin: string, status: string) => {
-    const key = activityKey(subject, origin);
+    const key = userKey(subject, origin);
     set((state) => ({
       friends: state.friends.map(f =>
-        activityKey(f, f._instanceOrigin) === key ? { ...f, status: status as Friend['status'] } : f
+        userKey(f, f._instanceOrigin) === key ? { ...f, status: status as Friend['status'] } : f
       ),
     }));
   },
 
   // Called from WS handler on user_updated to keep friend profile data live
-  updateFriendProfile: (user: User) => {
-    set((state) => ({
-      friends: state.friends.map(f =>
-        f.id === user.id
-          ? { ...f, displayName: user.displayName, avatar: user.avatar,
-              banner: user.banner, accentColor: user.accentColor,
-              avatarColor: user.avatarColor, bio: user.bio,
-              customStatus: user.customStatus, status: user.status }
-          : f
-      ),
-    }));
+  updateFriendProfile: (user: User, origin: string) => {
+    set((state) => {
+      let changed = false;
+      const friends = state.friends.map(f => {
+        if (!userUpdateReach(f, f._instanceOrigin, user, origin)) return f;
+        changed = true;
+        return { ...f, ...profileFieldsOf(user) };
+      });
+      return changed ? { friends } : state;
+    });
   },
 
   reset: () => set({ friends: [], requests: [], isLoading: false, error: null }),

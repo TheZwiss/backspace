@@ -75,7 +75,7 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
       className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all ${
         isRecording
           ? 'ring-2 ring-accent-mint bg-surface-elevated'
-          : 'bg-surface-primary hover:bg-surface-elevated'
+          : 'bg-white/[0.03] hover:bg-surface-elevated'
       }`}
     >
       <div className="flex-1 min-w-0">
@@ -331,7 +331,7 @@ export function KeybindsPanel() {
         </div>
         <dl className="space-y-1.5">
           {BINDABLE_ACTIONS.map((action) => (
-            <div key={action.id} className="rounded-lg bg-surface-primary px-4 py-3">
+            <div key={action.id} className="rounded-lg bg-white/[0.03] px-4 py-3">
               <dt className="text-sm text-txt-primary">{t(`keybinds.action.${action.id}`)}</dt>
               <dd className="text-xs text-txt-tertiary mt-1">
                 {portal.shortcuts[action.id]

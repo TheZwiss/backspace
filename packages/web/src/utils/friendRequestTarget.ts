@@ -1,5 +1,5 @@
 import type { SendFriendRequest } from '@backspace/shared';
-import { normalizeOriginToHost, parseFederatedUsername } from './identity';
+import { homeIdentityOf, parseFederatedUsername, type IdentityFields } from './identity';
 
 /**
  * The body of a friend request for a user the client already holds.
@@ -9,11 +9,9 @@ import { normalizeOriginToHost, parseFederatedUsername } from './identity';
  * label for the person (for a stub minted without a name hint it is
  * `<homeUserId>@<domain>`), and the home server cannot look a person up by it.
  *
- * - A replicated row (`homeInstance` set) carries its home identity.
- * - A user native to the remote instance it was loaded from (`origin`) is
- *   that instance's user by its id there.
- * - A native user of the home instance (`origin` is `''`) is named by
- *   username, which is their handle.
+ * The identity is `homeIdentityOf(user, origin)`. A native user of the
+ * page's own instance (`origin` is `''`) is named by username, which is their
+ * handle there.
  *
  * `username` is always sent too, as `name@host` for a federated target: a
  * home server that predates the identity fields ignores them and reads it.
@@ -24,21 +22,11 @@ import { normalizeOriginToHost, parseFederatedUsername } from './identity';
  * send `{ username }` as typed.
  */
 export function friendRequestTarget(
-  user: { id: string; username: string; homeUserId?: string | null; homeInstance?: string | null },
+  user: IdentityFields & { username: string },
   origin: string,
 ): SendFriendRequest {
+  const identity = homeIdentityOf(user, origin);
+  if (!identity || (origin === '' && !user.homeInstance)) return { username: user.username };
   const { baseName } = parseFederatedUsername(user.username);
-
-  if (user.homeInstance) {
-    const host = normalizeOriginToHost(user.homeInstance);
-    if (!user.homeUserId || !host) return { username: user.username };
-    return { username: `${baseName}@${host}`, homeUserId: user.homeUserId, homeInstance: host };
-  }
-
-  if (origin) {
-    const host = normalizeOriginToHost(origin);
-    if (host) return { username: `${baseName}@${host}`, homeUserId: user.id, homeInstance: host };
-  }
-
-  return { username: user.username };
+  return { username: `${baseName}@${identity.host}`, homeUserId: identity.userId, homeInstance: identity.host };
 }

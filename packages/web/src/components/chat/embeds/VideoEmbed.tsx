@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Embed } from '@backspace/shared';
 
 interface VideoEmbedProps {
@@ -6,6 +7,7 @@ interface VideoEmbedProps {
 }
 
 export function VideoEmbed({ embed }: VideoEmbedProps) {
+  const { t } = useTranslation('chat');
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Direct video URL — no provider, no embedUrl
@@ -38,7 +40,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
           <iframe
             className="absolute inset-0 w-full h-full"
             src={`${embed.embedUrl}?autoplay=1&origin=${encodeURIComponent(window.location.origin)}`}
-            title={embed.title ?? 'Video'}
+            title={embed.title ?? t('embed.videoTitle')}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />
@@ -48,7 +50,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
             data-embed-thumbnail
             onClick={() => setIsPlaying(true)}
             className="absolute inset-0 w-full h-full flex items-center justify-center group focus:outline-none"
-            aria-label={`Play ${embed.title ?? 'video'}`}
+            aria-label={embed.title ? t('embed.playNamed', { title: embed.title }) : t('embed.playUnnamed')}
           >
             {embed.image ? (
               <img

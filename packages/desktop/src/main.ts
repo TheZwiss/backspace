@@ -25,6 +25,7 @@ import {
   getPickerPath,
 } from './instanceUrl';
 import { getUpdateCapability, isSandboxed } from './updateCapability';
+import { ownAudioInSystemAudio } from './systemAudioCapability';
 import { loadDismissedVersion, setDismissedVersion } from './updateDismissal';
 import { purgeUpdaterCache } from './updaterCache';
 import {
@@ -775,6 +776,12 @@ function registerIpcHandlers(): void {
     if (event.sender !== mainWindow?.webContents) return 'app';
     return currentPickerMode();
   });
+  // Whether System Audio on this OS build carries Backspace's own playback
+  // (the call) to viewers; the stream settings say so before it is turned on.
+  ipcMain.handle('get-system-audio-capability', (event) => {
+    if (event.sender !== mainWindow?.webContents) return 'unknown';
+    return ownAudioInSystemAudio(process.platform, process.getSystemVersion());
+  });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
@@ -1322,8 +1329,12 @@ if (!gotTheLock) {
 
         // Provide the selected source — Electron creates the MediaStream.
         // System audio loopback support varies:
-        //   - Windows: native (Chromium default).
-        //   - macOS 13+: CoreAudio Tap; requires NSAudioCaptureUsageDescription
+        //   - Windows: WASAPI loopback. Backspace's own
+        //     playback is left out only on Windows 11, where Chromium honours
+        //     the renderer's restrictOwnAudio (see systemAudioCapability.ts);
+        //     on Windows 10 the whole mix, this call included, is captured.
+        //   - macOS 13+: ScreenCaptureKit, or CoreAudio Tap from 14.2, which
+        //     also leaves Backspace out; requires NSAudioCaptureUsageDescription
         //     in Info.plist (electron-builder injects it via mac.extendInfo).
         //   - Linux: PulseAudio loopback, gated behind the
         //     `PulseaudioLoopbackForScreenShare` feature flag we enable above.

@@ -80,7 +80,7 @@ describe('chatStore.rekeyChannelState', () => {
       hasMore: new Map([['A1', true]]),
       readStates: new Map([['A1', 'msg-last']]),
       channelAccessTimes: new Map([['A1', 123]]),
-      scrollPositions: new Map([['A1', 'msg-scroll']]),
+      scrollPositions: new Map([['A1', { kind: 'message' as const, messageId: 'msg-scroll', offsetPx: 0 }]]),
     });
 
     useChatStore.getState().rekeyChannelState('A1', 'B1');

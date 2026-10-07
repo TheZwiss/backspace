@@ -9,7 +9,7 @@ vi.mock('../audio/AudioManager', () => ({
 }));
 
 import { myStandingIn, viewerCanActOn, viewerCanManageRoleAt, viewerCanEditMemberRoles } from './roleHierarchy';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
 import { PermissionBits, permissionsToString, ALL_PERMISSIONS } from './permissions';
 import { useAuthStore } from '../stores/authStore';
 
@@ -130,7 +130,7 @@ describe('viewerCanEditMemberRoles', () => {
     const roles = [role(SPACE_ID, 0), lead, helper];
     useAuthStore.setState({ user: user('me') });
     useSpaceStore.setState({ spaces: [remote], currentSpaceId: SPACE_ID, roles, members });
-    setMyUserIdForOrigin(orbit, 'me-local');
+    useAuthStore.getState().recordMyRow(orbit, 'me-local');
     expect(viewerCanEditMemberRoles(remote, members, roles, MANAGE, members[1]!)).toBe(false);
     expect(viewerCanEditMemberRoles(remote, members, roles, MANAGE, members[2]!)).toBe(true);
   });

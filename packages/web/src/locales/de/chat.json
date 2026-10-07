@@ -4,6 +4,7 @@
       "hint": "Esc zum <cancel>Abbrechen</cancel> • Enter zum <save>Speichern</save>"
     },
     "edited": "(bearbeitet)",
+    "rowLabel": "{{author}}, {{time}}",
     "gifAlt": "GIF-Animation",
     "upload": {
       "failed": "Upload fehlgeschlagen",
@@ -31,11 +32,17 @@
     "noHistoryPermission": "Du hast keine Berechtigung, den Nachrichtenverlauf dieses Kanals zu sehen",
     "loading": "Nachrichten werden geladen",
     "loadingOlder": "Ältere Nachrichten werden geladen",
+    "loadFailed": "Nachrichten konnten nicht geladen werden",
     "jumpToPresent": "Zu den neuesten Nachrichten",
     "jump": {
       "unavailable": "Diese Nachricht ist nicht mehr verfügbar",
       "failed": "Die Nachricht konnte nicht geladen werden",
       "presentFailed": "Die neuesten Nachrichten konnten nicht geladen werden"
+    },
+    "unread": {
+      "label": "Neu",
+      "divider": "Neue Nachrichten",
+      "dividerWithDate": "Neue Nachrichten, {{date}}"
     },
     "welcome": {
       "channel": {
@@ -147,5 +154,14 @@
   "notification": {
     "unknownSender": "Jemand",
     "attachmentOnly": "Hat einen Anhang gesendet"
+  },
+  "embed": {
+    "loadAction": "Zum Laden klicken",
+    "loadNamed": "{{name}} laden",
+    "loadUnnamed": "Einbettung laden",
+    "frameTitle": "Einbettung",
+    "playNamed": "{{title}} abspielen",
+    "playUnnamed": "Video abspielen",
+    "videoTitle": "Video"
   }
 }

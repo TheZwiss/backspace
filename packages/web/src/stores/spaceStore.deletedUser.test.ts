@@ -48,7 +48,7 @@ describe('updateUserEverywhere → DM member patch (drives the live Deleted-User
 
   it('rewrites the matching member to the sanitized deleted user', () => {
     const deleted = { id: 'partner', username: 'Deleted User', displayName: null, isDeleted: true } as User;
-    useSpaceStore.getState().updateUserEverywhere(deleted);
+    useSpaceStore.getState().updateUserEverywhere(deleted, '');
     const member = useSpaceStore.getState().dmChannels[0].members.find(m => m.id === 'partner')!;
     expect(member.username).toBe('Deleted User');
     expect(member.isDeleted).toBe(true);

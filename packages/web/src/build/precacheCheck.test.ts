@@ -7,6 +7,9 @@ import {
   collectPrecacheCandidates,
   evaluatePrecacheBudget,
 } from '../../../../scripts/precache/check.mjs';
+import { PRECACHE_FILE_EXTENSIONS, PRECACHE_GLOB_PATTERNS } from './precache';
+
+const EXTENSIONS = PRECACHE_FILE_EXTENSIONS;
 
 // The shape workbox's generateSW writes: one precacheAndRoute call whose
 // entries carry a url and a revision (null for hashed file names).
@@ -40,7 +43,7 @@ describe('readPrecacheManifest', () => {
 describe('collectPrecacheCandidates', () => {
   it('marks manifest entries as precached and sizes them from disk', () => {
     const dist = makeDist({ 'index.html': 10, 'assets/index-a1.js': 300 });
-    const files = collectPrecacheCandidates(dist, ['index.html', 'assets/index-a1.js']);
+    const files = collectPrecacheCandidates(dist, ['index.html', 'assets/index-a1.js'], EXTENSIONS);
     expect(files).toEqual(expect.arrayContaining([
       { path: 'index.html', bytes: 10, precached: true },
       { path: 'assets/index-a1.js', bytes: 300, precached: true },
@@ -50,19 +53,32 @@ describe('collectPrecacheCandidates', () => {
 
   it('includes build assets missing from the manifest, which is where workbox leaves a file over its limit', () => {
     const dist = makeDist({ 'index.html': 10, 'assets/index-a1.js': 300, 'assets/huge-b2.js': 5000 });
-    const files = collectPrecacheCandidates(dist, ['index.html', 'assets/index-a1.js']);
+    const files = collectPrecacheCandidates(dist, ['index.html', 'assets/index-a1.js'], EXTENSIONS);
     expect(files).toContainEqual({ path: 'assets/huge-b2.js', bytes: 5000, precached: false });
+  });
+
+  it('leaves out an asset of a type the worker never precaches, however large (#330)', () => {
+    // Only a file the glob would have precached can have been dropped for
+    // size; a large font or image was never a candidate.
+    const dist = makeDist({ 'assets/index-a1.js': 300, 'assets/DMSans-x1.woff2': 5000, 'assets/banner-y2.png': 9000 });
+    const files = collectPrecacheCandidates(dist, ['assets/index-a1.js'], EXTENSIONS);
+    expect(files.map((f) => f.path)).toEqual(['assets/index-a1.js']);
+  });
+
+  it('builds the worker glob from the same list of file types', () => {
+    expect(PRECACHE_GLOB_PATTERNS).toEqual([`**/*.{${EXTENSIONS.join(',')}}`]);
+    expect([...EXTENSIONS].sort()).toEqual(['css', 'html', 'js', 'wasm']);
   });
 
   it('leaves source maps out, which are never precached', () => {
     const dist = makeDist({ 'assets/index-a1.js': 300, 'assets/index-a1.js.map': 9000 });
-    const files = collectPrecacheCandidates(dist, ['assets/index-a1.js']);
+    const files = collectPrecacheCandidates(dist, ['assets/index-a1.js'], EXTENSIONS);
     expect(files.map((f) => f.path)).toEqual(['assets/index-a1.js']);
   });
 
   it('throws when a manifest entry has no file behind it', () => {
     const dist = makeDist({ 'index.html': 10 });
-    expect(() => collectPrecacheCandidates(dist, ['index.html', 'assets/gone-c3.js'])).toThrow(/assets\/gone-c3\.js/);
+    expect(() => collectPrecacheCandidates(dist, ['index.html', 'assets/gone-c3.js'], EXTENSIONS)).toThrow(/assets\/gone-c3\.js/);
   });
 });
 

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { eq, or, and, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
+import { forgetReplicaProjection } from '../ws/replicaPresence.js';
 
 export interface DeletionBroadcastTargets {
   /** Space IDs the user is a member of (for member_left broadcasts) */
@@ -279,6 +280,8 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       federationHomeOrphaned: 0,
     }).where(eq(schema.users.id, uid)).run();
   });
+  // The tombstone shows 'offline' for good; a replicated row's projection goes with it.
+  forgetReplicaProjection(uid);
 
   return filesToDelete;
 }

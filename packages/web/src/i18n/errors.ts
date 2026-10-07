@@ -12,13 +12,28 @@ import defaultI18n from './index';
  */
 export function describeError(err: unknown, instance: I18n = defaultI18n): string {
   if (err instanceof HttpError && err.code) {
-    const key = `errors:${err.code}`;
-    if (instance.exists(key)) {
-      return instance.t(key, { ...err.details, defaultValue: err.message });
-    }
+    return describeErrorCode(err.code, err.message, err.details, instance);
   }
   if (err instanceof Error && err.message.trim().length > 0) {
     return err.message;
   }
   return instance.t('errors:generic');
+}
+
+/**
+ * The words for a server error code, from any protocol that carries one (an
+ * HTTP error body, a WebSocket `error` event): the localized text for the
+ * code, else the server's own English `message`, else the generic fallback.
+ */
+export function describeErrorCode(
+  code: string,
+  message: string,
+  details?: Record<string, string | number>,
+  instance: I18n = defaultI18n,
+): string {
+  const key = `errors:${code}`;
+  if (instance.exists(key)) {
+    return instance.t(key, { ...details, defaultValue: message });
+  }
+  return message.trim().length > 0 ? message : instance.t('errors:generic');
 }

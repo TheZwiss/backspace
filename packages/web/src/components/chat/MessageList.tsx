@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { formatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Message } from './Message';
-import { useChatStore, type LoadAroundResult } from '../../stores/chatStore';
-import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useChatStore, type LoadAroundResult, type LoadNewerResult } from '../../stores/chatStore';
+import { useSpaceStore, useIsDmChannel, getChannelOrigin } from '../../stores/spaceStore';
+import { isMe, useMyRowForOrigin } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import {
   usePendingMessageStore,
@@ -20,12 +20,23 @@ import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { describeError } from '../../i18n/errors';
 import type { MessageWithUser } from '@backspace/shared';
 import { SystemMessage } from './SystemMessage';
 import { MessageJumpContext } from './messageJumpContext';
+import {
+  BOTTOM_ANCHOR,
+  firstUnreadMessageId,
+  pageReachesReadPosition,
+  resolveOpenTarget,
+  type OpenTarget,
+  type ScrollAnchor,
+} from './scrollAnchor';
+import { layoutPixels } from '../../platform/interfaceScale';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
 const EMPTY_PENDING_BUBBLES: PendingBubble[] = [];
@@ -47,6 +58,11 @@ const JUMP_HIGHLIGHT_ANIMATION = 'message-jump-flash';
 const AT_BOTTOM_THRESHOLD_PX = 150;
 const NEAR_BOTTOM_THRESHOLD_PX = 5000;
 
+// A detached window pages forward once less than this is left below the
+// view: the mirror of the load-more trigger at the top, so the next page is
+// usually there before the user reaches the window's end.
+const NEWER_PAGE_TRIGGER_PX = PAGINATION_SLOT_HEIGHT_PX + 50;
+
 function isMessageLoaded(channelId: string, messageId: string): boolean {
   return (useChatStore.getState().messages.get(channelId) ?? []).some((m) => m.id === messageId);
 }
@@ -56,11 +72,61 @@ function isMessageLoaded(channelId: string, messageId: string): boolean {
  * the row centred in the container, clamped to the scrollable range.
  */
 function centredScrollTop(container: HTMLElement, el: HTMLElement): number {
-  const containerRect = container.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  const unclamped = container.scrollTop + (elRect.top - containerRect.top) - (container.clientHeight - elRect.height) / 2;
+  const height = layoutPixels(el.getBoundingClientRect().height);
+  const unclamped = container.scrollTop + rowOffset(container, el) - (container.clientHeight - height) / 2;
   const max = Math.max(0, container.scrollHeight - container.clientHeight);
   return Math.min(max, Math.max(0, unclamped));
+}
+
+// Where a channel opened at its first unread message holds that row: far
+// enough below the viewport top that the unread divider above it shows.
+const UNREAD_ROW_OFFSET_PX = 64;
+
+// A row's height before it is laid out, for anchoring a jump target that is
+// still loading. The anchor is re-measured once the row renders.
+const ROW_HEIGHT_ESTIMATE_PX = 40;
+
+/** Rows with a server id; optimistic sends (`pending-…`, `temp_…`) are not anchors. */
+const ANCHORABLE_ROW = /^msg-\d+$/;
+
+function findRow(container: HTMLElement, messageId: string): HTMLElement | null {
+  return container.querySelector<HTMLElement>(`[id="msg-${messageId}"]`);
+}
+
+/** Distance in layout pixels from the scroll viewport's top edge to the row's top edge. */
+function rowOffset(container: HTMLElement, row: HTMLElement): number {
+  return layoutPixels(row.getBoundingClientRect().top - container.getBoundingClientRect().top);
+}
+
+/** The first row with a server id whose bottom edge is below the viewport's top edge. */
+function topmostVisibleRow(container: HTMLElement): HTMLElement | null {
+  const top = container.getBoundingClientRect().top;
+  for (const row of container.querySelectorAll<HTMLElement>('[id^="msg-"]')) {
+    if (!ANCHORABLE_ROW.test(row.id)) continue;
+    if (row.getBoundingClientRect().bottom > top) return row;
+  }
+  return null;
+}
+
+/** True when `id` falls between the oldest and newest server ids in `ids`. */
+function idWithinRows(id: string, ids: readonly string[]): boolean {
+  if (!/^\d+$/.test(id)) return false;
+  const target = BigInt(id);
+  let min: bigint | null = null;
+  let max: bigint | null = null;
+  for (const rowId of ids) {
+    if (!/^\d+$/.test(rowId)) continue;
+    const value = BigInt(rowId);
+    if (min === null || value < min) min = value;
+    if (max === null || value > max) max = value;
+  }
+  return min !== null && max !== null && target >= min && target <= max;
+}
+
+function sharesAnyId(previous: readonly string[], next: readonly string[]): boolean {
+  if (previous.length === 0) return false;
+  const seen = new Set(previous);
+  return next.some((id) => seen.has(id));
 }
 
 interface MessageListProps {
@@ -127,10 +193,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const messages = useChatStore((s) => s.messages.get(channelId)) ?? EMPTY_MESSAGES;
   const loadMessages = useChatStore((s) => s.loadMessages);
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
+  const loadNewerMessages = useChatStore((s) => s.loadNewerMessages);
+  const presentReturn = useChatStore((s) => s.presentReturns.get(channelId) ?? 0);
   const loadMessagesAround = useChatStore((s) => s.loadMessagesAround);
   const isDetached = useChatStore((s) => s.detachedChannels.has(channelId));
   const addToast = useUIStore((s) => s.addToast);
-  const isLoading = useChatStore((s) => s.isLoading);
+  const loadState = useChatStore((s) => s.loadStates.get(channelId));
+  // Waiting for the ready that lists the channel is a load the list cannot
+  // start yet; it shows the same skeleton.
+  const isLoading = loadState?.status === 'loading' || loadState?.status === 'waiting';
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
   const ackChannel = useChatStore((s) => s.ackChannel);
   const saveScrollPosition = useChatStore((s) => s.saveScrollPosition);
@@ -138,67 +209,84 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
-  const isNearBottomRef = useRef(true);
+
+  // ─── Anchoring model ─────────────────────────────────────────────────────
+  // One anchor says what the view is held to: the bottom, or a row at an
+  // offset from the viewport top. Opening, remounting, a cache replaced under
+  // the open view, jumps, Jump to Present and every size change go through it.
+  // See docs/systems/message-list.md, "Anchoring model".
+  const anchorRef = useRef<ScrollAnchor>(BOTTOM_ANCHOR);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const isAtBottomRef = useRef(true);
-  const lastProgrammaticBottomScrollRef = useRef<number | null>(null);
+  // The offset and scroll geometry the list last set or measured. A scroll
+  // event at that offset with that geometry is the list's own; one after the
+  // geometry changed was caused by layout, not by the user.
+  const appliedScrollTopRef = useRef<number | null>(null);
+  const appliedGeometryRef = useRef<{ scrollHeight: number; clientHeight: number } | null>(null);
+  // The channel whose open target has been taken. Until then nothing derives
+  // or applies an anchor: the list has no rows to hold.
+  const openedChannelRef = useRef<string | null>(null);
+  const openTargetRef = useRef<OpenTarget>(BOTTOM_ANCHOR);
+  // A load that will bring the anchored row (jump, restore) is in flight.
+  const anchorLoadInFlightRef = useRef(false);
+  // The rows the last render held, to tell a replaced cache from an edit.
+  const renderedIdsRef = useRef<{ channelId: string; ids: string[] }>({ channelId, ids: [] });
+  // The first unread message when the channel opened, shown with a divider
+  // above it for the rest of the visit (a snapshot: acking does not move it).
+  const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
+  // The store's count of returns to the present for this channel that the
+  // list has followed (`chatStore.presentReturns`).
+  const presentReturnRef = useRef(0);
+  // The channel whose detached window is paging forward, so one page is
+  // asked for at a time.
+  const loadingNewerRef = useRef<string | null>(null);
+
   // Smooth-scroll intent tracking. While a smooth scroll is animating toward the bottom,
-  // intermediate `handleScroll` measurements would otherwise see a large `distanceFromBottom`
-  // and flip `isAtBottomRef` to false — closing the ResizeObserver/load-handler gate so
-  // late-loading media (avatars, embeds, images, Spotify thumbs) growing `scrollHeight`
-  // mid-animation never triggers a re-pin. The smooth scroll then lands at the originally
-  // computed (now stale) target, leaving the user above the true bottom.
-  // 'bottom' = animating toward the bottom, suppress at-bottom flip during the window.
-  // 'message' = jump-to-message animation, do NOT suppress (the user is legitimately moving away).
+  // intermediate `handleScroll` measurements would otherwise see a large distance from
+  // the bottom and move the anchor off it. The smooth scroll would then land at its
+  // originally computed (now stale) target while media loaded underneath.
+  // 'bottom' = animating toward the bottom, the anchor stays at the bottom meanwhile.
+  // 'message' = jump-to-message animation; nothing re-applies the anchor until it lands.
   // null = no animation in progress.
   const smoothScrollIntentRef = useRef<'bottom' | 'message' | null>(null);
   const smoothScrollDeadlineRef = useRef(0);
   const smoothScrollFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 5000px = same threshold as `nearBottom`. If the user wheels away mid-animation, their
-  // distance jumps well past this, and we let the at-bottom flag flip honestly so the
+  // distance jumps well past this, and we let the anchor move honestly so the
   // smooth scroll's terminal frames don't fight a deliberate user gesture.
   const SMOOTH_SCROLL_USER_INTENT_THRESHOLD = 5000;
   const SMOOTH_SCROLL_DEADLINE_MS = 800;
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
   // 50 ms threshold (vs the 200 ms default on showInitialSkeleton above) is
-  // safe here because Task 2's constant-height slot eliminated the layout
+  // safe here because the constant-height slot eliminated the layout
   // shift the 200 ms originally hid. 50 ms is below the ~100 ms visual
   // perception threshold so near-instant cache hits still complete without
   // ever rendering the skeleton, while slow loads see the skeleton appear
   // before the user's eye can register the slot as empty.
   const showPaginationSkeleton = useDelayedLoading(isLoadingMore, { threshold: 50 });
-  const prevMessagesLength = useRef(0);
   const prevChannelIdRef = useRef<string>(channelId);
-  const visibleMsgIdRef = useRef<string | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
   // Live mirror of the current `channelId` prop. Updated synchronously each render so
-  // that async callbacks (notably the `loadMoreMessages` await in `handleScroll` and the
-  // `requestAnimationFrame` it schedules) can compare a captured channel against the
-  // current channel and bail if the user switched away mid-flight. We don't read the
-  // store's `currentChannelId` because it lags one render behind a URL-driven channel
-  // switch (it's set in an `AppLayout` effect that fires after MessageList renders with
-  // the new prop), which would let the guard mis-fire during that single-frame window.
+  // that async callbacks (the `loadMoreMessages` await in `handleScroll`, the jump and
+  // restore loads) can compare a captured channel against the current channel and bail
+  // if the user switched away mid-flight. We don't read the store's `currentChannelId`
+  // because it lags one render behind a URL-driven channel switch (it's set in an
+  // `AppLayout` effect that fires after MessageList renders with the new prop).
   const currentChannelIdRef = useRef(channelId);
   currentChannelIdRef.current = channelId;
   // Suppress the first scroll event after a channel switch from triggering
   // pagination. When the new channel's content is shorter than the outgoing
   // channel's, the browser clamps `scrollTop` to its new max and dispatches a
-  // synthetic scroll event. That event lands in `handleScroll` with
-  // `scrollTop < 50`, and for any channel where `hasMore` is `true` (default
-  // for unvisited channels per the `?? true` fallback at the `hasMore`
-  // selector) it would fire `loadMoreMessages` even though the user never
-  // scrolled. The flag is armed in Effect 3 on every channel change and
-  // consumed by the load-more block on the next scroll event. A 250 ms
-  // setTimeout disarms it as a fallback in case no clamp event fires (new
-  // channel's content fit without clamping), so a real user scroll-to-top
-  // shortly after a channel switch isn't permanently suppressed.
+  // synthetic scroll event. That event lands in `handleScroll` near the top,
+  // and for any channel where `hasMore` is `true` (default for unvisited
+  // channels per the `?? true` fallback at the `hasMore` selector) it would
+  // fire `loadMoreMessages` even though the user never scrolled. The flag is
+  // armed on every channel change and consumed by the load-more block on the
+  // next scroll event. A 250 ms setTimeout disarms it as a fallback in case no
+  // clamp event fires, so a real user scroll-to-top shortly after a channel
+  // switch isn't permanently suppressed.
   const suppressNextLoadMoreRef = useRef(false);
   const suppressNextLoadMoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Unmount cleanup — clear the disarm timer so its callback doesn't run after
-  // the component is gone. Refs survive unmount, so the callback would still
-  // execute harmlessly, but explicit cleanup is the convention used by sibling
-  // timer refs in this file (`smoothScrollFallbackTimerRef`).
   useEffect(() => () => {
     if (suppressNextLoadMoreTimerRef.current) {
       clearTimeout(suppressNextLoadMoreTimerRef.current);
@@ -206,43 +294,132 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     }
   }, []);
 
+  // Monotonic id of the latest request that moves the view on purpose (a
+  // jump, Jump to Present, restoring a reading position). An older request
+  // still awaiting its load compares against it and gives up, so the newest
+  // one wins.
+  const jumpSeqRef = useRef(0);
+
+  const setAnchor = useCallback((anchor: ScrollAnchor) => {
+    anchorRef.current = anchor;
+    setIsAtBottom(anchor.kind === 'bottom');
+  }, []);
+
+  /**
+   * The bottom anchor follows the newest message. The end of a detached
+   * window is not the newest message, so a view there holds a row instead:
+   * the next page appends below it without moving the view, and nothing is
+   * marked read.
+   */
+  const bottomIsPresent = useCallback(
+    () => !useChatStore.getState().detachedChannels.has(currentChannelIdRef.current),
+    [],
+  );
+
+  const recordGeometry = useCallback((container: HTMLElement) => {
+    appliedGeometryRef.current = { scrollHeight: container.scrollHeight, clientHeight: container.clientHeight };
+    const near = container.scrollHeight - container.scrollTop - container.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
+    setIsNearBottom(near);
+  }, []);
+
+  /** The anchor the view is at now: the bottom, or the topmost visible row. */
+  const anchorFromLayout = useCallback((container: HTMLElement): ScrollAnchor => {
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()) return BOTTOM_ANCHOR;
+    const row = topmostVisibleRow(container);
+    if (!row) return BOTTOM_ANCHOR;
+    return { kind: 'message', messageId: row.id.slice(4), offsetPx: rowOffset(container, row) };
+  }, [bottomIsPresent]);
+
+  const deriveAnchorFromLayout = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    setAnchor(anchorFromLayout(container));
+    appliedScrollTopRef.current = null;
+    recordGeometry(container);
+  }, [anchorFromLayout, recordGeometry, setAnchor]);
+
+  /**
+   * Page a detached window forward (`chatStore.loadNewerMessages`). The rows
+   * append below the view and the anchor holds the row being read. A page
+   * that reaches the newest message attaches the window: a view already at
+   * its end then takes the bottom, so it follows new messages and the
+   * channel is marked read. An origin without forward paging answers with
+   * its newest page, which the store applies as a return to the present.
+   */
+  const pageForward = useCallback(async () => {
+    const requestChannelId = channelId;
+    if (loadingNewerRef.current === requestChannelId) return;
+    loadingNewerRef.current = requestChannelId;
+    const seq = jumpSeqRef.current;
+    let result: LoadNewerResult;
+    try {
+      result = await loadNewerMessages(requestChannelId);
+    } finally {
+      if (loadingNewerRef.current === requestChannelId) loadingNewerRef.current = null;
+    }
+    if (result !== 'attached') return;
+    await nextFrame();
+    if (jumpSeqRef.current !== seq || currentChannelIdRef.current !== requestChannelId) return;
+    if (anchorRef.current.kind === 'message') deriveAnchorFromLayout();
+  }, [channelId, loadNewerMessages, deriveAnchorFromLayout]);
+
+  /** Page forward when the view is close to the end of a detached window. */
+  const loadNewerIfAtEnd = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || openedChannelRef.current !== currentChannelIdRef.current) return;
+    if (bottomIsPresent() || anchorLoadInFlightRef.current) return;
+    // A bottom anchor on a detached window: Jump to Present is loading the
+    // newest page, which replaces the window.
+    if (anchorRef.current.kind === 'bottom') return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom >= NEWER_PAGE_TRIGGER_PX) return;
+    void pageForward();
+  }, [bottomIsPresent, pageForward]);
+
+  /**
+   * Hold the view to its anchor: the bottom, or the anchored row at its
+   * offset. Idempotent, and it only writes scrollTop when the view is off
+   * its anchor. A jump's smooth scroll is left to land.
+   */
+  const applyAnchor = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (smoothScrollIntentRef.current === 'message' && performance.now() < smoothScrollDeadlineRef.current) return;
+    const anchor = anchorRef.current;
+    if (anchor.kind === 'bottom') {
+      container.scrollTop = container.scrollHeight;
+    } else {
+      const row = findRow(container, anchor.messageId);
+      if (row) {
+        const delta = rowOffset(container, row) - anchor.offsetPx;
+        if (Math.abs(delta) >= 1) container.scrollTop = container.scrollTop + delta;
+      }
+    }
+    appliedScrollTopRef.current = container.scrollTop;
+    recordGeometry(container);
+    loadNewerIfAtEnd();
+  }, [recordGeometry, loadNewerIfAtEnd]);
+
   // Final defensive pin after a bottom-bound smooth scroll completes.
   // Runs from either the native `scrollend` handler (preferred) or the timeout fallback
   // (browsers without scrollend support). Whichever fires first clears the intent and
   // cancels its counterpart.
   const finalizeBottomSmoothScroll = useCallback(() => {
-    if (smoothScrollIntentRef.current !== 'bottom') {
-      // Already cleared (e.g. user wheeled away and we let the gate flip honestly,
-      // or the scrollend fired for an unrelated user-driven scroll).
-      return;
-    }
-    const container = containerRef.current;
-    if (!container) {
-      smoothScrollIntentRef.current = null;
-      smoothScrollDeadlineRef.current = 0;
-      if (smoothScrollFallbackTimerRef.current) {
-        clearTimeout(smoothScrollFallbackTimerRef.current);
-        smoothScrollFallbackTimerRef.current = null;
-      }
-      return;
-    }
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const userScrolledAway = distanceFromBottom >= SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
-    if (!userScrolledAway) {
-      container.scrollTop = container.scrollHeight;
-      lastProgrammaticBottomScrollRef.current = container.scrollTop;
-      isAtBottomRef.current = true;
-      setIsAtBottom(true);
-      isNearBottomRef.current = true;
-      setIsNearBottom(true);
-    }
+    if (smoothScrollIntentRef.current !== 'bottom') return;
     smoothScrollIntentRef.current = null;
     smoothScrollDeadlineRef.current = 0;
     if (smoothScrollFallbackTimerRef.current) {
       clearTimeout(smoothScrollFallbackTimerRef.current);
       smoothScrollFallbackTimerRef.current = null;
     }
-  }, []);
+    const container = containerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom >= SMOOTH_SCROLL_USER_INTENT_THRESHOLD) return;
+    setAnchor(BOTTOM_ANCHOR);
+    applyAnchor();
+  }, [applyAnchor, setAnchor]);
 
   // Set the smooth-scroll intent and arm the final-pin path. Pick exactly one signal
   // (native scrollend if supported, timeout otherwise) — the scrollend listener itself
@@ -262,9 +439,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
         finalizeBottomSmoothScroll();
       }, SMOOTH_SCROLL_DEADLINE_MS);
     }
-    // For 'message' intent: there is no defensive final pin (the target is not the bottom),
-    // but the intent ref must still be cleared once the animation ends. Use a timeout in all
-    // cases for 'message' — the scrollend listener also clears it, whichever fires first.
+    // For 'message' intent: there is no final pin (the target is not the bottom), but the
+    // intent must still be cleared once the animation ends. Use a timeout in all cases for
+    // 'message' — the scrollend listener also clears it, whichever fires first.
     if (intent === 'message') {
       smoothScrollFallbackTimerRef.current = setTimeout(() => {
         smoothScrollFallbackTimerRef.current = null;
@@ -276,10 +453,56 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     }
   }, [finalizeBottomSmoothScroll]);
 
+  // A request that moves the view on purpose cancels everything that pins the
+  // list to the bottom: a queued scroll event at the list's own offset would
+  // re-apply the old anchor, and a pending bottom-bound smooth scroll would
+  // finish at the bottom.
+  const cancelBottomPinning = useCallback(() => {
+    appliedScrollTopRef.current = null;
+    if (smoothScrollIntentRef.current === 'bottom') {
+      smoothScrollIntentRef.current = null;
+      smoothScrollDeadlineRef.current = 0;
+      if (smoothScrollFallbackTimerRef.current) {
+        clearTimeout(smoothScrollFallbackTimerRef.current);
+        smoothScrollFallbackTimerRef.current = null;
+      }
+    }
+  }, []);
+
+  /**
+   * The anchored row is not in the cache: the cache was replaced under the
+   * open view (a reconnect refetched the newest page, or Jump to Present
+   * loaded it after a newer jump). Load the window around the row and hold
+   * it again; if it is gone, keep whatever the view shows now.
+   */
+  const restoreAnchor = useCallback(async (anchor: Extract<ScrollAnchor, { kind: 'message' }>) => {
+    const seq = ++jumpSeqRef.current;
+    const requestChannelId = channelId;
+    anchorLoadInFlightRef.current = true;
+    let result: LoadAroundResult;
+    try {
+      result = await loadMessagesAround(requestChannelId, anchor.messageId);
+    } finally {
+      if (jumpSeqRef.current === seq) anchorLoadInFlightRef.current = false;
+    }
+    if (jumpSeqRef.current !== seq || currentChannelIdRef.current !== requestChannelId) return;
+    await nextFrame();
+    if (jumpSeqRef.current !== seq || currentChannelIdRef.current !== requestChannelId) return;
+    const container = containerRef.current;
+    if (result === 'loaded' && container && findRow(container, anchor.messageId)) {
+      applyAnchor();
+      return;
+    }
+    deriveAnchorFromLayout();
+  }, [channelId, loadMessagesAround, applyAnchor, deriveAnchorFromLayout]);
+
   // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
-  const isDm = isDmChannel(channelId);
-  const canReadHistory = isDm || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
+  // Undefined until the ready that lists the channel: not refused. The load
+  // waits meanwhile (`loadStates` `waiting`, shown as loading).
+  const isDm = useIsDmChannel(channelId);
+  const channelKnown = isDm !== undefined;
+  const canReadHistory = isDm !== false || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
 
   // Channel-specific DM record (if applicable). Passed to SystemMessage so it
   // can resolve actor display names from the channel roster — needed for
@@ -287,13 +510,16 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const currentDm = useSpaceStore((s) => isDm ? s.dmChannels.find(d => d.id === channelId) : undefined);
 
   // Pending bubble interleaving — synthetic MessageWithUser-shaped objects
-  // representing optimistic sends. `Message.tsx` (Task 19) branches on the
+  // representing optimistic sends. `Message.tsx` branches on the
   // `__pending` sentinel to render upload progress instead of confirmed state.
   // Note: per-byte transfer progress is intentionally NOT subscribed here.
   // Each attachment carries only `__transferId`; Message.tsx subscribes to a
   // single transfer in isolation so progress ticks don't re-render the list.
   const pendingBubbles = usePendingMessageStore((s) => s.bubbles.get(channelId)) ?? EMPTY_PENDING_BUBBLES;
-  const currentUser = useAuthStore((s) => s.user);
+  // Pending bubbles are the user's rows as the channel's instance issues them,
+  // so they are checked against that origin like the rows it sends.
+  const channelOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelId) ?? '');
+  const myRow = useMyRowForOrigin(channelOrigin);
 
   // Map for O(1) replyTo lookup when synthesizing pending bubbles. Built once
   // per `messages` change; per-bubble lookup is then constant-time.
@@ -304,22 +530,21 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   }, [messages]);
 
   const interleavedMessages: (MessageWithUser | PendingMessageView)[] = useMemo(() => {
-    if (!currentUser || pendingBubbles.length === 0) return messages;
+    if (!myRow || pendingBubbles.length === 0) return messages;
     // Synthesized DM messages keep the chatStore convention of channelId === ''
     // (real DM messages have empty channelId — DM identity lives on dmChannelId).
-    const isDm = isDmChannel(channelId);
     const synthChannelId = isDm ? '' : channelId;
     const synthesized: PendingMessageView[] = pendingBubbles.map((b) => {
       const synth: PendingMessageView = {
         id: `pending-${b.clientId}`,
         channelId: synthChannelId,
-        userId: currentUser.id,
+        userId: myRow.id,
         content: b.content,
         replyToId: b.replyToId,
         type: 'user',
         editedAt: null,
         createdAt: b.createdAtLocal,
-        user: currentUser,
+        user: myRow,
         attachments: b.transferIds.map((tid): PendingAttachmentView => ({
           id: `tx-${tid}`,                         // synthetic — no real attachmentId yet
           messageId: '',
@@ -343,63 +568,60 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       return synth;
     });
     return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
-  }, [messages, pendingBubbles, messagesById, channelId, currentUser]);
+  }, [messages, pendingBubbles, messagesById, channelId, myRow, isDm]);
 
+  // Load on open, and again when a listing names a channel that was unknown,
+  // which ends its `waiting` state.
   useEffect(() => {
     if (canReadHistory) {
       loadMessages(channelId);
     }
-  }, [channelId, loadMessages, canReadHistory]);
+  }, [channelId, loadMessages, canReadHistory, channelKnown]);
 
   // Track the last message ID so the ack re-fires when a temp message is replaced by its server-confirmed ID
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? '' : '';
 
-  // Ack channel when messages load or when new messages arrive while near bottom
+  // The channel is read once the view is held at the newest message: the
+  // anchor is the bottom and the cache is not a window short of the present.
   useEffect(() => {
-    if (messages.length > 0 && isNearBottom) {
+    if (messages.length > 0 && isAtBottom && !isDetached) {
       clearTimeout(ackTimerRef.current);
       ackTimerRef.current = setTimeout(() => ackChannel(channelId), 200);
     }
     return () => clearTimeout(ackTimerRef.current);
-  }, [channelId, messages.length, lastMessageId, isNearBottom, ackChannel]);
+  }, [channelId, messages.length, lastMessageId, isAtBottom, isDetached, ackChannel]);
 
-  // Save scroll anchor (tracked by handleScroll) when leaving a channel, then reset tracking
-  useEffect(() => {
+  // Channel open and close. Opening picks the target the view will take once
+  // the channel's rows are there; closing (a channel switch or an unmount)
+  // saves the anchor, so a remount or a later visit comes back to it.
+  useLayoutEffect(() => {
     const prevId = prevChannelIdRef.current;
     prevChannelIdRef.current = channelId;
 
-    // Save or clear the old channel's scroll position
-    if (prevId && prevId !== channelId) {
-      if (visibleMsgIdRef.current) {
-        // User was scrolled up — save the anchor message
-        saveScrollPosition(prevId, visibleMsgIdRef.current);
-        visibleMsgIdRef.current = null;
-      } else {
-        // User was at bottom — clear any stale saved position so we snap to bottom next time
-        const pos = useChatStore.getState().scrollPositions;
-        if (pos.has(prevId)) {
-          const next = new Map(pos);
-          next.delete(prevId);
-          useChatStore.setState({ scrollPositions: next });
-        }
-      }
+    openedChannelRef.current = null;
+    appliedScrollTopRef.current = null;
+    appliedGeometryRef.current = null;
+    anchorLoadInFlightRef.current = false;
+    jumpSeqRef.current += 1;
+    const { scrollPositions, readStates } = useChatStore.getState();
+    openTargetRef.current = resolveOpenTarget(scrollPositions.get(channelId), readStates.get(channelId));
+    setUnreadMarker(null);
+    presentReturnRef.current = useChatStore.getState().presentReturns.get(channelId) ?? 0;
+    // Nothing reads the anchor before the channel opens; the open sets it.
+    anchorRef.current = BOTTOM_ANCHOR;
+    const opensAtBottom = openTargetRef.current.kind === 'bottom';
+    setIsAtBottom(opensAtBottom);
+    setIsNearBottom(opensAtBottom);
+
+    if (prevId !== channelId) {
+      // Belt-and-suspenders: clear any in-flight pagination flag from the outgoing
+      // channel. `handleScroll`'s try/finally normally clears it when the await
+      // resolves; if the network hangs and it never resolves, the new channel would
+      // inherit the flag and render a phantom pagination skeleton.
+      setIsLoadingMore(false);
     }
 
-    prevMessagesLength.current = 0;
-    lastProgrammaticBottomScrollRef.current = null;
-
-    // Belt-and-suspenders: clear any in-flight pagination flag from the outgoing channel.
-    // `handleScroll`'s try/finally normally clears it when the await resolves, but the
-    // captured-channelId guard only silently drops the stale result — if the network
-    // hangs and the await never resolves, the new channel would inherit the flag and
-    // render a phantom pagination skeleton. Resetting here costs nothing and covers
-    // the never-resolves case. Idempotent w.r.t. the finally block.
-    setIsLoadingMore(false);
-
-    // Arm the clamp-scroll suppression flag. See `suppressNextLoadMoreRef`
-    // declaration for rationale. The 250 ms fallback timer disarms it in case
-    // no clamp event fires (new content fit without clamping) so legitimate
-    // user scrolls aren't silently dropped.
+    // Arm the clamp-scroll suppression flag. See `suppressNextLoadMoreRef`.
     suppressNextLoadMoreRef.current = true;
     if (suppressNextLoadMoreTimerRef.current) {
       clearTimeout(suppressNextLoadMoreTimerRef.current);
@@ -409,58 +631,170 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       suppressNextLoadMoreTimerRef.current = null;
     }, 250);
 
-    // If we have a saved position for the incoming channel, don't mark as near/at-bottom
-    // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
-    const willRestore = useChatStore.getState().scrollPositions.has(channelId);
-    setIsNearBottom(!willRestore);
-    isNearBottomRef.current = !willRestore;
-    setIsAtBottom(!willRestore);
-    isAtBottomRef.current = !willRestore;
+    return () => {
+      if (openedChannelRef.current === channelId) {
+        saveScrollPosition(channelId, anchorRef.current);
+      }
+    };
   }, [channelId, saveScrollPosition]);
 
-  // Handle scrolling: initial load restores position or snaps to bottom,
-  // new messages smooth-scroll if near bottom
+  // The channel's origin issued its message rows, so it says which author row is the user.
+  const isOwnMessage = useCallback(
+    (message: MessageWithUser) => isMe(message.user, getChannelOrigin(channelId)),
+    [channelId],
+  );
+
+  /**
+   * Hold the first unread row below the viewport top, with its divider. When
+   * everything unread fits on screen the view is at the bottom anyway: hold
+   * the bottom, so the list keeps following and the channel is marked read.
+   */
+  const anchorAtUnread = useCallback((messageId: string) => {
+    const container = containerRef.current;
+    if (!container) return;
+    setUnreadMarker({ channelId, messageId });
+    setAnchor({ kind: 'message', messageId, offsetPx: UNREAD_ROW_OFFSET_PX });
+    applyAnchor();
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()) {
+      setAnchor(BOTTOM_ANCHOR);
+      applyAnchor();
+    }
+  }, [channelId, setAnchor, applyAnchor, bottomIsPresent]);
+
+  /**
+   * The unread messages start before the loaded page: load the window around
+   * the read message on the channel's origin and open there. If that message
+   * is gone or the load fails, open at the latest message.
+   */
+  const openAtUnreadWindow = useCallback(async (lastReadId: string) => {
+    const seq = ++jumpSeqRef.current;
+    const requestChannelId = channelId;
+    const isCurrent = () => jumpSeqRef.current === seq && currentChannelIdRef.current === requestChannelId;
+    // Hold the read message meanwhile: nothing follows the bottom or acks.
+    setAnchor({ kind: 'message', messageId: lastReadId, offsetPx: 0 });
+    anchorLoadInFlightRef.current = true;
+    let result: LoadAroundResult;
+    try {
+      result = await loadMessagesAround(requestChannelId, lastReadId);
+    } finally {
+      if (jumpSeqRef.current === seq) anchorLoadInFlightRef.current = false;
+    }
+    if (!isCurrent()) return;
+    await nextFrame();
+    if (!isCurrent()) return;
+    const rows = useChatStore.getState().messages.get(requestChannelId) ?? [];
+    const first = result === 'loaded' ? firstUnreadMessageId(rows, lastReadId, isOwnMessage) : null;
+    if (first) {
+      anchorAtUnread(first);
+      return;
+    }
+    setAnchor(BOTTOM_ANCHOR);
+    applyAnchor();
+  }, [channelId, setAnchor, loadMessagesAround, isOwnMessage, anchorAtUnread, applyAnchor]);
+
+  /** Take the open target once the channel's rows are rendered. */
+  const openChannel = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    openedChannelRef.current = channelId;
+    const target = openTargetRef.current;
+    if (target.kind === 'message') {
+      setAnchor(target);
+      if (findRow(container, target.messageId)) applyAnchor();
+      else void restoreAnchor(target);
+      return;
+    }
+    if (target.kind === 'unread') {
+      const state = useChatStore.getState();
+      const rows = state.messages.get(channelId) ?? [];
+      const hasOlder = state.hasMore.get(channelId) ?? true;
+      if (!pageReachesReadPosition(rows, target.lastReadId, hasOlder)) {
+        void openAtUnreadWindow(target.lastReadId);
+        return;
+      }
+      const first = firstUnreadMessageId(rows, target.lastReadId, isOwnMessage);
+      if (first) {
+        anchorAtUnread(first);
+        return;
+      }
+    }
+    setAnchor(BOTTOM_ANCHOR);
+    applyAnchor();
+  }, [channelId, setAnchor, applyAnchor, restoreAnchor, openAtUnreadWindow, isOwnMessage, anchorAtUnread]);
+
+  // Mark Unread on a message of the open channel moves the divider to the
+  // first unread message after it. Read positions otherwise only move forward.
+  const readPosition = useChatStore((s) => s.readStates.get(channelId));
+  const lastReadPositionRef = useRef<{ channelId: string; id: string | undefined }>({ channelId, id: readPosition });
   useEffect(() => {
-    const prev = prevMessagesLength.current;
-    prevMessagesLength.current = messages.length;
+    const previous = lastReadPositionRef.current;
+    lastReadPositionRef.current = { channelId, id: readPosition };
+    if (previous.channelId !== channelId || readPosition === undefined || previous.id === undefined) return;
+    if (!/^\d+$/.test(readPosition) || !/^\d+$/.test(previous.id) || BigInt(readPosition) >= BigInt(previous.id)) return;
+    const rows = useChatStore.getState().messages.get(channelId) ?? [];
+    const first = firstUnreadMessageId(rows, readPosition, isOwnMessage);
+    setUnreadMarker(first ? { channelId, messageId: first } : null);
+  }, [channelId, readPosition, isOwnMessage]);
 
-    if (messages.length === 0) return;
+  // The rows changed. Before the channel is open, this is the moment to open
+  // it. After, the anchor holds the view: new rows below a view at the bottom
+  // are followed with a smooth scroll, and anything else (older rows loaded
+  // above, a cache replaced under the view, a jump's window) is re-anchored
+  // before paint.
+  useLayoutEffect(() => {
+    const prev = renderedIdsRef.current;
+    const ids = interleavedMessages.map((m) => m.id);
+    renderedIdsRef.current = { channelId, ids };
+    if (ids.length === 0) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    if (prev === 0) {
-      // Initial load / channel switch — restore to saved message anchor or snap to bottom
-      const savedMsgId = useChatStore.getState().scrollPositions.get(channelId);
-      requestAnimationFrame(() => {
-        const container = containerRef.current;
-        if (!container) return;
-        if (savedMsgId) {
-          const el = document.getElementById(`msg-${savedMsgId}`);
-          if (el) {
-            el.scrollIntoView({ block: 'start' });
-            const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-            const near = dist < NEAR_BOTTOM_THRESHOLD_PX;
-            setIsNearBottom(near);
-            isNearBottomRef.current = near;
-            const atBot = dist < AT_BOTTOM_THRESHOLD_PX;
-            setIsAtBottom(atBot);
-            isAtBottomRef.current = atBot;
-            return;
-          }
-        }
-        // No saved anchor or message not in cache — snap to bottom
-        container.scrollTop = container.scrollHeight;
-        lastProgrammaticBottomScrollRef.current = container.scrollTop;
-        isAtBottomRef.current = true;
-        setIsAtBottom(true);
-      });
-    } else if (messages.length > prev && isAtBottomRef.current) {
-      // New messages arrived while at bottom — smooth scroll
+    if (openedChannelRef.current !== channelId) {
+      openChannel();
+      return;
+    }
+
+    if (presentReturnRef.current !== presentReturn) {
+      // The store replaced a detached window with the newest page (a message
+      // sent from the window, an origin without forward paging): follow the
+      // newest message, and drop any jump or restore still loading.
+      presentReturnRef.current = presentReturn;
+      jumpSeqRef.current += 1;
+      anchorLoadInFlightRef.current = false;
+      cancelBottomPinning();
+      setAnchor(BOTTOM_ANCHOR);
+      applyAnchor();
+      return;
+    }
+
+    const anchor = anchorRef.current;
+    if (anchor.kind === 'message' && !findRow(container, anchor.messageId)) {
+      if (anchorLoadInFlightRef.current) return;
+      // Outside the rows now loaded, the anchored row was dropped with the
+      // cache (a reload, a replaced window): load it back. Inside them, it was
+      // deleted: hold what is on screen now.
+      if (idWithinRows(anchor.messageId, ids)) deriveAnchorFromLayout();
+      else void restoreAnchor(anchor);
+      return;
+    }
+    const sameChannel = prev.channelId === channelId;
+    const appended = sameChannel
+      && sharesAnyId(prev.ids, ids)
+      && ids.length > prev.ids.length
+      && ids[ids.length - 1] !== prev.ids[prev.ids.length - 1];
+    if (anchor.kind === 'bottom' && appended) {
+      // New messages arrived while at the bottom — smooth scroll to them.
       beginSmoothScrollIntent('bottom');
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- isAtBottomRef read via ref intentionally
-  }, [messages.length, channelId, beginSmoothScrollIntent]);
+    applyAnchor();
+  }, [interleavedMessages, channelId, presentReturn, openChannel, restoreAnchor, deriveAnchorFromLayout, beginSmoothScrollIntent, cancelBottomPinning, setAnchor, applyAnchor]);
 
-  // Auto-scroll when content height grows (embeds/images loading) while near bottom
+  // Every size change re-applies the anchor: the content (rows laying out,
+  // embeds loading, and the composer clearance, which is the content's
+  // bottom padding and so only visible in its border box) and the scroll
+  // viewport itself (the mobile keyboard, window resizes).
   const hasMessages = messages.length > 0;
   useEffect(() => {
     const content = contentRef.current;
@@ -468,16 +802,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     if (!content || !container) return;
 
     const observer = new ResizeObserver(() => {
-      const c = containerRef.current;
-      if (!c || !isAtBottomRef.current) return;
-      c.scrollTop = c.scrollHeight;
-      lastProgrammaticBottomScrollRef.current = c.scrollTop;
+      if (openedChannelRef.current !== currentChannelIdRef.current) return;
+      applyAnchor();
     });
-    observer.observe(content);
+    observer.observe(content, { box: 'border-box' });
+    observer.observe(container);
     return () => observer.disconnect();
-  }, [hasMessages, channelId]);
+  }, [hasMessages, channelId, applyAnchor]);
 
-  // Scroll to bottom when any image/media inside the message list finishes loading.
+  // Re-apply the anchor when any image/media inside the list finishes loading.
   // The `load` event doesn't bubble, but capture-phase listeners on ancestors still fire.
   // This handles the case ResizeObserver misses due to its own layout-loop suppression.
   useEffect(() => {
@@ -485,23 +818,20 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     if (!content) return;
 
     const handleMediaLoad = () => {
-      const c = containerRef.current;
-      if (!c || !isAtBottomRef.current) return;
-      c.scrollTop = c.scrollHeight;
-      lastProgrammaticBottomScrollRef.current = c.scrollTop;
+      if (openedChannelRef.current !== currentChannelIdRef.current) return;
+      applyAnchor();
     };
 
     content.addEventListener('load', handleMediaLoad, true);
     return () => content.removeEventListener('load', handleMediaLoad, true);
-  }, [hasMessages, channelId]);
+  }, [hasMessages, channelId, applyAnchor]);
 
-  // Effect 7 — `scrollend` listener (Chrome 114+, Safari 18+).
+  // `scrollend` listener (Chrome 114+, Safari 18+).
   // Fires once per smooth-scroll animation completion. When a 'bottom' intent is in
-  // flight, do a final defensive instant pin: layout may have grown between the
-  // smooth-scroll command and its terminal frame (lazy-loaded media, late embeds),
-  // and the smooth animation will have stopped at the originally computed target.
-  // For browsers without scrollend, the timeout fallback armed in
-  // `beginSmoothScrollIntent` handles the same final pin.
+  // flight, do a final defensive pin: layout may have grown between the smooth-scroll
+  // command and its terminal frame (lazy-loaded media, late embeds), and the smooth
+  // animation will have stopped at the originally computed target. For browsers without
+  // scrollend, the timeout fallback armed in `beginSmoothScrollIntent` does the same.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -512,8 +842,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       if (intent === 'bottom') {
         finalizeBottomSmoothScroll();
       } else if (intent === 'message') {
-        // No defensive pin (target is not bottom), but clear the intent so the next
-        // bottom-bound smooth scroll's suppression works correctly.
+        // No pin (the target is not the bottom), but clear the intent so the anchor is
+        // applied again and the next bottom-bound smooth scroll's suppression works.
         smoothScrollIntentRef.current = null;
         smoothScrollDeadlineRef.current = 0;
         if (smoothScrollFallbackTimerRef.current) {
@@ -546,64 +876,35 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // reply previews (through MessageJumpContext). See docs/systems/message-list.md,
   // "Jump to message".
 
-  // Monotonic id of the latest jump. An older jump still awaiting its load
-  // compares against it and gives up, so two quick clicks land on the second.
-  const jumpSeqRef = useRef(0);
-
-  // A jump moves the view on purpose. Cancel everything that pins the list to
-  // the bottom before anything moves: a queued scroll event matching the
-  // sentinel would re-pin, and a pending bottom-bound smooth scroll would
-  // finish at the bottom.
-  const cancelBottomPinning = useCallback(() => {
-    lastProgrammaticBottomScrollRef.current = null;
-    if (smoothScrollIntentRef.current === 'bottom') {
-      smoothScrollIntentRef.current = null;
-      smoothScrollDeadlineRef.current = 0;
-      if (smoothScrollFallbackTimerRef.current) {
-        clearTimeout(smoothScrollFallbackTimerRef.current);
-        smoothScrollFallbackTimerRef.current = null;
-      }
-    }
-  }, []);
-
-  const setBottomFlags = useCallback((distanceFromBottom: number) => {
-    const atBottom = distanceFromBottom < AT_BOTTOM_THRESHOLD_PX;
-    const nearBottom = distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX;
-    isAtBottomRef.current = atBottom;
-    setIsAtBottom(atBottom);
-    isNearBottomRef.current = nearBottom;
-    setIsNearBottom(nearBottom);
-  }, []);
-
-  // A jump that ends without scrolling hands the flags back to the layout.
-  const syncBottomStateFromLayout = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    setBottomFlags(container.scrollHeight - container.scrollTop - container.clientHeight);
-  }, [setBottomFlags]);
-
-  // The at-bottom gate is set from where the jump will land, not closed
-  // outright: a target already on screen near the bottom may not move the
-  // list at all, no scroll event follows, and a closed gate would never
-  // reopen, so the list would stop following new messages.
+  // The anchor is set from where the jump will land, before the list moves:
+  // a far jump holds the row (messages arriving afterwards do not pull the
+  // view back); a jump that lands near the bottom keeps following. A target
+  // already on screen near the bottom may not move the list at all, and no
+  // scroll event follows, so the anchor cannot wait for one.
   // Returns the row it scrolled to, or null when the row is not rendered.
   const scrollToRenderedMessage = useCallback((messageId: string): HTMLElement | null => {
     const container = containerRef.current;
-    const el = container?.querySelector<HTMLElement>(`[id="msg-${messageId}"]`);
+    const el = container ? findRow(container, messageId) : null;
     if (!container || !el) return null;
     cancelBottomPinning();
     const destination = centredScrollTop(container, el);
-    setBottomFlags(container.scrollHeight - container.clientHeight - destination);
+    const distanceFromBottom = container.scrollHeight - container.clientHeight - destination;
+    setAnchor(distanceFromBottom < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()
+      ? BOTTOM_ANCHOR
+      : { kind: 'message', messageId, offsetPx: rowOffset(container, el) - (destination - container.scrollTop) });
+    setIsNearBottom(distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX);
     beginSmoothScrollIntent('message');
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     flashMessage(el);
     return el;
-  }, [cancelBottomPinning, setBottomFlags, beginSmoothScrollIntent]);
+  }, [cancelBottomPinning, setAnchor, beginSmoothScrollIntent, bottomIsPresent]);
 
   const jumpToMessage = useCallback(async (messageId: string): Promise<void> => {
     const seq = ++jumpSeqRef.current;
     const requestChannelId = channelId;
     const isCurrent = () => jumpSeqRef.current === seq && currentChannelIdRef.current === requestChannelId;
+    // A jump is where the channel opens, if it has not opened yet.
+    openedChannelRef.current = requestChannelId;
     // Focus follows the jump only if nobody moved it meanwhile: a jump that
     // waits on the network must not pull focus out of the composer the user
     // clicked into while it loaded.
@@ -619,13 +920,18 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     if (land()) return;
 
     // Not loaded: replace the cache with the window around the target on the
-    // channel's origin. Close the at-bottom gate first: Effect A would
-    // otherwise smooth-scroll a grown cache to the bottom, and Effects B/C
-    // would pin the new rows there as they lay out.
+    // channel's origin. Anchor to the target first, so the window lays out
+    // around it instead of being followed to its bottom.
     cancelBottomPinning();
-    isAtBottomRef.current = false;
-    setIsAtBottom(false);
-    const result: LoadAroundResult = await loadMessagesAround(requestChannelId, messageId);
+    const container = containerRef.current;
+    setAnchor({ kind: 'message', messageId, offsetPx: container ? Math.max(0, (container.clientHeight - ROW_HEIGHT_ESTIMATE_PX) / 2) : 0 });
+    anchorLoadInFlightRef.current = true;
+    let result: LoadAroundResult;
+    try {
+      result = await loadMessagesAround(requestChannelId, messageId);
+    } finally {
+      if (jumpSeqRef.current === seq) anchorLoadInFlightRef.current = false;
+    }
     if (!isCurrent()) return;
 
     if (result === 'loaded') {
@@ -636,13 +942,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       if (land()) return;
     }
 
-    syncBottomStateFromLayout();
+    deriveAnchorFromLayout();
     addToast(
       result === 'failed' ? t('chat:list.jump.failed') : t('chat:list.jump.unavailable'),
       'info',
       4000,
     );
-  }, [channelId, scrollToRenderedMessage, cancelBottomPinning, loadMessagesAround, syncBottomStateFromLayout, addToast, t]);
+  }, [channelId, scrollToRenderedMessage, cancelBottomPinning, setAnchor, loadMessagesAround, deriveAnchorFromLayout, addToast, t]);
 
   // Rows get a fire-and-forget handle; the jump reports its own failures.
   const requestJump = useCallback((messageId: string) => {
@@ -664,134 +970,84 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     requestJump(jumpToMessageId);
   }, [jumpToMessageId, onJumpHandled, requestJump]);
 
-  // Jump to Present. After a jump the cache can be a window that stops short
-  // of the newest message (`detachedChannels`); scrolling to its bottom would
-  // not be the present, so reload the newest page first and pin to it.
+  // Jump to Present. The cache can be a window that stops short of the newest
+  // message (`detachedChannels`); scrolling to its bottom would not be the
+  // present, so reload the newest page first and pin to it.
   const jumpToPresent = useCallback(async () => {
+    const seq = ++jumpSeqRef.current;
+    const requestChannelId = channelId;
+    const isCurrent = () => jumpSeqRef.current === seq && currentChannelIdRef.current === requestChannelId;
+    anchorLoadInFlightRef.current = false;
     if (!useChatStore.getState().detachedChannels.has(channelId)) {
+      setAnchor(BOTTOM_ANCHOR);
       beginSmoothScrollIntent('bottom');
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
-    const requestChannelId = channelId;
-    // Supersede any jump still waiting on its window.
-    jumpSeqRef.current += 1;
-    // Open the gate first so Effects B/C pin the fresh page as it lays out.
-    isAtBottomRef.current = true;
-    setIsAtBottom(true);
+    // The fresh page is laid out at the bottom as it arrives.
+    cancelBottomPinning();
+    setAnchor(BOTTOM_ANCHOR);
     const loaded = await loadMessages(requestChannelId, true);
-    if (currentChannelIdRef.current !== requestChannelId) return;
+    if (!isCurrent()) return;
     if (!loaded) {
       // The window is still the cache. Its bottom is not the present, so
-      // stay where the user is, hand the flags back to the layout, and say so.
-      syncBottomStateFromLayout();
+      // stay where the user is, take the anchor from the layout, and say so.
+      deriveAnchorFromLayout();
       addToast(t('chat:list.jump.presentFailed'), 'info', 4000);
       return;
     }
     requestAnimationFrame(() => {
-      if (currentChannelIdRef.current !== requestChannelId) return;
-      const container = containerRef.current;
-      if (!container) return;
-      container.scrollTop = container.scrollHeight;
-      lastProgrammaticBottomScrollRef.current = container.scrollTop;
-      isAtBottomRef.current = true;
-      setIsAtBottom(true);
-      isNearBottomRef.current = true;
-      setIsNearBottom(true);
-      visibleMsgIdRef.current = null;
+      if (!isCurrent()) return;
+      setAnchor(BOTTOM_ANCHOR);
+      applyAnchor();
     });
-  }, [channelId, beginSmoothScrollIntent, loadMessages, syncBottomStateFromLayout, addToast, t]);
+  }, [channelId, setAnchor, beginSmoothScrollIntent, cancelBottomPinning, loadMessages, deriveAnchorFromLayout, applyAnchor, addToast, t]);
 
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;
     if (!container) return;
+    // Before the channel has opened there is nothing to hold: the first
+    // events are the browser clamping the previous channel's offset.
+    if (openedChannelRef.current !== channelId) return;
 
-    const sentinelBefore = lastProgrammaticBottomScrollRef.current;
-    const sentinelMatch = container.scrollTop === sentinelBefore;
-
-    // Sentinel: if scrollTop equals our last programmatic bottom-scroll value, this event
-    // was queued by our own command. Layout may have grown between the command and the
-    // event firing, but our intent is "stay at bottom" — do not let a post-growth distance
-    // measurement flip the at-bottom flags. Re-pin defensively (content may have grown
-    // again) and update the sentinel. See docs/systems/message-list.md (Auto-scroll model).
-    if (sentinelMatch) {
-      isAtBottomRef.current = true;
-      setIsAtBottom(true);
-      isNearBottomRef.current = true;
-      setIsNearBottom(true);
-      container.scrollTop = container.scrollHeight;
-      lastProgrammaticBottomScrollRef.current = container.scrollTop;
-      visibleMsgIdRef.current = null;
+    // The list's own scroll, or one caused by a layout change since the list
+    // last measured (the browser clamping the offset when content shrank):
+    // hold the anchor. See docs/systems/message-list.md, "Anchoring model".
+    const geometry = appliedGeometryRef.current;
+    const geometryChanged = !geometry
+      || geometry.scrollHeight !== container.scrollHeight
+      || geometry.clientHeight !== container.clientHeight;
+    if (container.scrollTop === appliedScrollTopRef.current || geometryChanged) {
+      applyAnchor();
       return;
     }
 
-    // Sentinel mismatch — the user has scrolled (or is scrolling) somewhere we did not
-    // command. Invalidate the sentinel so a future user scroll that coincidentally lands on
-    // the stale value can't trigger a false match and yank them to bottom.
-    lastProgrammaticBottomScrollRef.current = null;
-
-    // Check scroll position relative to bottom
+    // The user moved the view. An event at the list's last offset from here
+    // on is a coincidence, not the list's own.
+    appliedScrollTopRef.current = null;
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    // "at bottom" = within 150px — used for auto-scrolling on new messages
-    const atBottomMeasured = distanceFromBottom < AT_BOTTOM_THRESHOLD_PX;
-    // "near bottom" = within 5000px — used for "Jump to Present" button visibility
-    const nearBottom = distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX;
 
-    // Smooth-scroll-to-bottom suppression: while a smooth animation we initiated is
-    // animating toward the bottom, intermediate frames report large `distanceFromBottom`.
-    // Honoring those would flip `isAtBottomRef` to false and close the
-    // ResizeObserver/load-handler gates — preventing any late-loading media (avatars,
-    // embeds, attachment images, Spotify thumbs) growing scrollHeight mid-animation
-    // from re-pinning. The smooth scroll then lands at the originally computed (now
-    // stale) target. Suppress the flip ONLY for 'bottom' intent — 'message' intent
-    // (jump-to-message) legitimately moves the user away from bottom, so let the gate
-    // flip honestly there. Also let the gate flip if the user has wheeled away well
-    // past the near-bottom band (5000px), which signals a deliberate user gesture
-    // overriding our animation.
+    // While a smooth scroll we started animates toward the bottom, its frames
+    // report large distances. Keep the anchor at the bottom through them, so
+    // media that finishes loading mid-animation is still followed, unless the
+    // user has wheeled well away (a deliberate gesture overriding the animation).
     const intent = smoothScrollIntentRef.current;
-    const intentActive = intent === 'bottom' && performance.now() < smoothScrollDeadlineRef.current;
-    const userScrolledAway = distanceFromBottom >= SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
-    const suppressBottomFlip = intentActive && !userScrolledAway;
+    const holdingBottom = intent === 'bottom'
+      && performance.now() < smoothScrollDeadlineRef.current
+      && distanceFromBottom < SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
+    if (!holdingBottom) setAnchor(anchorFromLayout(container));
+    recordGeometry(container);
+    loadNewerIfAtEnd();
 
-    const atBottom = suppressBottomFlip ? true : atBottomMeasured;
-    setIsAtBottom(atBottom);
-    isAtBottomRef.current = atBottom;
-    setIsNearBottom(nearBottom);
-    isNearBottomRef.current = nearBottom;
-
-    // Track top-visible message for scroll position persistence
-    if (!nearBottom) {
-      const containerTop = container.getBoundingClientRect().top;
-      const msgEls = container.querySelectorAll('[id^="msg-"]');
-      for (const el of msgEls) {
-        if (el.getBoundingClientRect().bottom > containerTop) {
-          visibleMsgIdRef.current = el.id.replace('msg-', '');
-          break;
-        }
-      }
-    } else {
-      visibleMsgIdRef.current = null;
-    }
-
-    // Load more when scrolled to top.
-    // Capture the channelId locally so we can detect a channel switch that races the
-    // async load. Two guard points:
-    //  1. Before scheduling the rAF — if the user already switched, we have no business
-    //     touching scroll on the outgoing channel's (now-unmounted-from-view) container,
-    //     and `prevScrollHeight` is meaningless against the new channel's DOM.
-    //  2. *Inside* the rAF callback — the rAF runs ~16ms after we schedule it, so the
-    //     channel can switch in that window even if it was still current at schedule time.
-    // The try/finally guarantees `setIsLoadingMore(false)` runs even if `loadMoreMessages`
-    // throws (defense in depth — `chatStore.loadMoreMessages` currently catches and returns
-    // false, but we don't want a future refactor to leak the flag). The Effect-3 reset on
-    // channel switch is the third safety net for the "await never resolves" case.
+    // Load more when scrolled to top. The rows loaded above the view are held
+    // in place by the anchor (the layout effect re-applies it before paint).
+    // Capture the channelId so a channel switch that races the await is detected;
+    // the try/finally guarantees `setIsLoadingMore(false)` runs even if the load
+    // throws. The channel-switch reset is the safety net for an await that never
+    // resolves.
     // Consume the post-channel-switch suppression flag. The first scroll event
-    // after a channel change is almost always the browser-clamp event (when
-    // the new channel's content is shorter than the outgoing channel's
-    // scrollTop) and must NOT be treated as a user scroll-to-top. We only
-    // skip the load-more block — the at-bottom/near-bottom recomputation and
-    // the visible-message tracking above must still run (the clamp event
-    // genuinely changes scroll position, and the new value should be reflected).
+    // after a channel change is almost always the browser-clamp event and must
+    // NOT be treated as a user scroll-to-top.
     let suppressLoadMore = false;
     if (suppressNextLoadMoreRef.current) {
       suppressNextLoadMoreRef.current = false;
@@ -812,40 +1068,14 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       hasMore &&
       !isLoadingMore
     ) {
-      const requestChannelId = channelId;
       setIsLoadingMore(true);
-      // Capture BOTH synchronously, before the await — `prevScrollTop` must
-      // be the pre-await value for the anchor-from-bottom formula in the
-      // rAF callback below to hold. Moving this capture inside the rAF or
-      // after the await silently breaks the math.
-      const prevScrollHeight = container.scrollHeight;
-      const prevScrollTop = container.scrollTop;
       try {
-        const loaded = await loadMoreMessages(requestChannelId);
-        if (!loaded) return;
-        // Channel-switch guard #1: skip the rAF entirely if the user moved away during
-        // the await. The container ref now points at the new channel's scroller, so
-        // applying `scrollHeight - prevScrollHeight` would yank it to a wrong position.
-        if (currentChannelIdRef.current !== requestChannelId) return;
-        requestAnimationFrame(() => {
-          // Channel-switch guard #2: re-check inside the rAF callback. The frame between
-          // scheduling and firing (~16ms) is enough time for a click to switch channels,
-          // and the same wrong-position outcome would result.
-          if (currentChannelIdRef.current !== requestChannelId) return;
-          const c = containerRef.current;
-          if (!c) return;
-          // Anchor-from-bottom: keep the user's viewport at the same distance
-          // from the new bottom of content as it was from the old bottom.
-          // `(c.scrollHeight - prevScrollHeight)` is the height of freshly
-          // prepended messages; adding it to `prevScrollTop` keeps the visible
-          // content stationary across the prepend.
-          c.scrollTop = prevScrollTop + (c.scrollHeight - prevScrollHeight);
-        });
+        await loadMoreMessages(channelId);
       } finally {
         setIsLoadingMore(false);
       }
     }
-  }, [channelId, hasMore, isLoadingMore, loadMoreMessages]);
+  }, [channelId, hasMore, isLoadingMore, loadMoreMessages, applyAnchor, setAnchor, anchorFromLayout, recordGeometry, loadNewerIfAtEnd]);
 
   if (!canReadHistory) {
     return (
@@ -906,7 +1136,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
           {interleavedMessages.map((msg, i) => {
             const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
+            const dateLabel = showDate ? formatDateDivider(msg.createdAt) : null;
             const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
+            const isUnreadStart = unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id;
 
             // Walk back to find the nearest non-pending neighbor for "Mark Unread".
             // A `pending-${clientId}` ID would be rejected by the server, so we skip
@@ -922,14 +1154,23 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
 
             return (
               <React.Fragment key={msg.id}>
-                {showDate && (
+                {dateLabel && !isUnreadStart && (
                   <div className="flex items-center px-5 my-2 select-none pointer-events-none">
                     <div className="flex-1 h-[1px] bg-border-hard" />
                     <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
-                      {formatDateDivider(msg.createdAt)}
+                      {dateLabel}
                     </span>
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
+                )}
+                {isUnreadStart && (
+                  <UnreadDivider
+                    label={t('chat:list.unread.label')}
+                    name={dateLabel
+                      ? t('chat:list.unread.dividerWithDate', { date: dateLabel })
+                      : t('chat:list.unread.divider')}
+                    dateLabel={dateLabel}
+                  />
                 )}
                 {msg.type === 'system' ? (
                   <SystemMessage message={msg} dm={currentDm ?? null} />
@@ -970,6 +1211,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
         </div>
       )}
 
+      {loadState?.status === 'failed' && messages.length === 0 && (
+        <LoadFailedNotice
+          title={t('chat:list.loadFailed')}
+          detail={describeError(loadState.error)}
+          retryLabel={t('common:actions.tryAgain')}
+          onRetry={() => { void loadMessages(channelId, true); }}
+        />
+      )}
+
       {(!isNearBottom || isDetached) && messages.length > 0 && (
         <button
           onClick={() => { void jumpToPresent(); }}
@@ -986,25 +1236,80 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   );
 }
 
+/**
+ * The channel's messages could not be loaded. An overlay over the scroll
+ * container, never a replacement for it (docs/systems/message-list.md,
+ * "ContainerRef invariant"), so the list's effects stay attached for the retry.
+ */
+function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
+  title: string;
+  detail: string;
+  retryLabel: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-chat px-6">
+      <div role="alert" className="flex max-w-sm flex-col items-center gap-1 text-center">
+        <p className="text-[15px] font-semibold text-txt-primary">{title}</p>
+        <p className="text-[13px] text-txt-tertiary break-words">{detail}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 rounded-full bg-accent-primary px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-accent-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
+        >
+          {retryLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Where the unread messages start. A separator with its own name, so a
+ * screen reader moving through the list hears it; the visible label is short.
+ * When the first unread message also starts a new day, the date sits in the
+ * same rule instead of a second divider right above it.
+ */
+function UnreadDivider({ label, name, dateLabel }: { label: string; name: string; dateLabel: string | null }) {
+  return (
+    <div
+      role="separator"
+      aria-label={name}
+      className="flex items-center pl-5 pr-4 my-2 select-none pointer-events-none"
+    >
+      <div className="flex-1 h-px bg-accent-rose/50" />
+      {dateLabel && (
+        <>
+          <span className="px-[14px] text-[11px] font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
+          <div className="flex-1 h-px bg-accent-rose/50" />
+        </>
+      )}
+      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function WelcomeHeader({ channelId }: { channelId: string }) {
   const { t } = useTranslation(['chat', 'common']);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const authUser = useAuthStore((s) => s.user);
   const removeFriend = useSocialStore((s) => s.removeFriend);
   const friends = useSocialStore((s) => s.friends);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const openModal = useUIStore((s) => s.openModal);
-  const isDm = isDmChannel(channelId);
+  const isDm = useIsDmChannel(channelId);
   const navigate = useNavigate();
+  const viewer = useDmViewer(isDm ? channelId : null);
 
   if (isDm) {
     const dm = dmChannels.find(d => d.id === channelId);
     if (!dm) return null; // DM data not yet loaded (WebSocket ready pending)
-    const otherMembers = dm.members.filter(m => !isSelf(m, authUser));
+    const otherMembers = dm.members.filter(m => !isMine(m, viewer.origin, viewer.self));
     const isGroupDm = !!dm.ownerId;
 
     if (isGroupDm) {
-      const groupName = formatDmHeaderName(dm, authUser);
+      const groupName = formatDmHeaderName(dm, viewer);
       const ownerMember = dm.members.find(m => m.id === dm.ownerId);
       const ownerName = ownerMember?.displayName ?? ownerMember?.username ?? t('common:states.unknown');
       const hasFederated = dm.members.some(m => m.homeInstance);
@@ -1024,13 +1329,13 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
 
       const handleOwnerClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (!ownerMember) return;
-        openUserProfile(ownerMember, e.currentTarget.getBoundingClientRect(), 'bottom');
+        openUserProfile(ownerMember, viewer.origin, e.currentTarget.getBoundingClientRect(), 'bottom');
       };
 
       return (
         <div className="px-4 pt-8 pb-4">
           <div className="mb-2">
-            <AvatarStack members={otherMembers} size={80} border="chat" iconUrl={dm.icon} />
+            <AvatarStack members={otherMembers} origin={viewer.origin} size={80} border="chat" iconUrl={dm.icon} />
           </div>
           <h3 className="text-[32px] leading-10 font-bold text-txt-primary mt-2">{groupName}</h3>
           <p className="text-txt-secondary text-[14px] mt-1">
@@ -1083,12 +1388,16 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const { baseName } = parseFederatedUsername(otherUser?.username ?? '');
     const displayName = otherUser?.displayName ?? (baseName || t('chat:list.welcome.dm.fallbackName'));
     const mentionName = otherUser?.displayName ?? baseName;
-    const isFriend = otherUser ? friends.some(f => f.id === otherUser.id) : false;
+    // The same person (`userKey`), whichever instance's row each list holds.
+    const friend = otherUser
+      ? friends.find(f => userKey(f, f._instanceOrigin) === userKey(otherUser, viewer.origin))
+      : undefined;
+    const isFriend = !!friend;
 
     return (
       <div className="px-4 pt-8 pb-4">
         <div className="mb-2">
-          <ProfileAvatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} />
+          <ProfileAvatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} origin={viewer.origin} />
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
         <p className="text-txt-secondary text-[14px] mt-1">
@@ -1107,7 +1416,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         {isFriend && otherUser && (
           <div className="mt-4">
             <button
-              onClick={() => removeFriend(otherUser.id)}
+              onClick={() => friend && removeFriend(friend.id)}
               className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               {t('chat:list.welcome.dm.removeFriend')}

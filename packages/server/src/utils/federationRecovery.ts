@@ -1,7 +1,7 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
-import { onPeerActivated } from './federationPeerActivation.js';
+import { transitionPeer } from './federationPeerState.js';
 import { markPeerReset } from './federationReset.js';
 import { federationFetch } from './federationFetch.js';
 
@@ -59,23 +59,23 @@ export async function probePeerReachable(origin: string, signal?: AbortSignal): 
 }
 
 /**
- * Transition an unreachable peer back to active and reset recovery pacing.
- * onPeerActivated broadcasts federation_peers_changed to admins. Rotation fields
- * are intentionally untouched — recovery is orthogonal to rotation.
+ * Transition an unreachable peer back to active; the transition resets the
+ * recovery pacing and runs onPeerActivated. Rotation fields are untouched:
+ * recovery is orthogonal to rotation. Returns false when the row was no longer
+ * unreachable (nothing written).
  */
-export async function markPeerRecovered(peerId: string): Promise<void> {
-  const db = getDb();
-  db.update(schema.federationPeers)
-    .set({
-      status: 'active',
-      consecutiveFailures: 0,
-      lastSeenAt: Date.now(),
-      probeAttempts: 0,
-      lastProbeAt: null,
-    })
-    .where(eq(schema.federationPeers.id, peerId))
-    .run();
-  await onPeerActivated(peerId, 'health_check_recovery');
+export async function markPeerRecovered(peerId: string): Promise<boolean> {
+  // Only an unreachable row recovers: an admin may have revoked it, or a reset
+  // may have been detected, while the probe was in flight.
+  const outcome = transitionPeer(peerId, {
+    from: ['unreachable'],
+    to: 'active',
+    cause: 'health_check_recovery',
+    fields: { consecutiveFailures: 0, lastSeenAt: Date.now() },
+  });
+  if (!outcome.applied) return false;
+  await outcome.done;
+  return true;
 }
 
 /**
@@ -94,18 +94,18 @@ export async function markPeerRecovered(peerId: string): Promise<void> {
  * run.
  *
  * @returns `'reset_detected'` if the peer was routed to needs_attention;
- *          `'recovered'` if it was flipped back to active.
+ *          `'recovered'` if it was flipped back to active; `'unchanged'` if the
+ *          row had left `unreachable` meanwhile (nothing written).
  */
 export async function recoverOrDetectReset(
   peer: { id: string; origin: string; peerInstanceId: string | null },
   result: ProbeResult,
-): Promise<'recovered' | 'reset_detected'> {
+): Promise<'recovered' | 'reset_detected' | 'unchanged'> {
   if (peer.peerInstanceId && result.instanceId && result.instanceId !== peer.peerInstanceId) {
     markPeerReset(peer.id, peer.origin, peer.peerInstanceId, result.instanceId);
     return 'reset_detected';
   }
-  await markPeerRecovered(peer.id);
-  return 'recovered';
+  return (await markPeerRecovered(peer.id)) ? 'recovered' : 'unchanged';
 }
 
 /**
@@ -150,8 +150,8 @@ export async function detectResetOnNeedsAttentionPeers(signal?: AbortSignal): Pr
       eq(schema.federationPeers.status, 'needs_attention'),
       isNotNull(schema.federationPeers.peerInstanceId),
       or(
-        isNull(schema.federationPeers.needsAttentionReason),
-        ne(schema.federationPeers.needsAttentionReason, 'peer_reset_detected'),
+        isNull(schema.federationPeers.statusReason),
+        ne(schema.federationPeers.statusReason, 'peer_reset_detected'),
       ),
     ))
     .all();

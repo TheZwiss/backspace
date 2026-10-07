@@ -1,39 +1,64 @@
 import type { User } from '@backspace/shared';
-import { useSpaceStore } from '../stores/spaceStore';
-import { canonicalUserKey } from './identity';
+import { useSpaceStore, type UserViewEntry } from '../stores/spaceStore';
+import { userKey } from './identity';
 
 /**
- * Synchronous lookup into the userViews cache. Returns the best-known view of
- * the user from any connected origin, or the input unchanged on cache miss.
- *
- * Use from non-React paths (event handlers, helpers, predicates). React
- * render sites should use {@link useCanonicalUserView} so subscriptions tick
- * when the cache updates.
- *
- * Pass User-shaped inputs. Returning the cache entry replaces the input
- * reference; callers that depend on extra fields (UI-augmented types) should
- * either route the input through this helper before extending it, or call
- * with the underlying User and re-augment.
+ * The views `viewOf` has built, per cache entry and then per row. Entries and
+ * rows are replaced, never mutated, when they change, so the same pair always
+ * means the same view; both keys are weak, so a view is dropped with the entry
+ * or row it was built from.
  */
-export function getCanonicalUserView(user: User): User {
-  const key = canonicalUserKey(user);
-  const entry = useSpaceStore.getState().userViews.get(key);
-  return entry ? entry.user : user;
+const builtViews = new WeakMap<UserViewEntry, WeakMap<User, User>>();
+
+/**
+ * How `row` looks at its best: the cached view of the same person
+ * (`userKey(row, origin)`), with the row's own identity fields (`id`,
+ * `homeUserId`, `homeInstance`) kept. The cache supplies how a person is
+ * shown; the row, and the origin that issued it, stay what every request and
+ * id comparison uses, so a caller never ends up holding one instance's id
+ * paired with another instance's origin.
+ *
+ * The same `row` and `entry` always give the same object, so a component
+ * memoised on the view (every message row, member row and friend row) does
+ * not re-render for a view that did not change.
+ */
+function viewOf(row: User, entry: UserViewEntry | undefined): User {
+  if (!entry || entry.user === row) return row;
+  let byRow = builtViews.get(entry);
+  if (!byRow) {
+    byRow = new WeakMap();
+    builtViews.set(entry, byRow);
+  }
+  const built = byRow.get(row);
+  if (built) return built;
+  const view: User = { ...entry.user, id: row.id, homeUserId: row.homeUserId, homeInstance: row.homeInstance };
+  byRow.set(row, view);
+  return view;
 }
 
 /**
- * Reactive lookup into the userViews cache. Subscribes to the specific cache
- * entry so the calling component re-renders when an upsert lands a better
- * view (e.g. nova's home view of Frank arriving after orbit's stub
- * populated the cache first). Returns the input unchanged on cache miss; the
- * site falls back to the current best information until the cache fills.
+ * Synchronous lookup into the userViews cache for `row` as `origin` issued it
+ * (`''` = the page's own instance). Returns the input unchanged on a cache
+ * miss.
  *
- * Composes with `isSelf` / `resolveDisplayIdentity` rather than replacing
- * them — call those for self-detection / self-rendering as before, and pass
- * non-self users through this hook for cross-instance view resolution.
+ * Use from non-React paths (event handlers, helpers, predicates). React
+ * render sites use {@link useCanonicalUserView} so they re-render when the
+ * cache updates.
  */
-export function useCanonicalUserView(user: User): User {
-  const key = canonicalUserKey(user);
-  const entry = useSpaceStore((state) => state.userViews.get(key));
-  return entry ? entry.user : user;
+export function getCanonicalUserView(row: User, origin: string): User {
+  return viewOf(row, useSpaceStore.getState().userViews.get(userKey(row, origin)));
+}
+
+/**
+ * Reactive lookup into the userViews cache for `row` as `origin` issued it.
+ * Subscribes to that person's entry, so the component re-renders when a
+ * better view lands (e.g. nova's own view of Frank arriving after orbit's
+ * copy of him filled the cache first). Returns the input unchanged on a miss.
+ *
+ * Whether the row is the signed-in user is a separate question, answered by
+ * `isMine` / `isMe` (`stores/authStore.ts`).
+ */
+export function useCanonicalUserView(row: User, origin: string): User {
+  const entry = useSpaceStore((state) => state.userViews.get(userKey(row, origin)));
+  return viewOf(row, entry);
 }

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { eq, and, desc, lt, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -17,6 +17,7 @@ import {
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
+import { parseHistoryPage, selectHistoryPage, markHistoryPageHonoured } from '../utils/messagePaging.js';
 import { fetchEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 
 /**
@@ -209,14 +210,65 @@ export function buildMessageWithUser(
   };
 }
 
+/**
+ * Hydrate channel message rows into the wire shape, keeping their order.
+ *
+ * One batch each for authors, attachments, reactions, embeds and reply
+ * targets (confined to `channelId`, see fetchReplyToMessages). A row whose
+ * author row is missing is dropped. Every read path that returns channel
+ * messages goes through here: history, messages-around and search.
+ */
+export function hydrateChannelMessages(
+  channelId: string,
+  messageRows: (typeof schema.messages.$inferSelect)[],
+): MessageWithUser[] {
+  if (messageRows.length === 0) return [];
+  const db = getDb();
+
+  const userIds = [...new Set(messageRows.map(m => m.userId))];
+  const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const messageIds = messageRows.map(m => m.id);
+  const allAttachments = db.select()
+    .from(schema.attachments)
+    .where(inArray(schema.attachments.messageId, messageIds))
+    .all();
+  const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
+  for (const att of allAttachments) {
+    const mid = att.messageId ?? '';
+    if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
+    attachmentMap.get(mid)!.push(att);
+  }
+
+  const reactionsMap = fetchReactionsForMessages(messageIds);
+  const embedMap = fetchEmbedsForMessages(messageIds);
+  const replyToMap = fetchReplyToMessages(channelId, messageRows);
+
+  return messageRows
+    .map(m => {
+      const user = userMap.get(m.userId);
+      if (!user) return null;
+      const reactions = reactionsMap.get(m.id) ?? [];
+      const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
+      return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
+    })
+    .filter((m): m is MessageWithUser => m !== null);
+}
+
 export async function messageRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/channels/:id/messages - Get messages with cursor pagination
+  // (before or after; see docs/systems/api.md, "Message history paging")
   app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/channels/:id/messages', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const before = request.query.before;
-    const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
+
+    const parsed = parseHistoryPage(request.query);
+    if (!parsed.ok) {
+      return sendError(reply, 400, parsed.code);
+    }
+    const { page } = parsed;
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
@@ -228,76 +280,17 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const db = getDb();
-
-    let messageRows: (typeof schema.messages.$inferSelect)[];
-
-    if (before) {
-      messageRows = db.select()
+    const messageRows = selectHistoryPage(page, schema.messages, (cursor, orderBy, limit) =>
+      db.select()
         .from(schema.messages)
-        .where(and(
-          eq(schema.messages.channelId, id),
-          lt(schema.messages.id, before)
-        ))
-        .orderBy(desc(schema.messages.createdAt))
+        .where(and(eq(schema.messages.channelId, id), cursor))
+        .orderBy(...orderBy)
         .limit(limit)
-        .all();
-    } else {
-      messageRows = db.select()
-        .from(schema.messages)
-        .where(eq(schema.messages.channelId, id))
-        .orderBy(desc(schema.messages.createdAt))
-        .limit(limit)
-        .all();
-    }
+        .all(),
+    );
 
-    // Reverse to get chronological order
-    messageRows.reverse();
-
-    if (messageRows.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    // Batch fetch users
-    const userIds = [...new Set(messageRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    // Batch fetch attachments
-    const messageIds = messageRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.messageId, messageIds))
-      .all();
-
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.messageId ?? '';
-      if (!attachmentMap.has(mid)) {
-        attachmentMap.set(mid, []);
-      }
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    // Batch fetch reactions for all messages
-    const reactionsMap = fetchReactionsForMessages(messageIds);
-
-    // Batch fetch embeds for all messages
-    const embedMap = fetchEmbedsForMessages(messageIds);
-
-    // Batch fetch reply-to messages, confined to this channel
-    const replyToMap = fetchReplyToMessages(id, messageRows);
-
-    const messages: MessageWithUser[] = messageRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is MessageWithUser => m !== null);
-
-    return reply.code(200).send(messages);
+    markHistoryPageHonoured(reply, page);
+    return reply.code(200).send(hydrateChannelMessages(id, messageRows));
   });
 
   // POST /api/channels/:id/messages - Create a message

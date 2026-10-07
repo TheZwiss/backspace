@@ -48,20 +48,30 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.7.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.7.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.7.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.8.0" date="2026-10-07">
+      <description>
+        <p>Instances now catch up with each other regularly, so a direct message, friend or profile change that got lost between two instances arrives later instead of staying missing. Channels open at your first unread message, and the message list keeps your place while messages load and while the message box grows. People from different instances are no longer mixed up, and mentions and notifications on another instance's channels now recognise you. Roles can be dragged by their row again, and role changes no longer reset the open chat. Instance admins can see why a peer was rejected or needs attention.</p>
+      </description>
+    </release>
+    <release version="1.7.1" date="2026-10-06">
+      <description>
+        <p>Fixes changes between instances that could get lost or arrive out of order, such as a status change, an edit or a deleted message. A screen share now stays running for the sharer when the stream changes codec or the voice connection restarts, and the sharer hears when people start and stop watching, also across instances. The stream settings in the desktop app now say whether System Audio will include Backspace's own voice chat. On mobile, direct messages get a call button. The web app also downloads less at startup and moves to a new version after a hard reload.</p>
+      </description>
+    </release>
     <release version="1.7.0" date="2026-09-29">
       <description>
         <p>Adds a role hierarchy with a way to order roles, lets moderators edit a member's roles from their profile card, and reworks how direct messages between instances are matched, so a conversation shows once however it was started. Also a setting to hide the floating call window.</p>

@@ -2,11 +2,10 @@ import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { and, eq } from 'drizzle-orm';
 import { isFederationRelayEnabled } from './federationOutbox.js';
-import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
-import { federationFetch } from './federationFetch.js';
 import { generateSnowflake } from './snowflake.js';
 import { healResetIncarnation } from './federationReset.js';
-import type { FederationRelayEvent } from '@backspace/shared';
+import { syncPeerMutationLog } from './federationSync.js';
+import type { PeerExitCause } from './federationPeerState.js';
 
 export type PeerActivationReason =
   | 'initiate_accepted'
@@ -18,6 +17,7 @@ export type PeerActivationReason =
   | 'approval_handshake'
   | 'health_check_recovery'
   | 'ensure_peered'
+  | 'stale_peering_verified'
   | 'startup_bootstrap';
 
 // Dedup: concurrent activations for the same peerId share one promise.
@@ -27,18 +27,12 @@ const inFlightActivation = new Map<string, Promise<void>>();
  * Called whenever federation_peers.status transitions to 'active' for any reason.
  * Two independent invariants — both run unconditionally:
  *   1. Reset outbox backoff (nextRetryAt = now, attempts = 0) for this peer.
- *   2. Pull-sync mutation log from peer's /api/federation/sync since lastSyncedAt.
+ *   2. Pull-sync the peer's mutation log (`syncPeerMutationLog`, utils/federationSync.ts)
+ *      from this instance's cursors for it, every context.
  *
- * Call sites (must remain exhaustive — grep `onPeerActivated(` to audit):
- *   - routes/federation.ts /peer/initiate activation
- *   - routes/federation.ts /peer/accept existing-rejected override
- *   - routes/federation.ts /peer/accept existing-awaiting_approval
- *   - routes/federation.ts /peer/accept existing-pending
- *   - routes/federation.ts /peer/accept new-peer
- *   - routes/federation.ts /approval-requests/:id/approve
- *   - utils/federationWorker.ts health check recovery
- *   - utils/federationPeering.ts ensurePeered/performHandshake
- *   - utils/federationWorker.ts startup bootstrap (via startupBootstrapSync)
+ * Called by the peer state machine (utils/federationPeerState.ts) on every
+ * transition into `active`, with the transition's activation reason, and by
+ * startupBootstrapSync. No other code calls it.
  *
  * Deduplicated by peerId — concurrent calls share one promise.
  */
@@ -81,9 +75,13 @@ export async function onPeerActivated(
         .where(eq(schema.federationPeers.id, peerId))
         .get();
       if (peerRow?.origin) {
+        // The record pass asks the peer about each of its users' rows here,
+        // one lookup at a time, so it runs in the background: the presence
+        // snapshot below must not wait for it.
+        const origin = peerRow.origin;
         const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-        await backfillStubUsernamesForPeer(peerRow.origin).catch((e) => {
-          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${peerRow.origin}) failed`, e);
+        void backfillStubUsernamesForPeer(origin).catch((e: unknown) => {
+          console.warn('[onPeerActivated] backfillStubUsernamesForPeer(%s) failed', origin, e);
         });
 
         // Re-emit a fresh presence snapshot to the activating peer so its stubs
@@ -92,14 +90,14 @@ export async function onPeerActivated(
         // markPeerStubsOffline ran on our side too.
         const { snapshotPresenceForPeer } = await import('./federationPresence.js');
         try { await snapshotPresenceForPeer(peerRow.origin); } catch (e) {
-          console.warn(`[onPeerActivated] snapshotPresenceForPeer(${peerRow.origin}) failed`, e);
+          console.warn('[onPeerActivated] snapshotPresenceForPeer(%s) failed', peerRow.origin, e);
         }
       }
 
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     } catch (err) {
-      console.error(`[federation] onPeerActivated(${peerId}, ${reason}) failed:`, err);
+      console.error('[federation] onPeerActivated(%s, %s) failed:', peerId, reason, err);
     }
   })();
 
@@ -125,97 +123,6 @@ export function resetOutboxBackoff(peerId: string): void {
     .run();
   if (result.changes > 0) {
     console.log(`[federation] Reset backoff on ${result.changes} outbox entries for peer ${peerId}`);
-  }
-}
-
-/**
- * Pull-sync mutation log from the peer's /api/federation/sync endpoint.
- * Runs three contextType passes (dm, friend, profile), paginating each.
- * Updates peer.lastSyncedAt to Date.now() on success; leaves it untouched
- * on transient failure so the next activation retries.
- */
-export async function syncPeerMutationLog(
-  peerId: string,
-  reason: PeerActivationReason,
-): Promise<void> {
-  if (!isFederationRelayEnabled()) return;
-
-  const db = getDb();
-  const peer = db.select().from(schema.federationPeers)
-    .where(eq(schema.federationPeers.id, peerId)).get();
-  if (!peer || peer.status !== 'active') return;
-
-  const activePeer = peer;  // narrowed by the guard above
-
-  const ourOrigin = getOurOrigin();
-  const signingSecret = (activePeer.pendingHmacSecret && activePeer.secretRotationAt)
-    ? activePeer.pendingHmacSecret
-    : activePeer.hmacSecret;
-
-  console.log(`[federation] Sync-pull from ${activePeer.origin} (reason=${reason}, since=${activePeer.lastSyncedAt ?? 0})`);
-
-  let totalEvents = 0;
-  let skippedEvents = 0;
-
-  type SyncRequestBody = {
-    sinceTimestamp: number;
-    limit: number;
-    contextType?: 'friend' | 'profile';
-  };
-
-  async function runPass(contextType?: 'friend' | 'profile'): Promise<boolean> {
-    let since = activePeer.lastSyncedAt ?? 0;
-    while (true) {
-      const bodyObj: SyncRequestBody = { sinceTimestamp: since, limit: 100 };
-      if (contextType) bodyObj.contextType = contextType;
-      const body = JSON.stringify(bodyObj);
-      const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
-      const resp = await federationFetch(activePeer.origin, '/api/federation/sync', {
-        method: 'POST', headers, body,
-        signal: AbortSignal.timeout(30_000),
-      }, 'approved');
-      if (!resp.ok) {
-        console.warn(`[federation] Sync-pull ${contextType ?? 'dm'} pass HTTP ${resp.status} for ${activePeer.origin}`);
-        return false;
-      }
-      const data = await resp.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
-      if (data.events.length === 0) return true;
-      const { processRelayEvents } = await import('../routes/federation.js');
-      for (const event of data.events) {
-        try {
-          await processRelayEvents([event], activePeer.origin, activePeer.origin, db);
-          totalEvents += 1;
-        } catch (err) {
-          skippedEvents += 1;
-          const errMsg = err instanceof Error ? err.message : String(err);
-          console.error(
-            `[federation] Skipping poison-pill event during sync-pull from ${activePeer.origin}: ` +
-            `eventType=${event.eventType} messageId=${event.messageId} timestamp=${event.timestamp} ` +
-            `error=${errMsg}`,
-          );
-        }
-      }
-      since = data.checkpoint;
-      if (!data.hasMore) return true;
-    }
-  }
-
-  try {
-    if (!(await runPass())) return;
-    if (!(await runPass('friend'))) return;
-    if (!(await runPass('profile'))) return;
-
-    db.update(schema.federationPeers)
-      .set({ lastSyncedAt: Date.now() })
-      .where(eq(schema.federationPeers.id, activePeer.id))
-      .run();
-
-    if (totalEvents > 0 || skippedEvents > 0) {
-      const skipSuffix = skippedEvents > 0 ? ` (${skippedEvents} skipped due to errors)` : '';
-      console.log(`[federation] Sync-pull from ${activePeer.origin} replayed ${totalEvents} events${skipSuffix}`);
-    }
-  } catch (err) {
-    console.error(`[federation] Sync-pull from ${activePeer.origin} failed:`, err);
   }
 }
 
@@ -312,7 +219,9 @@ async function fanoutOutboundSubscribers(peerId: string): Promise<void> {
 /**
  * Startup bootstrap — scan for freshly-peered rows (status='active', lastSyncedAt=0)
  * and run onPeerActivated for each. Replaces runInitialSyncForNewPeers.
- * Invoked from startFederationWorkers.
+ * Invoked from startFederationWorkers. Peers that have synced before are
+ * pulled by the periodic pull instead (`startPeerSyncWorkers`, first run a
+ * minute after boot), which is what covers a restart or a restore.
  */
 export async function startupBootstrapSync(): Promise<void> {
   if (!isFederationRelayEnabled()) return;
@@ -340,16 +249,13 @@ export async function startupBootstrapSync(): Promise<void> {
   const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
   for (const peer of allActivePeers) {
     backfillStubUsernamesForPeer(peer.origin).catch((err) => {
-      console.warn(`[startup] stub-backfill ${peer.origin} failed`, err);
+      console.warn('[startup] stub-backfill %s failed', peer.origin, err);
     });
   }
 }
 
-export type PeerDeactivationReason =
-  | 'network_threshold'        // outbox worker hit PEER_UNREACHABLE_THRESHOLD
-  | 'auth_threshold'           // outbox worker hit AUTH_FAILURE_THRESHOLD
-  | 'remote_rejected'          // auto-peer handshake got a 403 (PEERING_REQUIRES_APPROVAL or revoked)
-  | 'admin_revoked';           // admin revoked peering from this side
+// Why a peer left `active`: the cause of the transition (utils/federationPeerState.ts).
+export type PeerDeactivationReason = PeerExitCause;
 
 // Dedup: concurrent deactivations for the same peerId share one promise.
 // SEPARATE from inFlightActivation — a flapping peer's activate-then-deactivate
@@ -362,13 +268,8 @@ const inFlightDeactivation = new Map<string, Promise<void>>();
  * the peer origin, emitting dm_call_undeliverable { phase: 'host_unreachable', terminal: true }
  * to stranded ringed users and clearing the entries.
  *
- * Call sites (must remain exhaustive — grep `onPeerDeactivated(` to audit):
- *   - utils/federationWorker.ts handleOutboxDeliveryFailure when status flips to 'unreachable'
- *   - utils/federationWorker.ts auth-failure path when status flips to 'needs_attention'
- *   - utils/federationWorker.ts resolvePendingPeers case 'rejected'
- *   - routes/federation.ts admin revoke endpoint
- *   - routes/federation.ts admin reset endpoint (when it transitions to a non-active status)
- *   - utils/federationPeering.ts performHandshake 403 path (settleRejectedHandshake)
+ * Called by the peer state machine (utils/federationPeerState.ts) on every
+ * transition out of `active`, with the transition's cause. No other code calls it.
  *
  * Deduplicated by peerId — concurrent calls share one promise. Separate map from
  * onPeerActivated so flapping peers don't collapse transitions.

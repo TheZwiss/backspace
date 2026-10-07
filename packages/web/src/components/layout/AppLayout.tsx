@@ -486,6 +486,7 @@ export function AppLayout() {
           />
           <UserProfilePopout
             user={userProfilePopout.user}
+            origin={userProfilePopout.origin}
             onClose={closeUserProfile}
             anchor={userProfilePopout.anchor}
             placement={userProfilePopout.placement}

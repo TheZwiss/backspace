@@ -404,13 +404,14 @@ export function patchCopy(state: DmConversations, channelId: string, patch: (cha
 }
 
 /** A user update: `patch` applied to every copy. Pins do not move. */
-export function patchEveryCopy(state: DmConversations, patch: (channel: DmChannel) => DmChannel): DmOperation {
+/** `patch` gets each copy with the origin that issued it (its member rows are that origin's). */
+export function patchEveryCopy(state: DmConversations, patch: (channel: DmChannel, origin: string) => DmChannel): DmOperation {
   let changed = false;
   const byKey = new Map<string, DmConversation>();
   for (const [key, conversation] of state.byKey) {
     const copies = new Map<string, DmCopy>();
     for (const [origin, copy] of conversation.copies) {
-      const channel = patchedChannel(copy.channel, patch);
+      const channel = patchedChannel(copy.channel, (c) => patch(c, origin));
       if (channel !== copy.channel) changed = true;
       copies.set(origin, channel === copy.channel ? copy : { ...copy, channel });
     }

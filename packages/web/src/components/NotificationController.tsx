@@ -93,9 +93,11 @@ export function NotificationController() {
           const body = message.content
             ? replaceEmojiShortcodesInMarkdownSource(message.content).replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
             : i18n.t('chat:notification.attachmentOnly');
+          // The event's channel id is the one the message was filed under; a
+          // DM message has no `channelId` of its own (it has `dmChannelId`).
           showAlertNotification('message', displayName, body, {
-            channelId: message.channelId,
-            spaceId: useSpaceStore.getState().channelToSpaceMap.get(message.channelId),
+            channelId: alert.channelId,
+            spaceId: useSpaceStore.getState().channelToSpaceMap.get(alert.channelId),
             userId: currentUser?.id,
           });
         }

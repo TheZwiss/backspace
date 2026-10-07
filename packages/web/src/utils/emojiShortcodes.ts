@@ -1,5 +1,6 @@
-import data from '@emoji-mart/data';
+import { useSyncExternalStore } from 'react';
 import type { Emoji, EmojiMartData } from '@emoji-mart/data';
+import { getLoadedEmojiData, loadEmojiData, onEmojiDataLoaded } from './emojiData';
 
 // ─── Emoji shortcodes ───────────────────────────────────────────────────────
 // `:name:` text is turned into the emoji it names when user text is rendered.
@@ -8,12 +9,19 @@ import type { Emoji, EmojiMartData } from '@emoji-mart/data';
 // every client.
 //
 // Names, in order of precedence:
-//   1. the emoji picker's own names (emoji-mart's data set, bundled with the
-//      picker), including its aliases;
+//   1. the emoji picker's own names (emoji-mart's data set, the chunk
+//      emojiData.ts loads for the picker too), including its aliases;
 //   2. Discord's names that emoji-mart does not have (`:cross:`,
 //      `:slight_smile:`, `:regional_indicator_a:`), from the generated table in
-//      discordEmojiAliases.ts. That table is its own chunk: main.tsx loads it
-//      with `loadDiscordEmojiAliases()` before the first render;
+//      discordEmojiAliases.ts, also a chunk of its own.
+//   main.tsx waits for both (`waitForEmojiShortcodeNames`, index.html
+//   preloads the chunks) before the first render, so text normally never
+//   shows a shortcode that later turns into an emoji. If a chunk stalls past
+//   that wait or fails, text renders with shortcodes as written; conversion
+//   happens at render time and stored text is never changed, so nothing
+//   typed is lost. Whenever the names arrive later, from the startup load, a
+//   retry or the emoji picker loading the same data, every component that
+//   renders shortcodes (through `useEmojiShortcodeNames`) draws again;
 //   3. Discord's skin-tone spellings on any name from 1 or 2: `_tone1`..`_tone5`
 //      and `_light_skin_tone`.. `_dark_skin_tone` (tone 1 is the lightest).
 // In every name `_` and `-` are the same character, so `:flag_va:` finds
@@ -26,8 +34,6 @@ import type { Emoji, EmojiMartData } from '@emoji-mart/data';
 // `est.:cross:`, `:smile::smile:` and CJK text without spaces still convert.
 // Text inside a URL (`https://…`, `www.…`) is never converted, and unknown
 // names stay as typed.
-
-const EMOJI_DATA = data as EmojiMartData;
 
 /** A shortcode, optionally followed by the picker's skin tone: `:name:` or `:name::skin-tone-N:`. */
 const SHORTCODE_SOURCE = ':([a-z0-9_+-]+):(?::skin-tone-([1-6]):)?';
@@ -50,16 +56,19 @@ function isAsciiAlphanumeric(char: string | undefined): boolean {
 
 // ─── Name tables ────────────────────────────────────────────────────────────
 
+let emojiData: EmojiMartData | null = null;
 let martByName: Map<string, Emoji> | null = null;
 let martByNative: Map<string, Emoji> | null = null;
+const NO_EMOJI: ReadonlyMap<string, Emoji> = new Map();
 
-/** Normalised emoji-mart name or alias → emoji. Built on first use. */
-function getMartByName(): Map<string, Emoji> {
+/** Normalised emoji-mart name or alias → emoji. Built on first use after the data loads. */
+function getMartByName(): ReadonlyMap<string, Emoji> {
   if (martByName) return martByName;
+  if (!emojiData) return NO_EMOJI;
   const map = new Map<string, Emoji>();
-  for (const [id, emoji] of Object.entries(EMOJI_DATA.emojis)) map.set(normaliseName(id), emoji);
-  for (const [alias, id] of Object.entries(EMOJI_DATA.aliases)) {
-    const emoji = EMOJI_DATA.emojis[id];
+  for (const [id, emoji] of Object.entries(emojiData.emojis)) map.set(normaliseName(id), emoji);
+  for (const [alias, id] of Object.entries(emojiData.aliases)) {
+    const emoji = emojiData.emojis[id];
     if (emoji) map.set(normaliseName(alias), emoji);
   }
   martByName = map;
@@ -67,10 +76,11 @@ function getMartByName(): Map<string, Emoji> {
 }
 
 /** Emoji (without variation selectors) → its emoji-mart entry, for skin tones of Discord names. */
-function getMartByNative(): Map<string, Emoji> {
+function getMartByNative(): ReadonlyMap<string, Emoji> {
   if (martByNative) return martByNative;
+  if (!emojiData) return NO_EMOJI;
   const map = new Map<string, Emoji>();
-  for (const emoji of Object.values(EMOJI_DATA.emojis)) {
+  for (const emoji of Object.values(emojiData.emojis)) {
     const base = emoji.skins[0]?.native;
     if (base) map.set(stripVariation(base), emoji);
   }
@@ -79,18 +89,87 @@ function getMartByNative(): Map<string, Emoji> {
 }
 
 let discordAliases: Readonly<Record<string, string>> | null = null;
-let discordAliasesLoad: Promise<void> | null = null;
+let namesLoad: Promise<void> | null = null;
+
+// ─── Names arriving after the first render ──────────────────────────────────
+
+let namesVersion = 0;
+const namesListeners = new Set<() => void>();
+
+function namesChanged(): void {
+  namesVersion += 1;
+  for (const listener of [...namesListeners]) listener();
+}
+
+function subscribeToNames(listener: () => void): () => void {
+  namesListeners.add(listener);
+  return () => { namesListeners.delete(listener); };
+}
 
 /**
- * Load Discord's names (a separate chunk). Resolves once they are available,
- * or once loading has failed: the app renders either way, and without the
- * table only Discord-only names stay as typed.
+ * Subscribes a component that renders shortcodes to the names: it draws again
+ * when a part of them arrives after it first rendered. Call it at the top of
+ * any component that calls the functions below during render; a memoized
+ * component re-renders too, since the subscription is its own state.
  */
-export function loadDiscordEmojiAliases(): Promise<void> {
-  discordAliasesLoad ??= import('./discordEmojiAliases')
-    .then((module) => { discordAliases = module.DISCORD_EMOJI_ALIASES; })
-    .catch((error: unknown) => { console.warn('[emoji] Discord shortcode names failed to load:', error); });
-  return discordAliasesLoad;
+export function useEmojiShortcodeNames(): number {
+  return useSyncExternalStore(subscribeToNames, () => namesVersion);
+}
+
+function adoptEmojiData(data: EmojiMartData): void {
+  if (emojiData === data) return;
+  emojiData = data;
+  martByName = null;
+  martByNative = null;
+  namesChanged();
+  // The picker's load can be the first to succeed; fetch a Discord table the
+  // startup load could not get along with it.
+  if (!discordAliases) void loadEmojiShortcodeNames();
+}
+
+onEmojiDataLoaded(adoptEmojiData);
+const alreadyLoaded = getLoadedEmojiData();
+if (alreadyLoaded) adoptEmojiData(alreadyLoaded);
+
+/**
+ * Load every shortcode name: emoji-mart's data set and Discord's table, two
+ * chunks fetched in parallel. Resolves once both have arrived or failed; it
+ * never rejects, because the app renders either way. Without emoji-mart's
+ * data no name converts; without Discord's table only Discord-only names stay
+ * as typed. A part that failed is fetched again on the next call.
+ */
+export function loadEmojiShortcodeNames(): Promise<void> {
+  namesLoad ??= Promise.all([
+    // A successful load reaches the tables through onEmojiDataLoaded.
+    emojiData ? Promise.resolve() : loadEmojiData()
+      .then(() => undefined)
+      .catch((error: unknown) => { console.warn('[emoji] Emoji names failed to load:', error); }),
+    discordAliases ? Promise.resolve() : import('./discordEmojiAliases')
+      .then((module) => {
+        discordAliases = module.DISCORD_EMOJI_ALIASES;
+        namesChanged();
+      })
+      .catch((error: unknown) => { console.warn('[emoji] Discord shortcode names failed to load:', error); }),
+  ]).then(() => {
+    if (!emojiData || !discordAliases) namesLoad = null;
+  });
+  return namesLoad;
+}
+
+/**
+ * Waits for {@link loadEmojiShortcodeNames}, but no longer than `maxWaitMs`.
+ * main.tsx renders when this resolves: a chunk that stalls without failing
+ * must not hold the app on a blank page. The load itself carries on, and
+ * text drawn meanwhile converts when it lands.
+ */
+export function waitForEmojiShortcodeNames(maxWaitMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    void loadEmojiShortcodeNames().then(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 function discordAlias(name: string): string | undefined {

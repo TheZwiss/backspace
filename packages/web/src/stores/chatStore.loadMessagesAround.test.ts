@@ -79,7 +79,7 @@ beforeEach(() => {
     hasMore: new Map([[CHANNEL, true]]),
     channelAccessTimes: new Map(),
     scrollPositions: new Map(),
-    detachedChannels: new Set(),
+    detachedChannels: new Map(),
   });
 });
 
@@ -138,7 +138,7 @@ describe('chatStore.loadMessagesAround', () => {
 
 describe('chatStore.loadMessages after a jump', () => {
   it('a forced reload returns the channel to the present', async () => {
-    useChatStore.setState({ detachedChannels: new Set([CHANNEL]) });
+    useChatStore.setState({ detachedChannels: new Map([[CHANNEL, []]]) });
     channelsMessages.mockResolvedValue(range(950, 999));
 
     await useChatStore.getState().loadMessages(CHANNEL, true);

@@ -71,6 +71,7 @@ function renderRow(props: Partial<Parameters<typeof DmMemberRow>[0]> = {}) {
     <>
       <DmMemberRow
         member={member}
+        origin={props.origin ?? ''}
         isOwner={props.isOwner ?? false}
         isSelf={props.isSelf ?? false}
         callerIsOwner={props.callerIsOwner ?? false}
@@ -295,6 +296,7 @@ describe('DmMemberRow — profile popout anchoring', () => {
     // own coordinates once it knows how tall it is (see UserProfilePopout).
     expect(openUserProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: member.id }),
+      '',
       rect,
       'left',
     );

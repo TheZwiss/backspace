@@ -67,7 +67,8 @@ function renderEditor(overrides: Override[]) {
       spaceId={SPACE_ID}
       permDefs={PERM_DEFS}
       unhideNote="Saving makes this channel visible to every member."
-      getOverrides={vi.fn().mockResolvedValue(overrides)}
+      overrides={overrides}
+      onSaved={vi.fn()}
       putOverride={putOverride}
       deleteOverride={deleteOverride}
     />,

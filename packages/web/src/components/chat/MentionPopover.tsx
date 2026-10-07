@@ -21,7 +21,7 @@ function MentionMemberRow({
   onSelect: (candidate: ChannelUser) => void;
   mobile: boolean;
 }) {
-  const canonical = useCanonicalUserView(candidate.user);
+  const canonical = useCanonicalUserView(candidate.user, candidate.origin);
   const roleColor = candidate.nameColor;
   const displayName = userDisplayName(canonical);
   // The username is the second label whenever it says more than the name:

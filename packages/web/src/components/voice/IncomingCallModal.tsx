@@ -42,7 +42,8 @@ export function IncomingCallModal() {
     const dmChannel = dmChannels.find(d => d.id === incomingCall.dmChannelId);
     return dmChannel?.members.find(m => m.id === incomingCall.callerId) ?? null;
   })();
-  const _canonicalCaller = useCanonicalUserView((_rawCallerMember as User | null) ?? _FALLBACK_USER);
+  const _callerOrigin = useSpaceStore((s) => (incomingCall?.dmChannelId ? s.channelOriginMap.get(incomingCall.dmChannelId) ?? '' : ''));
+  const _canonicalCaller = useCanonicalUserView((_rawCallerMember as User | null) ?? _FALLBACK_USER, _callerOrigin);
   const callerMember = _rawCallerMember ? _canonicalCaller : null;
 
   if (!incomingCall) return null;

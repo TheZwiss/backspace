@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 
 // A bio is short profile prose: paragraphs, bold, italics, strikethrough and
 // links. Anything else it contains (headings, lists, code, tables) is
@@ -23,6 +24,7 @@ interface ProfileBioProps {
 
 /** The "About me" text of a profile, as the profile card and the full profile show it. */
 export function ProfileBio({ bio }: ProfileBioProps) {
+  useEmojiShortcodeNames();
   return (
     <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
       <ReactMarkdown

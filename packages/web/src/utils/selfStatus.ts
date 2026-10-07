@@ -1,5 +1,5 @@
 import { isChosenUserStatus, ownsChosenStatus, type ChosenUserStatus, type User } from '@backspace/shared';
-import { homeHostOf } from './identity';
+import { homeHostOf, userKey } from './identity';
 
 /**
  * Where the signed-in user's chosen status lives and how the client reads it.
@@ -85,23 +85,18 @@ export function ownStatusReport(
   return { owner: authority.kind, status: report.status };
 }
 
-type RemoteAccount = Pick<User, 'homeInstance' | 'homeUserId'>;
+type RemoteAccount = Pick<User, 'id' | 'homeInstance' | 'homeUserId'>;
 
 /**
  * Whether a remote instance's account is this user's federated identity there:
- * its home host and home user id name the user's true home account. The same
- * check `ensureRemoteCredential` applies. A native account someone signed in
- * to on that remote is not.
+ * a replicated row naming the same person as the page's session row
+ * (`userKey`). The check `ensureRemoteCredential` applies. A native account
+ * someone signed in to on that remote is not, even where its id happens to
+ * match.
  */
-export function isMyFederatedIdentity(
-  user: SessionUser,
-  remote: RemoteAccount,
-  pageHost: string,
-): boolean {
-  if (!remote.homeInstance || !remote.homeUserId) return false;
-  const trueHomeHost = homeHostOf(user.homeInstance ?? pageHost);
-  if (homeHostOf(remote.homeInstance) !== trueHomeHost) return false;
-  return remote.homeUserId === (user.homeUserId ?? user.id);
+export function isMyFederatedIdentity(user: SessionUser, remote: RemoteAccount): boolean {
+  if (!remote.homeInstance) return false;
+  return userKey(remote, '') === userKey(user, '');
 }
 
 /**
@@ -112,10 +107,9 @@ export function isMyFederatedIdentity(
 export function statusToAssertOnRemote(
   user: SessionUser | null | undefined,
   remote: RemoteAccount & Pick<User, 'status'>,
-  pageHost: string,
 ): ChosenUserStatus | null {
   if (!user || statusAuthority(user)?.kind !== 'session') return null;
-  if (!isMyFederatedIdentity(user, remote, pageHost)) return null;
+  if (!isMyFederatedIdentity(user, remote)) return null;
   const mine = myChosenStatus(user, null);
   if (!mine || mine === remote.status) return null;
   return mine;

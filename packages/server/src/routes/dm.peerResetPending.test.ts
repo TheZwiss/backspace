@@ -86,7 +86,7 @@ function seedPeer(): void {
     origin: 'https://remote.example',
     hmacSecret: 'secret',
     status: 'needs_attention',
-    needsAttentionReason: 'peer_reset_detected',
+    statusReason: 'peer_reset_detected',
     peerInstanceId: 'dead-epoch',
     observedPeerInstanceId: 'new-epoch',
     createdAt: Date.now(),

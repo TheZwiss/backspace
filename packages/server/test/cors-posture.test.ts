@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MESSAGE_PAGING_HEADER } from '@backspace/shared';
 import { bootTwoInstances, type TwoInstanceHarness } from './helpers/twoInstanceHarness.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -83,6 +84,16 @@ describe('CORS posture', () => {
     const allowed = (res.headers.get('access-control-allow-headers') ?? '').toLowerCase();
     expect(allowed).toContain('upload-offset');
     expect(allowed).toContain('tus-resumable');
+  });
+
+  it('exposes the message paging header to a browser on another instance', async () => {
+    // A client paging forward on a remote instance reads this header to tell
+    // whether `after` was honoured; unexposed, it would read as an old server.
+    const res = await fetch(`${h.remote.origin}/api/instance/info`, {
+      headers: { Origin: h.home.origin },
+    });
+    const exposed = (res.headers.get('access-control-expose-headers') ?? '').toLowerCase();
+    expect(exposed).toContain(MESSAGE_PAGING_HEADER.toLowerCase());
   });
 
   it('serves a source file that documents why the origin stays reflected', async () => {

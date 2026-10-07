@@ -166,6 +166,7 @@ function Workbench({ scene }: { scene: Scene }) {
       {(scene === 'card' || scene === 'no-roles') && (
         <UserProfilePopout
           user={cardUser}
+          origin=""
           member={{ spaceId: SPACE_ID, userId: cardUser.id }}
           onClose={() => undefined}
           anchor={ANCHOR}

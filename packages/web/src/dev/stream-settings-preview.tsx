@@ -3,6 +3,7 @@
 // `StreamQualityControls` inside the two surfaces that ship it (the live
 // settings popover and the setup screen's drawer) with seeded stores, one scene
 // per `?scene=` so every state can be screenshotted without a voice call.
+// `?lang=en|de|ru|zh` picks the interface language (initI18n's dev preview).
 import { createRoot } from 'react-dom/client';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from '../components/voice/StreamQualityControls';
@@ -47,6 +48,10 @@ interface Scene {
   live?: { audio: ScreenShareAudioState; preference: boolean };
   /** Render as the desktop app on this platform (a stub `window.backspace`, read for the platform notes). */
   desktopPlatform?: 'win32' | 'darwin' | 'linux';
+  /** The desktop app's `getSystemAudioCapability` answer; absent = an app too old to have the method. */
+  ownAudio?: OwnAudioInSystemAudio;
+  /** System Audio preference before a share starts (the setup screen); default on. */
+  preference?: boolean;
 }
 
 const SCENES: Record<string, Scene> = {
@@ -91,6 +96,73 @@ const SCENES: Record<string, Scene> = {
     live: { audio: 'published', preference: true },
     desktopPlatform: 'win32',
   },
+  'win10-off': {
+    caption: 'Desktop app, Windows 10: System Audio still off, the warning is already there',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'win32',
+    ownAudio: 'included',
+    preference: false,
+  },
+  'win10-on': {
+    caption: 'Desktop app, Windows 10: System Audio on',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'win32',
+    ownAudio: 'included',
+  },
+  'win11-off': {
+    caption: 'Desktop app, Windows 11: System Audio off, nothing to warn about',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'win32',
+    ownAudio: 'excluded',
+    preference: false,
+  },
+  'win11-on': {
+    caption: 'Desktop app, Windows 11: System Audio on, Backspace is left out',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'win32',
+    ownAudio: 'excluded',
+  },
+  'mac-14-on': {
+    caption: 'Desktop app, macOS 14.2+: System Audio on, Backspace is left out',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'darwin',
+    ownAudio: 'excluded',
+  },
+  'mac-13-off': {
+    caption: 'Desktop app, macOS 13.0 to 14.1: System Audio off, warned',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'darwin',
+    ownAudio: 'included',
+    preference: false,
+  },
+  'mac-12': {
+    caption: 'Desktop app, macOS 12: no system audio at all',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'darwin',
+    ownAudio: 'unavailable',
+    preference: false,
+  },
+  'linux-off': {
+    caption: 'Desktop app, Linux: System Audio off, warned',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'linux',
+    ownAudio: 'included',
+    preference: false,
+  },
+  'win-old-app': {
+    caption: 'Desktop app too old to report the capability (Windows): the previous note, once on',
+    origin: '',
+    hostLimits: HOME_LIMITS,
+    desktopPlatform: 'win32',
+  },
   'live-unavailable': {
     caption: 'Browser share started without audio: cannot be added mid-stream, switch disabled and explained',
     origin: '',
@@ -101,7 +173,11 @@ const SCENES: Record<string, Scene> = {
 
 function seed(scene: Scene): void {
   if (scene.desktopPlatform) {
-    (window as { backspace?: unknown }).backspace = { platform: scene.desktopPlatform };
+    const ownAudio = scene.ownAudio;
+    (window as { backspace?: unknown }).backspace = {
+      platform: scene.desktopPlatform,
+      ...(ownAudio ? { getSystemAudioCapability: () => Promise.resolve(ownAudio) } : {}),
+    };
   }
   useSettingsStore.setState({
     streamingLimits: scene.origin ? HOME_LIMITS : scene.hostLimits,
@@ -113,7 +189,7 @@ function seed(scene: Scene): void {
     screenShareAudio: scene.live?.audio ?? null,
     screenShareConfig: {
       height: 1080, fps: 60, mode: 'gaming', customBitrateKbps: null,
-      shareAudio: scene.live?.preference ?? true, codec: 'vp9',
+      shareAudio: scene.live?.preference ?? scene.preference ?? true, codec: 'vp9',
     },
   });
 }
@@ -169,9 +245,10 @@ async function main(): Promise<void> {
   const host = document.getElementById('root');
   if (!host) throw new Error('missing #root');
   initializeInterfaceScale();
-  const key = new URLSearchParams(window.location.search).get('scene') ?? 'remote';
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get('scene') ?? 'remote';
   const scene = SCENES[key] ?? SCENES.remote!;
-  await initI18n();
+  await initI18n(); // reads `?lang=` itself in dev
   seed(scene);
   createRoot(host).render(<Workbench scene={scene} />);
 }

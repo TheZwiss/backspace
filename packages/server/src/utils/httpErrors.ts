@@ -51,6 +51,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   peer_pending_local_admin: 'Your admin has not approved federation with this instance yet',
   peer_unreachable: 'The remote instance is unreachable',
   PEER_EXISTS_RESET_REQUIRED: 'A peer record for this instance already exists; reset it first',
+  PEER_REVOKED: 'Peering with this instance has been revoked',
+  PEER_HANDSHAKE_IN_PROGRESS: 'This instance is completing its own peering handshake with you; yours will not be used',
 
   recipient_deleted: "This user's account was deleted",
 
@@ -66,6 +68,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   account_deleted: 'This account has been deleted',
   target_domain_required: 'targetDomain is required (string)',
   native_account_required: 'Only native accounts can mint attach proofs',
+  reattach_handle_taken: 'Another account on this instance signs in with that handle',
   username_confirmation_required: 'Username confirmation is required',
   username_confirmation_mismatch: 'Username does not match',
   avatar_url_invalid: 'Avatar URL must be a relative upload path or http/https URL',
@@ -119,6 +122,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   message_update_failed: 'Failed to update message',
   message_not_found: 'Message not found',
   not_message_author: 'You can only edit or delete your own messages',
+  system_message_immutable: 'System messages cannot be edited',
   // admin-settings
   field_not_boolean: '{{field}} must be a boolean',
   instance_settings_missing: 'Instance settings not initialized',
@@ -223,6 +227,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   message_empty: 'Message must have content or attachments',
   message_edit_not_author: 'You can only edit your own messages',
   message_delete_forbidden: 'You cannot delete this message',
+  paging_cursor_conflict: 'Use either before or after, not both',
   internal_error: 'Something went wrong on the server',
   // misc
   voice_disabled: 'Voice/video is not configured on this server',

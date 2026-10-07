@@ -5,6 +5,7 @@ import { Highlight, themes } from 'prism-react-renderer';
 import type { Components } from 'react-markdown';
 import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { replaceMentionTokens } from '../../utils/mentionTokens';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
@@ -239,6 +240,7 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, channelId = null }: MarkdownRendererProps) {
+  useEmojiShortcodeNames();
   return (
     <MentionChannelContext.Provider value={channelId}>
       <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>

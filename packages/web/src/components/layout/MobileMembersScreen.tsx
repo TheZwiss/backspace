@@ -8,60 +8,12 @@ import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
-import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
-
-/**
- * Which heading a member group renders under: the owner and the plain
- * "online" bucket are translated, a role group shows the role's own name.
- */
-type MemberGroupKind = 'owner' | 'role' | 'online';
-
-interface MemberGroup {
-  key: string;
-  kind: MemberGroupKind;
-  /** The role name for `kind: 'role'`; null for the translated buckets. */
-  label: string | null;
-  color: string | undefined;
-  position: number;
-}
-
-/**
- * Derives the display group for a member based on their highest-positioned role
- * or owner status.
- */
-function getMemberGroup(member: MemberWithUser, ownerId: string | undefined): MemberGroup {
-  if (ownerId && member.userId === ownerId) {
-    const ownerRole = member.roles?.find(r => r.position > 0);
-    return {
-      key: '__owner__',
-      kind: 'owner',
-      label: null,
-      color: ownerRole?.color ?? 'rgb(var(--accent-rose))',
-      position: Infinity,
-    };
-  }
-  if (member.roles && member.roles.length > 0) {
-    const sorted = [...member.roles].sort((a, b) => b.position - a.position);
-    const top = sorted[0]!;
-    return {
-      key: top.id,
-      kind: 'role',
-      label: top.name.toUpperCase(),
-      color: top.color,
-      position: top.position,
-    };
-  }
-  return {
-    key: '__online__',
-    kind: 'online',
-    label: null,
-    color: undefined,
-    position: -1,
-  };
-}
+import { groupMembers, memberNameColor, type MemberGroupKind } from '../../utils/memberGroups';
 
 function MobileMemberRow({
   member,
@@ -80,9 +32,9 @@ function MobileMemberRow({
   accentClass: string;
   onClickMember: (member: MemberWithUser) => void;
 }) {
-  const canonical = useCanonicalUserView(member.user);
-  const { baseName } = parseFederatedUsername(canonical.username);
-  const displayName = canonical.displayName ?? baseName;
+  const origin = useSpaceOrigin(member.spaceId);
+  const canonical = useCanonicalUserView(member.user, origin);
+  const displayName = userDisplayName(canonical);
 
   const rowClass = isRichActivity
     ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
@@ -146,41 +98,18 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
   const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === spaceId;
   const showMemberSkeleton = useDelayedLoading(isLoadingSpace);
 
-  const { roleGroups, offlineMembers } = useMemo(() => {
-    const online = members.filter(m => m.user.status !== 'offline');
-    const offline = members.filter(m => m.user.status === 'offline');
-
-    const groups = new Map<string, { kind: MemberGroupKind; label: string | null; color: string | undefined; position: number; members: MemberWithUser[] }>();
-    for (const m of online) {
-      const group = getMemberGroup(m, ownerId);
-      if (!groups.has(group.key)) {
-        groups.set(group.key, { kind: group.kind, label: group.label, color: group.color, position: group.position, members: [] });
-      }
-      groups.get(group.key)!.members.push(m);
-    }
-
-    const sorted = [...groups.entries()].sort(
-      (a, b) => b[1].position - a[1].position
-    );
-
-    return { roleGroups: sorted, offlineMembers: offline };
-  }, [members, ownerId]);
+  const { groups: roleGroups, offline: offlineMembers } = useMemo(() => groupMembers(members, ownerId), [members, ownerId]);
 
   const totalCount = members.length;
 
   const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
-    if (member.roles && member.roles.length > 0) {
-      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
-      return { color: sorted[0]!.color };
-    }
-    if (ownerId && member.userId === ownerId) {
-      return { color: 'rgb(var(--accent-rose))' };
-    }
-    return undefined;
+    const color = memberNameColor(member, ownerId);
+    return color ? { color } : undefined;
   };
 
   const handleMemberClick = (member: MemberWithUser) => {
-    pushMobileScreen('user-profile', { userId: member.userId, spaceId: member.spaceId, memberUserId: member.userId });
+    const origin = useSpaceStore.getState().spaces.find(s => s.id === member.spaceId)?._instanceOrigin ?? '';
+    pushMobileScreen('user-profile', { userId: member.userId, origin, spaceId: member.spaceId, memberUserId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {
@@ -211,7 +140,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
     );
   };
 
-  const onlineCount = roleGroups.reduce((sum, [, g]) => sum + g.members.length, 0);
+  const onlineCount = roleGroups.reduce((sum, g) => sum + g.members.length, 0);
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
@@ -273,8 +202,8 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
           </div>
         ) : (
           <>
-            {roleGroups.map(([key, group]) => (
-              <div key={key} className="mb-4">
+            {roleGroups.map((group) => (
+              <div key={group.key} className="mb-4">
                 <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
                 </h3>

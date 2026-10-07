@@ -11,7 +11,6 @@ import { BackspaceApiClient, HttpError, createApiClient, api } from '../api/clie
 import { useAuthStore } from './authStore';
 import {
   setApiForOriginResolver,
-  setUserIdForOriginResolver,
   setOriginFromHostnameResolver,
   setTokenForOriginResolver,
 } from '../utils/crossStoreResolvers';
@@ -20,7 +19,8 @@ import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemot
 // dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
 // so a static import here does not create an import-time cycle.
 import { useUIStore } from './uiStore';
-import { homeHostOf, parseFederatedUsername } from '../utils/identity';
+import { homeHostOf, homeIdentityOf, parseFederatedUsername } from '../utils/identity';
+import { isMyFederatedIdentity } from '../utils/selfStatus';
 // The registry's `errorMessage` carries one of these codes, never a sentence:
 // the Connections row is what turns it into words, in the user's language.
 import { registryReason } from '../i18n/registryErrors';
@@ -251,8 +251,8 @@ function resolveCredentialHomeApi(): BackspaceApiClient | null {
  * signal that the remote hash is something other than the issued secret.
  *
  * Never touches an account that is not this user's federated identity on that
- * instance: `homeInstance` and `homeUserId` must both match, so a native
- * account someone logged into on the remote is left alone.
+ * instance (`isMyFederatedIdentity`), so a native account someone logged into
+ * on the remote is left alone.
  */
 export async function ensureRemoteCredential(
   instance: ConnectedInstance,
@@ -261,13 +261,9 @@ export async function ensureRemoteCredential(
   const currentUser = useAuthStore.getState().user;
   if (!currentUser) return;
 
-  const trueHomeHost = homeHostOf(currentUser.homeInstance ?? window.location.host);
-  if (homeHostOf(instance.origin) === trueHomeHost) return; // home keeps the real password
-
-  const remote = instance.user;
-  if (!remote.homeInstance || !remote.homeUserId) return;
-  if (homeHostOf(remote.homeInstance) !== trueHomeHost) return;
-  if (remote.homeUserId !== (currentUser.homeUserId ?? currentUser.id)) return;
+  const trueHome = homeIdentityOf(currentUser, '');
+  if (trueHome && homeHostOf(instance.origin) === homeHostOf(trueHome.host)) return; // home keeps the real password
+  if (!isMyFederatedIdentity(currentUser, instance.user)) return;
 
   const homeApi = resolveCredentialHomeApi();
   if (!homeApi) return;
@@ -1605,15 +1601,6 @@ setApiForOriginResolver((origin: string): BackspaceApiClient => {
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
   if (!instance) return api;
   return instance.api;
-});
-
-// ─── User ID resolution (federation) ──────────────────────────────────────────
-// Maps an origin to the local user's ID on that remote instance.
-// Used by voice join/leave to optimistically add/remove the correct user ID.
-
-setUserIdForOriginResolver((origin: string): string | undefined => {
-  const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
-  return instance?.user.id;
 });
 
 // ─── Token resolution (federation) ────────────────────────────────────────────

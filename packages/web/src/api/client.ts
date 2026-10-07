@@ -81,7 +81,7 @@ import type {
   TelemetryPayload,
   TelemetryStatus,
 } from '@backspace/shared';
-import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
+import { MESSAGE_PAGING_AFTER, MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
 export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
@@ -90,11 +90,29 @@ export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, F
  * English text; `code` and `details` let the client say it in the user's
  * language.
  */
+/**
+ * The member an owner-only group DM request acts on, as the receiving
+ * instance can find them: its own local id, or a home identity it resolves.
+ */
+export type DmMemberTarget =
+  | { userId: string }
+  | { homeUserId: string; homeInstance: string };
+
 export interface CheckUsernameResponse {
   available: boolean;
   reason?: string;
   code?: ErrorCode;
   details?: ErrorDetails;
+}
+
+/**
+ * A history request with an `after` cursor. `forward` is false when the
+ * server ignored the cursor (it predates forward paging): `messages` is then
+ * the newest page, not the page after the cursor.
+ */
+export interface HistoryPageAfter<T> {
+  messages: T[];
+  forward: boolean;
 }
 
 /** The parts of an error body the client reads; see HttpError.fromBody for the vintages. */
@@ -211,6 +229,7 @@ export class BackspaceApiClient {
     delete: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<MessageWithUser[]>;
     messagesAround: (id: string, messageId: string, limit?: number) => Promise<MessageWithUser[]>;
+    messagesAfter: (id: string, after: string, limit?: number) => Promise<HistoryPageAfter<MessageWithUser>>;
     sendMessage: (channelId: string, data: CreateMessageRequest) => Promise<MessageWithUser>;
     getOverrides: (channelId: string) => Promise<{ channelId: string; targetType: string; targetId: string; allow: string; deny: string }[]>;
     putOverride: (channelId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<{ success: boolean }>;
@@ -243,50 +262,22 @@ export class BackspaceApiClient {
     close: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<DmMessageWithUser[]>;
     messagesAround: (id: string, messageId: string, limit?: number) => Promise<DmMessageWithUser[]>;
+    messagesAfter: (id: string, after: string, limit?: number) => Promise<HistoryPageAfter<DmMessageWithUser>>;
     sendMessage: (id: string, data: CreateDmMessageRequest) => Promise<DmMessageWithUser>;
     updateMessage: (id: string, data: UpdateMessageRequest) => Promise<DmMessageWithUser>;
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
     addMember: (dmChannelId: string, data: AddDmMemberRequest) => Promise<DmChannel>;
     leave: (dmChannelId: string) => Promise<{ success: boolean }>;
     /**
-     * Owner-only: rename a group DM and/or update its icon.
-     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) so the
-     * federation event's sourceInstance equals the channel's ownerHomeInstance
-     * (required by the receiver's authority check).
+     * Owner-only: rename a group DM and/or update its icon, on this client's
+     * instance. `channelId` is that instance's copy. The owner's instance is
+     * chosen, and the ids translated, by `utils/groupDmOwnerActions.ts`.
      */
     updateMetadata: (channelId: string, body: { name?: string | null; icon?: string | null }) => Promise<DmChannel>;
-    /**
-     * Owner-only: kick a member from a group DM.
-     *
-     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see
-     * updateMetadata. The optional `federated` arg is required when the
-     * target is a federated user: the channel-serving instance and the
-     * owner-serving instance disagree on the local replicated user id, and
-     * the home view surfaced through `userViews` carries the home id, not
-     * the owner instance's local id. When `federated` is supplied, the
-     * server resolves it via `resolveOrCreateReplicatedUser`. Without it,
-     * `targetUserId` is treated as a local id on the owner instance.
-     */
-    kickMember: (
-      channelId: string,
-      targetUserId: string,
-      federated?: { homeUserId: string; homeInstance: string },
-    ) => Promise<{ success: boolean }>;
-    /**
-     * Owner-only: transfer group DM ownership to another member without leaving.
-     *
-     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see
-     * updateMetadata. The optional `federated` arg is required for
-     * federated targets, mirroring `kickMember`. When supplied, the server
-     * uses `resolveOrCreateReplicatedUser(homeUserId, homeInstance)` to
-     * find the local user row. Without it, `newOwnerId` is treated as a
-     * local id on the owner instance.
-     */
-    transferOwnership: (
-      channelId: string,
-      newOwnerId: string,
-      federated?: { homeUserId: string; homeInstance: string },
-    ) => Promise<DmChannel>;
+    /** Owner-only: remove `target` from a group DM, on this client's instance. See `updateMetadata`. */
+    kickMember: (channelId: string, target: DmMemberTarget) => Promise<{ success: boolean }>;
+    /** Owner-only: make `target` the owner of a group DM, on this client's instance. See `updateMetadata`. */
+    transferOwnership: (channelId: string, target: DmMemberTarget) => Promise<DmChannel>;
     spaceInvite: (body: SpaceInviteRequest) => Promise<SpaceInviteResponse>;
   };
 
@@ -319,7 +310,7 @@ export class BackspaceApiClient {
 
   readonly roles: {
     create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) => Promise<Role>;
-    update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) => Promise<Role>;
+    update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; above?: string; below?: string; permissions?: string }) => Promise<Role>;
     delete: (spaceId: string, roleId: string) => Promise<{ success: boolean }>;
   };
 
@@ -400,12 +391,13 @@ export class BackspaceApiClient {
   };
 
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
-    async function request<T>(
+    /** Send a request and return the successful response; a failure throws. */
+    async function send(
       method: string,
       path: string,
       body?: unknown,
       requireAuth = true,
-    ): Promise<T> {
+    ): Promise<Response> {
       const headers: Record<string, string> = {};
 
       if (body) {
@@ -452,7 +444,33 @@ export class BackspaceApiClient {
         throw HttpError.fromBody(response.status, await response.json().catch(() => null));
       }
 
+      return response;
+    }
+
+    async function request<T>(
+      method: string,
+      path: string,
+      body?: unknown,
+      requireAuth = true,
+    ): Promise<T> {
+      const response = await send(method, path, body, requireAuth);
       return response.json() as Promise<T>;
+    }
+
+    /**
+     * The page after `after` in a channel's or DM's history. `forward` says
+     * whether the server honoured the cursor; a server that predates forward
+     * paging answers with the newest page instead (docs/systems/api.md,
+     * "Message history paging").
+     */
+    async function historyAfter<T>(path: string, after: string, limit: number): Promise<HistoryPageAfter<T>> {
+      const params = new URLSearchParams();
+      params.set('after', after);
+      params.set('limit', String(limit));
+      const response = await send('GET', `${path}?${params}`);
+      const forward = response.headers.get(MESSAGE_PAGING_HEADER) === MESSAGE_PAGING_AFTER;
+      const messages = await response.json() as T[];
+      return { messages, forward };
     }
 
     this.auth = {
@@ -547,6 +565,8 @@ export class BackspaceApiClient {
         params.set('limit', String(limit));
         return request<MessageWithUser[]>('GET', `/channels/${id}/messages?${params}`);
       },
+      messagesAfter: (id: string, after: string, limit = 50) =>
+        historyAfter<MessageWithUser>(`/channels/${id}/messages`, after, limit),
       messagesAround: (id: string, messageId: string, limit = 50) => {
         const params = new URLSearchParams();
         params.set('messageId', messageId);
@@ -604,6 +624,8 @@ export class BackspaceApiClient {
         params.set('limit', String(limit));
         return request<DmMessageWithUser[]>('GET', `/dm/${id}/messages?${params}`);
       },
+      messagesAfter: (id: string, after: string, limit = 50) =>
+        historyAfter<DmMessageWithUser>(`/dm/${id}/messages`, after, limit),
       messagesAround: (id: string, messageId: string, limit = 50) => {
         const params = new URLSearchParams();
         params.set('messageId', messageId);
@@ -620,44 +642,26 @@ export class BackspaceApiClient {
         request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
       leave: (dmChannelId: string) =>
         request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
-      // Owner-only methods. Each first re-routes through the owner's home
-      // instance via getApiForOrigin(getOwnerInstanceForDm(channelId)). When
-      // the resolved client is `this`, we fall through to the local request
-      // (terminating the recursion). When it's a different client (i.e. a
-      // remote BackspaceApiClient), we delegate to that client's identical
-      // method, which will see itself as `this` and execute the request.
-      // This keeps the federation event's sourceInstance equal to the
-      // channel's current ownerHomeInstance — required by receiver authority
-      // checks (see docs/systems/federation.md and the kick-authority test).
-      updateMetadata: (channelId, body) => {
-        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
-        if (target !== this) return target.dm.updateMetadata(channelId, body);
-        return request<DmChannel>('PATCH', `/dm/${channelId}`, body);
-      },
-      kickMember: (channelId, targetUserId, federated) => {
-        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
-        if (target !== this) return target.dm.kickMember(channelId, targetUserId, federated);
-        // For federated targets, the URL segment carries the homeUserId and
-        // the `homeInstance` query string signals federated resolution. The
-        // server route resolves via `resolveOrCreateReplicatedUser`. For
-        // local targets, the URL segment is the local user id (legacy form)
-        // and no query is appended.
-        if (federated) {
-          const homeId = encodeURIComponent(federated.homeUserId);
-          const homeInst = encodeURIComponent(federated.homeInstance);
-          return request<{ success: boolean }>(
-            'DELETE',
-            `/dm/${channelId}/members/${homeId}?homeInstance=${homeInst}`,
-          );
+      // Owner-only methods: plain requests to this client's instance.
+      // `utils/groupDmOwnerActions.ts` picks the owner's instance and names
+      // the conversation and the member as that instance's copy does.
+      updateMetadata: (channelId, body) =>
+        request<DmChannel>('PATCH', `/dm/${channelId}`, body),
+      kickMember: (channelId, target) => {
+        // A member named by home identity: the URL segment is the home user
+        // id and `homeInstance` asks the server to resolve it
+        // (`resolveRemoteIdentityForClient`). Otherwise it is the local id.
+        if ('homeUserId' in target) {
+          const homeId = encodeURIComponent(target.homeUserId);
+          const homeInst = encodeURIComponent(target.homeInstance);
+          return request<{ success: boolean }>('DELETE', `/dm/${channelId}/members/${homeId}?homeInstance=${homeInst}`);
         }
-        return request<{ success: boolean }>('DELETE', `/dm/${channelId}/members/${targetUserId}`);
+        return request<{ success: boolean }>('DELETE', `/dm/${channelId}/members/${encodeURIComponent(target.userId)}`);
       },
-      transferOwnership: (channelId, newOwnerId, federated) => {
-        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
-        if (target !== this) return target.dm.transferOwnership(channelId, newOwnerId, federated);
-        const body: TransferOwnershipRequest = federated
-          ? { homeUserId: federated.homeUserId, homeInstance: federated.homeInstance }
-          : { newOwnerId };
+      transferOwnership: (channelId, target) => {
+        const body: TransferOwnershipRequest = 'homeUserId' in target
+          ? { homeUserId: target.homeUserId, homeInstance: target.homeInstance }
+          : { newOwnerId: target.userId };
         return request<DmChannel>('POST', `/dm/${channelId}/transfer`, body);
       },
       spaceInvite: (body) =>
@@ -705,7 +709,7 @@ export class BackspaceApiClient {
     this.roles = {
       create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) =>
         request<Role>('POST', `/spaces/${spaceId}/roles`, data),
-      update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) =>
+      update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; above?: string; below?: string; permissions?: string }) =>
         request<Role>('PATCH', `/spaces/${spaceId}/roles/${roleId}`, data),
       delete: (spaceId: string, roleId: string) =>
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/roles/${roleId}`),

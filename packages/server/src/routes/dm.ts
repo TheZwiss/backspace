@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { eq, and, or, desc, lt, inArray, isNull } from 'drizzle-orm';
+import { eq, and, or, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
+import { insertDmMember, reopenClosedDmMembers, setDmMemberClosed } from '../utils/dmMemberClosed.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
@@ -26,6 +27,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { loadDmChannelWire, loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { findOrCreateOneOnOne, mintGroupKey, type OneOnOneResult } from '../utils/dmConversation.js';
 import { sendError } from '../utils/httpErrors.js';
+import { parseHistoryPage, selectHistoryPage, markHistoryPageHonoured } from '../utils/messagePaging.js';
 
 /** Members a group DM can hold, the owner included. */
 const GROUP_DM_MAX_MEMBERS = 10;
@@ -53,10 +55,14 @@ import {
   normalizeIconForWire,
 } from '../utils/federationOutbox.js';
 import { getOurOrigin, canonicalizeHomeInstance } from '../utils/federationAuth.js';
+import { recordLocalMemberChange } from '../utils/federationSubjectClock.js';
 import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser } from './federation.js';
 import { resolveRemoteIdentityForClient } from '../utils/federationClientIdentity.js';
+import { dmMessageEditRefusal, dmSystemContent, dmSystemName } from '../utils/dmSystemMessages.js';
+import { announceDmReconcile } from '../utils/dmConversationEvents.js';
+import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -218,6 +224,52 @@ export function buildDmMessageWithUser(
 }
 
 /**
+ * Hydrate DM message rows into the wire shape, keeping their order.
+ *
+ * One batch each for authors, attachments, reactions, embeds and reply
+ * targets (confined to `dmChannelId`, see fetchDmReplyToMessages). A row whose
+ * author row is missing is dropped. Every read path that returns a page of DM
+ * messages goes through here: history, messages-around and search.
+ */
+export function hydrateDmMessages(
+  dmChannelId: string,
+  messageRows: (typeof schema.dmMessages.$inferSelect)[],
+): DmMessageWithUser[] {
+  if (messageRows.length === 0) return [];
+  const db = getDb();
+
+  const userIds = [...new Set(messageRows.map(m => m.userId))];
+  const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const messageIds = messageRows.map(m => m.id);
+  const allAttachments = db.select()
+    .from(schema.attachments)
+    .where(inArray(schema.attachments.dmMessageId, messageIds))
+    .all();
+  const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
+  for (const att of allAttachments) {
+    const mid = att.dmMessageId ?? '';
+    if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
+    attachmentMap.get(mid)!.push(att);
+  }
+
+  const reactionsMap = fetchDmReactionsForMessages(messageIds);
+  const embedMap = fetchDmEmbedsForMessages(messageIds);
+  const replyToMap = fetchDmReplyToMessages(dmChannelId, messageRows);
+
+  return messageRows
+    .map(m => {
+      const user = userMap.get(m.userId);
+      if (!user) return null;
+      const reactions = reactionsMap.get(m.id) ?? [];
+      const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
+      return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
+    })
+    .filter((m): m is DmMessageWithUser => m !== null);
+}
+
+/**
  * Fetches a DM message by ID and hydrates it with user, attachments, reactions, and replyTo.
  */
 export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | null {
@@ -261,21 +313,13 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
  */
 export function reopenForClosedMembers(dmChannelId: string, lastMessage?: DmMessageWithUser): void {
   const db = getDb();
-  const closedMembers = db.select()
-    .from(schema.dmMembers)
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .all();
-  if (closedMembers.length === 0) return;
-
-  db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .run();
+  const reopened = reopenClosedDmMembers(db.$client, dmChannelId);
+  if (reopened.length === 0) return;
 
   const dmChannel = loadDmChannelWire(db, dmChannelId, lastMessage);
   if (!dmChannel) return;
-  for (const member of closedMembers) {
-    connectionManager.sendToUser(member.userId, {
+  for (const userId of reopened) {
+    connectionManager.sendToUser(userId, {
       type: 'dm_channel_created',
       dmChannel,
     });
@@ -342,17 +386,10 @@ function openOneOnOne(
     targetUser,
     { open: 'first' },
   );
+  announceDmReconcile(opened.reconciled);
   if (opened.created) return opened;
 
-  const reopened = db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, opened.channelId),
-      eq(schema.dmMembers.userId, callerId),
-      eq(schema.dmMembers.closed, 1),
-    ))
-    .run();
-  if (reopened.changes > 0) {
+  if (setDmMemberClosed(db.$client, opened.channelId, callerId, false)) {
     // Relay reopen to federated peers
     queueDmCloseRelay(opened.channelId, callerId, 'dm_reopen');
   }
@@ -471,10 +508,6 @@ function transferGroupDmOwnership(
     ? previousOwnerRow
     : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
 
-  const newOwnerBaseName = newOwnerRow?.username?.includes('@')
-    ? newOwnerRow.username.split('@')[0]
-    : (newOwnerRow?.username ?? 'Unknown');
-  const newOwnerDisplayName = newOwnerRow?.displayName ?? newOwnerBaseName;
 
   // Federation targets must be computed BEFORE the channel update so we use the
   // current home-identity columns; membership doesn't change in a transfer, so a
@@ -501,10 +534,10 @@ function transferGroupDmOwnership(
 
   const ownerSysMsgId = generateSnowflake();
   const ownerNow = Date.now();
-  const ownerSysContent = JSON.stringify({
+  const ownerSysContent = dmSystemContent({
     event: 'owner_changed',
     newOwnerId,
-    newOwnerDisplayName,
+    newOwnerDisplayName: dmSystemName(newOwnerRow),
   });
 
   // Wire homeInstance values are canonicalized to full URLs so receivers store
@@ -636,17 +669,13 @@ function removeDmMember(
     ? targetUserRow
     : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
 
-  const targetBaseName = targetUserRow?.username?.includes('@')
-    ? targetUserRow.username.split('@')[0]
-    : (targetUserRow?.username ?? 'Unknown');
-
   // Insert + broadcast member_removed system message (still a member at this point)
   const sysMsgId = generateSnowflake();
   const sysNow = Date.now();
-  const sysContent = JSON.stringify({
+  const sysContent = dmSystemContent({
     event: 'member_removed',
     targetUserId,
-    targetDisplayName: targetUserRow?.displayName ?? targetBaseName,
+    targetDisplayName: dmSystemName(targetUserRow),
     reason,
   });
 
@@ -689,6 +718,15 @@ function removeDmMember(
     eq(schema.readStates.channelId, channelId),
   )).run();
 
+  // The member's clock (federation.md "Subject clocks") moves to the removal,
+  // at the timestamp the relayed member_remove carries.
+  const removedAt = Date.now();
+  const removedIdentity = {
+    homeUserId: targetUserRow?.homeUserId || targetUserId,
+    homeInstance: targetUserRow?.homeInstance || getOurOrigin(),
+  };
+  recordLocalMemberChange(dmChannel.federatedId, removedIdentity, removedAt, db);
+
   // Federation: relay member_remove event with the reason
   if (isFederationRelayEnabled() && dmChannel.federatedId) {
     const domainOrigin = getOurOrigin();
@@ -696,15 +734,12 @@ function removeDmMember(
     const memberRemovePayload: FederationRelayEvent = {
       eventType: 'member_remove',
       dmChannelId: channelId,
-      messageId: `member_remove:${targetUserId}:${Date.now()}`,
+      messageId: `member_remove:${targetUserId}:${removedAt}`,
       federatedId: dmChannel.federatedId,
       encryptionVersion: 0,
-      timestamp: Date.now(),
+      timestamp: removedAt,
       membership: {
-        user: {
-          homeUserId: targetUserRow?.homeUserId || targetUserId,
-          homeInstance: targetUserRow?.homeInstance || domainOrigin,
-        },
+        user: removedIdentity,
         removedBy: {
           homeUserId: actorUserRow?.homeUserId || actorUserId,
           homeInstance: actorUserRow?.homeInstance || domainOrigin,
@@ -966,16 +1001,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         createdAt: now,
       }).run();
 
-      tx.insert(schema.dmMembers).values({
-        dmChannelId,
-        userId: request.userId,
-      }).run();
+      insertDmMember(db.$client, dmChannelId, request.userId, { at: now });
 
       for (const targetUser of targetUsers) {
-        tx.insert(schema.dmMembers).values({
-          dmChannelId,
-          userId: targetUser.id,
-        }).run();
+        insertDmMember(db.$client, dmChannelId, targetUser.id, { at: now });
       }
     });
 
@@ -1001,6 +1030,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           })
           .where(eq(schema.dmChannels.id, dmChannelId))
           .run();
+        // Every member's clock (federation.md "Subject clocks") starts at the
+        // creation, the timestamp the relayed member_add events carry.
+        for (const member of allUsers) {
+          recordLocalMemberChange(federatedId, {
+            homeUserId: member.homeUserId || member.id,
+            homeInstance: member.homeInstance || domainOrigin,
+          }, now, db);
+        }
       }
     }
 
@@ -1035,15 +1072,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Remote instances create their own system messages via federation event handlers.
     for (const targetUser of targetUsers) {
       if (!targetUser) continue;
-      const baseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
       const sysMsg = {
         id: generateSnowflake(),
         dmChannelId: dmChannelId,
         userId: request.userId,
-        content: JSON.stringify({
+        content: dmSystemContent({
           event: 'member_added',
           targetUserId: targetUser.id,
-          targetDisplayName: targetUser.displayName ?? baseName,
+          targetDisplayName: dmSystemName(targetUser),
         }),
         type: 'system' as const,
         createdAt: now,
@@ -1092,10 +1128,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         const memberAddPayload: FederationRelayEvent = {
           eventType: 'member_add',
           dmChannelId,
-          messageId: `member_add:${targetUser.id}:${Date.now()}`,
+          messageId: `member_add:${targetUser.id}:${now}`,
           federatedId,
           encryptionVersion: 0,
-          timestamp: Date.now(),
+          timestamp: now,
           membership: {
             user: {
               homeUserId: targetUser.homeUserId || targetUser.id,
@@ -1305,7 +1341,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       if (nameChanged) {
         const sysId = generateSnowflake();
-        const content = JSON.stringify({ event: 'name_changed', oldName, newName: nextName });
+        const content = dmSystemContent({ event: 'name_changed', oldName, newName: nextName });
         tx.insert(schema.dmMessages).values({
           id: sysId,
           dmChannelId: id,
@@ -1320,7 +1356,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       if (iconChanged) {
         const sysId = generateSnowflake();
-        const content = JSON.stringify({ event: 'icon_changed' });
+        const content = dmSystemContent({ event: 'icon_changed' });
         tx.insert(schema.dmMessages).values({
           id: sysId,
           dmChannelId: id,
@@ -1416,13 +1452,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Soft close: set closed flag (preserves membership for future message delivery)
-    db.update(schema.dmMembers)
-      .set({ closed: 1 })
-      .where(and(
-        eq(schema.dmMembers.dmChannelId, id),
-        eq(schema.dmMembers.userId, request.userId),
-      ))
-      .run();
+    setDmMemberClosed(db.$client, id, request.userId, true);
 
     // Broadcast dm_channel_closed to self for multi-tab sync
     connectionManager.sendToUser(request.userId, {
@@ -1512,10 +1542,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Insert dm_members row for new user
-    db.insert(schema.dmMembers).values({
-      dmChannelId: id,
-      userId: targetUserId,
-    }).run();
+    insertDmMember(db.$client, id, targetUserId);
 
     // If the channel doesn't have a federatedId and now has a remote member, assign one
     if (!dmChannel.federatedId && isFederationRelayEnabled()) {
@@ -1570,15 +1597,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     });
 
     // Insert & broadcast system message for member addition
-    const addBaseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
     const addSysMsg = {
       id: generateSnowflake(),
       dmChannelId: id,
       userId: request.userId,
-      content: JSON.stringify({
+      content: dmSystemContent({
         event: 'member_added',
-        targetUserId: targetUserId,
-        targetDisplayName: targetUser.displayName ?? addBaseName,
+        targetUserId,
+        targetDisplayName: dmSystemName(targetUser),
       }),
       type: 'system' as const,
       createdAt: Date.now(),
@@ -1602,12 +1628,21 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       message: { ...addSysMsg, user: addSysMsg.user ? sanitizeUser(addSysMsg.user) : undefined } as any,
     });
 
+    // The added member's clock (federation.md "Subject clocks") moves to the
+    // add, at the timestamp the relayed member_add carries.
+    const addedAt = Date.now();
+    const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
+    const addedIdentity = {
+      homeUserId: addedUser?.homeUserId || targetUserId,
+      homeInstance: addedUser?.homeInstance || getOurOrigin(),
+    };
+    recordLocalMemberChange(dmChannel.federatedId, addedIdentity, addedAt, db);
+
     // Federation: relay member_add to peers
     if (isFederationRelayEnabled() && dmChannel.federatedId) {
       const domainOrigin = getOurOrigin();
       const allParticipants = getDmParticipants(id);
 
-      const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
       const adderUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
 
       // Carry the current group metadata snapshot so a fresh peer can
@@ -1621,15 +1656,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const memberAddPayload: FederationRelayEvent = {
         eventType: 'member_add',
         dmChannelId: id,
-        messageId: `member_add:${targetUserId}:${Date.now()}`,
+        messageId: `member_add:${targetUserId}:${addedAt}`,
         federatedId: dmChannel.federatedId,
         encryptionVersion: 0,
-        timestamp: Date.now(),
+        timestamp: addedAt,
         membership: {
-          user: {
-            homeUserId: addedUser?.homeUserId || targetUserId,
-            homeInstance: addedUser?.homeInstance || domainOrigin,
-          },
+          user: addedIdentity,
           addedBy: {
             homeUserId: adderUser?.homeUserId || request.userId,
             homeInstance: adderUser?.homeInstance || domainOrigin,
@@ -1897,83 +1929,33 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
-  // GET /api/dm/:id/messages - Get DM messages with pagination
+  // GET /api/dm/:id/messages - Get DM messages with cursor pagination
+  // (before or after; see docs/systems/api.md, "Message history paging")
   app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/dm/:id/messages', async (request, reply) => {
     const { id } = request.params;
-    const before = request.query.before;
-    const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
+
+    const parsed = parseHistoryPage(request.query);
+    if (!parsed.ok) {
+      return sendError(reply, 400, parsed.code);
+    }
+    const { page } = parsed;
 
     if (!isDmMember(id, request.userId)) {
       return sendError(reply, 403, 'not_dm_member');
     }
 
     const db = getDb();
-
-    let messageRows: (typeof schema.dmMessages.$inferSelect)[];
-
-    if (before) {
-      messageRows = db.select()
+    const messageRows = selectHistoryPage(page, schema.dmMessages, (cursor, orderBy, limit) =>
+      db.select()
         .from(schema.dmMessages)
-        .where(and(
-          eq(schema.dmMessages.dmChannelId, id),
-          lt(schema.dmMessages.id, before)
-        ))
-        .orderBy(desc(schema.dmMessages.createdAt))
+        .where(and(eq(schema.dmMessages.dmChannelId, id), cursor))
+        .orderBy(...orderBy)
         .limit(limit)
-        .all();
-    } else {
-      messageRows = db.select()
-        .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, id))
-        .orderBy(desc(schema.dmMessages.createdAt))
-        .limit(limit)
-        .all();
-    }
+        .all(),
+    );
 
-    messageRows.reverse();
-
-    if (messageRows.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    // Batch fetch users
-    const userIds = [...new Set(messageRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    // Batch fetch attachments by dmMessageId
-    const messageIds = messageRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.dmMessageId, messageIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.dmMessageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    // Batch fetch reactions
-    const reactionsMap = fetchDmReactionsForMessages(messageIds);
-
-    // Batch fetch embeds
-    const embedMap = fetchDmEmbedsForMessages(messageIds);
-
-    // Batch fetch reply-to messages, confined to this DM channel
-    const replyToMap = fetchDmReplyToMessages(id, messageRows);
-
-    const messages: DmMessageWithUser[] = messageRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is DmMessageWithUser => m !== null);
-
-    return reply.code(200).send(messages);
+    markHistoryPageHonoured(reply, page);
+    return reply.code(200).send(hydrateDmMessages(id, messageRows));
   });
 
   // POST /api/dm/space-invite — Send a space invite card to a friend via DM.
@@ -2063,13 +2045,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'space_requires_approval');
     }
 
-    // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
-    const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
-
-    // 5. Build content + insert system message.
-    const now = Date.now();
-    const messageId = generateSnowflake();
-    const payload: SpaceInviteSystemPayload = {
+    // The invite's content, in the form every receiving instance checks it
+    // against (parseDmSystemEvent). An invite a receiver would refuse is not
+    // sent, and nothing is written for it.
+    const invite = parseDmSystemEvent(JSON.stringify({
       event: 'space_invite',
       spaceId: body.spaceId,
       spaceInstanceOrigin: spaceOrigin,
@@ -2082,13 +2061,22 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         description: snapshot.description,
         instanceName: snapshot.instanceName,
       },
-    };
+    } satisfies SpaceInviteSystemPayload));
+    if (!invite || invite.event !== 'space_invite') {
+      return sendError(reply, 400, 'invite_invalid');
+    }
 
+    // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
+    const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
+
+    // 5. Insert the system message.
+    const now = Date.now();
+    const messageId = generateSnowflake();
     db.insert(schema.dmMessages).values({
       id: messageId,
       dmChannelId,
       userId: callerId,
-      content: JSON.stringify(payload),
+      content: dmSystemContent(invite),
       type: 'system',
       createdAt: now,
     }).run();
@@ -2224,8 +2212,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'message_not_found');
     }
 
-    if (msg.userId !== request.userId) {
-      return sendError(reply, 403, 'not_message_author');
+    const editRefusal = dmMessageEditRefusal(msg, request.userId);
+    if (editRefusal) {
+      return sendError(reply, 403, editRefusal);
     }
 
     if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {

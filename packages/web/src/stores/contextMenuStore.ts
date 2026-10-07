@@ -28,7 +28,11 @@ export interface ContextMenuCheckbox extends ContextMenuItemBase {
 
 export interface ContextMenuCustom extends ContextMenuItemBase {
   type: 'custom';
-  render: () => ReactNode;
+  /**
+   * Renders the item. `close` dismisses the menu; a control inside the item
+   * that completes an action calls it, as an action item's click does.
+   */
+  render: (close: () => void) => ReactNode;
 }
 
 export interface ContextMenuSeparator extends ContextMenuItemBase {

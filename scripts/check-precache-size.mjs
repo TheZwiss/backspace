@@ -9,9 +9,10 @@
  * Usage (after `pnpm build` or `pnpm build:web`):
  *   node scripts/check-precache-size.mjs
  *
- * The limit is read from packages/web/src/build/precache.ts, the module
- * vite.config.ts builds the worker with, through Vite's own module loader, so
- * the number is defined in one place.
+ * The limit and the precached file types are read from
+ * packages/web/src/build/precache.ts, the module vite.config.ts builds the
+ * worker with, through Vite's own module loader, so both are defined in one
+ * place.
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -29,12 +30,12 @@ const webDir = path.join(root, 'packages/web');
 const distDir = path.join(webDir, 'dist');
 const limitModule = path.join(webDir, 'src/build/precache.ts');
 
-async function readLimit() {
+async function readPrecacheSettings() {
   // Vite is a dependency of the web package, not of the repository root.
   const requireFromWeb = createRequire(path.join(webDir, 'package.json'));
   const { runnerImport } = await import(pathToFileURL(requireFromWeb.resolve('vite')).href);
   const { module } = await runnerImport(limitModule, { configFile: false, logLevel: 'silent', root: webDir });
-  return module.PRECACHE_MAX_FILE_BYTES;
+  return { limitBytes: module.PRECACHE_MAX_FILE_BYTES, extensions: module.PRECACHE_FILE_EXTENSIONS };
 }
 
 function kib(bytes) {
@@ -42,14 +43,14 @@ function kib(bytes) {
 }
 
 async function main() {
-  const limitBytes = await readLimit();
+  const { limitBytes, extensions } = await readPrecacheSettings();
   let swSource;
   try {
     swSource = readFileSync(path.join(distDir, 'sw.js'), 'utf8');
   } catch {
     throw new Error(`${path.relative(root, distDir)}/sw.js not found; build the web app first`);
   }
-  const files = collectPrecacheCandidates(distDir, readPrecacheManifest(swSource));
+  const files = collectPrecacheCandidates(distDir, readPrecacheManifest(swSource), extensions);
   const { budgetBytes, overBudget, largest } = evaluatePrecacheBudget(limitBytes, files);
   const share = `${Math.round(PRECACHE_BUDGET_SHARE * 100)}%`;
 

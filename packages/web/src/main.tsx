@@ -6,7 +6,7 @@ import { startPendingMessageOrchestrator } from './stores/pendingMessageRehydrat
 import i18n, { initI18n } from './i18n';
 import './styles/globals.css';
 import { initializeInterfaceScale } from './platform/interfaceScale';
-import { loadDiscordEmojiAliases } from './utils/emojiShortcodes';
+import { waitForEmojiShortcodeNames } from './utils/emojiShortcodes';
 
 const stopInterfaceScale = initializeInterfaceScale();
 if (import.meta.hot) import.meta.hot.dispose(stopInterfaceScale);
@@ -135,8 +135,13 @@ function render(): void {
 // The selected language's catalogs are loaded before the first paint, so
 // nothing flashes English first. English itself is bundled, so if loading a
 // language fails the app still renders, in English, rather than not at all.
-// Discord's emoji shortcode names (a chunk of their own) load alongside, so
-// text renders with them from the first paint; that load never rejects.
+// The emoji shortcode names (emoji-mart's data set and Discord's table, each a
+// chunk of its own, requested with the main chunk through the modulepreload
+// links src/build/startupChunks.ts adds) load alongside, so text renders
+// converted from the first paint. The wait is capped: a chunk that stalls
+// must not leave a blank page. Past the cap the app renders with shortcodes as
+// written and converts them when the names land; the wait never rejects.
 const i18nReady = initI18n()
   .catch((err) => { console.error('[i18n] Failed to initialise, rendering in English:', err); });
-Promise.all([i18nReady, loadDiscordEmojiAliases()]).finally(render);
+const EMOJI_NAMES_MAX_WAIT_MS = 1000;
+Promise.all([i18nReady, waitForEmojiShortcodeNames(EMOJI_NAMES_MAX_WAIT_MS)]).finally(render);

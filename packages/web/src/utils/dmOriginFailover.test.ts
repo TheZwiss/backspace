@@ -21,14 +21,9 @@ vi.mock('../audio/AudioManager', () => ({
 
 // The signed-in account is homed on B, so B's copy of a conversation is the
 // pinned one while B is connected (the pin rule's home is the layout home).
-vi.mock('../stores/authStore', () => {
+vi.mock('../stores/authStore', async () => {
   const state = { user: { id: 'u-home', username: 'u', homeInstance: 'b.example', homeUserId: 'u-on-b' }, token: 't' };
-  return {
-    useAuthStore: Object.assign(
-      (selector: (s: unknown) => unknown) => selector(state),
-      { getState: () => state, setState: vi.fn(), subscribe: vi.fn() },
-    ),
-  };
+  return (await import('../test/authStoreMock')).authStoreMock(() => state);
 });
 
 vi.mock('../stores/instanceStore', async () => {

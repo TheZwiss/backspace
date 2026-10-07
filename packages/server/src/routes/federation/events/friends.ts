@@ -1,5 +1,6 @@
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { claimSubjectChange, friendPairClockSubject, isSubjectChangeStale, recordSubjectChange } from '../../../utils/federationSubjectClock.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { generateSnowflake } from '../../../utils/snowflake.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -16,6 +17,20 @@ import { hydrateReplicatedUserProfile } from '../profile.js';
  */
 function isHomedHere(actor: RelayActor): boolean {
   return isOwnDomain(extractDomain(actor.homeInstance).toLowerCase());
+}
+
+/**
+ * Ordering: a friend event older than the pair's last change here is stale
+ * and changes nothing (federation.md "Subject clocks"). Claims the pair's
+ * clock for `event` and returns true when the event is stale. Called after the
+ * event's attribution passed and with no `await` between it and the
+ * processor's writes.
+ */
+function claimFriendPair(event: FederationRelayEvent, from: RelayActor, to: RelayActor, db: ReturnType<typeof getDb>): boolean {
+  const subject = friendPairClockSubject(from, to);
+  if (!subject || claimSubjectChange(subject, event.timestamp, db)) return false;
+  console.log('[federation] Ignored %s %s: the pair changed later here', event.eventType, event.messageId);
+  return true;
 }
 
 export async function processFriendRequestCreateEvent(
@@ -66,6 +81,11 @@ export async function processFriendRequestCreateEvent(
   const toUser = recipient.kind === 'found' ? recipient.user : undefined;
   if (!toUser) {
     rejected.push({ messageId: event.messageId, reason: 'recipient_not_found' });
+    return;
+  }
+
+  if (claimFriendPair(event, from, to, db)) {
+    accepted.push(event.messageId);
     return;
   }
 
@@ -178,6 +198,11 @@ export function processFriendRequestUpdateEvent(
     return;
   }
   const fromUser = fromResolved.user;
+
+  if (claimFriendPair(event, from, to, db)) {
+    accepted.push(event.messageId);
+    return;
+  }
 
   // A recipient this instance does not hold has no pending request here to
   // answer: accept without effect.
@@ -293,6 +318,13 @@ export function processFriendRequestCancelEvent(
   }
   const toResolved = resolveRelayActor(to, db);
 
+  // The pair's clock moves also when there is nothing to cancel here: a
+  // request made before the cancel and delivered after it is then stale.
+  if (claimFriendPair(event, from, to, db)) {
+    accepted.push(event.messageId);
+    return;
+  }
+
   if (fromResolved.kind !== 'found' || toResolved.kind !== 'found') {
     // Accept idempotently — if either user doesn't exist, there's nothing to cancel
     accepted.push(event.messageId);
@@ -358,6 +390,14 @@ export async function processFriendAddEvent(
     return;
   }
 
+  // Stale before any work; claimed below, where the friendship is written.
+  const clockSubject = friendPairClockSubject(from, to);
+  if (clockSubject && isSubjectChangeStale(clockSubject, event.timestamp, db)) {
+    console.log('[federation] Ignored %s %s: the pair changed later here', event.eventType, event.messageId);
+    accepted.push(event.messageId);
+    return;
+  }
+
   // A friend_add is the recipient's answer to a request: it forms a friendship
   // only for a pair this instance holds a pending request for, from `from` (the
   // requester) to `to` (the acceptor), or for one that already exists. The
@@ -384,6 +424,7 @@ export async function processFriendAddEvent(
     .get();
 
   if (existingFriend) {
+    if (clockSubject) recordSubjectChange(clockSubject, event.timestamp, db);
     accepted.push(event.messageId);
     return;
   }
@@ -408,6 +449,11 @@ export async function processFriendAddEvent(
 
   const fromUser = await hydrateReplicatedUserProfile(pair.fromUser, event.friendship.fromProfile, db);
   const toUser = await hydrateReplicatedUserProfile(pair.toUser, event.friendship.toProfile, db);
+
+  if (claimFriendPair(event, from, to, db)) {
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Insert the friendship and resolve the request it answers (and a crossed
   // one the other way, if any) to 'accepted', together. The friend_request_update
@@ -494,6 +540,12 @@ export function processFriendRemoveEvent(
   if (actorResolved.kind === 'mismatch') {
     console.warn('[federation] Refused friend_remove: the actor homeUserId names a local user of another identity');
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  // The pair's clock moves also when there is nothing to remove here.
+  if (claimFriendPair(event, from, to, db)) {
+    accepted.push(event.messageId);
     return;
   }
 

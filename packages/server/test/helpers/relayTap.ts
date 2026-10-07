@@ -61,6 +61,15 @@ export interface RelayTap {
    * attempt and retries on its backoff schedule.
    */
   failNextRelays(count: number): void;
+  /**
+   * Forward the next relay POST whose batch satisfies `matches` as usual, so
+   * the receiver applies it, but answer the sender 502 instead of the
+   * receiver's answer, as a proxy that timed out on its way back would. The
+   * sender cannot tell this from a delivery that never arrived: the batch's
+   * outcome is unknown. Combined with `holdRelayResponses`, the 502 goes back
+   * when the hold is released.
+   */
+  loseRelayAnswer(matches: (batch: FederationRelayRequest) => boolean): void;
   close(): Promise<void>;
 }
 
@@ -98,6 +107,18 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+/**
+ * A relay POST body as a batch. A malformed body counts as a batch with no
+ * events rather than throwing inside the tap or an assertion helper.
+ */
+function parseRelayBatch(body: string): FederationRelayRequest {
+  try {
+    return JSON.parse(body) as FederationRelayRequest;
+  } catch {
+    return { version: 1, sourceInstance: '', events: [] };
+  }
+}
+
 export async function startRelayTap(targetOrigin?: string): Promise<RelayTap> {
   const requests: TappedRequest[] = [];
   let target: string | null = targetOrigin ?? null;
@@ -105,6 +126,8 @@ export async function startRelayTap(targetOrigin?: string): Promise<RelayTap> {
   let relayResponseGate: { opened: Promise<void>; open: () => void } | null = null;
   // Relay POSTs still to be answered 503 without being forwarded.
   let relaysToFail = 0;
+  // The next relay POST this matches is forwarded, and then answered 502.
+  let loseAnswerTo: ((batch: FederationRelayRequest) => boolean) | null = null;
 
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -150,8 +173,15 @@ export async function startRelayTap(targetOrigin?: string): Promise<RelayTap> {
         });
         const text = await upstream.text();
         const gate = relayResponseGate;
+        const loseAnswer = isRelay && loseAnswerTo !== null && loseAnswerTo(parseRelayBatch(body));
+        if (loseAnswer) loseAnswerTo = null;
         if (gate && isRelay) {
           await gate.opened;
+        }
+        if (loseAnswer) {
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'relay tap lost this answer on purpose' }));
+          return;
         }
         const outHeaders: Record<string, string> = {};
         upstream.headers.forEach((value, key) => {
@@ -177,19 +207,9 @@ export async function startRelayTap(targetOrigin?: string): Promise<RelayTap> {
   const addr = server.address() as AddressInfo;
   const origin = `http://127.0.0.1:${addr.port}`;
 
-  const relayBatches = (): FederationRelayRequest[] => {
-    const out: FederationRelayRequest[] = [];
-    for (const r of requests) {
-      if (r.method !== 'POST' || !r.path.startsWith('/api/federation/relay')) continue;
-      try {
-        out.push(JSON.parse(r.body) as FederationRelayRequest);
-      } catch {
-        // A malformed body is not a relay batch; skip it rather than throwing
-        // inside an assertion helper.
-      }
-    }
-    return out;
-  };
+  const relayBatches = (): FederationRelayRequest[] => requests
+    .filter(r => r.method === 'POST' && r.path.startsWith('/api/federation/relay'))
+    .map(r => parseRelayBatch(r.body));
 
   return {
     origin,
@@ -215,6 +235,9 @@ export async function startRelayTap(targetOrigin?: string): Promise<RelayTap> {
     },
     failNextRelays: (count: number) => {
       relaysToFail = count;
+    },
+    loseRelayAnswer: (matches: (batch: FederationRelayRequest) => boolean) => {
+      loseAnswerTo = matches;
     },
     close: () =>
       new Promise<void>((resolve) => {

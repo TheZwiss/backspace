@@ -119,30 +119,23 @@ describe('cleanupUnusedAutoPendingPeers', () => {
     expect(peerIds()).toEqual([]);
   });
 
-  it('removes an auto pending row whose only entries are presence broadcasts, with those entries', async () => {
-    seedPeer('presence-only');
-    seedEntry('p1', 'presence-only', 'presence_update', 'profile');
-    seedEntry('p2', 'presence-only', 'presence_update', 'profile');
-    const { cleanupUnusedAutoPendingPeers } = await import('./storageJanitor.js');
-
-    expect(cleanupUnusedAutoPendingPeers(nothingInFlight, NOW)).toBe(1);
-    expect(peerIds()).toEqual([]);
-    expect(outboxIds()).toEqual([]);
-  });
-
-  it('keeps a row that still carries a DM, friend or profile entry', async () => {
+  it('keeps a row that still carries any entry, a presence change included', async () => {
+    // Untargeted broadcasts no longer reach pending peers (#321), so whatever
+    // is queued on a pending row was addressed to that origin and waits on
+    // its handshake.
     seedPeer('dm');
     seedEntry('d1', 'dm', 'create', 'dm');
-    seedEntry('d2', 'dm', 'presence_update', 'profile');
     seedPeer('friend');
     seedEntry('f1', 'friend', 'friend_request_create', 'friend');
     seedPeer('profile');
     seedEntry('pr1', 'profile', 'profile_update', 'profile');
+    seedPeer('presence');
+    seedEntry('ps1', 'presence', 'presence_update', 'profile');
     const { cleanupUnusedAutoPendingPeers } = await import('./storageJanitor.js');
 
     expect(cleanupUnusedAutoPendingPeers(nothingInFlight, NOW)).toBe(0);
-    expect(peerIds()).toEqual(['dm', 'friend', 'profile']);
-    expect(outboxIds()).toEqual(['d1', 'd2', 'f1', 'pr1']);
+    expect(peerIds()).toEqual(['dm', 'friend', 'presence', 'profile']);
+    expect(outboxIds()).toEqual(['d1', 'f1', 'pr1', 'ps1']);
   });
 
   it('keeps an auto pending row younger than the grace period', async () => {

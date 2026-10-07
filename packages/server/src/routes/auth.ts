@@ -39,6 +39,20 @@ function unavailable(
   });
 }
 
+/**
+ * Whether the account a home instance's login answer names (`user` from its
+ * `AuthResponse`) is the home identity `homeUserId`. A native account presents
+ * its identity as `homeUserId ?? id`; either field matching counts, as it does
+ * for `/users/by-home-id`. A row without a home identity matches nothing.
+ */
+function isSameHomeAccount(
+  account: { id?: unknown; homeUserId?: unknown } | undefined,
+  homeUserId: string | null,
+): boolean {
+  if (!homeUserId || !account) return false;
+  return account.id === homeUserId || account.homeUserId === homeUserId;
+}
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
     config: {
@@ -391,6 +405,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           clearTimeout(timeout);
 
           if (homeResponse.ok) {
+            // A 200 says only that SOME account on the home has that name and
+            // password. The name sent is the local part of this row's name,
+            // which older re-attaches suffixed (`kai_1`), so it can be another
+            // person's handle there. The rehash is for this row only when the
+            // account the home signed in is this row's home identity: the
+            // identity a native account presents (`homeUserId ?? id`, as
+            // registration and `/users/by-home-id` read it).
+            const homeAccount = await homeResponse.json().catch(() => null) as
+              { user?: { id?: unknown; homeUserId?: unknown } } | null;
+            if (!isSameHomeAccount(homeAccount?.user, user.homeUserId)) {
+              app.log.warn(`Refused self-heal for ${user.username}: the home signed in a different account`);
+              return sendError(reply, 401, 'invalid_credentials');
+            }
+
             // §6.3a epoch guard: self-heal (re-hashing the local password because
             // the home accepted it) must fire ONLY when the home instance is the
             // SAME incarnation we established trust with. A reset home (new
