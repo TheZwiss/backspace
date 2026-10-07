@@ -42,13 +42,14 @@ vi.mock('../utils/federationFetch.js', async () => {
   };
 });
 
-import { connectionManager } from './handler.js';
+import { connectionManager, buildReadyPayload, VOICE_RECONNECT_GRACE_MS } from './handler.js';
 import type { FederatedCallEntry } from './handler.js';
 import {
   handleDmCallStartForTest as start,
   handleDmCallAcceptForTest as accept,
   handleDmCallRejectForTest as reject,
   handleDmCallEndForTest as end,
+  handleClientEvent,
   registerCallRelayHooks,
 } from './events.js';
 import {
@@ -71,6 +72,14 @@ const ONE_ON_ONE = 'dm-pair';
 const FED_GROUP = 'dm-fed-group';
 const FED_GROUP_FID = '0b9f4c52-3a51-4c0e-9a8e-5d2f8b6c7e10';
 const PEER = 'https://peer.example';
+/** A second group hosted here with a member on the peer. */
+const FED_GROUP_2 = 'dm-fed-group-2';
+const FED_GROUP_2_FID = '4a1b2c3d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+/** A 1-on-1 hosted here with the peer's member. */
+const PAIR_FED = 'dm-pair-fed';
+const PAIR_FED_FID = '0123456789abcdef0123456789abcdef';
+/** A space voice channel here, in a space bob owns. */
+const VOICE_CHANNEL = 'voice-1';
 /** The key of a group call hosted on the peer; GROUP has no key here, as on an instance that never relayed it. */
 const REMOTE_FID = '7d3e2f10-8c4b-4a6e-b1d2-93f0a5c4e821';
 
@@ -206,12 +215,17 @@ beforeEach(() => {
   seedDm(GROUP, 'alice', null, ['alice', 'bob', 'carol']);
   seedDm(ONE_ON_ONE, null, null, ['alice', 'bob']);
   seedDm(FED_GROUP, 'alice', FED_GROUP_FID, ['alice', 'bob', 'dave-stub', 'erin-stub']);
+  seedDm(FED_GROUP_2, 'alice', FED_GROUP_2_FID, ['alice', 'dave-stub']);
+  seedDm(PAIR_FED, null, PAIR_FED_FID, ['alice', 'dave-stub']);
+  testDb.insert(schema.spaces).values({ id: 'space-1', name: 'Space', ownerId: 'bob', createdAt: Date.now() }).run();
+  testDb.insert(schema.spaceMembers).values({ spaceId: 'space-1', userId: 'bob', joinedAt: Date.now() }).run();
+  testDb.insert(schema.channels).values({ id: VOICE_CHANNEL, spaceId: 'space-1', name: 'Voice', type: 'voice', createdAt: Date.now() }).run();
 
   for (const id of ['alice', 'bob', 'carol']) connect(id);
 });
 
 afterEach(() => {
-  for (const roomId of [GROUP, ONE_ON_ONE, FED_GROUP]) connectionManager.destroyRoom(roomId);
+  for (const roomId of [GROUP, ONE_ON_ONE, FED_GROUP, FED_GROUP_2, PAIR_FED, VOICE_CHANNEL]) connectionManager.destroyRoom(roomId);
   for (const [fedId] of Array.from(connectionManager.getAllFederatedCalls())) connectionManager.clearFederatedCall(fedId);
   for (const [userId, list] of sockets) {
     connectionManager.clearVoiceWs(userId);
@@ -729,5 +743,342 @@ describe('group call hosted on a peer (this instance holds the entry)', () => {
     expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
     expect(received('bob', 'dm_call_ended')).toHaveLength(1);
     expect(received('carol', 'dm_call_ended')).toHaveLength(1);
+  });
+});
+
+/** A call hosted on the peer, held here, that bob and carol were rung for. */
+function peerCall(partial: Partial<FederatedCallEntry> = {}): FederatedCallEntry {
+  return {
+    dmChannelId: GROUP,
+    federatedId: REMOTE_FID,
+    callerId: 'dave-stub',
+    callerHomeUserId: DAVE.homeUserId,
+    federatedCallHost: PEER,
+    livekitUrl: 'wss://peer.example/lk',
+    tokens: new Map([['bob', 'tok-b'], ['carol', 'tok-c']]),
+    ringedUserIds: ['bob', 'carol'],
+    joinedUserIds: [],
+    group: true,
+    state: 'ringing',
+    startedAt: Date.now(),
+    ...partial,
+  };
+}
+
+/** Close `userId`'s main socket, as a closed tab or a lost network does. */
+function closeSocket(userId: string): void {
+  connectionManager.removeConnection(ws(userId));
+}
+
+const BOB_HERE = { homeUserId: 'bob', homeInstance: 'https://local.example' };
+
+describe('a member here who leaves a call hosted on a peer without hanging up', () => {
+  it('leaves a group call once the session is gone past the grace, and the host is told', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    fetchMock.mockClear();
+
+    closeSocket('bob');
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS - 1);
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    await settle();
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      federatedId: REMOTE_FID,
+      call: { endedBy: BOB_HERE, perMember: true },
+    })]);
+  });
+
+  it('stays in the call when a new socket resumes the session within the grace', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    fetchMock.mockClear();
+
+    closeSocket('bob');
+    const resumed = connect('bob');
+    handleClientEvent({ type: 'voice_status', isMuted: false, isDeafened: false, isCameraOn: false, isScreenSharing: false }, 'bob', 'bob', resumed, false);
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS * 2);
+    await settle();
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual(['bob']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves a 1-on-1 or 1.8.0 call only here, as before, and relays nothing', async () => {
+    connectionManager.createFederatedCall(peerCall({ group: false }));
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    fetchMock.mockClear();
+
+    closeSocket('bob');
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS);
+    await settle();
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves a group call on joining a voice channel here', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    fetchMock.mockClear();
+
+    handleClientEvent({ type: 'voice_join', channelId: VOICE_CHANNEL }, 'bob', 'bob', ws('bob'), false);
+    await settle();
+
+    expect(connectionManager.getUserRoom('bob')?.roomId).toBe(VOICE_CHANNEL);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      call: expect.objectContaining({ endedBy: BOB_HERE, perMember: true }),
+    })]);
+  });
+
+  it('leaves a group call when the account is deleted', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    fetchMock.mockClear();
+
+    connectionManager.forceDisconnectUser('bob');
+    await settle();
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      call: expect.objectContaining({ perMember: true }),
+    })]);
+  });
+
+  it('says on the relayed accept of a group call that it will relay the leave', async () => {
+    connectionManager.createFederatedCall(peerCall());
+
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_accept',
+      call: { acceptor: BOB_HERE, perMember: true },
+    })]);
+  });
+
+  it('keeps the 1.8.0 accept for a 1-on-1 or 1.8.0 call', async () => {
+    connectionManager.createFederatedCall(peerCall({ group: false }));
+
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_accept',
+      call: { acceptor: BOB_HERE },
+    })]);
+  });
+});
+
+describe('a call record from a peer that is no longer live', () => {
+  it('does not block a start once nobody here is in the call (group)', async () => {
+    // The host ended the call without a dm_call_end reaching this instance.
+    connectionManager.createFederatedCall(peerCall({ state: 'active' }));
+
+    await start({ dmChannelId: GROUP }, 'carol', 'carol', ws('carol'));
+
+    expect(received('carol', 'error')).toEqual([]);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
+    expect(connectionManager.getRoom(GROUP)?.metadata).toMatchObject({ state: 'ringing', callerId: 'carol' });
+  });
+
+  it('does not block a start once nobody here is in the call (1-on-1)', async () => {
+    // A 1.8.0 host ends a 1-on-1 without telling its peers when its last
+    // participant's voice session runs out.
+    connectionManager.createFederatedCall(peerCall({
+      dmChannelId: ONE_ON_ONE, federatedId: PAIR_FED_FID, group: false, state: 'active', ringedUserIds: ['bob'],
+    }));
+    await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
+    closeSocket('bob');
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS);
+    const resumed = connect('bob');
+    fetchMock.mockClear();
+
+    await start({ dmChannelId: ONE_ON_ONE }, 'bob', 'bob', resumed);
+
+    expect(sentOn(resumed).filter(e => e.type === 'error')).toEqual([]);
+    expect(connectionManager.getRoom(ONE_ON_ONE)?.metadata).toMatchObject({ state: 'ringing', callerId: 'bob' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('lets the starter out of a place no session holds any more, and tells the host', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    // A reload: the old socket is gone, its grace still runs.
+    closeSocket('bob');
+    const reloaded = connect('bob');
+    fetchMock.mockClear();
+
+    await start({ dmChannelId: GROUP }, 'bob', 'bob', reloaded);
+    await settle();
+
+    expect(sentOn(reloaded).filter(e => e.type === 'error')).toEqual([]);
+    expect(connectionManager.getRoom(GROUP)?.metadata).toMatchObject({ state: 'ringing', callerId: 'bob' });
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      federatedId: REMOTE_FID,
+      call: expect.objectContaining({ perMember: true }),
+    })]);
+  });
+
+  it('refuses a start from another tab of a member still in the call', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    const secondTab = connect('bob');
+
+    await start({ dmChannelId: GROUP }, 'bob', 'bob', secondTab);
+
+    expect(sentOn(secondTab)).toEqual([
+      expect.objectContaining({ type: 'error', code: 'dm_call_in_progress', dmChannelId: GROUP }),
+    ]);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual(['bob']);
+  });
+
+  it('refuses a start while the call still rings', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await reject({ federatedCallId: REMOTE_FID }, 'carol');
+
+    await start({ dmChannelId: GROUP }, 'carol', 'carol', ws('carol'));
+
+    expect(received('carol', 'error')).toEqual([
+      expect.objectContaining({ code: 'dm_call_in_progress', dmChannelId: GROUP }),
+    ]);
+  });
+});
+
+describe('the end reaches the peers when the last participant here leaves', () => {
+  async function callOfTwo(): Promise<void> {
+    await start({ dmChannelId: FED_GROUP }, 'alice', 'alice', ws('alice'));
+    await accept({ dmChannelId: FED_GROUP }, 'bob', ws('bob'));
+    await end({ dmChannelId: FED_GROUP }, 'alice');
+    expect(participants(FED_GROUP)).toEqual(['bob']);
+    clearReceived();
+    fetchMock.mockClear();
+  }
+
+  it('through the voice reconnect grace running out', async () => {
+    await callOfTwo();
+
+    closeSocket('bob');
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS);
+    await settle();
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('alice', 'dm_call_ended')).toHaveLength(1);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+  });
+
+  it('by joining a voice channel', async () => {
+    await callOfTwo();
+
+    handleClientEvent({ type: 'voice_join', channelId: VOICE_CHANNEL }, 'bob', 'bob', ws('bob'), false);
+    await settle();
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+  });
+
+  it('through account deletion', async () => {
+    await callOfTwo();
+
+    connectionManager.forceDisconnectUser('bob');
+    await settle();
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('alice', 'dm_call_ended')).toHaveLength(1);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+  });
+
+  it('once, when the caller\'s socket closes while the group call rings', async () => {
+    await start({ dmChannelId: FED_GROUP }, 'alice', 'alice', ws('alice'));
+    fetchMock.mockClear();
+
+    closeSocket('alice');
+    vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS);
+    await settle();
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+  });
+});
+
+describe('a relayed accept that moves a member between calls hosted here', () => {
+  it('takes the member out of the call they sat in, which ends when that empties it', async () => {
+    connectionManager.createDmRoom(FED_GROUP, 'alice');
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE, true));
+    await end({ dmChannelId: FED_GROUP }, 'alice');
+    expect(participants(FED_GROUP)).toEqual(['dave-stub']);
+    connectionManager.createDmRoom(FED_GROUP_2, 'alice');
+    clearReceived();
+    fetchMock.mockClear();
+
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE, true, FED_GROUP_2_FID));
+    await settle();
+
+    expect(participants(FED_GROUP_2)).toEqual(['alice', 'dave-stub']);
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('bob', 'voice_state_update')).toContainEqual(
+      expect.objectContaining({ channelId: FED_GROUP, userId: 'dave-stub', action: 'leave' }),
+    );
+    expect(relayedTo(PEER)).toContainEqual(expect.objectContaining({
+      eventType: 'dm_call_end',
+      federatedId: FED_GROUP_FID,
+      call: { endedBy: { homeUserId: 'alice', homeInstance: 'https://local.example' } },
+    }));
+  });
+
+  it('does not seat the peer\'s acceptor of a 1-on-1, as in 1.8.0', async () => {
+    connectionManager.createDmRoom(PAIR_FED, 'alice');
+
+    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE, true, PAIR_FED_FID));
+    await settle();
+
+    expect(participants(PAIR_FED)).toEqual(['alice']);
+  });
+});
+
+describe('the ready payload', () => {
+  it('does not ring again a member who declined a group call that still rings', async () => {
+    await start({ dmChannelId: GROUP }, 'alice', 'alice', ws('alice'));
+    await reject({ dmChannelId: GROUP }, 'bob');
+
+    expect(buildReadyPayload('bob').activeCalls.map(c => c.dmChannelId)).not.toContain(GROUP);
+    expect(buildReadyPayload('carol').activeCalls.map(c => c.dmChannelId)).toContain(GROUP);
+  });
+
+  it('does not ring again a member who declined a group call held from a peer', async () => {
+    connectionManager.createFederatedCall(peerCall());
+    await reject({ federatedCallId: REMOTE_FID }, 'carol');
+
+    expect(buildReadyPayload('carol').activeCalls.map(c => c.federatedCallId)).not.toContain(REMOTE_FID);
+    expect(buildReadyPayload('bob').activeCalls.map(c => c.federatedCallId)).toContain(REMOTE_FID);
+  });
+});
+
+describe('a refused dm_call_accept', () => {
+  it('names the call that is gone, with a code, on the sending socket only', async () => {
+    const secondTab = connect('bob');
+
+    await accept({ dmChannelId: GROUP }, 'bob', secondTab);
+
+    expect(sentOn(secondTab)).toEqual([
+      expect.objectContaining({ type: 'error', code: 'dm_call_not_found', dmChannelId: GROUP }),
+    ]);
+    expect(sentOn(ws('bob'))).toEqual([]);
+  });
+
+  it('refuses a member of no such DM with a code', async () => {
+    await accept({ dmChannelId: ONE_ON_ONE }, 'carol', ws('carol'));
+
+    expect(received('carol', 'error')).toEqual([
+      expect.objectContaining({ code: 'not_dm_member', dmChannelId: ONE_ON_ONE }),
+    ]);
   });
 });
