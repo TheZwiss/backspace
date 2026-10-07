@@ -5,6 +5,7 @@ describe('resolveSupportedLanguage', () => {
   it('maps a regional tag to its base language when that base is shipped', () => {
     expect(resolveSupportedLanguage('ru-RU')).toBe('ru');
     expect(resolveSupportedLanguage('de-CH')).toBe('de');
+    expect(resolveSupportedLanguage('pt-BR')).toBe('pt');
   });
 
   it('is case-insensitive', () => {
@@ -18,7 +19,7 @@ describe('resolveSupportedLanguage', () => {
 });
 
 describe('pickLanguage', () => {
-  const allReleased = new Set(['en', 'ru', 'de', 'zh']);
+  const allReleased = new Set(['en', 'ru', 'de', 'pt', 'zh']);
 
   it('prefers the stored choice over the browser languages', () => {
     expect(pickLanguage('de', ['ru-RU'], allReleased)).toBe('de');
@@ -40,7 +41,7 @@ describe('pickLanguage', () => {
 
 describe('availableLanguages', () => {
   it('offers every released language to users', () => {
-    expect(availableLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'zh']);
+    expect(availableLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'pt', 'zh']);
   });
 
   it('never lets detection pick a language that is not released', () => {
@@ -64,7 +65,7 @@ describe('availableLanguages', () => {
 
 describe('supportedLanguages', () => {
   it('lists every language by its own name and text direction', () => {
-    expect(supportedLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'zh']);
+    expect(supportedLanguages.map((l) => l.code)).toEqual(['en', 'ru', 'de', 'pt', 'zh']);
     for (const language of supportedLanguages) {
       expect(language.nativeName.length).toBeGreaterThan(0);
       expect(['ltr', 'rtl']).toContain(language.dir);
