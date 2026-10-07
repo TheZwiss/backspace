@@ -532,6 +532,66 @@ control follows the channel.
 
 ---
 
+## Who receives role and override data
+
+A client is never sent more of a space's role or override data than it reads.
+The web client takes its own permissions from the server: the space's
+`myPermissions` and each channel's `myPermissions`, computed for the viewer
+with every role and override applied. It reads a role's `permissions` and the
+override rows only in the role editor, the member role editor and the channel
+and category Permissions tabs, and every one of those needs `MANAGE_ROLES`
+(see "Client gating"). So:
+
+| Viewer | Roles | Member rows' roles | Override rows | Own permissions |
+|---|---|---|---|---|
+| Not a member (explore, invite preview, directory, join previews) | none | none | none | none |
+| Member without `MANAGE_ROLES` (a `MANAGE_CHANNELS` holder and a member whose role has overrides included) | every role: `id`, `spaceId`, `name`, `color`, `position`, `isEveryone`, `createdAt`; no `permissions` field | display fields only | refused (`403 missing_permission`) | `myPermissions` on the space and on each channel it can see; `isPrivate` on channels and categories |
+| Member who holds `MANAGE_ROLES` in the space (the owner, instance admins and `ADMINISTRATOR` holders hold it) | every role with its display fields and `permissions` | display fields only | `GET /channels/:id/overrides`, `GET /categories/:id/overrides` | the same |
+
+Member rows list a member's roles to name, colour, group and rank them, so they
+never carry bits; a manager reads the bits from the space's role list.
+
+The rule is one module, `server/src/utils/permissionDataView.ts`:
+`viewerReadsPermissionData(spacePermissions)` decides it,
+`rolesForViewer` shapes a space's role list for the viewer, `roleView` one
+role, `memberRolesView` a member row's roles. Every send site goes through it:
+
+| Send site | Audience | Shaped by |
+|---|---|---|
+| WS `ready` (`buildReadyPayload`), each space's `roles` and `members[].roles` | the connecting user | `rolesForViewer` with the user's space permissions, `memberRolesView` |
+| `GET /api/spaces/:id` | members (`403 not_space_member` otherwise) | the same |
+| `POST /api/spaces/:id/public-join` answer and WS `join_request_accepted` (`buildFullSpace` in `routes/explore.ts`) | the member who just joined | the same, for that member |
+| `GET /api/spaces/:id/members`, `PATCH /api/spaces/:id/members/:uid` answer | members, a role manager | `memberRolesView` |
+| `POST /api/spaces/:id/roles`, `PATCH /api/spaces/:id/roles/:rid` answers | the actor | `roleView`, with the actor's permissions after the change (an actor who switched off their own `MANAGE_ROLES` gets no bits back) |
+| `GET /channels/:id/overrides`, `GET /categories/:id/overrides` | managers | refused unless `viewerReadsPermissionData` |
+| `member_joined` | the space | a new member has no roles: `roles: []` |
+| `space_access_changed` | the space | carries only `spaceId` |
+| `GET /api/spaces/explore`, `GET /api/spaces/invite/:code/preview`, `GET /api/directory/spaces` | anyone | carry no role or override data |
+
+**When a member's roles change.** Every role write and member role write is
+followed by `space_access_changed` (websocket.md), and the client refetches
+`GET /api/spaces/:id`, which is shaped for what the member holds now. A member
+given `MANAGE_ROLES` gets the bits on that refetch; a member who loses it gets
+the list without them, which replaces the one in the store. A `ready` is
+shaped the same way at every connect.
+
+**Federation.** A user whose home is another instance connects to the space's
+instance directly and is a member there under their local replicated id, so
+the same rule applies to them with that id. No server-to-server route serves
+role or override data.
+
+**Mixed versions.** The web client has read the space's role list only from
+`GET /api/spaces/:id`, which already left the bits out for members without
+`MANAGE_ROLES`, and it ignores the `roles` in `ready`, `public-join` and
+`join_request_accepted`. So an older client on this server and this client on
+an older server (which sends the bits to everyone) behave as before.
+
+Covered by `ws/readyPayload.roleScope.test.ts`, `routes/rolePayloadScope.test.ts`
+(both on `testing/rolePayloadFixture.ts`) and the web
+`stores/spaceStore.reducedRoles.test.ts`.
+
+---
+
 ## Broadcast audience
 
 Space membership and channel access are not the same thing, so the two

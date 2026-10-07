@@ -74,7 +74,7 @@ Cross-references: [database.md](database.md) (table schemas), [permissions.md](p
 - Channels filtered by `VIEW_CHANNEL` permission per-channel (computed per-user)
 - Each channel includes `isPrivate` (true if @everyone has VIEW_CHANNEL deny override, `isHiddenFromEveryone`; see permissions.md, "Private channels and categories") and `myPermissions`
 - Categories include `isPrivate` flag (same rule)
-- Roles include `permissions` field only if requesting user has `MANAGE_ROLES`
+- Roles carry their display fields for every member and their `permissions` only when the requesting user holds `MANAGE_ROLES`; member rows list their roles with display fields only (permissions.md, "Who receives role and override data")
 - `myPermissions` at space level included
 
 ### Update
@@ -347,7 +347,7 @@ keeps the rows it has and says nothing about the rest.
 **Validation:** Space must have `visibility === 'public'`, not banned, not already member.
 
 **Side effects:** Same as invite join (insert member, WS broadcast, add to connectionManager).
-**Response:** Full `SpaceWithChannelsAndMembers` (not just `Space`), so the client can immediately populate the store without a follow-up `GET /api/spaces/:id`.
+**Response:** Full `SpaceWithChannelsAndMembers` (not just `Space`), so the client can immediately populate the store without a follow-up `GET /api/spaces/:id`. Its roles are shaped for the new member as `GET /api/spaces/:id` shapes them (permissions.md, "Who receives role and override data").
 
 ### Join Request Workflow
 
@@ -374,7 +374,7 @@ Accept flow (atomic transaction):
 2. Update request status to `'accepted'`, set `decidedBy` and `decidedAt`
 3. `connectionManager.addUserSpace`
 4. Broadcast `member_joined` to space
-5. Build full `SpaceWithChannelsAndMembers` for accepted user
+5. Build full `SpaceWithChannelsAndMembers` for accepted user, roles shaped for them as in `GET /api/spaces/:id`
 6. Send `join_request_accepted` WS event to requesting user (includes full space data)
 
 Decline flow:
@@ -468,14 +468,15 @@ Updates `spaces.ownerId`, broadcasts `space_updated` WS event.
 - @everyone role (id=spaceId) cannot be assigned
 - Role hierarchy: the member must rank below the actor, and every role added or removed must sit below the actor's top role (`403 role_hierarchy`, permissions.md)
 - Atomically deletes all existing `member_roles` then inserts new ones
-- Triggers `connectionManager.pushReadyPayload(uid)` to force re-sync
+- Answers the member with their roles (display fields only)
+- Followed by `space_access_changed` to the space, and a `space_voice_state` to the member (websocket.md); their client refetches the space's detail, which carries role bits only once they hold `MANAGE_ROLES`
 - Triggers `checkVoicePermissions(spaceId)` to enforce voice changes
 
 **Add single role:** `POST /api/spaces/:id/members/:uid/roles` — body `{ roleId }`, requires `MANAGE_ROLES`
 
 **Remove single role:** `DELETE /api/spaces/:id/members/:uid/roles/:roleId` — requires `MANAGE_ROLES`
 
-Both single-role routes apply the same checks as the replace route (not own roles, not the owner's, member of the space, role of this space other than @everyone, role hierarchy) and push the target a ready payload.
+Both single-role routes apply the same checks as the replace route (not own roles, not the owner's, member of the space, role of this space other than @everyone, role hierarchy) and are followed by `space_access_changed` in the same way.
 
 ---
 
@@ -492,7 +493,8 @@ Both single-role routes apply the same checks as the replace route (not own role
 - Permissions default to `DEFAULT_EVERYONE_PERMISSIONS` limited to the bits the actor holds; given permissions must all be held (`403 cannot_grant_unowned_permissions`, permissions.md "Held-bits rule")
 - Created at the bottom: position 1, the other roles move up one (`normalizeRolePositions`); refused with `403 role_hierarchy` unless the actor ranks above 1
 - Color defaults to `'#b9bbbe'`
-- After creation: pushes ready payload to all space members, checks voice permissions
+- After creation: `space_access_changed` to the space, checks voice permissions
+- Answers the role, with `permissions` (the actor holds `MANAGE_ROLES`)
 
 ### Update Role
 
@@ -505,7 +507,8 @@ Both single-role routes apply the same checks as the replace route (not own role
 - `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role
 - Position: an integer from 1 (not for @everyone, `400 validation_failed`) below the actor's top role; the role moves there and the others are renumbered so positions stay distinct
 - Client: the role list in Space Settings > Roles sends `{ position }` alone to reorder (drag handle, arrow keys, up and down buttons; permissions.md, "Setting the order")
-- After update: pushes ready payload to all members, checks voice permissions
+- After update: `space_access_changed` to the space, checks voice permissions
+- Answers the role, with `permissions` only while the actor still holds `MANAGE_ROLES` after the change
 
 ### Delete Role
 
@@ -515,7 +518,7 @@ Both single-role routes apply the same checks as the replace route (not own role
 - Cannot delete @everyone role (roleId === spaceId)
 - `404 role_not_in_space` for a role of another space; `403 role_hierarchy` for a role at or above the actor's top role; `403 cannot_change_unowned_permissions` for a role carrying a bit the actor does not hold (permissions.md "Held-bits rule")
 - Deletes channel and category overrides referencing this role, then renumbers the remaining roles
-- After delete: pushes ready payload to all members, checks voice permissions
+- After delete: `space_access_changed` to the space, checks voice permissions
 
 ---
 
