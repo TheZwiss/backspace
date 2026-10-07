@@ -32,7 +32,8 @@ vi.mock('../stores/authStore', () => ({
 }));
 
 import { useSpaceStore } from '../stores/spaceStore';
-import { getCanonicalUserView } from './userViewLookup';
+import { renderHook } from '@testing-library/react';
+import { getCanonicalUserView, useCanonicalUserView } from './userViewLookup';
 import type { User } from '@backspace/shared';
 
 function makeUser(extras: Partial<User> & Pick<User, 'id' | 'username'>): User {
@@ -134,5 +135,53 @@ describe('user views across instances (#353)', () => {
     const resolved = getCanonicalUserView(frankOnOrbit, 'https://orbit.ddns.net');
     expect(resolved.displayName).toBe('Frank Home');
     expect(resolved.id).toBe('f-orbit');
+  });
+});
+
+describe('the same view for the same inputs', () => {
+  const stub = makeUser({
+    id: 'orbit-frank-stub',
+    username: 'frank@nova.ddns.net',
+    homeUserId: 'nova-frank-id',
+    homeInstance: 'nova.ddns.net',
+    avatarColor: 'lavender',
+  });
+  const homeFromNova = makeUser({
+    id: 'nova-local-id',
+    username: 'frank@nova.ddns.net',
+    homeUserId: 'nova-frank-id',
+    homeInstance: 'nova.ddns.net',
+    avatarColor: 'teal',
+  });
+
+  it('gives the same object for the same row and cache entry', () => {
+    useSpaceStore.getState().upsertUserView(homeFromNova, 'https://nova.ddns.net');
+    const first = getCanonicalUserView(stub, 'https://orbit.ddns.net');
+    const second = getCanonicalUserView(stub, 'https://orbit.ddns.net');
+    expect(first).not.toBe(stub);
+    expect(second).toBe(first);
+  });
+
+  it('keeps the same object across re-renders until the entry changes', () => {
+    useSpaceStore.getState().upsertUserView(homeFromNova, 'https://nova.ddns.net');
+    const { result, rerender } = renderHook(() => useCanonicalUserView(stub, 'https://orbit.ddns.net'));
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+
+    useSpaceStore.getState().upsertUserView({ ...homeFromNova, avatarColor: 'rose' }, 'https://nova.ddns.net');
+    rerender();
+    expect(result.current).not.toBe(first);
+    expect(result.current.avatarColor).toBe('rose');
+    expect(result.current.id).toBe('orbit-frank-stub');
+  });
+
+  it('builds a separate view for another row of the same person', () => {
+    useSpaceStore.getState().upsertUserView(homeFromNova, 'https://nova.ddns.net');
+    const otherStub = { ...stub, id: 'sky-frank-stub' };
+    const forStub = getCanonicalUserView(stub, 'https://orbit.ddns.net');
+    const forOther = getCanonicalUserView(otherStub, 'https://sky.ddns.net');
+    expect(forOther).not.toBe(forStub);
+    expect(forOther.id).toBe('sky-frank-stub');
   });
 });
