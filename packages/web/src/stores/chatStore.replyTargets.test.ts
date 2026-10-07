@@ -152,7 +152,7 @@ describe('a failed send and its reply', () => {
     send.mockRejectedValueOnce(new Error('Offline'));
     useChatStore.getState().setReplyTo(GENERAL, inGeneral);
 
-    await useChatStore.getState().sendMessage(GENERAL, 'answer');
+    await expect(useChatStore.getState().sendMessage(GENERAL, 'answer')).rejects.toThrow('Offline');
 
     expect(cached(GENERAL).some((m) => m.id.startsWith('temp_'))).toBe(false);
     expect(replyTargetIn(GENERAL)).toBe(inGeneral);
@@ -168,7 +168,7 @@ describe('a failed send and its reply', () => {
     const sending = useChatStore.getState().sendMessage(GENERAL, 'answer');
     useChatStore.getState().setReplyTo(GENERAL, newer);
     fail(new Error('Offline'));
-    await sending;
+    await expect(sending).rejects.toThrow('Offline');
 
     expect(replyTargetIn(GENERAL)).toBe(newer);
   });
@@ -177,7 +177,7 @@ describe('a failed send and its reply', () => {
     send.mockRejectedValueOnce(replyTargetInvalid());
     useChatStore.getState().setReplyTo(GENERAL, inGeneral);
 
-    await useChatStore.getState().sendMessage(GENERAL, 'answer');
+    await expect(useChatStore.getState().sendMessage(GENERAL, 'answer')).rejects.toThrow();
 
     expect(replyTargetIn(GENERAL)).toBeUndefined();
   });

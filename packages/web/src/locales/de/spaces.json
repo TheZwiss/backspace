@@ -52,6 +52,15 @@
       "rename": "Kanal umbenennen",
       "nameLabel": "Kanalname",
       "channelLabel": "Kanal",
+      "topic": {
+        "label": "Thema",
+        "placeholder": "Worum geht es in diesem Kanal?",
+        "hint": "Wird in der Kopfzeile des Kanals angezeigt. Dort kann jeder den vollständigen Text öffnen.",
+        "counter": "{{used}}/{{max}}",
+        "tooLong": "Kürze das Thema auf höchstens {{max}} Zeichen, um es zu speichern.",
+        "empty": "Kein Thema festgelegt.",
+        "reset": "Änderungen verwerfen"
+      },
       "private": {
         "label": "Privater Kanal",
         "description": "Nur ausgewählte Mitglieder und Rollen können diesen Kanal sehen.",
@@ -586,6 +595,10 @@
     "selectChannel": "Wähle einen Kanal",
     "selectChannelHint": "Wähle einen Text- oder Sprachkanal, um loszulegen",
     "notificationSettings": "Benachrichtigungseinstellungen",
+    "topic": {
+      "show": "Vollständiges Thema anzeigen",
+      "dialogTitle": "#{{name}}"
+    },
     "voice": {
       "connectionFailed": "Verbindung fehlgeschlagen",
       "connected": "Verbunden",

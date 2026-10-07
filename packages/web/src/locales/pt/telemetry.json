@@ -1,0 +1,46 @@
+{
+  "ask": {
+    "title": "Oi. Aqui é o Jannis. Fui eu que construí isto.",
+    "p1": "O Backspace não rastreia ninguém, e isso inclui a mim. Nenhum número, nenhum painel, nada. Eu consigo ver o contador de downloads, e depois tudo fica em silêncio. Construir isto dá a sensação de gritar no espaço e nunca ouvir nada de volta.",
+    "p2": "Então estou pedindo. Uma vez por dia, sua instância poderia me mandar um oizinho bem pequeno? Não quem você é, nem o que alguém disse. Só contagens arredondadas: quantas pessoas estão aqui, qual versão está rodando, se voz e federação estão ativadas e de qual país veio o oi. Sem nomes, sem mensagens, sem endereço de nenhum tipo.",
+    "previewLead": "Veja exatamente o que ele diria hoje:",
+    "previewToggleShow": "Mostrar a mensagem",
+    "previewToggleHide": "Ocultar a mensagem",
+    "previewLoading": "Montando a mensagem",
+    "previewError": "Não foi possível montar a mensagem agora. Nada foi enviado, e você ainda pode decidir como quiser.",
+    "p3": "Tudo o que voltar é publicado como dados abertos na página de insights do projeto, e os gráficos aparecem quando pelo menos dez instâncias disserem oi. Fica desligado até você dizer sim, e você pode desligar de novo quando quiser.",
+    "yes": "Oiii 👋",
+    "no": "Silêncio de rádio",
+    "later": "Decidir depois",
+    "footnote": "O receptor roda na Cloudflare, que vê a requisição como qualquer servidor web e deduz o país a partir dela. Nada mais sobre você é armazenado. Você pode mudar isso a qualquer momento nas configurações da instância.",
+    "saving": "Salvando sua escolha",
+    "error": "Não foi possível salvar sua escolha. Nada foi enviado. Tente novamente."
+  },
+  "yes": {
+    "title": "Sinal captado.",
+    "body": "O primeiro oi sai em um minuto aleatório, e depois todos os dias. Obrigado. Agora está bem menos silencioso por aqui.",
+    "close": "Fechar"
+  },
+  "no": {
+    "title": "Entendido.",
+    "body": "Nada será enviado. Vou seguir à deriva, e se você mudar de ideia, estou a um botão de distância nas configurações da instância.",
+    "close": "Fechar"
+  },
+  "panel": {
+    "title": "Diga oi ao Jannis",
+    "intro": "Um relatório de uso diário opcional para o mantenedor: contagens arredondadas e a versão, nada sobre pessoas. Desligado até você ativar.",
+    "toggle": "Enviar um oi diário",
+    "status": {
+      "never": "Nunca perguntado",
+      "off": "Desligado",
+      "on": "Ligado",
+      "lastDay": "Último oi enviado em {{date}}",
+      "none": "Nenhum oi enviado ainda",
+      "error": "A última tentativa, em {{date}}, falhou com o status {{status}}. Ele tentará de novo amanhã.",
+      "id": "ID da instância (aleatório, não é o seu domínio): {{id}}"
+    },
+    "previewTitle": "O que seria enviado hoje",
+    "learnMore": "O que é enviado e por quê",
+    "refreshPreview": "Atualizar"
+  }
+}

@@ -793,7 +793,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       // Real message will arrive via WebSocket and replace the temp one
     } catch (error) {
-      // Rollback: remove the optimistic message on failure
+      // Roll back locally, but let the composer expose failure and retain the draft.
       get().removeMessage(tempId, channelId);
       if (replyTarget && shouldRestoreReplyTarget(error)) {
         // Give the reply back unless the user has started another one in
@@ -802,6 +802,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ? state
           : { replyTargets: withReplyTarget(state.replyTargets, channelId, replyTarget) }));
       }
+      throw error;
     }
   },
 

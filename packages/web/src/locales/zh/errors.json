@@ -189,6 +189,8 @@
   "category_not_found": "未找到该分类。",
   "channel_name_required": "请输入频道名称。",
   "channel_name_length": "频道名称长度必须在 {{min}} 到 {{max}} 个字符之间。",
+  "channel_topic_invalid": "频道主题必须是文本。",
+  "channel_topic_length": "频道主题最多包含 {{max}} 个字符。",
   "channel_type_invalid": "频道类型必须是文字频道或语音频道。",
   "category_not_in_space": "该分类不属于此空间。",
   "channel_not_in_space": "该频道不属于此空间。",
