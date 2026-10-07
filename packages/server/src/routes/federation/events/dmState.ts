@@ -9,42 +9,38 @@ import type { Activity, FederationRelayEvent } from '@backspace/shared';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
 import { presenceUpdateEvent, validateActivities } from '../../../ws/presenceEvent.js';
 import { projectReplicaStatus } from '../../../ws/replicaPresence.js';
-import { extractDomain, resolveRelayActor, attributionRefusal } from '../identity.js';
+import { extractDomain, resolveRelayActor, attributionRefusal, type RelayActor } from '../identity.js';
 
 /**
  * The local users a `file_rejected` names: the users homed on the rejecting
- * instance who could not receive the file. With `affectedUsers` each is the
- * user that IS that identity (`resolveRelayActor`). An older sender sends only
- * bare home user ids, which are unique only on their home: one is used only
- * when exactly one local user carries it.
+ * instance who could not receive the file. The rejecting instance only speaks
+ * for its own users, so every name is taken as an identity homed there: with
+ * `affectedUsers`, an identity homed on any other instance is skipped; an
+ * older sender sends only bare home user ids, each of which names the user
+ * with that id homed on the sender. Each is the user that IS that identity
+ * (`resolveRelayActor`).
  */
 function resolveFileRejectedUsers(
   event: FederationRelayEvent,
+  sourceInstance: string,
   db: ReturnType<typeof getDb>,
 ): Array<typeof schema.users.$inferSelect> {
+  const sourceDomain = extractDomain(sourceInstance).toLowerCase();
+  const identities: RelayActor[] = Array.isArray(event.affectedUsers)
+    ? event.affectedUsers.filter((identity): identity is RelayActor =>
+      typeof identity?.homeUserId === 'string' && typeof identity.homeInstance === 'string'
+      && extractDomain(identity.homeInstance).toLowerCase() === sourceDomain)
+    : (event.affectedUserIds ?? [])
+      .filter((homeUserId): homeUserId is string => typeof homeUserId === 'string')
+      .map(homeUserId => ({ homeUserId, homeInstance: sourceInstance }));
+
   const users: Array<typeof schema.users.$inferSelect> = [];
   const seen = new Set<string>();
-  const add = (user: typeof schema.users.$inferSelect): void => {
-    if (seen.has(user.id)) return;
-    seen.add(user.id);
-    users.push(user);
-  };
-
-  if (Array.isArray(event.affectedUsers)) {
-    for (const identity of event.affectedUsers) {
-      if (typeof identity?.homeUserId !== 'string' || typeof identity.homeInstance !== 'string') continue;
-      const resolved = resolveRelayActor(identity, db);
-      if (resolved.kind === 'found') add(resolved.user);
-    }
-    return users;
-  }
-
-  for (const homeUserId of event.affectedUserIds ?? []) {
-    const candidates = db.select()
-      .from(schema.users)
-      .where(and(eq(schema.users.homeUserId, homeUserId), eq(schema.users.isDeleted, 0)))
-      .all();
-    if (candidates.length === 1) add(candidates[0]!);
+  for (const identity of identities) {
+    const resolved = resolveRelayActor(identity, db);
+    if (resolved.kind !== 'found' || seen.has(resolved.user.id)) continue;
+    seen.add(resolved.user.id);
+    users.push(resolved.user);
   }
   return users;
 }
@@ -56,7 +52,8 @@ export function processFileRejectedEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
-  // FED-010: file_rejected is a system event from the rejecting peer — no user attribution to verify
+  // FED-010: file_rejected is a system event from the rejecting peer. The
+  // users it names are its own; `resolveFileRejectedUsers` holds it to that.
   if (!event.attachmentId || !event.rejectionReason) {
     rejected.push({ messageId: event.messageId, reason: 'missing_file_rejected_payload' });
     return;
@@ -95,7 +92,7 @@ export function processFileRejectedEvent(
     return;
   }
 
-  const affectedUsers = resolveFileRejectedUsers(event, db).map(user => ({
+  const affectedUsers = resolveFileRejectedUsers(event, sourceInstance, db).map(user => ({
     userId: user.id,
     username: user.displayName || user.username,
     limit: event.rejectionLimit ?? 0,

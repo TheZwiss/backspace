@@ -1434,7 +1434,7 @@ When the origin instance receives a `file_rejected` event:
 
 1. Find local message by `event.messageId` (the original local message ID)
 2. Match attachment by `sourceFilename` or fallback to single attachment
-3. Resolve the affected users (`resolveFileRejectedUsers`): with `affectedUsers`, each is the user that IS that identity (`resolveRelayActor`, homeUserId + homeInstance). From an older sender with only `affectedUserIds`, a bare id is used only when exactly one live local user carries it as `home_user_id`, since a home user id is unique only on its home
+3. Resolve the affected users (`resolveFileRejectedUsers`). The rejecting instance speaks only for its own users, so each name is an identity homed on the sender: with `affectedUsers`, an identity homed on any other instance is skipped; from an older sender with only `affectedUserIds`, each bare id is taken as `{ homeUserId, homeInstance: <sender> }` (the sender only ever listed its own users there). Each is then the user that IS that identity (`resolveRelayActor`, homeUserId + homeInstance)
 4. Merge rejection info into `federationMeta` (accumulates from multiple peers). When no affected user is new (the same rejection delivered again), nothing changes and nothing is sent
 5. Set `federationStatus = 'remote_partial'`
 6. Broadcast `dm_message_updated` + targeted `federation_file_rejected` toast to message author

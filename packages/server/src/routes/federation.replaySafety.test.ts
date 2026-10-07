@@ -402,9 +402,21 @@ describe('file_rejected', () => {
     expect(meta().map(u => u.userId)).toEqual(['carol-home']);
   });
 
-  it('from an older sender, matches a bare id only when exactly one user carries it', async () => {
-    await apply(fileRejected({ affectedUserIds: ['carol', 'dave'] }));
-    expect(meta().map(u => u.userId)).toEqual(['dave-home']);
+  it('skips a named user homed on any instance but the sender', async () => {
+    await apply(fileRejected({
+      affectedUserIds: ['carol', 'carol'],
+      affectedUsers: [
+        { homeUserId: 'carol', homeInstance: 'https://other.test' },
+        { homeUserId: 'carol', homeInstance: HOME_ORIGIN },
+      ],
+    }));
+    expect(meta().map(u => u.userId)).toEqual(['carol-home']);
+  });
+
+  it('from an older sender, matches each bare id as the user of that id homed on the sender', async () => {
+    seedUser({ id: 'erin-other', username: 'erin@other.test', homeInstance: 'other.test', homeUserId: 'erin' });
+    await apply(fileRejected({ affectedUserIds: ['carol', 'dave', 'erin'] }));
+    expect(meta().map(u => u.userId)).toEqual(['carol-home', 'dave-home']);
   });
 
   it('a replay tells nobody again', async () => {
