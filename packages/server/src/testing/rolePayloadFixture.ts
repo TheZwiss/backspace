@@ -126,6 +126,33 @@ export function seedRolePayloadSpaces(db: FixtureDb): void {
   ]).run();
 }
 
+/**
+ * Users whose home is another instance, as `addReplicatedMember` takes them.
+ * The manager's id at home is the same string as a local plain member's id,
+ * so a check that compared bare ids across instances would mix the two up.
+ */
+export const REPLICATED = {
+  manager: { id: 'u-replica-manager', homeUserId: USERS.member, homeInstance: 'peer.example' },
+  member: { id: 'u-replica-member', homeUserId: 'u-home-member', homeInstance: 'peer.example' },
+} as const;
+
+/**
+ * A user whose home is another instance, replicated here under a local id
+ * that differs from their id at home, and made a member of `spaceId` (with
+ * `roleId` when given). This is how a remote user connected to this instance
+ * is a member of its spaces.
+ */
+export function addReplicatedMember(
+  db: FixtureDb,
+  spaceId: string,
+  user: { id: string; homeUserId: string; homeInstance: string },
+  roleId?: string,
+): void {
+  db.insert(schema.users).values({
+    id: user.id, username: user.id, passwordHash: 'x', homeUserId: user.homeUserId, homeInstance: user.homeInstance, createdAt: NOW,
+  }).run();
+  addMember(db, spaceId, user.id, roleId);
+}
 
 /** The stored permissions string of a fixture role, as a manager receives it. */
 export function storedBitsOf(roleId: string): string {

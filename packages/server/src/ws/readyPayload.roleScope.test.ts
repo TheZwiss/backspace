@@ -4,6 +4,8 @@ import { PermissionBits, permissionsToString, stringToPermissions } from '@backs
 import { setWorkerId } from '../utils/snowflake.js';
 import * as schema from '../db/schema.js';
 import {
+  REPLICATED,
+  addReplicatedMember,
   storedBitsOf,
   SPACE_ID,
   PRIVATE_ID,
@@ -112,6 +114,19 @@ describe('ready payload: roles by audience', () => {
     const general = space.channels.find(c => c.id === GENERAL_ID);
     expect(stringToPermissions(general?.myPermissions) & PermissionBits.MANAGE_ROLES).toBe(PermissionBits.MANAGE_ROLES);
     for (const role of space.roles) expect(role).not.toHaveProperty('permissions');
+  });
+
+  it('decides on the replicated id of a user whose home is another instance', async () => {
+    addReplicatedMember(testDb, SPACE_ID, REPLICATED.manager, 'r-mod');
+    addReplicatedMember(testDb, SPACE_ID, REPLICATED.member);
+
+    const manager = await readySpace(REPLICATED.manager.id);
+    expect(displayOf(manager)).toEqual(DISPLAY);
+    for (const role of manager.roles) expect(role.permissions).toBe(storedBitsOf(role.id));
+
+    for (const role of (await readySpace(REPLICATED.member.id)).roles) expect(role).not.toHaveProperty('permissions');
+    // The local member whose id is the manager's id at home gets no bits.
+    for (const role of (await readySpace(USERS.member)).roles) expect(role).not.toHaveProperty('permissions');
   });
 
   it('lists member roles with display fields only, for a manager too', async () => {

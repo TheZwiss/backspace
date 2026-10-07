@@ -11,8 +11,10 @@ import {
   EVERYONE_BITS,
   GENERAL_ID,
   PRIVATE_ID,
+  REPLICATED,
   REQUEST_SPACE_ID,
   ROLE_BITS,
+  addReplicatedMember,
   storedBitsOf,
   SPACE_ID,
   USERS,
@@ -158,6 +160,33 @@ describe('GET /api/spaces/:id', () => {
       expect(body.members.find(m => m.userId === USERS.vip)?.roles.map(r => r.id)).toEqual(['r-vip']);
       for (const member of body.members) for (const role of member.roles) expect(role).not.toHaveProperty('permissions');
     }
+  });
+});
+
+describe('a viewer whose home is another instance', () => {
+  beforeEach(() => {
+    addReplicatedMember(testDb, SPACE_ID, REPLICATED.manager, 'r-mod');
+    addReplicatedMember(testDb, SPACE_ID, REPLICATED.member);
+  });
+
+  it('gets the bits and the override rows while their replicated id holds MANAGE_ROLES', async () => {
+    const { status, body } = await getDetail(REPLICATED.manager.id);
+    expect(status).toBe(200);
+    expectStoredBits(body.roles);
+    as(REPLICATED.manager.id);
+    expect((await app.inject({ method: 'GET', url: `/api/channels/${PRIVATE_ID}/overrides` })).statusCode).toBe(200);
+  });
+
+  it('gets display fields only otherwise', async () => {
+    const { status, body } = await getDetail(REPLICATED.member.id);
+    expect(status).toBe(200);
+    expectNoBits(body.roles);
+    as(REPLICATED.member.id);
+    expect((await app.inject({ method: 'GET', url: `/api/channels/${PRIVATE_ID}/overrides` })).statusCode).toBe(403);
+  });
+
+  it('gives no bits to the local member whose id is the manager\'s id at home', async () => {
+    expectNoBits((await getDetail(USERS.member)).body.roles);
   });
 });
 
