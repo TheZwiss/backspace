@@ -1,0 +1,267 @@
+{
+  "chatPanel": {
+    "title": "Chat",
+    "close": "Fechar chat"
+  },
+  "badges": {
+    "mutedNoPermission": "Silenciado (sem permissão para falar)",
+    "spaceMuted": "Silenciado no espaço",
+    "mutedSpaceDeafened": "Silenciado (ensurdecido no espaço)",
+    "spaceDeafened": "Ensurdecido no espaço",
+    "locallyMuted": "Silenciado localmente",
+    "live": "AO VIVO",
+    "you": "(você)"
+  },
+  "moderation": {
+    "spaceMute": "Silenciar no espaço",
+    "spaceUnmute": "Reativar microfone no espaço",
+    "spaceDeafen": "Ensurdecer no espaço",
+    "spaceUndeafen": "Desfazer ensurdecimento no espaço",
+    "disconnect": "Desconectar",
+    "moveTo": "Mover para"
+  },
+  "participantMenu": {
+    "watchCamera": "Assistir à câmera",
+    "stopWatchingCamera": "Parar de assistir à câmera",
+    "muteUser": "Silenciar usuário",
+    "userVolume": "Volume do usuário"
+  },
+  "incomingCall": {
+    "status": "Chamada de voz recebida...",
+    "notificationTitle": "Chamada recebida",
+    "notificationBody": "{{name}} está ligando para você"
+  },
+  "grid": {
+    "waitingForOthers": "Aguardando a entrada de outras pessoas...",
+    "returnToGridHint": "Clique para voltar à visualização em grade",
+    "backToGrid": "Voltar à visualização em grade",
+    "gridButton": "Grade",
+    "showMembers": "Mostrar membros",
+    "hideMembers": "Ocultar membros"
+  },
+  "connectionInfo": {
+    "title": "Informações da conexão",
+    "notConnected": "Não conectado",
+    "gathering": "Coletando estatísticas...",
+    "section": {
+      "network": "Rede",
+      "audio": "Áudio",
+      "video": "Vídeo"
+    },
+    "network": {
+      "ping": "Ping",
+      "packetLoss": "Perda de pacotes",
+      "jitter": "Jitter",
+      "server": "Servidor",
+      "protocol": "Protocolo"
+    },
+    "video": {
+      "requestedCodec": "Codec solicitado",
+      "negotiatedCodec": "Codec negociado",
+      "encoderImplementation": "Implementação do codificador",
+      "qpDelta": "Delta da soma de QP",
+      "nackDelta": "Delta de NACK",
+      "pliDelta": "Delta de PLI"
+    },
+    "source": {
+      "microphone": "Microfone",
+      "camera": "Câmera",
+      "screen": "Tela",
+      "screenAudio": "Áudio da tela",
+      "unknown": "Desconhecido"
+    },
+    "remoteParticipant": "Remoto"
+  },
+  "screenPicker": {
+    "title": "Compartilhar sua tela",
+    "tabs": {
+      "screens": "Telas",
+      "windows": "Janelas"
+    },
+    "searchWindows": "Pesquisar janelas...",
+    "noWindowsMatch": "Nenhuma janela corresponde à sua pesquisa",
+    "noScreens": "Nenhuma tela disponível",
+    "noWindows": "Nenhuma janela disponível",
+    "loadingSources": "Procurando telas e janelas…",
+    "chooseTitle": "Escolha o que compartilhar",
+    "chooseHint": "Seu navegador vai perguntar qual tela, janela ou aba compartilhar.",
+    "chooseHintSystem": "Seu sistema vai perguntar qual tela ou janela compartilhar.",
+    "choose": "Escolher",
+    "chooseAgain": "Escolher outra coisa",
+    "preview": "Pré-visualizar",
+    "audioNeedsRepick": "A configuração de áudio do sistema só vale depois que você escolher de novo.",
+    "cancelled": "Nada foi escolhido.",
+    "unsupported": "Este navegador não consegue compartilhar sua tela.",
+    "captureFailed": "Não foi possível iniciar a captura.",
+    "startFailed": "Não foi possível iniciar a transmissão.",
+    "audioCaptureFailed": "Não foi possível iniciar a captura com o áudio do sistema. Desative o áudio do sistema se o seu sistema não for compatível.",
+    "start": "Iniciar transmissão",
+    "subtitle": "Escolha o que compartilhar, ajuste a qualidade e comece.",
+    "stageIdle": "Nada selecionado ainda",
+    "stageReady": "Pronto para entrar ao vivo",
+    "permissionHintMac": "O macOS bloqueia a captura de tela até que o Backspace tenha permissão de Gravação de Tela. Conceda-a em Ajustes do Sistema → Privacidade e Segurança → Gravação de Tela e tente novamente.",
+    "retrySources": "Tentar novamente",
+    "kind": {
+      "monitor": "Tela",
+      "window": "Janela"
+    }
+  },
+  "streamSettings": {
+    "title": "Configurações da transmissão",
+    "hostLimits": "Limites definidos por {{host}}",
+    "resolution": "Resolução",
+    "frameRate": "Taxa de quadros",
+    "contentMode": "Modo de conteúdo",
+    "mode": {
+      "gaming": "Jogos",
+      "text": "Texto"
+    },
+    "codec": "Codec",
+    "codecOption": {
+      "vp9": "VP9",
+      "h264": "H264"
+    },
+    "bitrate": "Taxa de bits",
+    "custom": "Personalizada",
+    "auto": "Automática",
+    "customBitrateDisabled": "Taxa de bits personalizada desativada pelo administrador",
+    "customBitrateDisabledByHost": "Taxa de bits personalizada desativada por {{host}}",
+    "systemAudio": "Áudio do sistema",
+    "chromeEchoNote": "O Chrome pode excluir o áudio do Backspace quando o tipo de captura permite",
+    "electronWindowsAudioNote": "O loopback do Windows pode capturar o áudio da chamada quando restrictOwnAudio não é compatível",
+    "electronMacAudioNote": "O macOS 13+ exige a permissão de Gravação de Tela e Áudio do Sistema",
+    "electronLinuxAudioNote": "O Linux exige compatibilidade com PulseAudio; o áudio do Backspace também pode ser capturado",
+    "systemAudioNote": {
+      "excluded": "Os espectadores ouvem o som do seu computador, mas não o chat de voz nem outros áudios do Backspace.",
+      "excludedMac": "Os espectadores ouvem o som do seu Mac, mas não o chat de voz nem outros áudios do Backspace. O macOS pede a permissão de Gravação de Tela e Áudio do Sistema.",
+      "includedWindows": "Esta versão do Windows compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. No Windows 11, o áudio do próprio Backspace fica de fora.",
+      "includedMac": "Esta versão do macOS compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. No macOS 14.2 e posteriores, o áudio do próprio Backspace fica de fora. O macOS pede a permissão de Gravação de Tela e Áudio do Sistema.",
+      "includedLinux": "O Linux compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. Requer PulseAudio, ou PipeWire com pipewire-pulse.",
+      "unavailableMac": "O áudio do sistema requer o macOS 13 ou posterior."
+    },
+    "systemAudioStartFailed": "Não foi possível iniciar a transmissão com o áudio do sistema. Desative Compartilhar áudio do sistema se esta plataforma não for compatível.",
+    "systemAudioAddFailed": "Não foi possível adicionar o áudio do sistema à transmissão.",
+    "systemAudioAdding": "Adicionando áudio do sistema…",
+    "systemAudioLiveUnavailable": "O áudio do sistema só pode ser adicionado quando a transmissão começa. Reinicie a transmissão para incluí-lo.",
+    "softwareH264Fallback": "A codificação H264 por hardware não está disponível. O OpenH264 por software está em uso; o VP9 pode ter melhor desempenho.",
+    "degradation": {
+      "maintainResolution": "manter resolução",
+      "maintainFramerate": "manter taxa de quadros",
+      "balanced": "equilibrado"
+    },
+    "summary": "{{bitrate}} · {{degradation}}"
+  },
+  "stream": {
+    "quality": "Qualidade da transmissão",
+    "qualityValue": "{{height}}p {{fps}}fps",
+    "volume": "Volume da transmissão",
+    "attenuation": "Atenuação da transmissão",
+    "attenuationStrength": "Intensidade da atenuação",
+    "stop": "Parar transmissão",
+    "change": "Trocar transmissão",
+    "stopWatching": "Parar de assistir",
+    "watch": "Assistir à transmissão",
+    "watchShort": "Assistir",
+    "mute": "Silenciar transmissão",
+    "isStreaming": "{{name}} está transmitindo"
+  },
+  "streamDiagnostics": {
+    "publisherNetwork": "A rede de quem transmite está instável",
+    "publisherCpu": "O computador de quem transmite não consegue codificar o vídeo rápido o suficiente",
+    "viewerNetwork": "Sua conexão está instável",
+    "reconnecting": "Conexão perdida — reconectando…",
+    "unknown": "A conexão está instável; não foi possível determinar o lado afetado"
+  },
+  "voiceDiagnostics": {
+    "selfNetwork": "Sua conexão está instável",
+    "participantNetwork": "{{name}} está com a conexão instável",
+    "reconnecting": "A conexão com o servidor de voz foi interrompida — reconectando…"
+  },
+  "channelDuration": "Canal ativo há {{duration}}",
+  "controls": {
+    "spaceMutedSelfMuted": "Silenciado no espaço (você também se silenciou)",
+    "unmuteShortcut": "Reativar microfone (M)",
+    "muteShortcut": "Silenciar (M)",
+    "undeafenShortcut": "Desfazer ensurdecimento (D)",
+    "deafenShortcut": "Ensurdecer (D)",
+    "unmute": "Reativar microfone",
+    "mute": "Silenciar",
+    "undeafen": "Desfazer ensurdecimento",
+    "deafen": "Ensurdecer",
+    "cameraOff": "Desligar câmera",
+    "cameraOn": "Ligar câmera",
+    "stopSharing": "Parar de compartilhar",
+    "shareScreen": "Compartilhar tela",
+    "shareOptions": "Opções de compartilhamento de tela",
+    "toggleChat": "Alternar chat",
+    "exitFullscreen": "Sair da tela cheia (Esc)",
+    "fullscreen": "Tela cheia",
+    "disconnect": "Desconectar",
+    "connectionInfo": "Informações da conexão",
+    "noiseSuppressionOff": "Desativar supressão de ruído com IA",
+    "noiseSuppressionOn": "Ativar supressão de ruído com IA"
+  },
+  "status": {
+    "dmCall": "Chamada em DM",
+    "voiceChannel": "Canal de voz",
+    "voiceCall": "Chamada de voz",
+    "connectionFailed": "Falha na conexão",
+    "connected": "Voz conectada",
+    "connecting": "Conectando...",
+    "reconnecting": "Reconectando…",
+    "disconnected": "Desconectado",
+    "connectionLost": "Conexão perdida. Tente novamente.",
+    "retry": "Tentar novamente"
+  },
+  "camera": {
+    "auto": "Automático",
+    "autoSystemDefault": "Automático (padrão do sistema)",
+    "selected": "Câmera selecionada",
+    "fallbackName": "Câmera {{index}}",
+    "select": "Selecionar câmera",
+    "switch": "Trocar câmera",
+    "turnOn": "Ligar câmera",
+    "turnOff": "Desligar câmera"
+  },
+  "joinSheet": {
+    "peopleInVoice_one": "{{count}} pessoa na voz",
+    "peopleInVoice_many": "{{count}} pessoas na voz",
+    "peopleInVoice_other": "{{count}} pessoas na voz",
+    "switchNotice": "Você vai sair de <current>{{current}}</current> e entrar em <target>{{target}}</target>",
+    "checkingCamera": "Verificando câmera…",
+    "tapToPreview": "Toque para pré-visualizar a câmera",
+    "cameraDenied": "Permissão de câmera negada.",
+    "stopPreview": "Parar pré-visualização",
+    "enablePreview": "Ativar pré-visualização da câmera",
+    "previewError": {
+      "inUse": "A câmera está sendo usada por outro aplicativo.",
+      "unavailable": "A câmera selecionada não está disponível.",
+      "notFound": "Nenhuma câmera detectada.",
+      "failed": "Não foi possível iniciar a pré-visualização da câmera."
+    },
+    "empty": {
+      "title": "Ainda não há ninguém neste canal.",
+      "hint": "Seja o primeiro a entrar!"
+    },
+    "unmuteMicrophone": "Reativar microfone",
+    "muteMicrophone": "Silenciar microfone",
+    "switchChannel": "Trocar de canal",
+    "join": "Entrar na voz"
+  },
+  "mobileCall": {
+    "collapse": "Recolher chamada",
+    "connectedCount_one": "{{count}} conectado",
+    "connectedCount_many": "{{count}} conectados",
+    "connectedCount_other": "{{count}} conectados",
+    "viewMembers": "Ver membros",
+    "micDenied": {
+      "title": "Acesso ao microfone negado",
+      "description": "Você está só ouvindo — as outras pessoas não conseguem ouvir você.",
+      "allow": "Permitir microfone"
+    },
+    "shareScreen": "Compartilhar tela",
+    "stopSharingScreen": "Parar de compartilhar a tela",
+    "disconnect": "Desconectar da chamada"
+  },
+  "connectLocked": "Você não tem permissão para se conectar a este canal"
+}

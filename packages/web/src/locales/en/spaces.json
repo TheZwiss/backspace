@@ -52,6 +52,15 @@
       "rename": "Rename Channel",
       "nameLabel": "Channel Name",
       "channelLabel": "Channel",
+      "topic": {
+        "label": "Topic",
+        "placeholder": "What's this channel about?",
+        "hint": "Shown in the channel header. Anyone can open the full text from there.",
+        "counter": "{{used}}/{{max}}",
+        "tooLong": "Shorten the topic to {{max}} characters or fewer to save it.",
+        "empty": "No topic set.",
+        "reset": "Discard Changes"
+      },
       "private": {
         "label": "Private Channel",
         "description": "Only selected members and roles will be able to view this channel.",
@@ -586,6 +595,10 @@
     "selectChannel": "Select a channel",
     "selectChannelHint": "Select a text or voice channel to get started",
     "notificationSettings": "Notification Settings",
+    "topic": {
+      "show": "Show full topic",
+      "dialogTitle": "#{{name}}"
+    },
     "voice": {
       "connectionFailed": "Connection Failed",
       "connected": "Connected",

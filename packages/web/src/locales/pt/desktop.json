@@ -1,0 +1,22 @@
+{
+  "update": {
+    "laterHint": "Você pode instalar depois em Configurações, Desktop",
+    "dismiss": "Dispensar esta atualização",
+    "failed": {
+      "title": "Não foi possível instalar a atualização",
+      "body": "O Backspace {{version}} foi baixado, mas a instalação falhou. Você pode instalá-lo manualmente."
+    },
+    "ready": {
+      "title": "Atualização pronta",
+      "body": "O Backspace {{version}} foi baixado e está pronto para instalar."
+    },
+    "available": {
+      "title": "O Backspace {{version}} está disponível",
+      "body": "Esta versão não consegue se atualizar sozinha, então baixe a nova versão para atualizar.",
+      "bodyWithCurrent": "Você está na versão {{currentVersion}}. Esta versão não consegue se atualizar sozinha, então baixe a nova versão para atualizar."
+    },
+    "restartNow": "Reiniciar agora",
+    "download": "Baixar",
+    "later": "Depois"
+  }
+}

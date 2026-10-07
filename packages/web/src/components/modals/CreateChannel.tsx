@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { describeError } from '../../i18n/errors';
+import { CHANNEL_TOPIC_MAX_LENGTH, normalizeChannelTopic } from '@backspace/shared/src/constants';
 
 export function CreateChannelModal() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -45,7 +46,7 @@ export function CreateChannelModal() {
 
     setIsLoading(true);
     try {
-      await createChannel(currentSpaceId, name.trim(), type, topic.trim() || undefined, categoryId || undefined);
+      await createChannel(currentSpaceId, name.trim(), type, normalizeChannelTopic(topic) ?? undefined, categoryId || undefined);
       closeModal();
       setName('');
       setTopic('');
@@ -133,6 +134,7 @@ export function CreateChannelModal() {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
+              maxLength={CHANNEL_TOPIC_MAX_LENGTH}
               className="input-standard w-full"
               placeholder={t('spaces:channel.create.topicPlaceholder')}
             />

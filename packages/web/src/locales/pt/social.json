@@ -1,0 +1,86 @@
+{
+  "tabs": {
+    "all": "Todos",
+    "pending": "Pendentes",
+    "add": "Adicionar amigo",
+    "activity": "Atividade"
+  },
+  "sections": {
+    "online": "Online — {{n}}",
+    "all": "Todos os amigos — {{n}}",
+    "pending": "Pendentes — {{n}}",
+    "active": "Ativos — {{n}}",
+    "offline": "Offline — {{n}}"
+  },
+  "empty": {
+    "online": "Ninguém está online agora.",
+    "all": "Nenhum amigo ainda — adicione alguém!",
+    "pending": "Nenhuma solicitação pendente — a Nori está tirando uma soneca.",
+    "activity": "Está tudo quieto por enquanto... Quando seus amigos começarem uma atividade, ela aparecerá aqui!"
+  },
+  "friend": {
+    "viaInstance": "via {{host}}",
+    "message": "Mensagem",
+    "remove": "Remover amigo"
+  },
+  "sendMessage": {
+    "failed": "Não foi possível abrir a conversa: {{reason}}"
+  },
+  "request": {
+    "incoming": "Solicitação de amizade recebida",
+    "outgoing": "Solicitação de amizade enviada",
+    "ignore": "Ignorar",
+    "cancel": "Cancelar solicitação",
+    "send": "Enviar solicitação de amizade",
+    "pending": "Solicitação pendente",
+    "sending": "Enviando...",
+    "cancelling": "Cancelando...",
+    "sent": "Solicitação de amizade enviada!"
+  },
+  "removeFriend": {
+    "title": "Remover amigo",
+    "description": "Tem certeza de que deseja remover {{name}} da sua lista de amigos? Você sempre poderá enviar uma nova solicitação de amizade depois.",
+    "fallbackName": "este usuário"
+  },
+  "add": {
+    "title": "Encontrar pessoas",
+    "hint": "Pesquise por nome de usuário ou use <handle>usuario@instancia</handle> para adicionar alguém diretamente.",
+    "placeholder": "Pesquisar ou adicionar por nome de usuário...",
+    "direct": "Enviar solicitação de amizade para <handle>{{handle}}</handle>",
+    "sendRequest": "Enviar solicitação",
+    "discover": "Descobrir pessoas",
+    "noSearchResults": "Nenhum usuário corresponde à sua pesquisa.",
+    "noDiscoverable": "Nenhum usuário descobrível ainda — convide pessoas para entrar!"
+  },
+  "mutuals": {
+    "friends_one": "{{count}} amigo em comum",
+    "friends_many": "{{count}} amigos em comum",
+    "friends_other": "{{count}} amigos em comum",
+    "spaces_one": "{{count}} espaço em comum",
+    "spaces_many": "{{count}} espaços em comum",
+    "spaces_other": "{{count}} espaços em comum",
+    "noFriends": "Nenhum amigo em comum",
+    "noSpaces": "Nenhum espaço em comum"
+  },
+  "profile": {
+    "tabs": {
+      "about": "Sobre",
+      "mutualFriends": "Amigos em comum",
+      "mutualSpaces": "Espaços em comum"
+    },
+    "aboutMe": "Sobre mim",
+    "roles": "Cargos",
+    "memberSince": "Membro desde",
+    "sendMessage": "Enviar mensagem",
+    "editRoles": "Editar cargos",
+    "viewFull": "Ver perfil completo",
+    "addFriend": "Adicionar amigo"
+  },
+  "activity": {
+    "title": "Ativos agora",
+    "quietTitle": "Está tudo quieto por enquanto...",
+    "quietDescription": "Quando um amigo começar uma atividade, como jogar ou ficar num canal de voz, ela aparecerá aqui!",
+    "online": "Online — {{n}}",
+    "offline": "Offline — {{n}}"
+  }
+}

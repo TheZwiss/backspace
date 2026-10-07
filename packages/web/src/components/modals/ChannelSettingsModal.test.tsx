@@ -145,3 +145,50 @@ describe('ChannelSettingsModal rename', () => {
     expect((screen.getByRole('textbox', { name: 'Channel Name' }) as HTMLInputElement).value).toBe('renamed');
   });
 });
+
+describe('ChannelSettingsModal topic', () => {
+  const manage = bits(PermissionBits.VIEW_CHANNEL, PermissionBits.MANAGE_CHANNELS);
+
+  it('edits the topic of an existing channel through the store', async () => {
+    seed(manage, manage);
+    useSpaceStore.getState().channelOriginMap.set('channel-1', '');
+    mockUpdateChannel.mockImplementation((_id: string, data: { topic: string | null }) =>
+      Promise.resolve({ ...channel, topic: data.topic }));
+    const user = userEvent.setup();
+    render(<ChannelSettingsModal />);
+    const field = screen.getByRole('textbox', { name: 'Topic' });
+    await user.type(field, '  Weekly game night  ');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockUpdateChannel).toHaveBeenCalledWith('channel-1', { topic: 'Weekly game night' });
+    await waitFor(() => expect(useSpaceStore.getState().channels[0].topic).toBe('Weekly game night'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).toBeNull());
+  });
+
+  it('shows the server error for a refused topic and keeps the typed text', async () => {
+    seed(manage, manage);
+    mockUpdateChannel.mockRejectedValue(new HttpError(400, 'Channel topic can be at most 1024 characters', undefined, 'channel_topic_length', { max: 1024 }));
+    const user = userEvent.setup();
+    render(<ChannelSettingsModal />);
+    const field = screen.getByRole('textbox', { name: 'Topic' });
+    await user.type(field, 'Refused');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByText('Channel topics can be at most 1024 characters long.')).toBeTruthy());
+    expect(screen.getByRole('textbox', { name: 'Topic' })).toHaveValue('Refused');
+  });
+
+  it('shows the topic read-only without MANAGE_CHANNELS', () => {
+    const view = bits(PermissionBits.VIEW_CHANNEL);
+    seed(view, view);
+    useSpaceStore.setState({ channels: [{ ...channel, topic: 'Read me' }] });
+    render(<ChannelSettingsModal />);
+    expect(screen.queryByRole('textbox', { name: 'Topic' })).toBeNull();
+    expect(screen.getByText('Read me')).toBeTruthy();
+  });
+
+  it('offers no topic field for a voice channel', () => {
+    seed(manage, manage);
+    useSpaceStore.setState({ channels: [{ ...channel, type: 'voice' }] });
+    render(<ChannelSettingsModal />);
+    expect(screen.queryByRole('textbox', { name: 'Topic' })).toBeNull();
+  });
+});

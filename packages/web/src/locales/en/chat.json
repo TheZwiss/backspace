@@ -87,7 +87,6 @@
     "sendMessage": "Send message",
     "uploadFailed": "Failed to upload {{file}}: {{reason}}",
     "uploadFailedReason": "Upload failed",
-    "sendFailed": "Failed to send message",
     "typing": {
       "named_one": "{{names}} is typing",
       "named_other": "{{names}} are typing",

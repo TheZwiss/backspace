@@ -96,7 +96,7 @@ beforeEach(() => {
     detachedChannels: new Map(),
     presentReturns: new Map(),
     realtimeMessageEvents: [],
-    replyTo: null,
+    replyTargets: new Map(),
   });
 });
 
