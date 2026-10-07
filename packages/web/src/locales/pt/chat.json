@@ -89,7 +89,6 @@
     "sendMessage": "Enviar mensagem",
     "uploadFailed": "Falha ao enviar {{file}}: {{reason}}",
     "uploadFailedReason": "Falha no envio",
-    "sendFailed": "Falha ao enviar a mensagem",
     "typing": {
       "named_one": "{{names}} está digitando",
       "named_many": "{{names}} estão digitando",
