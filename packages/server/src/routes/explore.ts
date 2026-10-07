@@ -7,6 +7,7 @@ import { isMember, isBanned, isSpaceOwner, hasPermission, computePermissions, Pe
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { sendError } from '../utils/httpErrors.js';
+import { memberRolesView, rolesForViewer } from '../utils/permissionDataView.js';
 import type {
   ExploreSpace,
   JoinRequest,
@@ -109,20 +110,9 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
       const u = userMap.get(m.userId);
       if (!u) return null;
 
-      const assignedRoleIds = memberRoleRows
+      const assignedRoleIds = new Set(memberRoleRows
         .filter(mr => mr.userId === m.userId)
-        .map(mr => mr.roleId);
-
-      const memberRoles = roles
-        .filter(r => assignedRoleIds.includes(r.id))
-        .map(r => ({
-          id: r.id,
-          spaceId: r.spaceId,
-          name: r.name,
-          color: r.color ?? '#b9bbbe',
-          position: r.position ?? 0,
-          createdAt: r.createdAt,
-        }));
+        .map(mr => mr.roleId));
 
       return {
         spaceId: m.spaceId,
@@ -130,7 +120,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
         nickname: m.nickname,
         joinedAt: m.joinedAt,
         user: sanitizeUser(u),
-        roles: memberRoles,
+        roles: memberRolesView(roles, assignedRoleIds),
       };
     })
     .filter((m): m is MemberWithUser => m !== null);
@@ -171,16 +161,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
     channels: visibleChannels,
     categories,
     members,
-    roles: roles.map(r => ({
-      id: r.id,
-      spaceId: r.spaceId,
-      name: r.name,
-      color: r.color ?? '#b9bbbe',
-      position: r.position ?? 0,
-      permissions: r.permissions ?? undefined,
-      isEveryone: r.id === spaceId,
-      createdAt: r.createdAt,
-    })),
+    roles: rolesForViewer(roles, spacePerms),
     myPermissions: permissionsToString(spacePerms),
   };
 }

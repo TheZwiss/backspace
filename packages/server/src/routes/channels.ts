@@ -29,6 +29,7 @@ import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
 import { checkChannelTopic } from '../utils/channelTopic.js';
 import { canActOnMemberInSpace, canManageRoleInSpace } from '../utils/roleHierarchy.js';
+import { viewerReadsPermissionData } from '../utils/permissionDataView.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -548,7 +549,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'channel_not_found');
     }
 
-    if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
+    // Override rows go only to viewers who manage roles (utils/permissionDataView.ts).
+    if (!viewerReadsPermissionData(computePermissions(request.userId, channel.spaceId))) {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
@@ -731,7 +733,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'not_space_member');
     }
 
-    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+    // Override rows go only to viewers who manage roles (utils/permissionDataView.ts).
+    if (!viewerReadsPermissionData(computePermissions(request.userId, category.spaceId))) {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 

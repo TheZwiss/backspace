@@ -32,6 +32,7 @@ import { sendError } from '../utils/httpErrors';
 import { canActOnMemberInSpace, canManageRoleInSpace, getHierarchyStanding } from '../utils/roleHierarchy.js';
 import { canActOnMember, canManageRoleAt } from '@backspace/shared/src/permissions.js';
 import { moveRoleToPosition, normalizeRolePositions, positionNextTo } from '../db/rolePositions.js';
+import { memberRolesView, roleView, rolesForViewer, viewerReadsPermissionData } from '../utils/permissionDataView.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -362,20 +363,9 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         const user = userMap.get(m.userId);
         if (!user) return null;
 
-        const assignedRoleIds = memberRoleRows
+        const assignedRoleIds = new Set(memberRoleRows
           .filter(mr => mr.userId === m.userId)
-          .map(mr => mr.roleId);
-        
-        const memberRoles = roles
-          .filter(r => assignedRoleIds.includes(r.id))
-          .map(r => ({
-            id: r.id,
-            spaceId: r.spaceId,
-            name: r.name,
-            color: r.color ?? '#b9bbbe',
-            position: r.position ?? 0,
-            createdAt: r.createdAt,
-          }));
+          .map(mr => mr.roleId));
 
         return {
           spaceId: m.spaceId,
@@ -383,7 +373,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
-          roles: memberRoles,
+          roles: memberRolesView(roles, assignedRoleIds),
         };
       })
       .filter((m): m is MemberWithUser => m !== null);
@@ -439,22 +429,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    const canManageRoles = (spacePerms & PermissionBits.MANAGE_ROLES) !== 0n;
-
     const result: SpaceWithChannelsAndMembers = {
       ...rowToSpace(server),
       channels: visibleChannels,
       categories,
       members,
-      roles: roles.map(r => ({
-        id: r.id,
-        spaceId: r.spaceId,
-        name: r.name,
-        color: r.color ?? '#b9bbbe',
-        position: r.position ?? 0,
-        permissions: canManageRoles ? (r.permissions ?? '0') : undefined,
-        createdAt: r.createdAt,
-      })),
+      roles: rolesForViewer(roles, spacePerms),
       myPermissions: permissionsToString(spacePerms),
     };
 
@@ -873,20 +853,9 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         const user = userMap.get(m.userId);
         if (!user) return null;
 
-        const assignedRoleIds = memberRoleRows
+        const assignedRoleIds = new Set(memberRoleRows
           .filter(mr => mr.userId === m.userId)
-          .map(mr => mr.roleId);
-
-        const assignedRoles = roles
-          .filter(r => assignedRoleIds.includes(r.id))
-          .map(r => ({
-            id: r.id,
-            spaceId: r.spaceId,
-            name: r.name,
-            color: r.color ?? '#b9bbbe',
-            position: r.position ?? 0,
-            createdAt: r.createdAt,
-          }));
+          .map(mr => mr.roleId));
 
         return {
           spaceId: m.spaceId,
@@ -894,7 +863,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
-          roles: assignedRoles,
+          roles: memberRolesView(roles, assignedRoleIds),
         };
       })
       .filter((m): m is MemberWithUser => m !== null);
@@ -1043,23 +1012,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       ))
       .all();
 
-    const updatedRoleIds = updatedRoleRows.map(r => r.roleId);
+    const updatedRoleIds = new Set(updatedRoleRows.map(r => r.roleId));
     const allRoles = db.select()
       .from(schema.roles)
       .where(eq(schema.roles.spaceId, id))
       .orderBy(schema.roles.position)
       .all();
-
-    const memberRoles = allRoles
-      .filter(r => updatedRoleIds.includes(r.id))
-      .map(r => ({
-        id: r.id,
-        spaceId: r.spaceId,
-        name: r.name,
-        color: r.color ?? '#b9bbbe',
-        position: r.position ?? 0,
-        createdAt: r.createdAt,
-      }));
 
     const result: MemberWithUser = {
       spaceId: updatedMember.spaceId,
@@ -1067,7 +1025,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       nickname: updatedMember.nickname,
       joinedAt: updatedMember.joinedAt,
       user: sanitizeUser(user),
-      roles: memberRoles,
+      roles: memberRolesView(allRoles, updatedRoleIds),
     };
 
     return reply.code(200).send(result);
@@ -1223,11 +1181,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     normalizeRolePositions(rawDb, id);
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+    if (!role) {
+      return sendError(reply, 500, 'internal_error');
+    }
 
     // A new role has no holders yet, so nobody's own access changed.
     announceAccessChange(id, []);
 
-    return reply.code(201).send(role);
+    return reply.code(201).send(roleView(role, viewerReadsPermissionData(computePermissions(request.userId, id))));
   });
 
   // PATCH /api/spaces/:id/roles/:roleId - Update a role
@@ -1347,10 +1308,16 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       moveRoleToPosition(getRawDb(), id, roleId, position);
     }
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+    if (!updated) {
+      return sendError(reply, 404, 'role_not_in_space', { roleId });
+    }
 
     announceAccessChange(id, membersHoldingRole(id, roleId));
 
-    return reply.code(200).send(updated);
+    // The actor may have just switched off their own MANAGE_ROLES (a role
+    // below their top role can carry it), so the answer is shaped for what
+    // they hold now.
+    return reply.code(200).send(roleView(updated, viewerReadsPermissionData(computePermissions(request.userId, id))));
   });
 
   // DELETE /api/spaces/:id/roles/:roleId - Delete a role

@@ -34,6 +34,7 @@ import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { isGroupConversation } from '../utils/dmConversation.js';
 import { normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { utcDay } from '../telemetry/day.js';
+import { memberRolesView, rolesForViewer } from '../utils/permissionDataView.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
@@ -1596,20 +1597,9 @@ export function buildReadyPayload(userId: string): {
           const u = userMap.get(m.userId);
           if (!u) return null;
 
-          const assignedRoleIds = memberRoleRows
+          const assignedRoleIds = new Set(memberRoleRows
             .filter(mr => mr.userId === m.userId)
-            .map(mr => mr.roleId);
-
-          const memberRoles = roles
-            .filter(r => assignedRoleIds.includes(r.id))
-            .map(r => ({
-              id: r.id,
-              spaceId: r.spaceId,
-              name: r.name,
-              color: r.color ?? '#b9bbbe',
-              position: r.position ?? 0,
-              createdAt: r.createdAt,
-            }));
+            .map(mr => mr.roleId));
 
           return {
             spaceId: m.spaceId,
@@ -1617,7 +1607,7 @@ export function buildReadyPayload(userId: string): {
             nickname: m.nickname,
             joinedAt: m.joinedAt,
             user: sanitizeUser(u),
-            roles: memberRoles,
+            roles: memberRolesView(roles, assignedRoleIds),
           };
         })
         .filter((m): m is MemberWithUser => m !== null);
@@ -1663,16 +1653,7 @@ export function buildReadyPayload(userId: string): {
         channels: visibleChannels,
         categories: categoriesBySpace.get(spaceRow.id) ?? [],
         members,
-        roles: roles.map(r => ({
-          id: r.id,
-          spaceId: r.spaceId,
-          name: r.name,
-          color: r.color ?? '#b9bbbe',
-          position: r.position ?? 0,
-          permissions: r.permissions ?? undefined,
-          isEveryone: r.id === spaceRow.id,
-          createdAt: r.createdAt,
-        })),
+        roles: rolesForViewer(roles, spacePerms),
         myPermissions: permissionsToString(spacePerms),
       });
     }
