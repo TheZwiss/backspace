@@ -1113,6 +1113,10 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'dm_call_accepted': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
+      // Every member of a DM hears each accept, late joins of a group call
+      // included. Only the call this client holds changes state: a member
+      // calling another DM, or sitting in a voice channel, stays where it is.
+      if (!dmCallEventIsOurs(event)) break;
       const { setIncomingCall, setOutgoingCall, outgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
       const wasOutgoingCall = !!outgoingCall;
       setIncomingCall(null);

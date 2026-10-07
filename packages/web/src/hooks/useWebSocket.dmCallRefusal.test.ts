@@ -187,3 +187,38 @@ describe('dmCallEventIsOurs', () => {
     expect(dmCallEventIsOurs({ dmChannelId: GROUP, federatedCallId: 'key-group' })).toBe(false);
   });
 });
+
+describe('an accept in a DM call', () => {
+  it('connects the caller of that DM', () => {
+    const ws = homeSocket();
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP }, connectFn });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().outgoingCall).toBeNull();
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+    expect(connectFn).toHaveBeenCalledWith(GROUP, true);
+  });
+
+  it('leaves alone a member calling a different DM', () => {
+    const ws = homeSocket();
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ outgoingCall: { dmChannelId: OTHER }, connectFn });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: OTHER });
+    expect(useVoiceStore.getState().activeDmCall).toBeNull();
+    expect(connectFn).not.toHaveBeenCalled();
+  });
+
+  it('does not pull a member in a voice channel into the call', () => {
+    const ws = homeSocket();
+    useVoiceStore.setState({ isLiveKitConnected: true, currentVoiceChannelId: 'voice-1' });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().activeDmCall).toBeNull();
+  });
+});
