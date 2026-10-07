@@ -121,6 +121,25 @@ describe('addReaction', () => {
     addReaction(MESSAGE, '👍');
     expect(sent('reaction_add')).toHaveLength(2);
   });
+
+  it('drops adds that have timed out when it records a new one', () => {
+    vi.useFakeTimers();
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [message(), { ...message(), id: 'msg-2' }]]]),
+    });
+    const { addReaction } = useChatStore.getState();
+    addReaction(MESSAGE, '👍');
+    vi.advanceTimersByTime(REACTION_ADD_IN_FLIGHT_MS / 2);
+    addReaction(MESSAGE, '🎉');
+    vi.advanceTimersByTime(REACTION_ADD_IN_FLIGHT_MS / 2);
+    addReaction('msg-2', '👍');
+
+    // The first add timed out; the second is still within its window.
+    expect([...useChatStore.getState().reactionAddsInFlight.keys()]).toEqual([
+      JSON.stringify([MESSAGE, '🎉']),
+      JSON.stringify(['msg-2', '👍']),
+    ]);
+  });
 });
 
 describe('hasOwnReaction', () => {

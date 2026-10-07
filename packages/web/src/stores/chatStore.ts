@@ -949,8 +949,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // not in flight: the next tap sends it again.
     if (!wsSend({ type: 'reaction_add', messageId, emoji }, origin)) return;
     set((state) => {
-      const reactionAddsInFlight = new Map(state.reactionAddsInFlight);
-      reactionAddsInFlight.set(reactionKey(messageId, emoji), Date.now());
+      // Drop the entries that have timed out on the way: an add the server
+      // refused is never answered, so nothing else would remove them.
+      const now = Date.now();
+      const reactionAddsInFlight = new Map<string, number>();
+      for (const [key, sentAt] of state.reactionAddsInFlight) {
+        if (now - sentAt < REACTION_ADD_IN_FLIGHT_MS) reactionAddsInFlight.set(key, sentAt);
+      }
+      reactionAddsInFlight.set(reactionKey(messageId, emoji), now);
       return { reactionAddsInFlight };
     });
   },
