@@ -52,6 +52,15 @@
       "rename": "重命名频道",
       "nameLabel": "频道名称",
       "channelLabel": "频道",
+      "topic": {
+        "label": "主题",
+        "placeholder": "这个频道主要聊些什么？",
+        "hint": "显示在频道标题栏中，任何人都可以在那里打开完整内容。",
+        "counter": "{{used}}/{{max}}",
+        "tooLong": "请将主题缩短到 {{max}} 个字符以内后再保存。",
+        "empty": "尚未设置主题。",
+        "reset": "放弃更改"
+      },
       "private": {
         "label": "私密频道",
         "description": "仅选定的成员和身份组可以查看此频道。",
@@ -578,6 +587,10 @@
     "selectChannel": "选择一个频道",
     "selectChannelHint": "选择一个文字或语音频道以开始体验",
     "notificationSettings": "通知设置",
+    "topic": {
+      "show": "查看完整主题",
+      "dialogTitle": "#{{name}}"
+    },
     "voice": {
       "connectionFailed": "连接失败",
       "connected": "已连接",

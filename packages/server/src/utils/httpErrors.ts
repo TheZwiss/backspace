@@ -211,6 +211,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   category_not_found: 'Category not found',
   channel_name_required: 'Channel name is required',
   channel_name_length: 'Channel name must be between {{min}} and {{max}} characters',
+  channel_topic_invalid: 'Channel topic must be a string',
+  channel_topic_length: 'Channel topic can be at most {{max}} characters',
   channel_type_invalid: 'Channel type must be "text" or "voice"',
   category_not_in_space: 'Category {{id}} does not belong to this space',
   channel_not_in_space: 'Channel {{id}} does not belong to this space',

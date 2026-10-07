@@ -52,6 +52,15 @@
       "rename": "Renomear canal",
       "nameLabel": "Nome do canal",
       "channelLabel": "Canal",
+      "topic": {
+        "label": "Tópico",
+        "placeholder": "Sobre o que é este canal?",
+        "hint": "Aparece no cabeçalho do canal. Qualquer pessoa pode abrir o texto completo por lá.",
+        "counter": "{{used}}/{{max}}",
+        "tooLong": "Reduza o tópico para {{max}} caracteres ou menos para salvá-lo.",
+        "empty": "Nenhum tópico definido.",
+        "reset": "Descartar alterações"
+      },
       "private": {
         "label": "Canal privado",
         "description": "Somente os membros e cargos selecionados poderão ver este canal.",
@@ -594,6 +603,10 @@
     "selectChannel": "Selecione um canal",
     "selectChannelHint": "Selecione um canal de texto ou de voz para começar",
     "notificationSettings": "Configurações de notificação",
+    "topic": {
+      "show": "Mostrar tópico completo",
+      "dialogTitle": "#{{name}}"
+    },
     "voice": {
       "connectionFailed": "Falha na conexão",
       "connected": "Conectado",

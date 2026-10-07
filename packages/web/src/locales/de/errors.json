@@ -189,6 +189,8 @@
   "category_not_found": "Diese Kategorie wurde nicht gefunden.",
   "channel_name_required": "Gib einen Kanalnamen ein.",
   "channel_name_length": "Kanalnamen müssen {{min}} bis {{max}} Zeichen lang sein.",
+  "channel_topic_invalid": "Ein Kanalthema muss Text sein.",
+  "channel_topic_length": "Kanalthemen dürfen höchstens {{max}} Zeichen lang sein.",
   "channel_type_invalid": "Ein Kanal ist entweder ein Textkanal oder ein Sprachkanal.",
   "category_not_in_space": "Diese Kategorie gehört nicht zu diesem Space.",
   "channel_not_in_space": "Dieser Kanal gehört nicht zu diesem Space.",

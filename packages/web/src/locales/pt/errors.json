@@ -189,6 +189,8 @@
   "category_not_found": "Não foi possível encontrar essa categoria.",
   "channel_name_required": "Digite um nome para o canal.",
   "channel_name_length": "Os nomes de canal devem ter de {{min}} a {{max}} caracteres.",
+  "channel_topic_invalid": "O tópico de um canal precisa ser texto.",
+  "channel_topic_length": "Os tópicos de canal podem ter no máximo {{max}} caracteres.",
   "channel_type_invalid": "Um canal pode ser de texto ou de voz.",
   "category_not_in_space": "Essa categoria não pertence a este espaço.",
   "channel_not_in_space": "Esse canal não pertence a este espaço.",
