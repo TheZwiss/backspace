@@ -1440,6 +1440,17 @@ export interface FederationCallPayload {
   rejector?: { homeUserId: string; homeInstance: string };
   endedBy?: { homeUserId: string; homeInstance: string };
   participants?: FederationRelayParticipant[];  // All DM members for Path B identity matching
+  /**
+   * Group call rules, per member (voice.md, "Group calls across instances").
+   * On `dm_call_start` the host says it applies them: a member's end or
+   * decline removes only that member, and the host relays `dm_call_end` to
+   * every peer once the call is over. On `dm_call_end` / `dm_call_reject`
+   * from an instance holding the call's entry: only this member left or
+   * declined, and the sender keeps the call for its other members. Senders
+   * up to 1.8.0 omit it; their ends and declines end the call for all of
+   * the sender's members.
+   */
+  perMember?: boolean;
 }
 
 export interface FederationMembershipPayload {

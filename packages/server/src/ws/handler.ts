@@ -582,7 +582,13 @@ class ConnectionManager implements ReplicaSessionHost {
     this.ringTimeoutFanoutHook = fn;
   }
 
-  private fanOutCallEnd(dmChannelId: string, endedByUserId: string): void {
+  /**
+   * Relay `dm_call_end` for a call this instance ended to every peer with a
+   * member in it. `endedByUserId` must be a local user this instance speaks
+   * for (the caller, or the local member whose action ended the call): a peer
+   * refuses an end attributed to a user homed on another instance.
+   */
+  fanOutCallEnd(dmChannelId: string, endedByUserId: string): void {
     if (!this.ringTimeoutFanoutHook) return;
     this.ringTimeoutFanoutHook(dmChannelId, endedByUserId).catch(err =>
       console.error('[ws] call-end fan-out error:', err),
@@ -718,28 +724,40 @@ class ConnectionManager implements ReplicaSessionHost {
   }
 
   /**
+   * Take every participant that `peerOrigin` relayed into the DM call
+   * `dmChannelId` (`remoteParticipants`) out of it, as when that peer can no
+   * longer tell us they left. Returns how many left and whether the call
+   * ended because nobody is left. Local only: the caller relays the end.
+   */
+  leavePeerParticipants(dmChannelId: string, peerOrigin: string): { removed: number; ended: boolean } {
+    const peerKey = normalizeOriginForCompare(peerOrigin);
+    const room = this.voiceRooms.get(dmChannelId);
+    if (peerKey === null || !room || room.roomType !== 'dm') return { removed: 0, ended: false };
+    const meta = room.metadata as DmRoomMeta;
+    let removed = 0;
+    for (const [userId, origin] of Array.from(meta.remoteParticipants)) {
+      if (normalizeOriginForCompare(origin) !== peerKey) continue;
+      this.leaveRoom(dmChannelId, userId);
+      removed += 1;
+      if (this.afterDmCallLeave(dmChannelId, userId) === 'ended') return { removed, ended: true };
+    }
+    return { removed, ended: false };
+  }
+
+  /**
    * A peer stopped being active: the participants it relayed into calls
    * hosted here can no longer tell us they left, so they leave now. A call
-   * left empty ends and the end is relayed to the remaining peers. Returns
-   * how many participants were removed.
+   * left empty ends, and the end is relayed to the remaining peers in the
+   * caller's name. Returns how many participants were removed.
    */
   dropRemoteCallParticipants(peerOrigin: string): number {
-    const peerKey = normalizeOriginForCompare(peerOrigin);
-    if (peerKey === null) return 0;
     let removed = 0;
     for (const [roomId, room] of Array.from(this.voiceRooms)) {
       if (room.roomType !== 'dm') continue;
-      const meta = room.metadata as DmRoomMeta;
-      for (const [userId, origin] of Array.from(meta.remoteParticipants)) {
-        if (normalizeOriginForCompare(origin) !== peerKey) continue;
-        if (!this.voiceRooms.has(roomId)) break;
-        this.leaveRoom(roomId, userId);
-        removed += 1;
-        if (this.afterDmCallLeave(roomId, userId) === 'ended') {
-          this.fanOutCallEnd(roomId, userId);
-          break;
-        }
-      }
+      const callerId = (room.metadata as DmRoomMeta).callerId;
+      const result = this.leavePeerParticipants(roomId, peerOrigin);
+      removed += result.removed;
+      if (result.ended) this.fanOutCallEnd(roomId, callerId);
     }
     return removed;
   }

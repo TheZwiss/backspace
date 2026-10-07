@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import fs from 'node:fs';
@@ -49,11 +49,13 @@ import {
   handleDmCallAcceptForTest as accept,
   handleDmCallRejectForTest as reject,
   handleDmCallEndForTest as end,
+  registerCallRelayHooks,
 } from './events.js';
 import {
   processDmCallAcceptEvent,
   processDmCallEndEvent,
   processDmCallRejectEvent,
+  processDmCallStartEvent,
 } from '../routes/federation/events/calls.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 
@@ -142,10 +144,19 @@ function seedDm(id: string, ownerId: string | null, federatedId: string | null, 
   testDb.insert(schema.dmMembers).values(members.map(userId => ({ dmChannelId: id, userId }))).run();
 }
 
-function relay(eventType: 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end', actor: { homeUserId: string; homeInstance: string }): FederationRelayEvent {
+/**
+ * A relayed call event from PEER. `perMember` marks a sender of this version
+ * (an end or decline of that member only); a peer up to 1.8.0 omits it.
+ */
+function relay(
+  eventType: 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end',
+  actor: { homeUserId: string; homeInstance: string },
+  perMember?: boolean,
+): FederationRelayEvent {
+  const flag = perMember ? { perMember: true } : {};
   const call = eventType === 'dm_call_accept' ? { acceptor: actor }
-    : eventType === 'dm_call_reject' ? { rejector: actor }
-      : { endedBy: actor };
+    : eventType === 'dm_call_reject' ? { rejector: actor, ...flag }
+      : { endedBy: actor, ...flag };
   return {
     eventType,
     messageId: `msg-${Math.random().toString(36).slice(2, 10)}`,
@@ -170,6 +181,11 @@ function relayedFrom(process: typeof processDmCallEndEvent, event: FederationRel
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 }
+
+beforeAll(() => {
+  // The ConnectionManager relays the ends it makes itself through this hook.
+  registerCallRelayHooks();
+});
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -242,6 +258,15 @@ describe('starting a call in a DM that already has one', () => {
     ]);
     expect(sentOn(ws('alice'))).toEqual([]);
     expect(connectionManager.getRoom(GROUP)?.metadata).toMatchObject({ state: 'ringing', callerId: 'alice' });
+  });
+
+  it('refuses a start from a member of no such DM with a code', async () => {
+    await start({ dmChannelId: ONE_ON_ONE }, 'carol', 'carol', ws('carol'));
+
+    expect(received('carol', 'error')).toEqual([
+      expect.objectContaining({ code: 'not_dm_member', dmChannelId: ONE_ON_ONE }),
+    ]);
+    expect(connectionManager.getRoom(ONE_ON_ONE)).toBeUndefined();
   });
 
   it('refuses a start in a DM whose call is hosted on another instance', async () => {
@@ -425,20 +450,20 @@ describe('1-on-1 call keeps its semantics', () => {
 });
 
 describe('group call hosted here with members on a peer', () => {
-  async function callWithRemoteDave(): Promise<void> {
+  async function callWith(...remote: Array<typeof DAVE>): Promise<void> {
     connectionManager.createDmRoom(FED_GROUP, 'alice');
     connectionManager.setVoiceWs('alice', ws('alice'));
-    relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE));
+    for (const actor of remote) relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', actor));
     await settle();
   }
 
   it('seats a remote acceptor as a participant', async () => {
-    await callWithRemoteDave();
+    await callWith(DAVE);
     expect(participants(FED_GROUP)).toEqual(['alice', 'dave-stub']);
   });
 
   it('keeps the call for the remote member when the local caller hangs up', async () => {
-    await callWithRemoteDave();
+    await callWith(DAVE);
     fetchMock.mockClear();
 
     await end({ dmChannelId: FED_GROUP }, 'alice');
@@ -447,27 +472,44 @@ describe('group call hosted here with members on a peer', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('ends the call for every peer when the last remote participant leaves', async () => {
-    await callWithRemoteDave();
+  it('takes only the member who left out when the peer leaves others in', async () => {
+    await callWith(DAVE, ERIN);
+    clearReceived();
+
+    const result = relayedFrom(processDmCallEndEvent, relay('dm_call_end', DAVE, true));
+    await settle();
+
+    expect(result.accepted).toHaveLength(1);
+    expect(participants(FED_GROUP)).toEqual(['alice', 'erin-stub']);
+    expect(received('bob', 'dm_call_ended')).toEqual([]);
+  });
+
+  it('ends the call for every peer, in the caller\'s name, when the last remote participant leaves', async () => {
+    await callWith(DAVE);
     await end({ dmChannelId: FED_GROUP }, 'alice');
     clearReceived();
     fetchMock.mockClear();
 
-    const result = relayedFrom(processDmCallEndEvent, relay('dm_call_end', DAVE));
+    const result = relayedFrom(processDmCallEndEvent, relay('dm_call_end', DAVE, true));
     await settle();
 
     expect(result.rejected).toEqual([]);
     expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
     expect(received('bob', 'dm_call_ended')).toHaveLength(1);
-    // The sender is not excluded: its other members may still be ringing.
-    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: FED_GROUP_FID })]);
+    // The sender is not excluded: its other members may still be ringing. The
+    // end names a user homed here, which the peer accepts from this instance.
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      federatedId: FED_GROUP_FID,
+      call: { endedBy: { homeUserId: 'alice', homeInstance: 'https://local.example' } },
+    })]);
   });
 
   it('ignores a relayed end from a remote member who is not in the call', async () => {
-    await callWithRemoteDave();
+    await callWith(DAVE);
     clearReceived();
 
-    const result = relayedFrom(processDmCallEndEvent, relay('dm_call_end', ERIN));
+    const result = relayedFrom(processDmCallEndEvent, relay('dm_call_end', ERIN, true));
     await settle();
 
     expect(result.accepted).toHaveLength(1);
@@ -476,18 +518,55 @@ describe('group call hosted here with members on a peer', () => {
   });
 
   it('records a relayed decline without ending a call others are in', async () => {
-    await callWithRemoteDave();
+    await callWith(DAVE);
     clearReceived();
 
-    relayedFrom(processDmCallRejectEvent, relay('dm_call_reject', ERIN));
+    relayedFrom(processDmCallRejectEvent, relay('dm_call_reject', ERIN, true));
     await settle();
 
     expect(participants(FED_GROUP)).toEqual(['alice', 'dave-stub']);
     expect(received('alice', 'dm_call_rejected')).toEqual([]);
   });
 
+  it('takes every participant of a 1.8.0 peer out when one of them hangs up', async () => {
+    // A 1.8.0 peer ends the call for all of its members on one member's end.
+    await callWith(DAVE, ERIN);
+    clearReceived();
+
+    relayedFrom(processDmCallEndEvent, relay('dm_call_end', DAVE));
+    await settle();
+
+    expect(participants(FED_GROUP)).toEqual(['alice']);
+    expect(received('bob', 'dm_call_ended')).toEqual([]);
+  });
+
+  it('ends the call a 1.8.0 peer\'s end leaves empty', async () => {
+    await callWith(DAVE, ERIN);
+    await end({ dmChannelId: FED_GROUP }, 'alice');
+    clearReceived();
+    fetchMock.mockClear();
+
+    relayedFrom(processDmCallEndEvent, relay('dm_call_end', ERIN));
+    await settle();
+
+    expect(connectionManager.getRoom(FED_GROUP)).toBeUndefined();
+    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end' })]);
+  });
+
+  it('takes the participants of a 1.8.0 peer out on a decline from it, and keeps the call', async () => {
+    await callWith(DAVE);
+    clearReceived();
+
+    relayedFrom(processDmCallRejectEvent, relay('dm_call_reject', ERIN));
+    await settle();
+
+    expect(participants(FED_GROUP)).toEqual(['alice']);
+    expect(connectionManager.getRoom(FED_GROUP)?.metadata).toMatchObject({ state: 'active' });
+  });
+
   it('drops the participants of a peer that went away and ends the call they leave empty', async () => {
-    await callWithRemoteDave();
+    await callWith(DAVE);
     await end({ dmChannelId: FED_GROUP }, 'alice');
     clearReceived();
 
@@ -524,7 +603,11 @@ describe('group call hosted on a peer (this instance holds the entry)', () => {
 
     await end({ federatedCallId: REMOTE_FID }, 'bob');
 
-    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_end', federatedId: REMOTE_FID })]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_end',
+      federatedId: REMOTE_FID,
+      call: expect.objectContaining({ perMember: true }),
+    })]);
     expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
     expect(received('carol', 'dm_call_ended')).toEqual([]);
   });
@@ -549,6 +632,82 @@ describe('group call hosted on a peer (this instance holds the entry)', () => {
     expect(received('carol', 'dm_call_rejected')).toHaveLength(1);
     expect(received('bob', 'dm_call_rejected')).toEqual([]);
     expect(connectionManager.getFederatedCall(REMOTE_FID)?.ringedUserIds).toEqual(['bob']);
-    expect(relayedTo(PEER)).toEqual([expect.objectContaining({ eventType: 'dm_call_reject', federatedId: REMOTE_FID })]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      eventType: 'dm_call_reject',
+      federatedId: REMOTE_FID,
+      call: expect.objectContaining({ perMember: true }),
+    })]);
+  });
+
+  function startFromPeer(perMember: boolean): void {
+    seedDm('dm-remote-group', 'dave-stub', REMOTE_FID, ['bob', 'carol', 'dave-stub']);
+    const tokenFor = (homeUserId: string) => ({ homeUserId, homeInstance: 'https://local.example', token: `tok-${homeUserId}` });
+    const event: FederationRelayEvent = {
+      eventType: 'dm_call_start',
+      messageId: 'start-1',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: REMOTE_FID,
+      call: {
+        livekitUrl: 'wss://peer.example/lk',
+        tokens: { bob: 'tok-bob', carol: 'tok-carol' },
+        memberTokens: [tokenFor('bob'), tokenFor('carol')],
+        caller: { ...DAVE, displayName: 'Dave' },
+        ...(perMember ? { perMember: true } : {}),
+      },
+    };
+    processDmCallStartEvent(event, PEER, testDb, [], [], []);
+  }
+
+  it('applies the group rules to a call whose host says it does', async () => {
+    startFromPeer(true);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.group).toBe(true);
+
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    await accept({ federatedCallId: REMOTE_FID }, 'carol', ws('carol'));
+    clearReceived();
+    await end({ federatedCallId: REMOTE_FID }, 'bob');
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual(['carol']);
+    expect(received('carol', 'dm_call_ended')).toEqual([]);
+  });
+
+  it('keeps the 1.8.0 rules for a group call from a 1.8.0 host', async () => {
+    // A 1.8.0 host ends the whole call on one member's end and does not tell
+    // the instance that relayed it, so this instance ends it for its members.
+    startFromPeer(false);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)?.group).toBe(false);
+
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    await accept({ federatedCallId: REMOTE_FID }, 'carol', ws('carol'));
+    clearReceived();
+    fetchMock.mockClear();
+    await end({ federatedCallId: REMOTE_FID }, 'bob');
+
+    expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
+    expect(received('carol', 'dm_call_ended')).toHaveLength(1);
+    const relayed = relayedTo(PEER);
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0]!.call).not.toHaveProperty('perMember');
+  });
+
+  it('ends the call for every member here when the host relays its end', async () => {
+    startFromPeer(true);
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    clearReceived();
+
+    const result = relayedFrom(processDmCallEndEvent, {
+      eventType: 'dm_call_end',
+      messageId: 'end-1',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: REMOTE_FID,
+      call: { endedBy: DAVE },
+    });
+
+    expect(result.accepted).toEqual(['end-1']);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
+    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
+    expect(received('carol', 'dm_call_ended')).toHaveLength(1);
   });
 });

@@ -328,3 +328,44 @@ describe('sendFederatedCallStart — the conversation key', () => {
     expect(storedKey('dm-unkeyed')).toBeNull();
   });
 });
+
+describe('sendFederatedCallStart — group call rules', () => {
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+
+    const cm = await importManager();
+    for (const [fedId] of cm.getAllFederatedCalls()) cm.clearFederatedCall(fedId);
+    sendCallRelayMock.mockReset();
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
+  });
+
+  afterEach(async () => {
+    const cm = await importManager();
+    cm.destroyRoom('dm-rules');
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  it.each([
+    ['a group', 'alice', '6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b', true],
+    ['a 1-on-1', null, '0123456789abcdef0123456789abcdef', undefined],
+  ])('%s call start says whether the host applies the group rules', async (_label, ownerId, key, perMember) => {
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
+    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
+    seedDmChannel('dm-rules', key, ownerId);
+    seedDmMember('dm-rules', 'alice');
+    seedDmMember('dm-rules', 'bob-stub');
+    seedActivePeer('https://orbit.example', 'Orbit');
+
+    const cm = await importManager();
+    cm.createDmRoom('dm-rules', 'alice');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-rules', 'alice', 'Alice');
+
+    const call = relayTo('https://orbit.example')!.call as { perMember?: boolean } | undefined;
+    expect(call?.perMember).toBe(perMember);
+  });
+});

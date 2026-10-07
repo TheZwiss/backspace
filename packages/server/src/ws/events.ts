@@ -1696,6 +1696,7 @@ async function handleDmCallReject(event: Record<string, unknown>, userId: string
       federatedId: fedId,
       call: {
         rejector: { homeUserId, homeInstance: getOurOrigin() },
+        ...(fedCall.group ? { perMember: true } : {}),
       },
     }]);
 
@@ -1802,6 +1803,7 @@ async function handleDmCallEnd(event: Record<string, unknown>, userId: string): 
       federatedId: fedId,
       call: {
         endedBy: { homeUserId, homeInstance: getOurOrigin() },
+        ...(fedCall.group ? { perMember: true } : {}),
       },
     }]);
 
@@ -1908,6 +1910,11 @@ async function sendFederatedCallStart(
 
   const callerHomeUserId = members.find(m => m.userId === callerId)?.homeUserId || callerId;
 
+  // A group call follows the group rules here, and the peers holding its
+  // entry are told so (`perMember`, voice.md "Group calls across instances").
+  const room = connectionManager.getRoom(dmChannelId);
+  const perMember = room?.roomType === 'dm' && (room.metadata as DmRoomMeta).group;
+
   // Group remote members by the instance that homes them. Each bucket is the
   // exact set of identities its peer is entitled to act for.
   const targetedPeers = new Map<string, typeof members>();
@@ -1961,6 +1968,7 @@ async function sendFederatedCallStart(
           displayName: callerName,
         },
         participants,
+        ...(perMember ? { perMember: true } : {}),
       },
     };
   };
