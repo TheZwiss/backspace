@@ -31,7 +31,7 @@ import { getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sendError } from '../utils/httpErrors';
 import { canActOnMemberInSpace, canManageRoleInSpace, getHierarchyStanding } from '../utils/roleHierarchy.js';
 import { canActOnMember, canManageRoleAt } from '@backspace/shared/src/permissions.js';
-import { moveRoleToPosition, normalizeRolePositions } from '../db/rolePositions.js';
+import { moveRoleToPosition, normalizeRolePositions, positionNextTo } from '../db/rolePositions.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -1241,11 +1241,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/spaces/:id/roles/:roleId - Update a role
-  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number; permissions?: string } }>('/api/spaces/:id/roles/:roleId', {
+  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number; above?: unknown; below?: unknown; permissions?: string } }>('/api/spaces/:id/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, roleId } = request.params;
-    const { name, color, position, permissions } = request.body;
+    const { name, color, permissions, above, below } = request.body;
+    let position = request.body.position;
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
@@ -1264,6 +1265,29 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const actorStanding = getHierarchyStanding(id, request.userId);
     if (!canManageRoleAt(actorStanding, role.position ?? 0)) {
       return sendError(reply, 403, 'role_hierarchy');
+    }
+    // A move by anchor (`above` or `below` another role) lands the role next
+    // to that role in the order as it is now, so it does what the mover's list
+    // showed even when that list is out of date; the request's `position`,
+    // which clients send too for servers that do not read the anchor, is
+    // ignored then (permissions.md, "Setting the order").
+    if (above !== undefined || below !== undefined) {
+      const side = above !== undefined ? 'above' : 'below';
+      const anchorId = above ?? below;
+      if (roleId === id || (above !== undefined && below !== undefined) || typeof anchorId !== 'string') {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      const anchor = db.select({ id: schema.roles.id }).from(schema.roles)
+        .where(and(eq(schema.roles.id, anchorId), eq(schema.roles.spaceId, id)))
+        .get();
+      if (!anchor) {
+        return sendError(reply, 400, 'role_not_in_space', { roleId: anchorId });
+      }
+      const placed = positionNextTo(getRawDb(), id, roleId, anchorId, side);
+      if (placed === null) {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      position = placed;
     }
     if (position !== undefined) {
       // @everyone is always at 0, and positions count from 1.

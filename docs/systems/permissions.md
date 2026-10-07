@@ -185,8 +185,17 @@ it. The order is the hierarchy, so this list is where the owner sets it:
 
 The move rule is `canMoveRole` in `web/src/utils/roleOrder.ts`: the role and
 the position it moves to must both pass `canManageRoleAt`, the check the
-server makes on `PATCH /roles/:rid { position }`. A move sends the position
-the role in the target slot holds. It shows at once (`moveRoleInRankOrder`
+server makes on `PATCH /roles/:rid` for a move. A move names the role shown
+in the place it moves to as its anchor (`roleMoveRequest`): `{ above: id }`
+when it moves up, `{ below: id }` when it moves down, and the server puts it
+directly next to that role in the order it holds then (`positionNextTo`,
+then `moveRoleToPosition`). So a move made from a list that is out of date
+(a refresh built before the viewer's last move, another member's move) still
+does what the list showed, and the same move sent twice moves once. The
+request also carries `position`, the anchor's position, for 1.7.x servers,
+which read only that; a server that reads the anchor ignores it. 1.7.x
+clients send `position` alone, which still moves the role to that position.
+It shows at once (`moveRoleInRankOrder`
 renumbers n..1 as `moveRoleToPosition` does), goes to the space's own
 instance through `getApiForOrigin(space._instanceOrigin)`, and is put back
 if refused, with the server's reason (`describeError`) right under the role

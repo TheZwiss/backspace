@@ -7,7 +7,7 @@ import { useUIStore } from '../../../stores/uiStore';
 import { describeError } from '../../../i18n/errors';
 import { LOCK_ICON } from '../../ui/LockNote';
 import { myStandingIn } from '../../../utils/roleHierarchy';
-import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder } from '../../../utils/roleOrder';
+import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder, roleMoveRequest } from '../../../utils/roleOrder';
 
 // The role list of Space Settings > Roles, in rank order, with the controls
 // that set the order (docs/systems/permissions.md, "Role hierarchy", "Setting
@@ -98,8 +98,8 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
   const move = async (from: number, to: number, control: MoveControl) => {
     if (moving || !space || !canMove(from, to)) return;
     const role = ranked[from];
-    const slot = ranked[to];
-    if (!role || !slot) return;
+    const request = roleMoveRequest(ranked, from, to);
+    if (!role || !request) return;
 
     const before = roles;
     const optimistic = [...moveRoleInRankOrder(ranked, from, to), ...(everyone ? [everyone] : [])];
@@ -110,11 +110,11 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
     setAnnouncement(t('roles.reorder.moved', { name: role.name, position: to + 1, total: ranked.length }));
 
     try {
-      // The server moves the role to the position the slot's role holds and
-      // renumbers the rest, which is the order already shown.
-      // The order shown is already the one stored; space_access_changed
-      // brings the space's refreshed detail to every member, this list included.
-      await getApiForOrigin(space._instanceOrigin ?? '').roles.update(spaceId, role.id, { position: slot.position });
+      // The server puts the role next to the role shown in the place it
+      // moved to and renumbers the rest, which is the order already shown;
+      // space_access_changed brings the space's refreshed detail to every
+      // member, this list included.
+      await getApiForOrigin(space._instanceOrigin ?? '').roles.update(spaceId, role.id, request);
     } catch (err) {
       // Put the order back unless something else has replaced the roles
       // since; then the space's own state is the one to show.

@@ -816,11 +816,13 @@ Remote space icons, banners, and member avatars are resolved via `resolveAssetUr
 
 Two distinct flags track per-space load progress:
 
-- `loadingSpaceId: string | null` — non-null while a `loadSpaceDetail` call is in flight. Drives the channel-list and member-list skeletons (gated through `useDelayedLoading`).
+- `loadingSpaceId: string | null` — set when a plain `loadSpaceDetail` starts (a `quiet` one never sets it) and cleared when the newest load of that space lands or fails. Drives the channel-list and member-list skeletons (gated through `useDelayedLoading`).
+
+Only the newest `loadSpaceDetail` of a space applies its response; an older one landing later changes nothing and resolves to what the newest resolves to. A detail lands in `channels`/`categories`/`members`/`roles` only when its space is still the open one (`currentSpaceId`; every caller opens the space before loading it); otherwise only that space's channel index entries and permission entries are updated. websocket.md (`space_access_changed`) says why loads of one space overlap.
 - `loadedSpaceIds: Set<string>` — populated only on successful `loadSpaceDetail` completion. Used to differentiate "load not yet attempted" from "loaded with empty result." Required by mobile UI to gate the empty-state mascot — without it, the mascot flashes during the pre-skeleton load window because `state.channels` is overwritten on each `loadSpaceDetail` and a fresh space switch leaves `spaceChannels` momentarily filtered to `[]`.
 
 `loadedSpaceIds` lifecycle:
-- Added on `loadSpaceDetail` success (the same `set()` that replaces `channels`/`categories`/`members`).
+- Added when a `loadSpaceDetail` response lands in the open space (the same `set()` that replaces `channels`/`categories`/`members`).
 - Pruned per-space on `deleteSpace`, `leaveSpace`, `removeSpace`, `removeInstanceSpaces`.
 - Wiped entirely on `reset` (logout).
 - Ephemeral — not persisted.

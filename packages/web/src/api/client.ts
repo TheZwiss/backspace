@@ -310,7 +310,7 @@ export class BackspaceApiClient {
 
   readonly roles: {
     create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) => Promise<Role>;
-    update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) => Promise<Role>;
+    update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; above?: string; below?: string; permissions?: string }) => Promise<Role>;
     delete: (spaceId: string, roleId: string) => Promise<{ success: boolean }>;
   };
 
@@ -709,7 +709,7 @@ export class BackspaceApiClient {
     this.roles = {
       create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) =>
         request<Role>('POST', `/spaces/${spaceId}/roles`, data),
-      update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) =>
+      update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; above?: string; below?: string; permissions?: string }) =>
         request<Role>('PATCH', `/spaces/${spaceId}/roles/${roleId}`, data),
       delete: (spaceId: string, roleId: string) =>
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/roles/${roleId}`),

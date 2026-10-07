@@ -323,6 +323,73 @@ describe('role management follows the role hierarchy', () => {
   });
 });
 
+// A move names the role it lands next to (`above` or `below`), so it does what
+// the mover's list showed even when that list is out of date: the client sends
+// `position` as well for servers that do not read the anchor (1.7.x), and this
+// server ignores it when an anchor is given.
+describe('moving a role next to another role', () => {
+  // Moderators 3, Helpers 2, Members 1, @everyone 0.
+  const move = (roleId: string, payload: Record<string, unknown>) =>
+    app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/roles/${roleId}`, payload });
+
+  it('puts the role directly below the anchor, whatever position the request names', async () => {
+    as('owner');
+    const res = await move('r-mod', { position: 1, below: 'r-helper' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ position: number }>().position).toBe(2);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-helper': 3, 'r-mod': 2, 'r-member': 1 });
+  });
+
+  it('puts the role directly above the anchor', async () => {
+    as('owner');
+    expect((await move('r-member', { position: 3, above: 'r-mod' })).statusCode).toBe(200);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-member': 3, 'r-mod': 2, 'r-helper': 1 });
+  });
+
+  it('puts the role at the bottom when it goes above @everyone', async () => {
+    as('owner');
+    expect((await move('r-mod', { above: SPACE_ID })).statusCode).toBe(200);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-helper': 3, 'r-member': 2, 'r-mod': 1 });
+  });
+
+  it('does nothing more when the same move arrives twice (two clicks from one stale list)', async () => {
+    as('owner');
+    expect((await move('r-mod', { position: 2, below: 'r-helper' })).statusCode).toBe(200);
+    // The second click was made on the list from before the first move landed;
+    // by absolute position it would move Moderators a second rank down.
+    expect((await move('r-mod', { position: 2, below: 'r-helper' })).statusCode).toBe(200);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-helper': 3, 'r-mod': 2, 'r-member': 1 });
+  });
+
+  it('refuses an anchor that is not a place a role can go', async () => {
+    as('owner');
+    const codeOf = async (payload: Record<string, unknown>) => {
+      const res = await move('r-mod', payload);
+      return [res.statusCode, res.json<{ code: string }>().code];
+    };
+    expect(await codeOf({ below: SPACE_ID })).toEqual([400, 'validation_failed']);
+    expect(await codeOf({ above: 'r-mod' })).toEqual([400, 'validation_failed']);
+    expect(await codeOf({ above: 'r-helper', below: 'r-member' })).toEqual([400, 'validation_failed']);
+    expect(await codeOf({ above: 7 })).toEqual([400, 'validation_failed']);
+    expect(await codeOf({ below: 'r-nowhere' })).toEqual([400, 'role_not_in_space']);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-mod': 3, 'r-helper': 2, 'r-member': 1 });
+  });
+
+  it('refuses moving @everyone by anchor', async () => {
+    as('owner');
+    expect((await move(SPACE_ID, { above: 'r-member' })).statusCode).toBe(400);
+    expect(positions()[SPACE_ID]).toBe(0);
+  });
+
+  it('applies the role hierarchy to the place the anchor gives', async () => {
+    as('helper');
+    // Directly above Helpers is position 2 after the move: the helper's own rank.
+    const res = await move('r-member', { position: 1, above: 'r-helper' });
+    expectHierarchyRefusal(res);
+    expect(positions()).toEqual({ [SPACE_ID]: 0, 'r-mod': 3, 'r-helper': 2, 'r-member': 1 });
+  });
+});
+
 describe('normalizeRolePositions', () => {
   it('turns roles that all sit at 0 into distinct positions in creation order, oldest highest', async () => {
     const { normalizeRolePositions } = await import('../db/rolePositions.js');

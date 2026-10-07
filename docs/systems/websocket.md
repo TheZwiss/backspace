@@ -158,8 +158,10 @@ member's roles: `POST`, `PATCH`, `DELETE /spaces/:id/roles[/:rid]`,
 What the receiver may see or do there, and how the roles and members look,
 may be different now. The client refetches the space's detail from its own
 instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
-(no skeleton) and no message cache touched; for a space that is not open it
-only updates that space's permission entries. Every channel the detail lists
+(no skeleton) and no message cache touched. One action can send several of
+these events (a member role edit, quick role moves), and their refetches can
+answer out of order; which load lands, and what lands for a space that is
+not open, is in spaces.md ("Client Load State"). Every channel the detail lists
 goes through `upsertChannel`, and a channel of that space it no longer lists
 goes through the `channel_deleted` path, which also closes it when it is
 open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). The detail carries no

@@ -61,6 +61,36 @@ export function moveRoleToPosition(db: Database.Database, spaceId: string, roleI
 }
 
 /**
+ * The position `roleId` takes when it is moved directly above or below
+ * `anchorId` (another role of the space, or @everyone, id === spaceId, for
+ * "above": the bottom), in the space's current order. Feeding it to
+ * `moveRoleToPosition` puts the role right next to the anchor. Null when the
+ * anchor is not a role of the space, is the role itself, or is @everyone with
+ * "below" (nothing goes below @everyone).
+ */
+export function positionNextTo(
+  db: Database.Database,
+  spaceId: string,
+  roleId: string,
+  anchorId: string,
+  side: 'above' | 'below',
+): number | null {
+  if (anchorId === roleId) return null;
+  const others = orderedRoles(db, spaceId).filter((r) => r.id !== roleId);
+  let insertAt: number;
+  if (anchorId === spaceId) {
+    if (side === 'below') return null;
+    insertAt = others.length;
+  } else {
+    const anchorIndex = others.findIndex((r) => r.id === anchorId);
+    if (anchorIndex === -1) return null;
+    insertAt = side === 'above' ? anchorIndex : anchorIndex + 1;
+  }
+  // Most senior first: index i of the n roles after the move is position n - i.
+  return others.length + 1 - insertAt;
+}
+
+/**
  * Boot-time pass over every space. Databases from before the hierarchy was
  * enforced have every role at position 0; this turns their displayed order
  * into distinct positions once, and is a no-op afterwards.
