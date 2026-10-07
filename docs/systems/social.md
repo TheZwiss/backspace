@@ -430,20 +430,25 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 
 ---
 
-## 7. Initial Sync: Friend Backfill
+## 7. Pull Sync of Friend Events
 
-When a peer transitions to `active` (including at startup for peers with `lastSyncedAt = 0`), the federation worker calls `onPeerActivated(peerId, reason)`. One of its two unconditional invariants is `syncPeerMutationLog`, which pulls missed events from the peer's `/api/federation/sync` endpoint — including a dedicated friend sync pass.
+Friend events are pulled from each active peer's mutation log like DM and profile events: on every activation and periodically, with a cursor in the peer's clock and refusals kept for retry. The mechanism is in [federation.md "Pull sync"](federation.md#pull-sync); the `friend` context is its second pass, and its ordering unit is the friend pair.
 
-**Flow (`federationPeerActivation.ts:syncPeerMutationLog`):**
+### Applied-event ledger
 
-1. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), processing each batch via `processRelayEvents()` directly
-2. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same direct processing
-3. **Third pass (profile events):** Paginates through `POST /federation/sync` with `contextType: 'profile'`, same direct processing
-4. After all three passes complete, updates `lastSyncedAt = Date.now()` so the window advances on the next activation
+A friend processor acts on whatever request or friendship the pair has now, so it cannot tell a second delivery of an event from a new one: a replayed `friend_request_create` would recreate a request the recipient declined, a replayed `friend_request_update` or `friend_request_cancel` would answer a newer request, and a replayed `friend_remove` would end a friendship formed again after it. `processRelayEvents` therefore applies the five friend event types through the ledger `federation_applied_events`, on the live relay and the pull alike:
 
-At startup, `startupBootstrapSync()` scans for `status = 'active' AND lastSyncedAt = 0` peers and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each, preserving the original startup-sync semantics while using the unified path.
+- before dispatch, an event whose key `<eventType>:<messageId>` is recorded for its signing peer is answered `duplicate` and not applied;
+- an event the processor accepts is recorded;
+- a refused event is not recorded, so a retry can still apply it.
 
-The sync endpoint (`POST /api/federation/sync`) returns events from the `federation_mutation_log` table, which retains entries for 90 days. This means friend relationships established within the last 90 days are backfilled when a new peer connection is created.
+The key works because each friend event's `messageId` is its entity id (`friend_req:<pair>:<ms>`, `friend:<pair>:<ms>`, see "Entity ID Format"), unique per event and the same on the live relay and in the log. Ledger rows live 100 days, longer than the 90-day log a pull reads.
+
+**Before the upgrade.** The ledger only knows events applied since migration 0022. For every peer that had synced before, the migration starts the friend cursor two minutes before the upgrade, so friend history from before it is never re-applied. The cost, accepted: a friend event lost before the upgrade is not healed by the pull. A peering made after the upgrade starts its friend cursor at 0, as the activation pull always did.
+
+**Rolled-back requests.** When the outbox rolls back a `friend_request_create` (a `refused` answer, "Failure Handling" above), `invokePermanentFailureCallback` also deletes that event's mutation-log row, so `/sync` stops serving a request the sender no longer has.
+
+At startup, `startupBootstrapSync()` scans for `status = 'active' AND lastSyncedAt = 0` peers and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each. The sync endpoint (`POST /api/federation/sync`) serves friend events one of whose sides is homed at the requester, from the `federation_mutation_log` table, which retains entries for 90 days, so friend relationships established within the last 90 days are backfilled when a new peer connection is created.
 
 ---
 

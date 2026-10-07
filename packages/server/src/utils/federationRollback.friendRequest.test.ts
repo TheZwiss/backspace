@@ -105,3 +105,30 @@ describe('rollbackFriendRequestCreate', () => {
     expect(event.reason).toBe('peer_rejected');
   });
 });
+
+describe('invokePermanentFailureCallback', () => {
+  it('withdraws the rolled-back event from the mutation log, so /sync stops serving it (#255)', async () => {
+    const logRow = (id: string, entityId: string, mutationType: string) => ({
+      id, entityId, contextId: 'ctx', contextType: 'friend', mutationType, mutatedAt: 1, payload: '{}',
+    });
+    testDb.insert(schema.federationMutationLog).values([
+      logRow('ml-1', 'friend_req:a:b:1', 'friend_request_create'),
+      logRow('ml-2', 'friend_req:a:b:2', 'friend_request_create'),
+    ]).run();
+
+    const { invokePermanentFailureCallback } = await import('./federationRollback.js');
+    invokePermanentFailureCallback('friend_request_create', 'friend_req:a:b:1', 'recipient_not_found');
+
+    const left = testDb.select({ id: schema.federationMutationLog.id }).from(schema.federationMutationLog).all();
+    expect(left).toEqual([{ id: 'ml-2' }]);
+  });
+
+  it('leaves the log alone for an event type without a rollback', async () => {
+    testDb.insert(schema.federationMutationLog).values({
+      id: 'ml-3', entityId: 'm1', contextId: 'ch', contextType: 'dm', mutationType: 'create', mutatedAt: 1, payload: null,
+    }).run();
+    const { invokePermanentFailureCallback } = await import('./federationRollback.js');
+    invokePermanentFailureCallback('create', 'm1', 'invalid_target');
+    expect(testDb.select().from(schema.federationMutationLog).all()).toHaveLength(1);
+  });
+});

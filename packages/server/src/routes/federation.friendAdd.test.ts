@@ -284,7 +284,9 @@ describe('a friend_add without the requester\'s pending request changes nothing'
     const replay = events.find(e => e.eventType === 'friend_add')!;
     const replayed = await deliver(home, orbit, [replay, friendAdd('friend:later', ALICE, HOME)]);
     expect(replayed.accepted).toEqual([]);
-    expect(replayed.rejected.map(r => r.reason)).toEqual(['invalid_target', 'invalid_target']);
+    // The replay was applied once already: the applied-event ledger answers it
+    // `duplicate` (#255). A new friend_add finds no pending request.
+    expect(replayed.rejected.map(r => r.reason)).toEqual(['duplicate', 'invalid_target']);
     expect(areFriends(home, ALICE, bobOnHome)).toBe(false);
   });
 

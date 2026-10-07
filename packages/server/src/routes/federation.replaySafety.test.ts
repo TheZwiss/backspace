@@ -9,6 +9,8 @@ import type { FederationRelayEvent, FederationRelayParticipant } from '@backspac
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { oneOnOneKey } from '../utils/dmConversation.js';
+import { connectionManager } from '../ws/handler.js';
+import { processRelayEvents } from './federation/events/dispatch.js';
 
 setWorkerId(1);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -129,7 +131,6 @@ function closeReopenEvent(eventType: 'dm_close' | 'dm_reopen', timestamp: number
 }
 
 async function apply(event: FederationRelayEvent, delivery: 'live' | 'catch_up' = 'live') {
-  const { processRelayEvents } = await import('./federation/events/dispatch.js');
   return processRelayEvents([event], HOME_ORIGIN, HOME_ORIGIN, db, { delivery });
 }
 
@@ -165,7 +166,6 @@ beforeEach(async () => {
   db.insert(schema.dmMembers).values({ dmChannelId: CHANNEL, userId: 'bob', closed: 0, closedChangedAt: 1 }).run();
   db.insert(schema.dmMembers).values({ dmChannelId: CHANNEL, userId: 'alice-on-orbit', closed: 0, closedChangedAt: 1 }).run();
 
-  const { connectionManager } = await import('../ws/handler.js');
   sentToUser = [];
   sentToDmMembers = [];
   vi.spyOn(connectionManager, 'sendToUser').mockImplementation((userId: string, event: { type: string }) => {
@@ -388,5 +388,82 @@ describe('file_rejected', () => {
     expect((await apply(event)).accepted).toEqual(['own-1']);
     expect(sentToUser.filter(s => s.type === 'federation_file_rejected')).toHaveLength(1);
     expect(sentToDmMembers.filter(s => s.type === 'dm_message_updated')).toHaveLength(1);
+  });
+});
+
+describe('friend events go through the applied-event ledger', () => {
+  const FROM_ALICE = { homeUserId: 'alice', homeInstance: HOME_ORIGIN };
+  const TO_BOB = { homeUserId: 'bob', homeInstance: ORBIT_ORIGIN };
+
+  function friendEvent(
+    eventType: 'friend_request_create' | 'friend_request_update' | 'friend_remove',
+    messageId: string,
+    friendship: Partial<NonNullable<FederationRelayEvent['friendship']>> & Pick<NonNullable<FederationRelayEvent['friendship']>, 'from' | 'to'>,
+  ): FederationRelayEvent {
+    return {
+      eventType,
+      contextType: 'friend',
+      messageId,
+      encryptionVersion: 0,
+      timestamp: 1_000,
+      friendship: { createdAt: 1_000, ...friendship },
+    };
+  }
+
+  function requests(): Array<{ fromId: string; toId: string; status: string | null }> {
+    return db.select({ fromId: schema.friendRequests.fromId, toId: schema.friendRequests.toId, status: schema.friendRequests.status })
+      .from(schema.friendRequests).all();
+  }
+
+  function friendsCount(): number {
+    return db.select().from(schema.friends).all().length;
+  }
+
+  it('a replayed request does not come back after the recipient declined it', async () => {
+    const create = friendEvent('friend_request_create', 'friend_req:alice:bob:1000', {
+      from: FROM_ALICE, to: TO_BOB, status: 'pending', fromProfile: { username: 'alice' },
+    });
+    expect((await apply(create)).accepted).toEqual([create.messageId]);
+    db.update(schema.friendRequests).set({ status: 'declined' }).run();
+
+    const replay = await apply(create, 'catch_up');
+    expect(replay.rejected).toEqual([{ messageId: create.messageId, reason: 'duplicate' }]);
+    expect(requests()).toEqual([{ fromId: 'alice-on-orbit', toId: 'bob', status: 'declined' }]);
+    expect(sentToUser.filter(s => s.type === 'friend_request_received')).toHaveLength(1);
+  });
+
+  it('a replayed remove does not end a friendship formed again after it', async () => {
+    db.insert(schema.friends).values({ userId: 'alice-on-orbit', friendId: 'bob', createdAt: 1 }).run();
+    const remove = friendEvent('friend_remove', 'friend:alice:bob:2000', { from: FROM_ALICE, to: TO_BOB });
+    expect((await apply(remove)).accepted).toEqual([remove.messageId]);
+    expect(friendsCount()).toBe(0);
+
+    db.insert(schema.friends).values({ userId: 'alice-on-orbit', friendId: 'bob', createdAt: 3_000 }).run();
+    expect((await apply(remove, 'catch_up')).rejected).toEqual([{ messageId: remove.messageId, reason: 'duplicate' }]);
+    expect(friendsCount()).toBe(1);
+  });
+
+  it('a replayed decline does not answer a newer request', async () => {
+    db.insert(schema.friendRequests).values({ id: 'req-1', fromId: 'bob', toId: 'alice-on-orbit', status: 'pending', createdAt: 1 }).run();
+    const decline = friendEvent('friend_request_update', 'friend_req:alice:bob:1500', {
+      from: TO_BOB, to: FROM_ALICE, status: 'declined',
+    });
+    expect((await apply(decline)).accepted).toEqual([decline.messageId]);
+    expect(requests()).toEqual([{ fromId: 'bob', toId: 'alice-on-orbit', status: 'declined' }]);
+
+    db.insert(schema.friendRequests).values({ id: 'req-2', fromId: 'bob', toId: 'alice-on-orbit', status: 'pending', createdAt: 4_000 }).run();
+    expect((await apply(decline, 'catch_up')).rejected).toEqual([{ messageId: decline.messageId, reason: 'duplicate' }]);
+    expect(requests().map(r => r.status)).toEqual(['declined', 'pending']);
+  });
+
+  it('a refused friend event is not recorded, so it can apply when retried', async () => {
+    const toNobody = friendEvent('friend_request_create', 'friend_req:alice:zed:1000', {
+      from: FROM_ALICE, to: { homeUserId: 'zed', homeInstance: ORBIT_ORIGIN }, status: 'pending',
+    });
+    expect((await apply(toNobody)).rejected).toEqual([{ messageId: toNobody.messageId, reason: 'recipient_not_found' }]);
+    expect(db.select().from(schema.federationAppliedEvents).all()).toEqual([]);
+
+    seedUser({ id: 'zed', username: 'zed', passwordHash: 'real-hash', homeInstance: null });
+    expect((await apply(toNobody, 'catch_up')).accepted).toEqual([toNobody.messageId]);
   });
 });

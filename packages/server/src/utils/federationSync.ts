@@ -39,7 +39,7 @@ export type SyncReason = PeerActivationReason | 'periodic' | 'manual';
 
 export const ALL_SYNC_CONTEXTS: readonly SyncContext[] = ['dm', 'friend', 'profile'];
 /** What the periodic tick pulls. */
-export const PERIODIC_SYNC_CONTEXTS: readonly SyncContext[] = ['dm', 'profile'];
+export const PERIODIC_SYNC_CONTEXTS: readonly SyncContext[] = ALL_SYNC_CONTEXTS;
 
 export const SYNC_PAGE_LIMIT = 100;
 export const FIRST_PAGE_OVERLAP_MS = 120_000;
@@ -107,13 +107,12 @@ function isAfter(a: CursorPosition, b: CursorPosition): boolean {
 }
 
 /**
- * Where a context's cursor starts when it has none: the whole log for DM and
- * profile events, whose processors are safe to apply twice; for friend events,
- * the last completed pull (in this instance's clock, as before cursors).
+ * Where a context's cursor starts when it has none: the whole log. Every
+ * relay processor is safe to apply twice (friend events through the ledger).
+ * A peer that had synced before the upgrade got every cursor from migration
+ * 0022 instead, at its `last_synced_at`.
  */
-function initialCursorTs(peer: PeerRow, context: SyncContext): number {
-  return context === 'friend' ? peer.lastSyncedAt ?? 0 : 0;
-}
+const INITIAL_CURSOR_TS = 0;
 
 /**
  * Restart every cursor of `peer` at 0, and drop its kept events, when the
@@ -154,7 +153,7 @@ function loadCursor(peer: PeerRow, context: SyncContext): CursorPosition {
     ))
     .get();
   if (row) return { ts: row.cursorTs, id: row.cursorId };
-  const ts = initialCursorTs(peer, context);
+  const ts = INITIAL_CURSOR_TS;
   db.insert(schema.federationSyncCursors)
     .values({ peerId: peer.id, contextType: context, cursorTs: ts, cursorId: null, peerEpoch: peer.peerInstanceId })
     .onConflictDoNothing()
