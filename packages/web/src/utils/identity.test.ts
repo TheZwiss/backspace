@@ -8,6 +8,9 @@ import {
   isFederationGlobeApplicable,
   hostOf,
   userDisplayName,
+  ownRowAt,
+  isMine,
+  selfIdentityOf,
 } from './identity';
 
 describe('normalizeOriginToHost', () => {
@@ -173,5 +176,44 @@ describe('userDisplayName', () => {
 
   it('treats an empty display name as none', () => {
     expect(userDisplayName({ displayName: '', username: 'kai@orbit.example' })).toBe('kai');
+  });
+});
+
+describe('ownRowAt', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'location', { value: { host: 'nova.ddns.net' }, writable: true });
+  });
+
+  const ORBIT = 'https://orbit.ddns.net';
+
+  it("makes a nova-native session's row on orbit orbit's copy of them", () => {
+    const session = { id: 'n-1', homeInstance: null, homeUserId: null };
+    const row = ownRowAt(session, ORBIT, 'o-7');
+    expect(row).toEqual({ id: 'o-7', homeInstance: 'nova.ddns.net', homeUserId: 'n-1' });
+    expect(userKey(row, ORBIT)).toBe(userKey(session, ''));
+    expect(isMine(row, ORBIT, selfIdentityOf(session, new Map([[ORBIT, 'o-7']])))).toBe(true);
+  });
+
+  it("is never orbit's own user who has the session row's id", () => {
+    const session = { id: 'n-1', homeInstance: null, homeUserId: null };
+    expect(userKey(ownRowAt(session, ORBIT, 'o-7'), ORBIT)).not.toBe(userKey({ id: 'n-1' }, ORBIT));
+  });
+
+  it('makes a replicated session\'s row on its true home that home\'s native row', () => {
+    const session = { id: 'n-5', homeInstance: 'orbit.ddns.net', homeUserId: 'o-7' };
+    const row = ownRowAt(session, ORBIT, 'o-7');
+    expect(row).toEqual({ id: 'o-7', homeInstance: null, homeUserId: null });
+    expect(userKey(row, ORBIT)).toBe(userKey(session, ''));
+  });
+
+  it('keeps the home identity of a replicated session on a third instance', () => {
+    const session = { id: 'n-5', homeInstance: 'orbit.ddns.net', homeUserId: 'o-7' };
+    const row = ownRowAt(session, 'https://vega.ddns.net', 'v-3');
+    expect(row).toEqual({ id: 'v-3', homeInstance: 'orbit.ddns.net', homeUserId: 'o-7' });
+  });
+
+  it("is the session row's identity on the page's own instance", () => {
+    const session = { id: 'n-1', homeInstance: null, homeUserId: null };
+    expect(ownRowAt(session, '', 'n-1')).toEqual(session);
   });
 });

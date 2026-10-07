@@ -6,7 +6,7 @@ import { api } from '../../api/client';
 import { Message } from './Message';
 import { useChatStore, type LoadAroundResult, type LoadNewerResult } from '../../stores/chatStore';
 import { useSpaceStore, useIsDmChannel, getChannelOrigin } from '../../stores/spaceStore';
-import { useAuthStore, isMe } from '../../stores/authStore';
+import { isMe, useMyRowForOrigin } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import {
   usePendingMessageStore,
@@ -516,7 +516,10 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // Each attachment carries only `__transferId`; Message.tsx subscribes to a
   // single transfer in isolation so progress ticks don't re-render the list.
   const pendingBubbles = usePendingMessageStore((s) => s.bubbles.get(channelId)) ?? EMPTY_PENDING_BUBBLES;
-  const currentUser = useAuthStore((s) => s.user);
+  // Pending bubbles are the user's rows as the channel's instance issues them,
+  // so they are checked against that origin like the rows it sends.
+  const channelOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelId) ?? '');
+  const myRow = useMyRowForOrigin(channelOrigin);
 
   // Map for O(1) replyTo lookup when synthesizing pending bubbles. Built once
   // per `messages` change; per-bubble lookup is then constant-time.
@@ -527,7 +530,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   }, [messages]);
 
   const interleavedMessages: (MessageWithUser | PendingMessageView)[] = useMemo(() => {
-    if (!currentUser || pendingBubbles.length === 0) return messages;
+    if (!myRow || pendingBubbles.length === 0) return messages;
     // Synthesized DM messages keep the chatStore convention of channelId === ''
     // (real DM messages have empty channelId — DM identity lives on dmChannelId).
     const synthChannelId = isDm ? '' : channelId;
@@ -535,13 +538,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       const synth: PendingMessageView = {
         id: `pending-${b.clientId}`,
         channelId: synthChannelId,
-        userId: currentUser.id,
+        userId: myRow.id,
         content: b.content,
         replyToId: b.replyToId,
         type: 'user',
         editedAt: null,
         createdAt: b.createdAtLocal,
-        user: currentUser,
+        user: myRow,
         attachments: b.transferIds.map((tid): PendingAttachmentView => ({
           id: `tx-${tid}`,                         // synthetic — no real attachmentId yet
           messageId: '',
@@ -565,7 +568,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       return synth;
     });
     return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
-  }, [messages, pendingBubbles, messagesById, channelId, currentUser, isDm]);
+  }, [messages, pendingBubbles, messagesById, channelId, myRow, isDm]);
 
   // Load on open, and again when a listing names a channel that was unknown,
   // which ends its `waiting` state.

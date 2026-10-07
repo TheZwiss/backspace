@@ -3,7 +3,7 @@ import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
 import { wsSend } from '../hooks/useWebSocket';
 import { HttpError } from '../api/client';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
-import { useAuthStore } from './authStore';
+import { myRowForOrigin } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { usePendingMessageStore } from './pendingMessageStore';
 import type { ScrollAnchor } from '../components/chat/scrollAnchor';
@@ -627,8 +627,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (channelId: string, content: string, attachmentIds?: string[]) => {
     const replyToId = get().replyTo?.id;
     const isDm = isDmChannel(channelId);
-    const currentUser = useAuthStore.getState().user;
     const origin = getChannelOrigin(channelId);
+    // The user's row as the channel's instance issues it: the optimistic
+    // message is checked against that origin (own message, edit, profile).
+    const myRow = myRowForOrigin(origin);
     const client = getApiForOrigin(origin);
 
     // Sending from a window of older history goes back to the present, where
@@ -637,16 +639,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Generate optimistic message
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    if (currentUser) {
+    if (myRow) {
       const optimisticMessage: MessageWithUser = {
         id: tempId,
         channelId: isDm ? '' : channelId,
-        userId: currentUser.id,
+        userId: myRow.id,
         content: content || null,
         replyToId: replyToId ?? null,
         editedAt: null,
         createdAt: Date.now(),
-        user: currentUser,
+        user: myRow,
         attachments: [],
         embeds: [],
         reactions: [],
@@ -662,7 +664,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (isDm) {
         useSpaceStore.getState().patchDmCopy(channelId, dm => ({
           ...dm,
-          lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() },
+          lastMessage: { id: tempId, dmChannelId: channelId, userId: myRow.id, content, createdAt: Date.now() },
         }));
       }
     }

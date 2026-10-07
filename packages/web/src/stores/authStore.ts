@@ -12,7 +12,7 @@ import { useSettingsStore } from './settingsStore';
 import { useExploreStore } from './exploreStore';
 import { useDirectoryStore } from './directoryStore';
 import { deleteAccountOnRemotes } from '../utils/federationOps';
-import { isMine, selfIdentityOf, type IdentityFields, type SelfIdentity } from '../utils/identity';
+import { isMine, ownRowAt, selfIdentityOf, type IdentityFields, type SelfIdentity } from '../utils/identity';
 import { myChosenStatus, statusAuthority, type OwnStatusReport } from '../utils/selfStatus';
 import i18n from '../i18n';
 
@@ -329,3 +329,31 @@ export function getMyUserIdForOrigin(origin: string): string | undefined {
   return myRowIds.get(origin);
 }
 
+
+/**
+ * The signed-in user's row as the instance at `origin` issues it
+ * (`ownRowAt`), for rows the client makes up before that instance sends its
+ * own: the session row itself for `''`, else the session row under the id
+ * that instance's `ready` gave the user. Null when signed out or while that
+ * instance has not named the user's row: the session row's id means someone
+ * else there.
+ */
+export function myRowFor(user: User | null, myRowIds: ReadonlyMap<string, string>, origin: string): User | null {
+  if (!user) return null;
+  if (!origin) return user;
+  const rowId = myRowIds.get(origin);
+  return rowId ? ownRowAt(user, origin, rowId) : null;
+}
+
+/** `myRowFor` the current session, read once. */
+export function myRowForOrigin(origin: string): User | null {
+  const { user, myRowIds } = useAuthStore.getState();
+  return myRowFor(user, myRowIds, origin);
+}
+
+/** Reactive `myRowForOrigin`. */
+export function useMyRowForOrigin(origin: string): User | null {
+  const user = useAuthStore((s) => s.user);
+  const myRowIds = useAuthStore((s) => s.myRowIds);
+  return useMemo(() => myRowFor(user, myRowIds, origin), [user, myRowIds, origin]);
+}

@@ -235,3 +235,25 @@ export function isMine(row: IdentityFields, origin: string, self: SelfIdentity |
   return homeIdentityOf(row, origin) !== null && userKey(row, origin) === self.key;
 }
 
+
+/**
+ * The signed-in user's row as the instance at `origin` issues it, for a row
+ * the client makes up before that instance sends its own (an unsent message,
+ * a pending upload, a DM preview, the local voice participant). `rowId` is
+ * the id that instance gave the user (`getMyUserIdForOrigin(origin)`); the
+ * identity fields name the person `session` (the page's session row) names,
+ * the way that instance carries them: none when `origin` is their home, else
+ * their home identity. The profile fields are the session row's.
+ *
+ * So `isMine(ownRowAt(session, origin, id), origin, self)` holds and the
+ * row's `userKey` is the session row's, whichever instance it is checked
+ * against.
+ */
+export function ownRowAt<T extends IdentityFields>(session: T, origin: string, rowId: string): T {
+  const identity = homeIdentityOf(session, '');
+  if (!identity) return { ...session, id: rowId };
+  if (homeHostOf(identity.host) === homeHostOf(deliveringHost(origin))) {
+    return { ...session, id: rowId, homeInstance: null, homeUserId: null };
+  }
+  return { ...session, id: rowId, homeInstance: identity.host, homeUserId: identity.userId };
+}
