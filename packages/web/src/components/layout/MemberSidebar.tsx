@@ -9,6 +9,7 @@ import { Avatar } from '../ui/Avatar';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { groupMembers, memberNameColor, type MemberGroupKind } from '../../utils/memberGroups';
@@ -30,7 +31,8 @@ function MemberSidebarRow({
   accentClass: string;
   onClickMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
 }) {
-  const canonical = useCanonicalUserView(member.user);
+  const origin = useSpaceOrigin(member.spaceId);
+  const canonical = useCanonicalUserView(member.user, origin);
   const displayName = userDisplayName(canonical);
 
   const rowClass = isRichActivity
@@ -101,7 +103,8 @@ export function MemberSidebar() {
 
   const handleMemberClick = (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => {
     e.stopPropagation();
-    openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left', { spaceId: member.spaceId, userId: member.userId });
+    const origin = useSpaceStore.getState().spaces.find(s => s.id === member.spaceId)?._instanceOrigin ?? '';
+    openUserProfile(user, origin, e.currentTarget.getBoundingClientRect(), 'left', { spaceId: member.spaceId, userId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {

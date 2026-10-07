@@ -181,6 +181,11 @@ export const dmMembers = sqliteTable('dm_members', {
   dmChannelId: text('dm_channel_id').notNull().references(() => dmChannels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   closed: integer('closed').default(0),
+  // When `closed` last took its current value, for last-writer-wins against a
+  // relayed dm_close / dm_reopen: the member's own action or the membership's
+  // start (local clock), or the relayed event's timestamp. Written only through
+  // utils/dmMemberClosed.ts.
+  closedChangedAt: integer('closed_changed_at').notNull().default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.dmChannelId, table.userId] }),
   userIdx: index('idx_dm_members_user_id').on(table.userId),
@@ -241,6 +246,8 @@ export const reactions = sqliteTable('reactions', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   messageIdx: index('idx_reactions_message_id').on(table.messageId),
+  // One reaction per user, emoji and message. A repeat insert is refused.
+  messageUserEmojiIdx: uniqueIndex('idx_reactions_message_user_emoji').on(table.messageId, table.userId, table.emoji),
 }));
 
 export const dmReactions = sqliteTable('dm_reactions', {
@@ -251,6 +258,8 @@ export const dmReactions = sqliteTable('dm_reactions', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   dmMessageIdx: index('idx_dm_reactions_dm_message_id').on(table.dmMessageId),
+  // One reaction per user, emoji and message. A repeat insert is refused.
+  dmMessageUserEmojiIdx: uniqueIndex('idx_dm_reactions_message_user_emoji').on(table.dmMessageId, table.userId, table.emoji),
 }));
 
 export const roles = sqliteTable('roles', {
@@ -376,6 +385,14 @@ export const instanceSettings = sqliteTable('instance_settings', {
   supportCardEnabled: integer('support_card_enabled', { mode: 'boolean' }).notNull().default(true),
   /** First-boot timestamp (ms); backfilled by ensureDefaults, so non-null after boot. */
   installedAt: integer('installed_at'),
+  /**
+   * When this instance began recording applied relay events in
+   * `federation_applied_events` (ms): the upgrade that ran migration 0022.
+   * Null on an instance that recorded them from its first boot. A friend
+   * event applied before it cannot be recognized, so the pull never reads a
+   * peer's friend events from before it (utils/federationSync.ts).
+   */
+  ledgerStartedAt: integer('ledger_started_at'),
   updatedAt: integer('updated_at').notNull(),
 });
 
@@ -448,8 +465,85 @@ export const federationPeers = sqliteTable('federation_peers', {
   approvalToken: text('approval_token'),
   peerInstanceId: text('peer_instance_id'),
   observedPeerInstanceId: text('observed_peer_instance_id'),
-  needsAttentionReason: text('needs_attention_reason'),
+  // Why the row is in its status, for the statuses that carry a reason
+  // (needs_attention, rejected); NULL for every other status. Written only by
+  // utils/federationPeerState.ts. See docs/systems/federation.md, "Peer state".
+  statusReason: text('status_reason'),
 });
+
+// Pull-sync position per peer and context ('dm' | 'friend' | 'profile'): the
+// peer's mutation-log row last consumed, in the PEER's clock (`mutated_at`)
+// with its row id as the tiebreak. `peerEpoch` is the peer's instance id the
+// cursor was taken against; a different epoch restarts the cursor at 0.
+// See utils/federationSync.ts.
+export const federationSyncCursors = sqliteTable('federation_sync_cursors', {
+  peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
+  contextType: text('context_type').notNull(),
+  cursorTs: integer('cursor_ts').notNull().default(0),
+  cursorId: text('cursor_id'),
+  peerEpoch: text('peer_epoch'),
+  lastPulledAt: integer('last_pulled_at'),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.peerId, table.contextType] }),
+}));
+
+// Pulled events a receiver refused for a reason that can pass later, kept
+// with the whole event and replayed locally in the peer's order within each
+// subject (`subjectKey`, the unit utils/federationSync.ts orders pulled events
+// in). A subject with a row here holds its later pulled events behind it.
+// One row per distinct event: `eventHash` is the sha256 of the event's
+// canonical JSON, so a re-read of a kept event adds nothing and two events
+// that share a type, message and millisecond (two reactions, two rejected
+// attachments) are both kept.
+export const federationSyncRetry = sqliteTable('federation_sync_retry', {
+  id: text('id').primaryKey(),
+  peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
+  contextType: text('context_type').notNull(),
+  subjectKey: text('subject_key').notNull(),
+  eventType: text('event_type').notNull(),
+  messageId: text('message_id').notNull(),
+  eventTs: integer('event_ts').notNull(),
+  eventHash: text('event_hash').notNull(),
+  eventJson: text('event_json').notNull(),
+  lastReason: text('last_reason').notNull(),
+  attempts: integer('attempts').notNull().default(1),
+  firstFailedAt: integer('first_failed_at').notNull(),
+  nextRetryAt: integer('next_retry_at').notNull(),
+}, (table) => ({
+  eventIdx: uniqueIndex('idx_sync_retry_event').on(table.peerId, table.eventHash),
+  subjectIdx: index('idx_sync_retry_subject').on(table.peerId, table.subjectKey),
+  orderIdx: index('idx_sync_retry_order').on(table.peerId, table.eventTs),
+}));
+
+// Relay events this instance has applied (or a tombstone standing for one),
+// for events whose processors cannot tell a second delivery from state alone:
+// friend events, and the delete of a message not held here, which answers a
+// later create of it as a duplicate. Keyed by the normalized origin the event
+// is attributed to. Swept by the janitor after 100 days, longer than the
+// 90-day mutation log the pull reads.
+export const federationAppliedEvents = sqliteTable('federation_applied_events', {
+  sourceOrigin: text('source_origin').notNull(),
+  eventKey: text('event_key').notNull(),
+  appliedAt: integer('applied_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.sourceOrigin, table.eventKey] }),
+  appliedAtIdx: index('idx_applied_events_applied_at').on(table.appliedAt),
+}));
+
+// The last applied change per federated subject: a group member (the group's
+// federatedId + the member's identity) or a friend pair (both identities).
+// Relayed member and friend events apply last-writer-wins against it, on the
+// live relay and the pull alike; local changes record it too. `changedAt` is
+// the change's own timestamp (the relayed event's, or local time for a change
+// made here); `recordedAt` is the local time of the write, for the sweep.
+// Written only through utils/federationSubjectClock.ts.
+export const federationSubjectClocks = sqliteTable('federation_subject_clocks', {
+  subjectKey: text('subject_key').primaryKey(),
+  changedAt: integer('changed_at').notNull(),
+  recordedAt: integer('recorded_at').notNull(),
+}, (table) => ({
+  recordedAtIdx: index('idx_subject_clocks_recorded_at').on(table.recordedAt),
+}));
 
 // Records a detected federated-peer reset (same origin, new instance epoch).
 // One row per origin; upserted when a live epoch change is observed, resolved

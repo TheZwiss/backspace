@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { buildFederationHeaders } from '../utils/federationAuth.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 
 setWorkerId(1);
 
@@ -449,10 +450,69 @@ describe('POST /api/federation/peer/accept — BUG-1a: honest 409 refusal for ex
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-active')).get();
     expect(row?.status).toBe('needs_attention');
-    expect(row?.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row?.statusReason).toBe('peer_reset_detected');
     expect(row?.observedPeerInstanceId).toBe('epoch-B-new-incarnation');
     expect(row?.peerInstanceId).toBe('epoch-A');
     expect(row?.hmacSecret).toBe('S0');
+  });
+
+  it('existing unreachable peer: same 409 refusal, secret unchanged (an established peering is not re-keyed unauthenticated)', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-unreachable',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'unreachable',
+      peerInstanceId: 'epoch-A',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.5',
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-other',
+        instanceId: 'epoch-A',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-unreachable')).get();
+    expect(row?.hmacSecret).toBe('S0');
+    expect(row?.status).toBe('unreachable');
+  });
+
+  it('auto-accept off: an active peer still gets the 409 refusal and reset detection, not an approval request', async () => {
+    testDb.update(schema.instanceSettings).set({ autoAcceptPeering: 0 }).run();
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active-gated',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'active',
+      peerInstanceId: 'epoch-A',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.6',
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-different',
+        instanceId: 'epoch-B-new-incarnation',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-active-gated')).get();
+    expect(row?.status).toBe('needs_attention');
+    expect(row?.statusReason).toBe('peer_reset_detected');
+    const queued = testDb.select().from(schema.peerApprovalRequests).all();
+    expect(queued).toHaveLength(0);
   });
 
   it('existing needs_attention peer: same 409 refusal, secret unchanged', async () => {
@@ -461,7 +521,7 @@ describe('POST /api/federation/peer/accept — BUG-1a: honest 409 refusal for ex
       origin: 'https://caller.example',
       hmacSecret: 'S0',
       status: 'needs_attention',
-      needsAttentionReason: 'peer_reset_detected',
+      statusReason: 'peer_reset_detected',
       peerInstanceId: 'epoch-A',
       createdAt: Date.now(),
     }).run();
@@ -567,12 +627,7 @@ describe('POST /api/federation/approval-requests/:id/approve — persists remote
   it('writes remote.instanceName when remote /peer/accept succeeds', async () => {
     const approvalId = seedApprovalRequest();
 
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote Backspace' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote Backspace' }) }));
 
     const response = await app.inject({
       method: 'POST',
@@ -587,15 +642,10 @@ describe('POST /api/federation/approval-requests/:id/approve — persists remote
     expect(row?.instanceName).toBe('Remote Backspace');
   });
 
-  it('writes null instanceName when remote response omits the field', async () => {
+  it('keeps the name from the approval request when the remote response omits the field', async () => {
     const approvalId = seedApprovalRequest();
 
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true }) }));
 
     const response = await app.inject({
       method: 'POST',
@@ -606,6 +656,105 @@ describe('POST /api/federation/approval-requests/:id/approve — persists remote
     expect(response.statusCode).toBe(200);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
-    expect(row?.instanceName).toBeNull();
+    expect(row?.instanceName).toBe('Stale Name');
+  });
+});
+
+describe('POST /api/federation/peer/accept: the answer follows the row state (#323)', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings('Local Backspace');
+    app = await buildApp();
+  });
+
+  function seedRow(values: Partial<typeof schema.federationPeers.$inferInsert>): void {
+    testDb.insert(schema.federationPeers).values({
+      id: 'row', origin: 'https://caller.example', hmacSecret: 'S0', status: 'pending', createdAt: Date.now(), ...values,
+    }).run();
+  }
+
+  function setAutoAccept(on: boolean): void {
+    testDb.update(schema.instanceSettings).set({ autoAcceptPeering: on ? 1 : 0 }).run();
+  }
+
+  async function handshake(remoteAddress: string, origin = 'https://caller.example'): Promise<{ status: number; body: Record<string, unknown> }> {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress,
+      payload: { sourceOrigin: origin, hmacSecret: 'S1', instanceId: 'epoch-caller' },
+    });
+    return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+  }
+
+  function row(): typeof schema.federationPeers.$inferSelect | undefined {
+    return testDb.select().from(schema.federationPeers).where(eq(schema.federationPeers.id, 'row')).get();
+  }
+
+  it('a revoked origin gets 403 with code PEER_REVOKED and the error text older releases match', async () => {
+    seedRow({ status: 'revoked' });
+    const { status, body } = await handshake('10.0.2.1');
+    expect(status).toBe(403);
+    expect(body.code).toBe('PEER_REVOKED');
+    expect(body.error).toBe('Peering with this instance has been revoked');
+  });
+
+  it('with auto-accept off, a revoked origin also gets 403, not an approval request', async () => {
+    setAutoAccept(false);
+    seedRow({ status: 'revoked' });
+    const { status } = await handshake('10.0.2.2');
+    expect(status).toBe(403);
+    expect(testDb.select().from(schema.peerApprovalRequests).all()).toHaveLength(0);
+  });
+
+  it('with auto-accept on, an origin our admin denied stays blocked', async () => {
+    seedRow({ status: 'rejected', statusReason: 'denied_by_local_admin', initiatedBy: 'admin' });
+    const { status, body } = await handshake('10.0.2.3');
+    expect(status).toBe(403);
+    expect(body.code).toBe('PEERING_REQUIRES_APPROVAL');
+    expect(row()?.status).toBe('rejected');
+  });
+
+  it('with auto-accept off, a remote that revoked us and now re-initiates is taken on our admin row', async () => {
+    setAutoAccept(false);
+    seedRow({ status: 'rejected', statusReason: 'revoked_by_remote', initiatedBy: 'admin' });
+    const { status } = await handshake('10.0.2.4');
+    expect(status).toBe(200);
+    expect(row()?.status).toBe('active');
+    expect(row()?.hmacSecret).toBe('S1');
+    expect(row()?.statusReason).toBeNull();
+  });
+
+  it('with auto-accept off, a remote that revoked our auto row is queued for our admin, not refused', async () => {
+    setAutoAccept(false);
+    seedRow({ status: 'rejected', statusReason: 'revoked_by_remote', initiatedBy: 'auto' });
+    const { status } = await handshake('10.0.2.5');
+    expect(status).toBe(202);
+    expect(row()?.status).toBe('rejected');
+  });
+
+  it('a row parked on our older-peering refusal is taken by the remote Re-peer (#309 recovery)', async () => {
+    seedRow({ status: 'rejected', statusReason: 'stale_peering_on_remote', initiatedBy: 'auto' });
+    const { status } = await handshake('10.0.2.6');
+    expect(status).toBe(200);
+    expect(row()?.status).toBe('active');
+  });
+
+  it('while our own handshake with a higher origin is in flight, answers 409 PEER_HANDSHAKE_IN_PROGRESS', async () => {
+    seedRow({ status: 'pending', origin: 'https://zzz-caller.example' });
+    const { claimAdminHandshake, releaseAdminHandshake } = await import('../utils/federationPeering.js');
+    expect(claimAdminHandshake('https://zzz-caller.example')).toBe(true);
+    try {
+      const { status, body } = await handshake('10.0.2.7', 'https://zzz-caller.example');
+      expect(status).toBe(409);
+      expect(body.code).toBe('PEER_HANDSHAKE_IN_PROGRESS');
+      expect(row()?.hmacSecret).toBe('S0');
+    } finally {
+      releaseAdminHandshake('https://zzz-caller.example');
+    }
   });
 });

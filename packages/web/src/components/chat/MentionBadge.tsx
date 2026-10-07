@@ -41,7 +41,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId, channelId
     const memberContext = resolved.member
       ? { spaceId: resolved.member.spaceId, userId: resolved.member.userId }
       : undefined;
-    openUserProfile(resolved.user, e.currentTarget.getBoundingClientRect(), undefined, memberContext);
+    openUserProfile(resolved.user, resolved.origin, e.currentTarget.getBoundingClientRect(), undefined, memberContext);
   };
 
   // Build inline styles: role-colored text with tinted background

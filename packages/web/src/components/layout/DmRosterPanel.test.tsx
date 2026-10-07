@@ -18,7 +18,7 @@ vi.mock('../../audio/AudioManager', () => ({
 // Mutable selector-state holders so individual tests can flip caller / channel
 // shape without rebuilding the whole module mock graph.
 type ChatStateShape = { currentChannelId: string | null };
-type SpaceStateShape = { dmChannels: DmChannel[]; currentSpaceId: string | null; userViews: Map<string, unknown> };
+type SpaceStateShape = { dmChannels: DmChannel[]; currentSpaceId: string | null; userViews: Map<string, unknown>; channelOriginMap: Map<string, string> };
 type UIStateShape = {
   memberListOpen: boolean;
   showDms: boolean;
@@ -27,13 +27,14 @@ type UIStateShape = {
   addToast: ReturnType<typeof vi.fn>;
 };
 type AuthStateShape = { user: User | null };
-type SocialStateShape = { friends: { id: string }[]; removeFriend: ReturnType<typeof vi.fn> };
+type SocialStateShape = { friends: { id: string; _instanceOrigin: string }[]; removeFriend: ReturnType<typeof vi.fn> };
 
 const chatState: ChatStateShape = { currentChannelId: 'dm-1' };
 const spaceState: SpaceStateShape = {
   dmChannels: [],
   currentSpaceId: null,
   userViews: new Map(),
+  channelOriginMap: new Map(),
 };
 const uiState: UIStateShape = {
   memberListOpen: true,
@@ -78,16 +79,8 @@ vi.mock('../../stores/uiStore', () => ({
   ),
 }));
 
-vi.mock('../../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: AuthStateShape) => unknown) => selector(authState),
-    {
-      getState: () => authState,
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    },
-  ),
-}));
+vi.mock('../../stores/authStore', async () =>
+  (await import('../../test/authStoreMock')).authStoreMock(() => authState));
 
 vi.mock('../../stores/socialStore', () => ({
   useSocialStore: Object.assign(
@@ -165,7 +158,7 @@ function setScenario(opts: {
   memberListOpen?: boolean;
   showDms?: boolean;
   currentSpaceId?: string | null;
-  friends?: { id: string }[];
+  friends?: { id: string; _instanceOrigin: string }[];
   channelId?: string | null;
 }) {
   authState.user = opts.caller;
@@ -374,7 +367,7 @@ describe('DmRosterPanel — action wiring', () => {
       caller: me,
       members: [me, friend],
       ownerId: 'someone-else', // caller is not owner
-      friends: [{ id: 'friend-1' }],
+      friends: [{ id: 'friend-1', _instanceOrigin: '' }],
     });
     const { container } = renderPanel();
 

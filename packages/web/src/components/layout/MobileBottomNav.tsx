@@ -1,8 +1,7 @@
 import React from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useAuthStore } from '../../stores/authStore';
-import { useSocialStore } from '../../stores/socialStore';
+import { isIncomingRequest, useSocialStore } from '../../stores/socialStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useNavigate } from 'react-router-dom';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
@@ -20,7 +19,6 @@ export function MobileBottomNav() {
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const readStates = useChatStore((s) => s.readStates);
   const requests = useSocialStore((s) => s.requests);
-  const authUser = useAuthStore((s) => s.user);
   const updateBadge = useInstanceUpdateBadge();
   // The Backspace row lives on the You screen, so its dot surfaces here.
   const hubUpdated = useHubUpdateState().state === 'updated';
@@ -39,7 +37,7 @@ export function MobileBottomNav() {
   const hasUnreadSpaces = Array.from(unreadChannels).some(chId => !voiceChannelIds.has(chId));
 
   // Pending friend requests — filter for incoming only
-  const pendingIncoming = requests.filter(r => r.status === 'pending' && r.fromId !== authUser?.id);
+  const pendingIncoming = requests.filter(r => r.status === 'pending' && isIncomingRequest(r));
 
   const handleTab = (tab: 'spaces' | 'dms' | 'you') => {
     setMobileTab(tab);

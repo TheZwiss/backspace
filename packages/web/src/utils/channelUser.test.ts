@@ -9,7 +9,6 @@ vi.mock('../audio/AudioManager', () => ({
 
 import { useAuthStore } from '../stores/authStore';
 import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
-import { clearMyUserIdCache, setMyUserIdForOrigin } from './crossStoreResolvers';
 import {
   filterMentionCandidates,
   getChannelMentionCandidates,
@@ -68,7 +67,7 @@ afterEach(() => {
     channelToSpaceMap: new Map(),
     userViews: new Map(),
   });
-  clearMyUserIdCache();
+  useAuthStore.setState({ myRowIds: new Map() });
 });
 
 describe('resolveChannelUser', () => {
@@ -153,7 +152,7 @@ describe('resolveChannelUser', () => {
 describe('getChannelMentionCandidates', () => {
   it("lists a DM's members except me, in the DM origin's id space", () => {
     useAuthStore.setState({ user: me });
-    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
     useSpaceStore.setState({
       dmChannels: [orbitDm],
       channelOriginMap: new Map([[orbitDm.id, ORBIT]]),
@@ -172,7 +171,7 @@ describe('getChannelMentionCandidates', () => {
 
   it("is empty under another origin's id for a DM, never the listed entry's home ids", () => {
     useAuthStore.setState({ user: me });
-    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
     useSpaceStore.setState({
       dmChannels: [homeDm],
       channelOriginMap: new Map([[homeDm.id, '']]),
@@ -206,7 +205,7 @@ describe('filterMentionCandidates', () => {
 describe('self in a channel', () => {
   it("is my id on the channel's origin: home id at home, the remote id on a remote DM", () => {
     useAuthStore.setState({ user: me });
-    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
     useSpaceStore.setState({
       dmChannels: [homeDm, orbitDm],
       channelOriginMap: new Map([[homeDm.id, ''], [orbitDm.id, ORBIT]]),
@@ -219,7 +218,7 @@ describe('self in a channel', () => {
 
   it("uses the origin of the copy an alternate DM id belongs to", () => {
     useAuthStore.setState({ user: me });
-    setMyUserIdForOrigin(ORBIT, meOnOrbit.id);
+    useAuthStore.getState().recordMyRow(ORBIT, meOnOrbit.id);
     useSpaceStore.setState({
       dmChannels: [{ ...orbitDm, federatedId: 'fed-2' } as DmChannel],
       channelOriginMap: new Map([[orbitDm.id, ORBIT]]),

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, or, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
+import { insertDmMember, reopenClosedDmMembers, setDmMemberClosed } from '../utils/dmMemberClosed.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
@@ -54,6 +55,7 @@ import {
   normalizeIconForWire,
 } from '../utils/federationOutbox.js';
 import { getOurOrigin, canonicalizeHomeInstance } from '../utils/federationAuth.js';
+import { recordLocalMemberChange } from '../utils/federationSubjectClock.js';
 import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser } from './federation.js';
@@ -311,21 +313,13 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
  */
 export function reopenForClosedMembers(dmChannelId: string, lastMessage?: DmMessageWithUser): void {
   const db = getDb();
-  const closedMembers = db.select()
-    .from(schema.dmMembers)
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .all();
-  if (closedMembers.length === 0) return;
-
-  db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(eq(schema.dmMembers.dmChannelId, dmChannelId), eq(schema.dmMembers.closed, 1)))
-    .run();
+  const reopened = reopenClosedDmMembers(db.$client, dmChannelId);
+  if (reopened.length === 0) return;
 
   const dmChannel = loadDmChannelWire(db, dmChannelId, lastMessage);
   if (!dmChannel) return;
-  for (const member of closedMembers) {
-    connectionManager.sendToUser(member.userId, {
+  for (const userId of reopened) {
+    connectionManager.sendToUser(userId, {
       type: 'dm_channel_created',
       dmChannel,
     });
@@ -395,15 +389,7 @@ function openOneOnOne(
   announceDmReconcile(opened.reconciled);
   if (opened.created) return opened;
 
-  const reopened = db.update(schema.dmMembers)
-    .set({ closed: 0 })
-    .where(and(
-      eq(schema.dmMembers.dmChannelId, opened.channelId),
-      eq(schema.dmMembers.userId, callerId),
-      eq(schema.dmMembers.closed, 1),
-    ))
-    .run();
-  if (reopened.changes > 0) {
+  if (setDmMemberClosed(db.$client, opened.channelId, callerId, false)) {
     // Relay reopen to federated peers
     queueDmCloseRelay(opened.channelId, callerId, 'dm_reopen');
   }
@@ -732,6 +718,15 @@ function removeDmMember(
     eq(schema.readStates.channelId, channelId),
   )).run();
 
+  // The member's clock (federation.md "Subject clocks") moves to the removal,
+  // at the timestamp the relayed member_remove carries.
+  const removedAt = Date.now();
+  const removedIdentity = {
+    homeUserId: targetUserRow?.homeUserId || targetUserId,
+    homeInstance: targetUserRow?.homeInstance || getOurOrigin(),
+  };
+  recordLocalMemberChange(dmChannel.federatedId, removedIdentity, removedAt, db);
+
   // Federation: relay member_remove event with the reason
   if (isFederationRelayEnabled() && dmChannel.federatedId) {
     const domainOrigin = getOurOrigin();
@@ -739,15 +734,12 @@ function removeDmMember(
     const memberRemovePayload: FederationRelayEvent = {
       eventType: 'member_remove',
       dmChannelId: channelId,
-      messageId: `member_remove:${targetUserId}:${Date.now()}`,
+      messageId: `member_remove:${targetUserId}:${removedAt}`,
       federatedId: dmChannel.federatedId,
       encryptionVersion: 0,
-      timestamp: Date.now(),
+      timestamp: removedAt,
       membership: {
-        user: {
-          homeUserId: targetUserRow?.homeUserId || targetUserId,
-          homeInstance: targetUserRow?.homeInstance || domainOrigin,
-        },
+        user: removedIdentity,
         removedBy: {
           homeUserId: actorUserRow?.homeUserId || actorUserId,
           homeInstance: actorUserRow?.homeInstance || domainOrigin,
@@ -1009,16 +1001,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         createdAt: now,
       }).run();
 
-      tx.insert(schema.dmMembers).values({
-        dmChannelId,
-        userId: request.userId,
-      }).run();
+      insertDmMember(db.$client, dmChannelId, request.userId, { at: now });
 
       for (const targetUser of targetUsers) {
-        tx.insert(schema.dmMembers).values({
-          dmChannelId,
-          userId: targetUser.id,
-        }).run();
+        insertDmMember(db.$client, dmChannelId, targetUser.id, { at: now });
       }
     });
 
@@ -1044,6 +1030,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           })
           .where(eq(schema.dmChannels.id, dmChannelId))
           .run();
+        // Every member's clock (federation.md "Subject clocks") starts at the
+        // creation, the timestamp the relayed member_add events carry.
+        for (const member of allUsers) {
+          recordLocalMemberChange(federatedId, {
+            homeUserId: member.homeUserId || member.id,
+            homeInstance: member.homeInstance || domainOrigin,
+          }, now, db);
+        }
       }
     }
 
@@ -1134,10 +1128,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         const memberAddPayload: FederationRelayEvent = {
           eventType: 'member_add',
           dmChannelId,
-          messageId: `member_add:${targetUser.id}:${Date.now()}`,
+          messageId: `member_add:${targetUser.id}:${now}`,
           federatedId,
           encryptionVersion: 0,
-          timestamp: Date.now(),
+          timestamp: now,
           membership: {
             user: {
               homeUserId: targetUser.homeUserId || targetUser.id,
@@ -1458,13 +1452,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Soft close: set closed flag (preserves membership for future message delivery)
-    db.update(schema.dmMembers)
-      .set({ closed: 1 })
-      .where(and(
-        eq(schema.dmMembers.dmChannelId, id),
-        eq(schema.dmMembers.userId, request.userId),
-      ))
-      .run();
+    setDmMemberClosed(db.$client, id, request.userId, true);
 
     // Broadcast dm_channel_closed to self for multi-tab sync
     connectionManager.sendToUser(request.userId, {
@@ -1554,10 +1542,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Insert dm_members row for new user
-    db.insert(schema.dmMembers).values({
-      dmChannelId: id,
-      userId: targetUserId,
-    }).run();
+    insertDmMember(db.$client, id, targetUserId);
 
     // If the channel doesn't have a federatedId and now has a remote member, assign one
     if (!dmChannel.federatedId && isFederationRelayEnabled()) {
@@ -1643,12 +1628,21 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       message: { ...addSysMsg, user: addSysMsg.user ? sanitizeUser(addSysMsg.user) : undefined } as any,
     });
 
+    // The added member's clock (federation.md "Subject clocks") moves to the
+    // add, at the timestamp the relayed member_add carries.
+    const addedAt = Date.now();
+    const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
+    const addedIdentity = {
+      homeUserId: addedUser?.homeUserId || targetUserId,
+      homeInstance: addedUser?.homeInstance || getOurOrigin(),
+    };
+    recordLocalMemberChange(dmChannel.federatedId, addedIdentity, addedAt, db);
+
     // Federation: relay member_add to peers
     if (isFederationRelayEnabled() && dmChannel.federatedId) {
       const domainOrigin = getOurOrigin();
       const allParticipants = getDmParticipants(id);
 
-      const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
       const adderUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
 
       // Carry the current group metadata snapshot so a fresh peer can
@@ -1662,15 +1656,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const memberAddPayload: FederationRelayEvent = {
         eventType: 'member_add',
         dmChannelId: id,
-        messageId: `member_add:${targetUserId}:${Date.now()}`,
+        messageId: `member_add:${targetUserId}:${addedAt}`,
         federatedId: dmChannel.federatedId,
         encryptionVersion: 0,
-        timestamp: Date.now(),
+        timestamp: addedAt,
         membership: {
-          user: {
-            homeUserId: addedUser?.homeUserId || targetUserId,
-            homeInstance: addedUser?.homeInstance || domainOrigin,
-          },
+          user: addedIdentity,
           addedBy: {
             homeUserId: adderUser?.homeUserId || request.userId,
             homeInstance: adderUser?.homeInstance || domainOrigin,

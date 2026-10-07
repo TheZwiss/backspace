@@ -169,7 +169,6 @@
       "active": "Aktiv",
       "pending": "Ausstehend",
       "unreachable": "Nicht erreichbar",
-      "rejected": "Abgelehnt (Auto-Peering verweigert)",
       "rejectedShort": "Abgelehnt",
       "revoked": "Widerrufen",
       "awaitingApproval": "Wartet auf Freigabe",
@@ -218,7 +217,27 @@
       "rotateSecret": "Secret rotieren",
       "rotationInProgress": "Eine Rotation läuft bereits",
       "revoke": "Widerrufen",
-      "editInterval": "Rotationsintervall bearbeiten"
+      "editInterval": "Rotationsintervall bearbeiten",
+      "reason": {
+        "auth_failures": "Signierte Zustellungen schlagen fehl",
+        "peer_reset_detected": "Mit neuer Identität neu installiert",
+        "repeer_incomplete": "Neues Peering nicht bestätigt",
+        "denied_by_local_admin": "Von deinem Admin abgelehnt",
+        "denied_by_remote": "Von deren Admin abgelehnt",
+        "revoked_by_remote": "Von deren Admin widerrufen",
+        "expired_on_remote": "Anfrage dort abgelaufen",
+        "stale_peering_on_remote": "Gegenseite hat ein älteres Peering"
+      },
+      "reasonDetail": {
+        "auth_failures": "{{host}} hat fünf signierte Zustellungen in Folge abgelehnt, die beiden Instanzen teilen also nicht mehr dasselbe Geheimnis. Setze das Peering zurück und peere danach neu.",
+        "peer_reset_detected": "{{host}} wurde neu installiert: Die Instanz meldet eine andere Identität als vorher. Nutze „Neu peeren“ im Banner oben, um dich mit der neuen Instanz zu verbinden und die Konten der alten aufzuräumen.",
+        "repeer_incomplete": "{{host}} hat einen Handshake angenommen, aber eine signierte Prüfung mit dem neuen Geheimnis ist fehlgeschlagen, deshalb wird das Peering nicht genutzt. Setze es zurück und versuche es erneut. Scheitert es wieder, muss der dortige Admin seine Seite zurücksetzen.",
+        "denied_by_local_admin": "Ein Admin hier hat die Peering-Anfrage von {{host}} abgelehnt. Ihre Anfragen werden abgewiesen, bis du das Peering neu startest oder diesen Eintrag löschst.",
+        "denied_by_remote": "Der Admin von {{host}} hat das Peering mit dieser Instanz abgelehnt. Starte es neu, sobald er zustimmt.",
+        "revoked_by_remote": "Der Admin von {{host}} hat das Peering mit dieser Instanz widerrufen. Es kommt zurück, wenn er es neu startet.",
+        "expired_on_remote": "Der Admin von {{host}} hat die Peering-Anfrage nicht innerhalb von 30 Tagen beantwortet. Starte das Peering neu, um erneut zu fragen.",
+        "stale_peering_on_remote": "{{host}} hält noch ein älteres Peering mit dieser Instanz und lehnt ein neues ab, bis der dortige Admin es zurücksetzt. Diese Instanz prüft alle 15 Minuten und verbindet sich, sobald das passiert ist."
+      }
     },
     "approvals": {
       "title": "Ausstehende Freigabeanfragen",
@@ -322,5 +341,16 @@
         }
       }
     }
+  },
+  "peerRejected": {
+    "auth_failures": "Nachrichten an {{name}} werden nicht zugestellt: Das gemeinsame Geheimnis der Verbindung funktioniert nicht mehr. Ein Admin muss das Peering zurücksetzen.",
+    "peer_reset_detected": "Nachrichten an {{name}} werden nicht zugestellt: Die Instanz wurde neu installiert. Ein Admin muss neu peeren.",
+    "repeer_incomplete": "Nachrichten an {{name}} werden nicht zugestellt: Das neue Peering konnte nicht bestätigt werden. Ein Admin muss das Peering zurücksetzen.",
+    "denied_by_local_admin": "Nachrichten an {{name}} können nicht zugestellt werden: Dein Admin hat die Föderation mit dieser Instanz abgelehnt.",
+    "denied_by_remote": "Nachrichten an {{name}} können nicht zugestellt werden: Deren Admin hat die Föderation mit dieser Instanz abgelehnt.",
+    "revoked_by_remote": "Nachrichten an {{name}} können nicht zugestellt werden: Deren Admin hat die Föderation mit dieser Instanz widerrufen.",
+    "expired_on_remote": "Nachrichten an {{name}} können nicht zugestellt werden: Deren Admin hat die Föderationsanfrage nicht rechtzeitig beantwortet.",
+    "stale_peering_on_remote": "Nachrichten an {{name}} können noch nicht zugestellt werden: Die Instanz hält noch eine ältere Verbindung zu dieser, die der dortige Admin zurücksetzen muss.",
+    "fallback": "Nachrichten an {{name}} können nicht zugestellt werden: {{reason}}"
   }
 }

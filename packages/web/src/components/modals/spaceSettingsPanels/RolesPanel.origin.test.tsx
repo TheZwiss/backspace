@@ -11,7 +11,7 @@ vi.mock('../../../audio/AudioManager', () => ({
 }));
 
 import { RolesPanel } from './RolesPanel';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../../../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { api, type BackspaceApiClient } from '../../../api/client';
@@ -74,7 +74,7 @@ beforeEach(() => {
     spacePermissions: new Map([[SPACE_ID, permissionsToString(ALL_PERMISSIONS)]]),
     loadSpaceDetail: vi.fn(async () => undefined),
   });
-  setMyUserIdForOrigin(ORBIT, 'lead-local');
+  useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
 });
 
 afterEach(() => {

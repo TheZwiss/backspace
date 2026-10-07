@@ -93,6 +93,9 @@ export function getRelayTtlDays(): number {
   }
 }
 
+/** How long a mutation log row is kept (the janitor's `cleanupFederationMutationLog`): how far back a peer's pull can read. */
+export const MUTATION_LOG_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+
 /**
  * Append an entry to the federation mutation log.
  * No-op if federation relay is disabled.

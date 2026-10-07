@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useDmViewer } from '../../hooks/useDmViewer';
+import { isMine } from '../../utils/identity';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getChannelOrigin } from '../../stores/spaceStore';
 import {
@@ -52,7 +53,8 @@ export function MobileVoiceFullScreen() {
   const spaces = useSpaceStore((s) => s.spaces);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
 
-  const authUser = useAuthStore((s) => s.user);
+  // A DM call's members are the rows of the instance the DM is pinned to.
+  const dmViewer = useDmViewer(currentVoiceChannelId?.startsWith('dm-') ? currentVoiceChannelId.slice(3) : null);
 
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
@@ -259,7 +261,7 @@ export function MobileVoiceFullScreen() {
     const dmId = currentVoiceChannelId.replace('dm-', '');
     const dm = dmChannels.find((d) => d.id === dmId);
     if (dm) {
-      const others = dm.members.filter((m) => m.id !== authUser?.id);
+      const others = dm.members.filter((m) => !isMine(m, dmViewer.origin, dmViewer.self));
       channelName = others.map((m) => m.displayName ?? m.username).join(', ');
     }
   } else {

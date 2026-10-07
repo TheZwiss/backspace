@@ -6,7 +6,7 @@ import type { PresenceSubject } from './identity';
 
 /**
  * Turning what a server sends about presence into `PresenceSubject`s, so the
- * activity store can key it by the person's home identity (`activityKey`).
+ * activity store can key it by the person's home identity (`userKey`).
  *
  * A current server names the subject's identity itself (`homeUserId` /
  * `homeInstance` on `presence_update`, `userActivityIdentities` on `ready`).

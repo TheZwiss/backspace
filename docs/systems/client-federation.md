@@ -5,9 +5,9 @@
 Source files:
 - `packages/web/src/stores/instanceStore.ts` — Core multi-instance connection management, token caching, topology sync
 - `packages/web/src/hooks/useWebSocket.ts` — WebSocket multiplexing (one connection per instance), origin-aware event routing
-- `packages/web/src/stores/spaceStore.ts` — Origin-aware space/channel store, `channelOriginMap`, `getChannelOrigin()`, `resolveUserOrigin()`, `getLayoutHomeOrigin()`, `getMyUserIdForOrigin()`, DM deduplication
-- `packages/web/src/utils/crossStoreResolvers.ts` — Neutral module holding the cross-store resolver bindings (`_getApiForOrigin`, `_resolveOriginFromHostname`, `_getUserIdForOrigin`) + the WS-populated user-ID cache. Breaks a TDZ cycle between spaceStore and instanceStore; see "API Client Resolution" below
-- `packages/web/src/utils/identity.ts` — Cross-instance user identity resolution (`isSelf`, `canonicalUserMatch`, self-ID registry)
+- `packages/web/src/stores/spaceStore.ts` — Origin-aware space/channel store, `channelOriginMap`, `getChannelOrigin()`, `getLayoutHomeOrigin()`, DM deduplication
+- `packages/web/src/utils/crossStoreResolvers.ts` — Neutral module holding the cross-store resolver bindings (`_getApiForOrigin`, `_resolveOriginFromHostname`, `_getTokenForOrigin`). Breaks a TDZ cycle between spaceStore and instanceStore; see "API Client Resolution" below
+- `packages/web/src/utils/identity.ts` — Cross-instance user identity (`homeIdentityOf`, `userKey`, `isMine`, `personRequest`, `ownRowAt`, `userUpdateReach`); "my ids" live in `stores/authStore.ts` (`myRowIds`, `getMyUserIdForOrigin`, `myRowForOrigin`). The rule is section 5
 - `packages/web/src/components/modals/ConnectedInstances.tsx` — Connections settings panel
 - `packages/web/src/components/modals/RemotePasswordStep.tsx` - the password/fallback-login step shared by the Connections add-instance flow and the directory's connect-and-join dialog
 - `packages/web/src/components/modals/ConnectAndJoinModal.tsx` - connect-then-join from an Outer Space card (see [directory.md](directory.md) §9)
@@ -278,15 +278,15 @@ Source: `stores/dmConversations.ts` (state, operations, pin rule), `stores/space
 
 ### User View Cache
 
-The DM dedup pass at `populateFromReady` is first-wins by `federatedId` and skips the duplicate channel **as a whole**, including its `members` array. When a user is connected to multiple instances and a sibling instance's `ready` arrives first, the home instance's view of the same federated DM is dropped. Without further machinery, render sites would only ever see the sibling-stub view of every member — wrong username (`name@homeHost`), stale or 404-ing avatar URL, wrong `avatarColor`, and a globe icon for users whose home IS our currently-logged-in instance.
+The DM merge keeps one copy per conversation, and every surface holds the rows of whichever instance delivered them, so render sites would otherwise only see some instance's copy of a person: a `name@homeHost` username, a stale or 404-ing avatar, and a globe for users whose home is the page's own instance.
 
-`userViews` is a parallel cache that mirrors the philosophy of `dmAlternatives`: information from skipped ready payloads is still load-bearing — for rendering, not for routing. Render sites read through it to surface the home view of every user the client has ever heard about, regardless of which carrying channel survived dedup.
+`userViews` is a cache of the best-known view of every person the client has heard about, from any delivering instance. It is for rendering only.
 
 **State:**
 
-- `userViews: Map<canonicalUserKey, UserViewEntry>` on `spaceStore`. Each entry is `{ user: User, deliveredBy: string, isHome: boolean, updatedAt: number }`.
-- `canonicalUserKey(user)` (in `utils/identity.ts`) returns `<homeInstanceHost>:<homeUserId>` for federated users and `:<id>` for purely-local users — same key across instances for the same person.
-- `isDeliveryFromHome(user, deliveringOrigin)` (in `utils/identity.ts`) decides whether a delivery is "home view" or "stub view": the user is delivered from their home iff their `homeInstance` matches the delivering origin's host (with `''` resolving to `window.location.host`).
+- `userViews: Map<userKey, UserViewEntry>` on `spaceStore`. Each entry is `{ user: User, deliveredBy: string, isHome: boolean, updatedAt: number }`.
+- The key is `userKey(row, deliveringOrigin)`, the person's home identity (section 5). It is the same for a person's own row on their home and for every other instance's copy of them, and it never joins natives of two instances on different hostnames whose row ids happen to be equal (#353; instances sharing a hostname share an identity host, section 5).
+- `isHome` is `isIssuedByHome(row, deliveringOrigin)`: the delivering instance is the home the row names (always true for a native row).
 
 **Preference rule on upsert (`upsertUserView(user, deliveringOrigin)`):**
 
@@ -295,37 +295,32 @@ The DM dedup pass at `populateFromReady` is first-wins by `federatedId` and skip
 - If existing is stub and incoming is home view: overwrite (upgrade).
 - Same tier (both home or both stub): freshness wins; incoming overwrites.
 
-`deliveringOrigin` is a REQUIRED parameter — never default it. The user's declared `homeInstance` is NOT a substitute, because a stub view delivered by orbit has `homeInstance=nova`; pruning by declared home would evict the wrong entries.
+`deliveringOrigin` is REQUIRED: a native row names no host of its own, so the key and the tier depend on who delivered it.
 
 **Wire surfaces that upsert** (every place a `User` lands on the client from a connection):
 
-- `populateFromReady` walks `incomingDms[].members` BEFORE the `federatedId` dedup pass — load-bearing — and walks every space's `members[].user`. `loadSpaceDetail` upserts each member after asset normalization.
-- WS handlers in `useWebSocket.ts`: `ready` (space members), `dm_message_created` / `dm_message_updated` / `message_created` / `message_updated` (`message.user` and `message.replyTo?.user`), `user_updated`, `member_joined`, `friend_request_received` / `friend_request_sent` / `friend_request_accepted`, `dm_channel_created`, `dm_member_added`.
-- REST hydrators: `socialStore.loadFriends` / `loadRequests` / `searchUsers`, `discoverStore.fetchUsers`, `utils/mutuals.loadFederatedMutuals`. Each upserts with the load's origin.
-- Modals that fetch a profile via REST (`UserProfileModal`, `TransferOwnershipModal`) call `useSpaceStore.getState().upsertUserView(fetchedUser, fetchOrigin)` after the fetch returns.
+- `populateFromReady` walks `incomingDms[].members` BEFORE the DM merge (load-bearing) and every space's `members[].user`. `loadSpaceDetail` upserts each member after asset normalization.
+- WS handlers in `useWebSocket.ts`: `dm_message_created` / `dm_message_updated` / `message_created` / `message_updated` (`message.user` and `message.replyTo?.user`), `user_updated`, `member_joined`, `friend_request_received` / `friend_request_sent` / `friend_request_accepted`, `dm_channel_created`, `dm_member_added`.
+- REST hydrators: `socialStore.loadFriends` / `loadRequests` / `searchUsers`, `discoverStore.fetchUsers`, `utils/mutuals.loadFederatedMutuals`, `reloadDmsForOrigin`. Each upserts with the load's origin.
+- Modals that fetch a profile via REST (`UserProfileModal`, `TransferOwnershipModal`) upsert the fetched row with the origin they fetched it from.
 
-**Render-side lookup:**
+**Render-side lookup** (`utils/userViewLookup.ts`):
 
-- `useCanonicalUserView(user)` in `utils/userViewLookup.ts` is a Zustand selector hook that subscribes to the cache entry for `canonicalUserKey(user)`. Render sites call this before reading `username` / `displayName` / `avatar` / `avatarColor` / `homeInstance` / `homeUserId`. The hook returns the input on cache miss; the component falls back to current best information until the cache fills.
-- `getCanonicalUserView(user)` is the synchronous getter for non-React paths (event handlers, helpers like `useVoiceParticipantMeta`).
-- `isFederationGlobeApplicable(user)` in `utils/identity.ts` is the predicate used at three globe-icon sites (`DmListItem`, `MainContent`, `MobileDmsScreen`). It gates the globe on `parseFederatedUsername(username).domain && domain !== window.location.host` — no globe for users whose home is us, even when only a stub is loaded.
+- `useCanonicalUserView(row, origin)` subscribes to the entry for `userKey(row, origin)`; `getCanonicalUserView(row, origin)` is the synchronous form. `origin` is the instance that issued `row` and is required at every call site: a DM member's origin is `getChannelOrigin(dm.id)` (`useDmViewer`), a space member's is the space's `_instanceOrigin` (`useSpaceOrigin`), a friend's is `_instanceOrigin`, a message author's is the channel's origin, a channel user's is `ChannelUser.origin`.
+- The result is the cached view's display fields with the row's own identity fields (`id`, `homeUserId`, `homeInstance`) kept. The cache supplies how a person looks; the row and its origin stay what every request and id comparison uses. On a miss the row is returned unchanged.
+- `isFederationGlobeApplicable(user)` gates the globe on `parseFederatedUsername(username).domain && domain !== window.location.host`.
 
-**Render reactivity is structural, not coincidental.** Subscribers receive cache updates via the Zustand selector, regardless of whether legacy update paths (`updateUserEverywhere`, `updateFriendProfile`) also fired. That coupling was deliberately avoided so that future contributors who add a new wire surface and only call `upsertUserView` do not silently break render propagation.
-
-**Composition with `isSelf` / `resolveDisplayIdentity`.** Self-rendering continues to flow through the existing identity helpers — `isSelf` for filtering, `resolveDisplayIdentity` for substituting the home identity into a replicated alias of self. The cache lookup composes alongside, not inside: render sites filter via `isSelf`, then pass non-self users through `useCanonicalUserView`. Self-as-member (e.g. in a group DM) goes through the cache like any other member; the cache holds the home view of self anyway.
+Subscribers re-render through the Zustand selector whenever an upsert lands, so a new wire surface only has to call `upsertUserView`.
 
 **Lifecycle:**
 
-- Pruned in `removeInstanceSpaces(origin)` — drops every entry whose `deliveredBy === origin`. Mirrors the `dmAlternatives` prune in the same function.
+- Pruned in `removeInstanceSpaces(origin)`: drops every entry whose `deliveredBy === origin`.
 - `reset()` clears the cache.
-- **NOT pruned on transient WS disconnect.** Last-known view persists across blips, matching `dmAlternatives`' no-flapping invariant. If the surviving cache no longer holds a home view for some user (because the home origin was fully removed), render falls back to whatever the carrying payload supplies — degrades to the stub view, no crash.
+- NOT pruned on transient WS disconnect: the last-known view persists across blips.
 
-**Out of scope by design:**
+**Out of scope by design:** the cache feeds no identity decision and no write. Extended profile data (`bio`, `banner`, `pronouns`) fetched by the profile modal stays in its local state.
 
-- The cache is render-only. It does NOT feed identity-resolution or write paths. API write payloads (e.g. `api.dm.create`, `api.friend.add`) continue to source identity from the original prop or click-site state, where the user explicitly nominated `homeUserId`/`homeInstance`.
-- The cache stores `User`-shaped fields. Extended profile data (`bio`, `banner`, `pronouns`) fetched via REST in profile modals lives in those modals' local state; `upsertUserView` is called from modals only to seed the home view of the cache, not to mirror extended profile data.
-
-Source: `stores/spaceStore.ts` (state, `upsertUserView`, prune in `removeInstanceSpaces`), `utils/identity.ts` (`normalizeOriginToHost`, `canonicalUserKey`, `isDeliveryFromHome`, `isFederationGlobeApplicable`), `utils/userViewLookup.ts` (`getCanonicalUserView`, `useCanonicalUserView`).
+Source: `stores/spaceStore.ts` (`userViews`, `upsertUserView`, prune in `removeInstanceSpaces`), `utils/identity.ts` (`userKey`, `isIssuedByHome`, `isFederationGlobeApplicable`), `utils/userViewLookup.ts`.
 
 ### API Client Resolution
 
@@ -340,19 +335,9 @@ Returns the correct API client for the given origin. Uses a resolver pattern to 
 - `spaceStore` re-exports `getApiForOrigin` (and its sibling setters) from the utility for backward compatibility with existing import sites
 - Consumers call `getApiForOrigin(getChannelOrigin(channelId))` to get the right client
 
-The same pattern covers `resolveOriginFromHostname` (for `resolveUserOrigin`), the user-ID resolver (`resolveUserIdFromInstances`), and the WS-populated user-ID cache (`setMyUserIdForOrigin` / `getCachedUserIdForOrigin` / `clearMyUserIdCache`).
+The same pattern covers `resolveOriginFromHostname` (for `getLayoutHomeOrigin`). The user's row id per instance is not a resolver: it is `authStore.myRowIds` (section 5).
 
 **Why the utility exists:** `instanceStore` runs top-level `setXResolver` calls at module load. If spaceStore holds the backing `let _getApiForOrigin` declaration AND the import chain reaches instanceStore while spaceStore is mid-load (e.g. via `JoinSpaceModal` importing `useInstanceStore` directly), the setter crashes with TDZ: `Cannot access '_getApiForOrigin' before initialization`. Hoisting the mutable bindings into a module that has no back-edges into the stores eliminates the cycle. Do NOT add imports from `./stores/*` into `crossStoreResolvers.ts` — doing so re-creates the exact cycle that module was carved out to break.
-
-### User Origin Resolution
-
-```typescript
-resolveUserOrigin(user: { homeInstance?: string | null }): string
-```
-
-Determines which connected instance a user belongs to, based on their `homeInstance` field. Returns the origin string or `''` for local users.
-
----
 
 ## 4. WebSocket Multiplexing (`useWebSocket.ts`)
 
@@ -387,32 +372,48 @@ When a WS connection opens and authenticates, the server sends a `ready` event c
 
 ## 5. Cross-Instance Identity (`identity.ts`)
 
-Users have **different Snowflake IDs on each instance**. The identity system resolves these:
+This is the one statement of how the client answers "who is this person" and "is this me". `auth.md`, `social.md` and `federation.md` point here.
 
-### Self-ID Registry
+A user row means something only together with the instance that issued it: row ids are local to an instance (the same person has a different id on each), and a row without `homeInstance` is native to whichever instance sent it, not to the page's own instance. So every identity question takes the row and its issuing origin (`''` = the page's own instance), never the row alone.
 
-```typescript
-registerSelfId(id)   // Called on each WS ready event
-isSelf(user)         // Checks all registered IDs
-```
+### The person: `homeIdentityOf` and `userKey`
 
-Tracks all IDs belonging to the current user across instances.
+`homeIdentityOf(row, origin)` returns `{ host, userId }`:
 
-### Display Identity Resolution
+| Row | Identity |
+|---|---|
+| `homeInstance` and `homeUserId` set (a replicated row) | `(homeInstance, homeUserId)`, whoever issued it |
+| No `homeInstance` (native to the issuing instance) | `(host of origin, row.id)`; `''` is `window.location.host` |
+| `homeInstance` set, `homeUserId` missing (a legacy stub) | none (`null`) |
 
-```typescript
-resolveDisplayIdentity(user, homeUser): User
-```
+`userKey(row, origin)` is `<homeHostOf(host)>:<userId>`, and for a legacy stub `~<issuing host>:<id>`, a key no other row shares. Hosts are compared only through `homeHostOf` (lowercased, scheme and port dropped), the same rule `selfStatus.ts` and `instanceStore` use. Every client map keyed by person uses `userKey`: `userViews`, the activity store (`activitiesFor`), presence on roster rows and friends, mutual-friend dedup, "is this friend already a member", "is this person already in my DMs" (`findExistingDmForUser(row, origin)`). Nothing matches people by a raw id, by `homeUserId ?? id`, or by username.
 
-If a user is `isSelf()`, returns the home user for consistent avatar/display name rendering. Prevents the same person appearing with different profiles across instances.
+**One hostname, one identity host.** The port is dropped because the server drops it. A replicated row's stored `homeInstance` is the bare hostname (`extractDomain` in `routes/federation/identity.ts`), registration refuses a `homeInstance` containing a port, and the server compares identity hosts without one (`identityHost`, `getOurIdentityDomain`). A client that kept the port would key a user of `nova:8443` as `nova:8443:<id>` from their home's own rows and `nova:<id>` from every replicated copy, splitting one person in two. The consequence: two instances on one hostname with different ports (`localhost:3005` and `localhost:3006`) have one identity host, and a native of each with the same row id has the same `userKey`. The server cannot federate such a pair either: its identity domain is that hostname (`DOMAIN`, or the hostname of `getOurOrigin()` when `DOMAIN` is unset; a port in `DOMAIN` is not supported), so each sees the other's users as homed at its own identity domain and refuses to create rows for them (`resolveOrCreateReplicatedUser`'s self-homed check). Natives of two instances are kept apart whenever the instances' hostnames differ, which every supported federation requires; a local multi-instance setup needs a distinct hostname per instance (`DOMAIN`, as the server's `bootIdentityPeered` harness does).
 
-### Canonical User Match
+`isIssuedByHome(row, origin)` is whether the issuing instance is the home the row names (the "home view" tier of `userViews`).
 
-```typescript
-canonicalUserMatch(a, b): boolean
-```
+A `user_updated` row reaches stored rows through `userUpdateReach(row, rowOrigin, user, origin)`: `'row'` for the issuing instance's own row with that id (every field applies, `withUserUpdate`), `'person'` for another instance's row of the same person when the event is their home's row (only `profileFieldsOf`, so the row keeps its id, username and identity fields), otherwise nothing. `spaceStore.updateUserEverywhere` (roster and DM member rows, each with its space's or DM copy's origin), `socialStore.updateFriendProfile` and `chatStore.updateUserInMessages` (each channel's origin) all apply it. A `user_updated` row with `isDeleted` drops what is stored about the person by the same rule (`updateIsAbout`: any reach): `socialStore.removeDeletedUser` (friend rows, and requests by their `user` row), `discoverStore.removeDeletedUser` (discover cards) and `activityStore.clearUserActivities`. An entry that keeps only a row id (a typing entry, a request's `fromId`/`toId`) names no person on another instance, so it matches only the issuing instance's row with that id (`updateIsAboutRowId`, the `'row'` reach): `chatStore.clearTypingForDeletedUser` and the request party ids. Each instance that holds a row of the person sends its own event for it. So a deletion on orbit never drops nova's user who has the same id, the home's deletion drops every instance's row of the person, and a deleted copy drops only that instance's rows.
 
-Determines if two user records represent the same person across instances. Cascade: same local ID → same homeUserId → username+homeInstance match.
+### Naming a person in a request: `personRequest` and `openDirectMessage`
+
+`personRequest(row, origin)` says where to send a request about a person and how to name them: a person native to the page's instance by `{ userId }` on `''`; anyone with an identity by `{ homeUserId, homeInstance }` on `''`, which the server resolves or creates the row for; a legacy stub by `{ userId }` on the instance that issued it. `friendRequestTarget` and the group-DM member list of `AddDmMemberModal` build on it.
+
+`openDirectMessage(row, origin)` (`utils/openDirectMessage.ts`) is the one "Send Message" path (profile card, profile modal, friends page, New DM modal, DM search bar): it returns the open 1-on-1 with that person or creates it through `personRequest`, and resolves to the row id to navigate to. Before this, the create sites sent `userId: row.id` to the page's instance whenever `homeInstance` was null, which named whoever holds that id there when the row was native to another instance.
+
+### The signed-in user: `myRowIds`, `isMine`, `isMe`
+
+One record holds "my ids": `authStore.myRowIds`, origin to the row id that instance's `ready` gave the user. The `ready` handler records it for every remote origin (`recordMyRow`) before anything else in that `ready` runs; `removeInstanceSpaces(origin)` forgets it (`forgetMyRow`); a new session or logout clears it. The page's own instance is not in it: its row is `authStore.user`. Placeholder instance entries never feed it.
+
+- `getMyUserIdForOrigin(origin)` (defined in `authStore`, re-exported from `spaceStore`): the session row id for `''`, else `myRowIds.get(origin)`, else undefined. The id a mention, a voice-state key or a membership request on that instance carries.
+- `myRowForOrigin(origin)` (`authStore`; `useMyRowForOrigin` reactive, `ownRowAt` in `identity.ts` the pure part): the user's row as the instance at `origin` issues it, for every row the client makes up before that instance sends its own (the optimistic `temp_` message and its DM `lastMessage`, pending upload bubbles, the local LiveKit participant's fallback row). The session row for `''`; otherwise the session row under `getMyUserIdForOrigin(origin)` with the identity fields that instance carries (none when `origin` is the user's home, else their home identity); null until that instance's `ready` named the row, and nothing is made up meanwhile. A made-up row built from the session row alone is checked against the channel's origin and reads as someone else there.
+- `selfIdentityOf(user, myRowIds)` (`identity.ts`) builds a `SelfIdentity`: `key`, the `userKey` of the session row, and `rowIds`, the per-origin ids with `''` mapped to the session row. `useSelfIdentity()` is its memoised hook.
+- `isMine(row, origin, self)` is true when `row.id` is the id that instance gave the user, or when the row names the same person (`userKey(row, origin) === self.key`, legacy stubs excluded). `isMe(row, origin)` reads the store. There is no username or display-name fallback: two people can share a name, and on a session that is itself a replicated row (erin@nova signed in on orbit) such a fallback named orbit's own erin as the user (#325).
+
+Every self check goes through these: DM "other members", group ownership, own messages and reactions, the last own editable message, alerts (`messageAlertsUser` asks `isMe` of the author and mentions carry `getMyUserIdForOrigin` of the channel's origin), the shown status dot (`useShownStatus(subject, origin, status)`), the profile card and modal (no Send Message and no friend actions on the user's own profile), voice join/leave cues, and `isMyFederatedIdentity` (a remote account is the user's federated identity when it is replicated and its `userKey` is the session row's).
+
+`useDmViewer(dmId)` (`hooks/useDmViewer.ts`) returns `{ self, origin }` for a DM, the `DmViewer` the DM formatters (`formatDmHeaderName`, `formatDmInputLabel`, `formatDmSidebarPreview`, `isDeletedPartnerDm`) take.
+
+Source: `utils/identity.ts`, `stores/authStore.ts` (`myRowIds`, `recordMyRow`, `forgetMyRow`, `useSelfIdentity`, `isMe`, `getMyUserIdForOrigin`), `utils/openDirectMessage.ts`, `hooks/useDmViewer.ts`, `hooks/useSpaceOrigin.ts`.
 
 ---
 
@@ -706,7 +707,7 @@ This slice is intentionally separate from `instanceStore` because the data is pe
 
 Modeled on the peering-approval surface above, the FederationPanel's `ResetCleanup` component (`admin.md` "FederationPanel") is the admin surface for a factory-reset peer. It fetches `api.federation.peers()` + `api.federation.resetEvents()` (`GET /api/federation/reset-events`) and subscribes to `onFederationPeerResetDetected(cb)` — the client handler for the `federation_peer_reset_detected` admin WS event (`useWebSocket.ts`) — to refetch live. Two surfaces:
 
-- **Reset-detected banner** — one persistent accent-rose banner per peer with `status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'` (the `needsAttentionReason` field distinguishes a reset from a generic auth-failure, and now also `'repeer_incomplete'`). **Re-peer** runs `resetPeer(id)` **then** `initiatePeering({ remoteOrigin })` — reset-before-handshake so activation heals the stale graph against the new incarnation. **The result is surfaced honestly:** `initiatePeering` now returns `{ peer, verified }`; when `verified === false` (or the peer comes back `needs_attention`), or when it rejects with `409 PEER_EXISTS_RESET_REQUIRED`, the toast is a **warning** telling the admin the remote still holds stale peering and its admin must reset the **other** side, then Re-peer again — rather than a false success. A cryptographically-verified activation shows the success toast. The common one-side reset recovers in one click; a bidirectional-stale case names the side that must act. See `federation.md` "Trust re-establishment contract".
+- **Reset-detected banner** — one persistent accent-rose banner per peer with `status === 'needs_attention' && statusReason === 'peer_reset_detected'` (the `statusReason` field distinguishes a reset from a generic auth-failure, and now also `'repeer_incomplete'`). **Re-peer** runs `resetPeer(id)` **then** `initiatePeering({ remoteOrigin })` — reset-before-handshake so activation heals the stale graph against the new incarnation. **The result is surfaced honestly:** `initiatePeering` now returns `{ peer, verified }`; when `verified === false` (or the peer comes back `needs_attention`), or when it rejects with `409 PEER_EXISTS_RESET_REQUIRED`, the toast is a **warning** telling the admin the remote still holds stale peering and its admin must reset the **other** side, then Re-peer again — rather than a false success. A cryptographically-verified activation shows the success toast. The common one-side reset recovers in one click; a bidirectional-stale case names the side that must act. See `federation.md` "Trust re-establishment contract".
 - **Detached-accounts card** — informational, neutral-tier surface (no rose/urgency styling) for the reset incarnation's real accounts that now operate as sovereign local accounts (`FederationOrphanedAccount`: owned-spaces / membership / message counts). Copy: detached accounts keep working locally and owners sign in with their existing password. Cards render only for unacknowledged events (`orphanedAccounts.length > 0 && acknowledgedAt === null`; the endpoint still returns acknowledged events for audit). Per-account **Remove** reuses `api.admin.deleteUser(id)` (`DELETE /api/admin/users/:id`, full purge) for genuinely-abandoned accounts — a Remove on a space owner surfaces the existing `409 { ownedSpaces }` as a "transfer ownership first" toast instead of deleting. A per-event **Dismiss** footer calls `api.federation.acknowledgeResetEvent(origin)` (`POST /api/federation/reset-events/acknowledge`) then re-fetches — a real server-side acknowledgement (replacing the old client-only "Keep") that hides the card and removes the event from the badge count without touching any account.
 
 ### AccountPanel re-attach action (fallback, re-attach spec §3.4)

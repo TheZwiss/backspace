@@ -7,7 +7,6 @@ vi.mock('../audio/AudioManager', () => ({
 
 import { renderHook } from '@testing-library/react';
 import { useAuthStore } from '../stores/authStore';
-import { clearSelfIds, registerSelfId } from '../utils/identity';
 import { useShownStatus } from './useShownStatus';
 
 function user(fields: Partial<User> & Pick<User, 'id' | 'username'>): User {
@@ -27,24 +26,23 @@ const erinOnNova = user({ id: 'erin-nova', username: 'erin', status: 'online' })
 const ada = user({ id: 'ada', username: 'ada', status: 'online' });
 
 afterEach(() => {
-  useAuthStore.setState({ user: null, trueHomeStatus: null });
-  clearSelfIds();
+  useAuthStore.setState({ user: null, trueHomeStatus: null, myRowIds: new Map() });
 });
 
 describe('useShownStatus', () => {
   it("shows the signed-in user's chosen status over an instance's view of them", () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
 
-    const { result } = renderHook(() => useShownStatus(erinHere, 'online'));
+    const { result } = renderHook(() => useShownStatus(erinHere, '', 'online'));
 
     expect(result.current).toBe('dnd');
   });
 
   it("recognises the user's row on another instance as the same person", () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
-    registerSelfId('erin-nova');
+    useAuthStore.getState().recordMyRow('https://nova.example', 'erin-nova');
 
-    const { result } = renderHook(() => useShownStatus(erinOnNova, erinOnNova.status));
+    const { result } = renderHook(() => useShownStatus(erinOnNova, 'https://nova.example', erinOnNova.status));
 
     expect(result.current).toBe('dnd');
   });
@@ -59,7 +57,7 @@ describe('useShownStatus', () => {
     });
     useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
 
-    const { result } = renderHook(() => useShownStatus(otherErin, otherErin.status));
+    const { result } = renderHook(() => useShownStatus(otherErin, 'https://nova.example', otherErin.status));
 
     expect(result.current).toBe('online');
   });
@@ -67,7 +65,7 @@ describe('useShownStatus', () => {
   it('keeps the given status while the choice is not known', () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: null });
 
-    const { result } = renderHook(() => useShownStatus(erinHere, 'online'));
+    const { result } = renderHook(() => useShownStatus(erinHere, '', 'online'));
 
     expect(result.current).toBe('online');
   });
@@ -75,7 +73,7 @@ describe('useShownStatus', () => {
   it('never changes what another user shows', () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
 
-    const { result } = renderHook(() => useShownStatus(ada, 'idle'));
+    const { result } = renderHook(() => useShownStatus(ada, '', 'idle'));
 
     expect(result.current).toBe('idle');
   });
@@ -83,8 +81,25 @@ describe('useShownStatus', () => {
   it('shows nothing for an unresolved subject', () => {
     useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
 
-    const { result } = renderHook(() => useShownStatus(null, undefined));
+    const { result } = renderHook(() => useShownStatus(null, '', undefined));
 
     expect(result.current).toBeUndefined();
+  });
+
+  it("recognises the user's row on nova by identity before nova's ready names it", () => {
+    useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
+
+    const { result } = renderHook(() => useShownStatus(erinOnNova, 'https://nova.example', erinOnNova.status));
+
+    expect(result.current).toBe('dnd');
+  });
+
+  it('never takes a native of another instance for the user because its id matches', () => {
+    useAuthStore.setState({ user: erinHere, trueHomeStatus: 'dnd' });
+    const sameIdOnOrbit = user({ id: 'erin-nova', username: 'someone', status: 'online' });
+
+    const { result } = renderHook(() => useShownStatus(sameIdOnOrbit, 'https://orbit.example', 'online'));
+
+    expect(result.current).toBe('online');
   });
 });

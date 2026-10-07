@@ -785,11 +785,7 @@ All store actions resolve the correct API client via `getApiForOrigin(origin)` b
 
 ### User ID Resolution
 
-`getMyUserIdForOrigin(origin)` returns the user's ID on a specific instance:
-- Home (`''`): returns `authStore.user.id`
-- Remote: checks `_myUserIdByOrigin` cache (populated from WS ready events), falls back to `instanceStore` resolver
-
-Used for self-leave (`leaveSpace` calls `removeMember` with the correct user ID for the instance).
+`getMyUserIdForOrigin(origin)`, the user's row id on the instance at `origin`, is defined in client-federation.md section 5. Used for self-leave (`leaveSpace` calls `removeMember` with the correct user ID for the instance).
 
 ### Remote Invite Join Flow
 

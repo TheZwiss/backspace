@@ -5,13 +5,13 @@ import { getSpaceGradient, SPACE_GRADIENT_MAP } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { AvatarColor } from '@backspace/shared';
 import { useSpaceStore } from '../../../stores/spaceStore';
-import { useAuthStore } from '../../../stores/authStore';
+import { useSelfIdentity } from '../../../stores/authStore';
+import { useSpaceOrigin } from '../../../hooks/useSpaceOrigin';
 import { useUIStore } from '../../../stores/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
 import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
-import { getMyUserIdForOrigin } from '../../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 import { describeError } from '../../../i18n/errors';
 import { useAvatarColorNames } from './spaceOptions';
@@ -26,13 +26,17 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
   const deleteSpace = useSpaceStore((s) => s.deleteSpace);
-  const currentUser = useAuthStore((s) => s.user);
   const closeModal = useUIStore((s) => s.closeModal);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const navigate = useNavigate();
 
   const space = spaces.find((s) => s.id === spaceId);
-  const isOwner = space?.ownerId === getMyUserIdForOrigin((space as any)?._instanceOrigin ?? '');
+  // The user's row id on the space's instance, which issued its owner id and
+  // member rows.
+  const self = useSelfIdentity();
+  const spaceOrigin = useSpaceOrigin(spaceId);
+  const myIdHere = self?.rowIds.get(spaceOrigin);
+  const isOwner = !!space && myIdHere !== undefined && space.ownerId === myIdHere;
   const myPerms = spacePermissions.get(spaceId);
   const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 
@@ -93,14 +97,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   // then calls closeModal in the same continuation. React 18 batches those
   // two store writes into one render, and the panel is unmounted by it.
   const transferCandidates = useMemo(() => {
-    const candidates = members.filter(m => m.userId !== currentUser?.id);
+    const candidates = members.filter(m => m.userId !== myIdHere);
     if (!transferSearch.trim()) return candidates;
     const q = transferSearch.toLowerCase();
     return candidates.filter(m =>
       m.user.displayName?.toLowerCase().includes(q) ||
       m.user.username.toLowerCase().includes(q)
     );
-  }, [members, currentUser?.id, transferSearch]);
+  }, [members, myIdHere, transferSearch]);
 
   if (!space) return null;
 

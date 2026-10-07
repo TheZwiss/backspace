@@ -114,6 +114,45 @@ function seed(dbPath: string): void {
   db.close();
 }
 
+/**
+ * Reactions as an install left them before 0024. A squashed install had no
+ * unique key on (message, user, emoji), so the same user's reaction could be
+ * stored several times; a pre-squash install had the inline UNIQUE and holds
+ * no such rows. `kept` marks the row 0024 keeps of each key: the earliest,
+ * and of two equally early ones the lower rowid (the first inserted here,
+ * where nothing renumbers rowids).
+ */
+const SEEDED_REACTIONS = [
+  { id: 'react-late', userId: 'user-1', emoji: '👍', createdAt: 200, kept: false, duplicate: true },
+  { id: 'react-early', userId: 'user-1', emoji: '👍', createdAt: 100, kept: true, duplicate: false },
+  { id: 'react-early-twin', userId: 'user-1', emoji: '👍', createdAt: 100, kept: false, duplicate: true },
+  { id: 'react-other-user', userId: 'user-2', emoji: '👍', createdAt: 300, kept: true, duplicate: false },
+  { id: 'react-other-emoji', userId: 'user-1', emoji: '🎉', createdAt: 400, kept: true, duplicate: false },
+] as const;
+
+const REACTION_TABLES = [
+  { table: 'reactions', messageColumn: 'message_id', index: 'idx_reactions_message_user_emoji' },
+  { table: 'dm_reactions', messageColumn: 'dm_message_id', index: 'idx_dm_reactions_message_user_emoji' },
+] as const;
+
+/**
+ * Seeds `SEEDED_REACTIONS` on message `msg-r` in both reaction tables; the
+ * duplicates only where the schema lets them in. The parent rows are left
+ * out (foreign keys off): only the reaction tables are under test here.
+ */
+function seedReactions(dbPath: string, withDuplicates: boolean): void {
+  const db = new Database(dbPath);
+  db.pragma('foreign_keys = OFF');
+  for (const { table, messageColumn } of REACTION_TABLES) {
+    const insert = db.prepare(`INSERT INTO ${table} (id, ${messageColumn}, user_id, emoji, created_at) VALUES (?, 'msg-r', ?, ?, ?)`);
+    for (const r of SEEDED_REACTIONS) {
+      if (r.duplicate && !withDuplicates) continue;
+      insert.run(r.id, r.userId, r.emoji, r.createdAt);
+    }
+  }
+  db.close();
+}
+
 /** Boots the server's database layer on `dbPath`, exactly as the server does. */
 async function boot(dbPath: string): Promise<void> {
   vi.resetModules();
@@ -204,8 +243,10 @@ describe('upgrading through initDatabase from every database shape in the field'
 
     buildPreSquash(shapes.preSquash);
     seed(shapes.preSquash);
+    seedReactions(shapes.preSquash, false);
     buildSquashed(shapes.squashed);
     seed(shapes.squashed);
+    seedReactions(shapes.squashed, true);
 
     for (const dbPath of Object.values(shapes)) await boot(dbPath);
   });
@@ -295,6 +336,64 @@ describe('upgrading through initDatabase from every database shape in the field'
 
     db.prepare("DELETE FROM federation_peers WHERE id = 'peer-extra'").run();
     expect(db.prepare("SELECT COUNT(*) AS n FROM federation_outbox WHERE peer_id = 'peer-extra'").get()).toEqual({ n: 0 });
+    db.close();
+  });
+
+  it('the squashed baseline really lets the same reaction be stored twice', () => {
+    const db = new Database(':memory:');
+    for (const stmt of migrationText(journal[0]!.tag).split(/-->\s*statement-breakpoint/)) {
+      const clean = stmt.trim();
+      if (clean) db.exec(clean);
+    }
+    db.pragma('foreign_keys = OFF');
+    const insert = db.prepare("INSERT INTO reactions (id, message_id, user_id, emoji, created_at) VALUES (?, 'm', 'u', 'x', 1)");
+    insert.run('a');
+    insert.run('b');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM reactions').get()).toEqual({ n: 2 });
+    db.close();
+  });
+
+  it.each(['preSquash', 'squashed'] as const)('%s: keeps the earliest of each user\'s reaction and drops the repeats', (shape) => {
+    const db = new Database(shapes[shape], { readonly: true });
+    for (const { table, messageColumn } of REACTION_TABLES) {
+      const ids = (db.prepare(`SELECT id FROM ${table} WHERE ${messageColumn} = 'msg-r' ORDER BY id`).all() as Array<{ id: string }>).map((r) => r.id);
+      expect(ids).toEqual(SEEDED_REACTIONS.filter((r) => r.kept).map((r) => r.id).sort());
+    }
+    db.close();
+  });
+
+  it.each(['preSquash', 'squashed', 'empty'] as const)('%s: has the unique (message, user, emoji) index on both reaction tables', (shape) => {
+    const db = new Database(shapes[shape], { readonly: true });
+    for (const { table, index } of REACTION_TABLES) {
+      const created = (db.prepare(`PRAGMA index_list(${table})`).all() as Array<{ name: string; unique: number; origin: string }>)
+        .find((i) => i.name === index);
+      expect(created).toMatchObject({ unique: 1, origin: 'c' });
+      const columns = (db.prepare(`PRAGMA index_info(${JSON.stringify(index)})`).all() as Array<{ name: string }>).map((c) => c.name);
+      expect(columns).toEqual([table === 'reactions' ? 'message_id' : 'dm_message_id', 'user_id', 'emoji']);
+    }
+    db.close();
+  });
+
+  it('preSquash: keeps its inline UNIQUE beside the new index', () => {
+    const db = new Database(shapes.preSquash, { readonly: true });
+    for (const { table } of REACTION_TABLES) {
+      const inline = (db.prepare(`PRAGMA index_list(${table})`).all() as Array<{ origin: string }>).filter((i) => i.origin === 'u');
+      expect(inline).toHaveLength(1);
+    }
+    db.close();
+  });
+
+  it.each(['preSquash', 'squashed', 'empty'] as const)('%s: refuses a repeat of a stored reaction and takes a different one', (shape) => {
+    const db = new Database(shapes[shape]);
+    db.pragma('foreign_keys = OFF');
+    for (const { table, messageColumn } of REACTION_TABLES) {
+      const insert = db.prepare(`INSERT INTO ${table} (id, ${messageColumn}, user_id, emoji, created_at) VALUES (?, 'msg-repeat', ?, ?, 1)`);
+      insert.run(`${table}-first`, 'user-1', '👍');
+      expect(() => insert.run(`${table}-repeat`, 'user-1', '👍')).toThrow(/UNIQUE constraint failed/);
+      insert.run(`${table}-other-user`, 'user-2', '👍');
+      insert.run(`${table}-other-emoji`, 'user-1', '🎉');
+      expect(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${messageColumn} = 'msg-repeat'`).get()).toEqual({ n: 3 });
+    }
     db.close();
   });
 });

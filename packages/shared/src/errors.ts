@@ -61,6 +61,8 @@ export const ERROR_CODES = [
   'peer_pending_local_admin',
   'peer_unreachable',
   'PEER_EXISTS_RESET_REQUIRED',
+  'PEER_REVOKED',
+  'PEER_HANDSHAKE_IN_PROGRESS',
 
   // Direct messages
   'recipient_deleted',

@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useSelfIdInChannel } from '../../utils/channelUser';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
 import { VoiceUserRow } from './VoiceUserRow';
@@ -96,14 +96,16 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
   });
   const members = useSpaceStore((s) => s.members);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
-  const myUser = useAuthStore((s) => s.user);
+  // The user's row id on the channel's instance: the ids in `voiceUsers` are
+  // that instance's.
+  const myIdHere = useSelfIdInChannel(channelId);
   const isActive = currentVoiceChannel === channelId;
 
   const openContextMenu = useContextMenuStore((s) => s.open);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, userId: string) => {
-      if (userId === myUser?.id) return;
+      if (userId === myIdHere) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -138,7 +140,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [myUser?.id, channelId, openContextMenu],
+    [myIdHere, channelId, openContextMenu],
   );
 
   return (
@@ -238,7 +240,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
               : null;
 
             const userDrag = voiceUserHandlers?.(userId, channelId);
-            const isDraggable = !!(userDrag?.draggable && userId !== myUser?.id);
+            const isDraggable = !!(userDrag?.draggable && userId !== myIdHere);
             const isBeingDragged = userDrag?.isBeingDragged ?? false;
 
             return (
@@ -260,12 +262,12 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   isMuted={isMuted}
                   isDeafened={isParticipantDeafened}
                   isCameraOn={hasCamera}
-                  isUnwatchedCamera={userId !== myUser?.id && unwatchedCameras.has(userId)}
+                  isUnwatchedCamera={userId !== myIdHere && unwatchedCameras.has(userId)}
                   isScreenSharing={isScreenSharing}
                   isServerMuted={isSpaceMuted}
                   isServerDeafened={isSpaceDeafened}
                   isPermissionMuted={isPermissionMuted}
-                  isLocallyMuted={userId !== myUser?.id && (participantMutes.get(userId) ?? false)}
+                  isLocallyMuted={userId !== myIdHere && (participantMutes.get(userId) ?? false)}
                   isSpeaking={speakingUserIds.has(userId)}
                   connectionWarning={connectionWarning}
                 />

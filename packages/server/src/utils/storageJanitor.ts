@@ -7,7 +7,10 @@ import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import { generateSnowflake } from './snowflake.js';
 import { federationFetch } from './federationFetch.js';
+import { MUTATION_LOG_RETENTION_MS } from './federationOutbox.js';
 import { expireOutboxQueues } from './federationOutboxQueue.js';
+import { sweepAppliedEvents } from './federationAppliedEvents.js';
+import { sweepSubjectClocks } from './federationSubjectClock.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -481,12 +484,12 @@ export function cleanupUnusedAutoPendingPeers(
 }
 
 /**
- * Delete federation mutation log entries older than `retentionDays` (default 90).
+ * Delete federation mutation log entries older than `MUTATION_LOG_RETENTION_MS`.
  * Returns the number of rows deleted.
  */
-export function cleanupFederationMutationLog(retentionDays: number = 90): number {
+export function cleanupFederationMutationLog(): number {
   const db = getDb();
-  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - MUTATION_LOG_RETENTION_MS;
   const result = db.delete(schema.federationMutationLog)
     .where(lt(schema.federationMutationLog.mutatedAt, cutoff))
     .run();
@@ -938,6 +941,8 @@ let lastStorageCleanupAt = 0;
  * Run all periodic federation/GC cleanup tasks:
  *  - Expired outbox entries
  *  - Old mutation log entries
+ *  - Applied-event ledger rows past their retention (sweepAppliedEvents)
+ *  - Member and friend clock rows past their retention (sweepSubjectClocks)
  *  - Stale file queue entries
  *  - Soft-deleted DM channels past grace period
  *  - Unused auto-created pending peer rows (cleanupUnusedAutoPendingPeers)
@@ -947,6 +952,8 @@ export async function runFederationJanitor(): Promise<void> {
   try {
     const outbox = cleanupFederationOutbox();
     const mutLog = cleanupFederationMutationLog();
+    const appliedEvents = sweepAppliedEvents();
+    const subjectClocks = sweepSubjectClocks();
     const fileQ = cleanupFederationFileQueue();
     const dmGc = cleanupSoftDeletedDmChannels();
 
@@ -959,10 +966,10 @@ export async function runFederationJanitor(): Promise<void> {
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     }
 
-    const total = outbox + mutLog + fileQ + dmGc + pendingPeers;
+    const total = outbox + mutLog + appliedEvents + subjectClocks + fileQ + dmGc + pendingPeers;
     if (total > 0) {
       console.log(
-        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc} pendingPeers=${pendingPeers}`,
+        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} appliedEvents=${appliedEvents} subjectClocks=${subjectClocks} fileQueue=${fileQ} dmChannels=${dmGc} pendingPeers=${pendingPeers}`,
       );
     }
 

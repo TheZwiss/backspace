@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
 import { useUIStore } from '../../stores/uiStore';
-import { useDragToClose } from '../../hooks/useDragToClose';
+import { MobilePickerSheet } from './MobilePickerSheet';
 
 export type InputPopoverTab = 'emoji' | 'gif';
 
@@ -160,72 +160,14 @@ function MobileSheet({
   onTabChange,
   availableTabs,
 }: MobileSheetProps) {
-  // Escape to close (parity with desktop)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  // Drag-down-to-close. Only the handle + tab-bar area receives the touch;
-  // the picker grids manage their own scrolling and must not be hijacked.
-  // `hasInteracted` flips true on the first touchstart and stays true — we
-  // use it to suppress the `animate-slide-up-sheet` keyframe from re-running
-  // during snap-back / close-out, which would otherwise fight the inline
-  // transform the hook is animating.
-  const { sheetStyle, handleProps, hasInteracted } = useDragToClose({ onClose });
-
-  return createPortal(
-    <>
-      {/* Backdrop — single tap (mousedown OR touchstart) closes */}
-      <div
-        className="fixed inset-0 z-[300] bg-black/30"
-        onMouseDown={onClose}
-        onTouchStart={onClose}
-      />
-      {/* Sheet */}
-      <div
-        className={`fixed left-0 right-0 z-[301] rounded-t-2xl glass-modal flex flex-col ${
-          hasInteracted ? '' : 'animate-slide-up-sheet'
-        }`}
-        style={{
-          // Sit at the bottom of the visible viewport. On iOS 16.4+ the
-          // `keyboard-inset-height` env var lifts us above the soft keyboard;
-          // on older iOS the 100dvh-based MobileShell layout already shrinks
-          // the visual viewport when the keyboard is open, so bottom:0 lands
-          // just above the keyboard naturally.
-          bottom: 'var(--keyboard-inset)',
-          paddingBottom: 'var(--safe-bottom)',
-          maxHeight: 'min(calc(60*var(--app-dvh)), calc(60*var(--app-vh)))',
-          ...sheetStyle,
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        {/* Drag handle + tab bar — both belong to the "header" drag area.
-            Spreading `handleProps` here means the user can grab anywhere in
-            this top region (handle pill, padding around it, tab buttons'
-            interstitial space) to dismiss; tab buttons themselves still
-            receive their own clicks because clicks aren't blocked, only
-            vertical drag past the dead-zone is. */}
-        <div {...handleProps} className="shrink-0 touch-none">
-          <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
-          <TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} mobile />}
-          {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
-        </div>
-      </div>
-    </>,
-    document.body,
+  return (
+    <MobilePickerSheet
+      onClose={onClose}
+      header={<TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />}
+    >
+      {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} mobile />}
+      {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
+    </MobilePickerSheet>
   );
 }
 

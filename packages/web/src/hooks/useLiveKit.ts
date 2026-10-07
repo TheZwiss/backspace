@@ -15,10 +15,11 @@ import {
   TrackEvent,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
+import { homeIdentityOf } from '../utils/identity';
 import { refreshStreamHostLimits, useStreamHostLimits } from '../utils/streamHostLimits';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore, type VoiceConnectionQuality } from '../stores/voiceStore';
-import { useAuthStore } from '../stores/authStore';
+import { myRowForOrigin } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus, clearSpaceVoiceForDmCall } from '../utils/voice';
@@ -183,7 +184,9 @@ function resolveParticipantUserId(identity: string): string {
   const activeDmCall = useVoiceStore.getState().activeDmCall;
   if (!activeDmCall) return rawId;
   const dmChannel = useSpaceStore.getState().dmChannels.find((d) => d.id === activeDmCall.dmChannelId);
-  const match = dmChannel?.members.find((m) => m.homeUserId === rawId || m.id === rawId);
+  // The identity names the member by their row id here or by their home id.
+  const origin = getChannelOrigin(activeDmCall.dmChannelId);
+  const match = dmChannel?.members.find((m) => m.id === rawId || homeIdentityOf(m, origin)?.userId === rawId);
   return match?.id ?? rawId;
 }
 
@@ -311,8 +314,11 @@ export function useLiveKit() {
         cachedUser = memberMatch.user as User;
         homeUserId = memberMatch.user.homeUserId ?? null;
       } else if (isLocal) {
-        // Local user safety net — authStore is always available
-        cachedUser = useAuthStore.getState().user;
+        // Local user safety net: the user's row as the instance hosting the
+        // call issues it, the origin `useVoiceParticipantMeta` reads it with.
+        const vs = useVoiceStore.getState();
+        const callChannelId = vs.currentVoiceChannelId ?? vs.activeDmCall?.dmChannelId ?? null;
+        cachedUser = myRowForOrigin(callChannelId ? getChannelOrigin(callChannelId) : '');
         homeUserId = cachedUser?.homeUserId ?? null;
       } else {
         // Space switched — carry forward from previous cycle

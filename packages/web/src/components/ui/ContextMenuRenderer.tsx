@@ -146,7 +146,7 @@ function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
       return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render()}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div>{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} />;
@@ -433,7 +433,7 @@ function MobileLeafItem({ item, close }: MobileLeafItemProps) {
       return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render()}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div>{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} isMobile />;

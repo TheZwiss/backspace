@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from './snowflake.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 
 setWorkerId(1);
 
@@ -162,11 +163,8 @@ describe('performHandshake — approval token capture & clear', () => {
       createdAt: Date.now(),
     }).run();
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote' }) }),
     );
 
     const { ensurePeered } = await import('./federationPeering.js');

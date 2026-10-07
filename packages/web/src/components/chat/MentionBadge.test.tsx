@@ -56,7 +56,7 @@ describe('MentionBadge', () => {
     render(<MentionBadge userId={MIRA.id} channelId="chan-1" />);
     fireEvent.click(screen.getByText('@mira'));
     expect(openUserProfile).toHaveBeenCalledTimes(1);
-    expect(openUserProfile.mock.calls[0]![3]).toEqual({ spaceId: 'space-1', userId: MIRA.id });
+    expect(openUserProfile.mock.calls[0]![4]).toEqual({ spaceId: 'space-1', userId: MIRA.id });
   });
 });
 
@@ -86,7 +86,7 @@ describe('MentionBadge in a DM (#338)', () => {
     render(<MentionBadge userId={KAI.id} channelId={DM.id} />);
     fireEvent.click(screen.getByText('@Kai'));
     expect(openUserProfile).toHaveBeenCalledTimes(1);
-    expect(openUserProfile.mock.calls[0]![3]).toBeUndefined();
+    expect(openUserProfile.mock.calls[0]![4]).toBeUndefined();
   });
 });
 

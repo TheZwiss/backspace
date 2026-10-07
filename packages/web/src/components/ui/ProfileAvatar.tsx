@@ -10,6 +10,8 @@ interface ProfileAvatarProps extends Omit<AvatarProps, 'onClick' | 'user'> {
   /** Undefined while the user record is still resolving — the avatar then stays
    *  presentational rather than offering a click that opens nothing. */
   user?: User;
+  /** The instance that issued `user` ('' = the page's own). */
+  origin: string;
   /** Preferred side for the card; it flips automatically when there's no room. */
   placement?: Placement;
   /** The space member this avatar depicts, when it sits in a space surface. */
@@ -26,7 +28,7 @@ interface ProfileAvatarProps extends Omit<AvatarProps, 'onClick' | 'user'> {
  * `Avatar` made every one of those a trigger by accident, which is what let the
  * profile card re-anchor to its own picture and walk across the screen.
  */
-export function ProfileAvatar({ user, placement = 'right', member, ...avatarProps }: ProfileAvatarProps) {
+export function ProfileAvatar({ user, origin, placement = 'right', member, ...avatarProps }: ProfileAvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const handleClick = user
@@ -34,7 +36,7 @@ export function ProfileAvatar({ user, placement = 'right', member, ...avatarProp
         // Rows that hold an avatar usually have their own click target (open the
         // DM, select the member). Opening the profile is the more specific intent.
         e.stopPropagation();
-        openUserProfile(user, e.currentTarget.getBoundingClientRect(), placement, member);
+        openUserProfile(user, origin, e.currentTarget.getBoundingClientRect(), placement, member);
       }
     : undefined;
 

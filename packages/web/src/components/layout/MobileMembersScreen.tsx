@@ -9,6 +9,7 @@ import { Avatar } from '../ui/Avatar';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -31,7 +32,8 @@ function MobileMemberRow({
   accentClass: string;
   onClickMember: (member: MemberWithUser) => void;
 }) {
-  const canonical = useCanonicalUserView(member.user);
+  const origin = useSpaceOrigin(member.spaceId);
+  const canonical = useCanonicalUserView(member.user, origin);
   const displayName = userDisplayName(canonical);
 
   const rowClass = isRichActivity
@@ -106,7 +108,8 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
   };
 
   const handleMemberClick = (member: MemberWithUser) => {
-    pushMobileScreen('user-profile', { userId: member.userId, spaceId: member.spaceId, memberUserId: member.userId });
+    const origin = useSpaceStore.getState().spaces.find(s => s.id === member.spaceId)?._instanceOrigin ?? '';
+    pushMobileScreen('user-profile', { userId: member.userId, origin, spaceId: member.spaceId, memberUserId: member.userId });
   };
 
   const groupHeading = (kind: MemberGroupKind, label: string | null): string => {

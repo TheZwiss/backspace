@@ -5,6 +5,7 @@ import { connectionManager } from '../ws/handler.js';
 import { tombstoneUser, collectDeletionBroadcastTargets } from './userDeletion.js';
 import { sanitizeUser } from './sanitize.js';
 import type { PeerActivationReason } from './federationPeerActivation.js';
+import { applyPeerTransition, readPeerState, runPeerTransitionEffects } from './federationPeerState.js';
 
 /** Pure-stub sentinel: a user replicated purely over S2S (no local credentials). */
 const REPLICATED_STUB_SENTINEL = '!federation-replicated';
@@ -58,18 +59,34 @@ export function homeInstanceMatch(origin: string) {
 export function markPeerReset(peerId: string, origin: string, deadEpoch: string, observedEpoch: string): void {
   const db = getDb();
 
-  db.transaction((tx) => {
+  const committed = db.transaction((tx) => {
+    // Seeing the same new incarnation again (it handshakes or is probed once
+    // more) is not a new detection: the users were snapshotted and the journal
+    // written the first time. Re-running either would flag stubs created since
+    // (which must survive the heal) and undo the admin's dismissal.
+    const current = readPeerState(peerId, tx);
+    const seenBefore = tx.select({ observed: schema.federationPeers.observedPeerInstanceId })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, peerId))
+      .get();
+    const repeat =
+      current?.status === 'needs_attention' &&
+      current.statusReason === 'peer_reset_detected' &&
+      seenBefore?.observed === observedEpoch;
+    if (repeat) return null;
+
     // 1. Route the peer to needs_attention and record the observed (untrusted)
     //    epoch. peer_instance_id (trusted baseline) and hmac_secret are NOT
-    //    touched — an unauthenticated observation never rekeys trust.
-    tx.update(schema.federationPeers)
-      .set({
-        status: 'needs_attention',
-        needsAttentionReason: 'peer_reset_detected',
-        observedPeerInstanceId: observedEpoch,
-      })
-      .where(eq(schema.federationPeers.id, peerId))
-      .run();
+    //    touched: an unauthenticated observation never rekeys trust. Only an
+    //    established peering is routed; a revoked or deleted row is left alone.
+    const moved = applyPeerTransition(tx, peerId, {
+      from: ['active', 'unreachable', 'needs_attention'],
+      to: 'needs_attention',
+      reason: 'peer_reset_detected',
+      cause: 'reset_detected',
+      fields: { observedPeerInstanceId: observedEpoch },
+    });
+    if (!moved.applied) return null;
 
     // 2. Snapshot exactly the current (dead-incarnation) users for this origin.
     //    Any stub created AFTER this point (e.g. a friend-add reaching the new
@@ -151,9 +168,12 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
         })
         .run();
     }
+
+    return moved.effects;
   });
 
-  connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+  if (!committed) return;
+  void runPeerTransitionEffects(committed);
   connectionManager.sendToAdmins({ type: 'federation_peer_reset_detected' as const, origin });
 }
 
@@ -184,6 +204,9 @@ const HANDSHAKE_ACTIVATION_REASONS: ReadonlySet<PeerActivationReason> = new Set(
   'accept_awaiting_approval_fallback',
   'approval_handshake',
   'ensure_peered',
+  // A parked row activated because a signed /epoch round-trip verified the
+  // remote holds our secret: the epoch it carries is authenticated.
+  'stale_peering_verified',
 ]);
 
 /**

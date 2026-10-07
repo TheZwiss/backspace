@@ -172,13 +172,26 @@ For each member with `closed = 1`:
 
 This ensures closed DMs resurface automatically when new activity occurs.
 
+### Closed state is last-writer-wins
+
+This is the one place the rule is written; other specs point here.
+
+`dm_members.closed_changed_at` is when the row's `closed` value was set, and `utils/dmMemberClosed.ts` is the only writer of both columns (`insertDmMember`, `setDmMemberClosed`, `reopenClosedDmMembers`, `applyRelayedDmMemberClosed`):
+
+- A new member row takes its insertion time: a close or reopen from before the membership began never applies to it.
+- A local change (the member closes it, reopens it, a new message or call reopens it) takes the local time of the change.
+- A relayed `dm_close` / `dm_reopen` applies only when its timestamp is newer than the row's, and then takes that timestamp. When it applies but the row already had that state, nothing is sent to the member.
+- A relayed message delivered live reopens every member who closed the conversation, as a local message does: its `createdAt` is the sender's clock and the close time this instance's, so comparing them would let a sender clock that runs behind keep a fresh reply from reopening it. A message delivered by a pull reopens a member only when the member's state is older than the message (`closedBefore: message.createdAt`): a pull can deliver an old message long after it was sent, and a close made after it was written stands.
+
+A peer's pull replays its mutation log, so a relayed close or reopen can arrive again long after the member's state here moved on; this rule keeps it from undoing a newer state. Local times and a peer's timestamps come from different clocks, which the rule tolerates: it only orders a replayed event against a change made after it was first applied, minutes to days apart. The migration that added the column stamped every existing row with the migration time, so no close or reopen from before the upgrade applies.
+
 ### Federation
 
 Close and reopen are relayed to all peer instances that hold a copy of the DM:
 
-- **Close relay:** After setting `closed = 1` locally, `queueDmCloseRelay(channelId, userId, 'dm_close')` queues a `dm_close` outbox event. The receiving instance finds the channel by `federatedId`, resolves the acting user by `homeUserId` + `homeInstance` via `resolveRelayActor`, sets `closed = 1` on the local `dm_members` row, and broadcasts `dm_channel_closed`.
-- **Reopen relay:** Explicit reopens (`POST /api/dm` when reopening a closed 1-on-1 DM) queue a `dm_reopen` event. The receiving instance sets `closed = 0` and broadcasts `dm_channel_created` with a full channel payload.
-- **Relayed-message reopen:** `processCreateEvent` (inbound message relay) also checks each recipient's `closed` flag and performs the same resurface sequence (`dm_channel_created` → `dm_message_created`) — mirroring `broadcastDmMessage`. This ensures messages relayed from a remote instance properly reopen closed DMs on the receiving instance.
+- **Close relay:** After setting `closed = 1` locally, `queueDmCloseRelay(channelId, userId, 'dm_close')` queues a `dm_close` outbox event. The receiving instance finds the channel by `federatedId`, resolves the acting user by `homeUserId` + `homeInstance` via `resolveRelayActor`, applies `closed = 1` to the local `dm_members` row last-writer-wins (above), and broadcasts `dm_channel_closed` when the state changed.
+- **Reopen relay:** Explicit reopens (`POST /api/dm` when reopening a closed 1-on-1 DM) queue a `dm_reopen` event. The receiving instance applies `closed = 0` the same way and broadcasts `dm_channel_created` with a full channel payload when the state changed.
+- **Relayed-message reopen:** `processCreateEvent` (inbound message relay) reopens members who closed the conversation before the message was written and sends them `dm_channel_created`, mirroring `broadcastDmMessage`. A live create then broadcasts `dm_message_created`; a pulled one (federation.md "Pull sync") does not.
 - Only fires for DMs with a `federatedId`, to the origins of members homed elsewhere (`getGroupDmTargetOrigins`). A 1-on-1 between two users of this instance is keyed but has no targets; an unshared group has no key.
 
 ### Frontend
@@ -619,7 +632,9 @@ The check reads no new wire field, so events from older senders are judged the s
 - Background file worker downloads the file and updates the filename to the local path
 - SSRF protection: `isUrlFromPeer()` validates attachment URL hostname matches peer origin
 
-**Broadcast:** every local member of the conversation gets `dm_message_created`, members homed on the source instance included; a closed member is reopened first and gets `dm_channel_created` with the message (the same resurface sequence as `broadcastDmMessage`).
+**Broadcast:** every local member of the conversation gets `dm_message_created`, members homed on the source instance included; a member who closed it is reopened first and gets `dm_channel_created` with the message (the same resurface sequence as `broadcastDmMessage`; which closes a relayed message reopens is in "Closed state is last-writer-wins"). A message that arrived through a pull is stored without `dm_message_created` (federation.md "Pull sync"); when it created this instance's copy of a 1-on-1, each member gets that copy in a `dm_channel_created`, which makes no sound, so the conversation is listed without a reconnect.
+
+**A delete that came first.** A create whose message a `delete` from the same peer already named is answered `duplicate` and stored nowhere (federation.md "Receiver guarantees").
 
 ### Relayed edits and deletes
 
@@ -639,7 +654,7 @@ The event's `messageId` stays the sender's local id: it is the outbox coalescing
 
 1. Malformed target: rejected `invalid_target` (terminal).
 2. `attributionRefusal(target.actor, sourceInstance)`, the same check every relay event runs (direct, or homeward via `localUserActsOnPeer`): a refusal is returned as its reason, `attribution_mismatch` (terminal) or `attribution_unproven` (retried: the homeward proof has not reached this instance yet). See `federation.md` §3.
-3. Resolve `target.message` with `resolveLocalDmMessage`, and require it to be in this instance's copy of `target.federatedId`: else `unknown_message`. Not terminal: the create may not have arrived yet, and the sender retries on the outbox backoff schedule.
+3. Resolve `target.message` with `resolveLocalDmMessage`, and require it to be in this instance's copy of `target.federatedId`: else `unknown_message`. For an edit it is not terminal: the create may not have arrived yet, and the sender retries on the outbox backoff schedule. A delete of a message not held here at all is accepted instead (see "Inbound: Message Delete").
 4. The signing peer must be one of `getGroupDmTargetOrigins(<the message's conversation>)`, the origins this instance relays that conversation to, or the instance the message itself arrived from (`dm_messages.sourceInstance`, compared with `normalizeOriginForCompare`; the relay targets are compared by domain, as in "Relayed message creates"): else `invalid_target` (terminal). A peer the conversation never reached cannot address its messages, whatever actor it names.
 5. The actor must be the message's author, compared as federated identities (`sameRelayActor(relayActorOfUser(author), target.actor)`: equal home user id, same home domain), never as local ids: else `not_message_author` (terminal). Nothing is modified.
 
@@ -647,20 +662,22 @@ An event **without** a `target` (an older sender) is matched as `(sourceInstance
 
 ### Inbound: Message Update
 
-**Function:** `federation.ts:processUpdateEvent()`
+**Function:** `federation/events/dmMessages.ts:processUpdateEvent()`
 
 1. Find and authorize the local message ("Relayed edits and deletes")
-2. Update content (mention tokens rewritten, "Mentions in relayed messages") and `editedAt`
-3. Broadcast `dm_message_updated` to all local members
+2. Last-writer-wins on the author's `editedAt`: an edit whose `editedAt` is not newer than the copy's changes nothing and sends nothing (accepted). An older sender without `editedAt` is applied only when the content differs
+3. Update content (mention tokens rewritten, "Mentions in relayed messages") and `editedAt`
+4. Broadcast `dm_message_updated` to all local members
 
 ### Inbound: Message Delete
 
-**Function:** `federation.ts:processDeleteEvent()`
+**Function:** `federation/events/dmMessages.ts:processDeleteEvent()`
 
-1. Find and authorize the local message ("Relayed edits and deletes")
-2. Delete attachments, reactions, and message atomically
-3. Clean up attachment files from disk
-4. Broadcast `dm_message_deleted` to all local members
+1. Find and authorize the local message ("Relayed edits and deletes"). A message this instance does not hold at all is accepted as a no-op; when it is homed on the signing peer, a tombstone is recorded (federation.md "Receiver guarantees") so a create of it arriving later is a duplicate
+2. Record the same tombstone for a held relayed copy homed on the signing peer, so a create delivered again later does not bring it back
+3. Delete attachments, reactions, and message atomically
+4. Clean up attachment files from disk
+5. Broadcast `dm_message_deleted` to all local members
 
 ### Inbound: Read State Update
 
@@ -728,6 +745,8 @@ What decides the path is whether this instance holds a channel with the event's 
   2. The channel must be a group (`ownerId` set). A 1-on-1 has a fixed pair: else `invalid_target` (terminal).
   3. The adder (`membership.addedBy`, required) must be a current member of this copy, matched by federated identity (`memberWithIdentity`: same home user id on the same home domain), and the signing peer one of `relayTargetOrigins(<the members before the add>)`, compared by domain (`mayRelayInto`, `federation/dmChannels.ts`, the same check "Relayed message creates" uses): else `unauthorized_source`. Nothing is added.
 
+**Order.** Adds and removes of one member are last-writer-wins on the member's clock, whichever instance sent them and whether they came live or by a pull: an add older than the member's last change here (a kick, a leave, or a change made through this instance's routes) is accepted and changes nothing, before either path, so it also creates no copy of a group not held here. The rule is in [federation.md "Subject clocks"](federation.md#subject-clocks-member-and-friend-events-are-last-writer-wins).
+
 `unauthorized_source` is retried by the sender. An add can legitimately arrive before the event that made its adder a member, when that member was added through a third instance; the retry applies it once that event has landed. The local route's friendship check is the adder's own instance's to make; the receiver cannot see that friendship.
 
 Known limit: a copy kept after all of this instance's members left keeps its roster from that time. An add by someone who joined later is refused until their own add reaches this instance, which it does not, since the group is no longer relayed here. Re-adding through the owner or any member still in that roster works.
@@ -742,12 +761,13 @@ When a group DM is created with multiple remote members, the origin instance que
 
 1. Find channel by `federatedId`. If not found, accept silently (idempotent). A kick (`reason` other than `leave`) on a channel without an owner, a 1-on-1, is refused `invalid_target` (terminal): a 1-on-1 has a fixed pair and no one who may kick.
 2. Authority check: for kicks, `sourceInstance` must match `ownerHomeInstance`. For self-leave (`reason === 'leave'`), any instance is accepted.
-3. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
-4. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
-5. Delete `dm_members` row
-6. Delete `read_states`
-7. Broadcast `dm_member_removed` to remaining local members
-8. If zero members remain: soft-delete channel
+3. Member's clock: a remove older than the member's last change here is accepted and changes nothing; otherwise the clock moves to it, also when there is no one to remove ("Relayed member adds", **Order**).
+4. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
+5. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
+6. Delete `dm_members` row
+7. Delete `read_states`
+8. Broadcast `dm_member_removed` to remaining local members
+9. If zero members remain: soft-delete channel
 
 ### Ownership Transfer (Inbound)
 
@@ -772,7 +792,7 @@ System messages (`type = 'system'` in `dm_messages`) record group lifecycle even
 - **User ids in content are the storing instance's own.** Membership and metadata system messages are never relayed as messages: every instance writes its own from the relay event it applies, whose users are named by home identity (see "Instance-Local Creation"). So `targetUserId` and `newOwnerId` always name rows of the instance that stored them. No renderer reads them; the names shown are the `*DisplayName` fields recorded at the time of the event.
 - **Only `space_invite` is relayed as a message** (`RELAYABLE_DM_SYSTEM_EVENTS`). The space invite route builds its content through `parseDmSystemEvent` and refuses an invite that would not parse (`invite_invalid`), so it never sends one a receiver refuses.
 - **Relayed system content is validated.** `processCreateEvent` parses a relayed `type: 'system'` message before it writes anything and stores it only when it is a well-formed relayable event, in its canonical form; anything else is refused with `invalid_system_message`.
-- **System messages cannot be edited**, by anyone, their author included. `PATCH /api/dm/messages/:id` and the WS `dm_message_edit` share `dmMessageEditRefusal` and answer `system_message_immutable`; a relayed `update` of a system message is refused with the same reason. How a sender's outbox treats both relay reasons, by sender version: `federation.md`, "Terminal rejection reasons". Deleting a system message follows the ordinary delete rules.
+- **System messages cannot be edited**, by anyone, their author included. `PATCH /api/dm/messages/:id` and the WS `dm_message_edit` share `dmMessageEditRefusal` and answer `system_message_immutable`; a relayed `update` of a system message is refused with the same reason. How a sender's outbox treats both relay reasons, by sender version: `federation.md`, "Rejection reasons". Deleting a system message follows the ordinary delete rules.
 
 ### Event Types
 

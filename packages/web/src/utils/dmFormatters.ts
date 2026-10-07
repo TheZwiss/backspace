@@ -1,8 +1,18 @@
 import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, DmSystemEvent } from '@backspace/shared';
 import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents';
-import { parseFederatedUsername, isSelf } from './identity';
+import { parseFederatedUsername, isMine, type SelfIdentity } from './identity';
 import i18n from '../i18n';
 import { formatters } from '../i18n/formatters';
+
+/**
+ * Who is looking at a DM: the signed-in user (`useSelfIdentity`) and the
+ * instance that issued the DM's member rows (`getChannelOrigin(dm.id)`),
+ * which together say which member is the viewer (`isMine`).
+ */
+export interface DmViewer {
+  self: SelfIdentity | null;
+  origin: string;
+}
 
 // ─── DM Preview Formatting ────────────────────────────────────────────────────
 
@@ -193,7 +203,7 @@ function isSystemMessage(m: LastMessageLike): boolean {
  */
 export function formatDmSidebarPreview(
   dm: Pick<DmChannel, 'lastMessage' | 'ownerId' | 'members'>,
-  currentUser: { id: string; username: string } | null,
+  viewer: DmViewer,
 ): string | null {
   const lastMessage = dm.lastMessage ?? null;
   if (!lastMessage) return null;
@@ -216,8 +226,7 @@ export function formatDmSidebarPreview(
   if (!isGroup) return text;
 
   // Group user messages: prefix with sender display name unless it's the current user.
-  const authoredBySelf = currentUser ? isSelf({ id: lastMessage.userId, username: actor?.username ?? '', homeInstance: actor?.homeInstance ?? null }, currentUser) : false;
-  if (authoredBySelf) return text;
+  if (isMine(actor ?? { id: lastMessage.userId }, viewer.origin, viewer.self)) return text;
 
   return i18n.t('dm:preview.withSender', { name: resolveDisplayName(actor), text });
 }
@@ -253,11 +262,9 @@ export function formatDmTimestamp(createdAt: number): string {
 
 // ─── DM Display Names ─────────────────────────────────────────────────────────
 
-type AuthLike = { id: string; username: string; homeInstance?: string | null } | null;
-
 /** Other-side member resolution, identical to every other DM display path. */
-function otherMembersOf(dm: DmChannel, currentUser: AuthLike): User[] {
-  return dm.members.filter(m => !isSelf(m, currentUser));
+function otherMembersOf(dm: Pick<DmChannel, 'members'>, viewer: DmViewer): User[] {
+  return dm.members.filter(m => !isMine(m, viewer.origin, viewer.self));
 }
 
 /** Member's visible name — display name if set, else the parsed base of the username. */
@@ -277,9 +284,9 @@ function memberDisplayName(m: User): string {
  * dropped `dm.name`, so a renamed group still showed the joined-names
  * fallback in those two surfaces while every other site honored it.
  */
-export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string {
+export function formatDmHeaderName(dm: DmChannel, viewer: DmViewer): string {
   const isGroup = !!dm.ownerId;
-  const others = otherMembersOf(dm, currentUser);
+  const others = otherMembersOf(dm, viewer);
 
   if (isGroup) {
     if (dm.name && dm.name.trim().length > 0) return dm.name;
@@ -304,7 +311,7 @@ export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string
  * has 4+ members ("Message #Test, Nova, erin, Nova" runs off-screen
  * and obscures the actual call-to-action).
  */
-export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string {
+export function formatDmInputLabel(dm: DmChannel, viewer: DmViewer): string {
   const isGroup = !!dm.ownerId;
 
   if (isGroup) {
@@ -312,7 +319,7 @@ export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string
     return i18n.t('dm:names.theGroup');
   }
 
-  const partner = otherMembersOf(dm, currentUser)[0];
+  const partner = otherMembersOf(dm, viewer)[0];
   if (!partner) return `@${i18n.t('dm:names.unknownHandle')}`;
   return `@${memberDisplayName(partner) || i18n.t('dm:names.unknownHandle')}`;
 }
@@ -321,9 +328,9 @@ export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string
  * True when `dm` is a 1-on-1 whose only other participant(s) are tombstoned.
  * Drives the read-only composer — you cannot message a deleted user.
  */
-export function isDeletedPartnerDm(dm: Pick<DmChannel, 'ownerId' | 'members'>, currentUser: AuthLike): boolean {
+export function isDeletedPartnerDm(dm: Pick<DmChannel, 'ownerId' | 'members'>, viewer: DmViewer): boolean {
   if (dm.ownerId) return false; // group
-  const others = dm.members.filter(m => !isSelf(m, currentUser));
+  const others = otherMembersOf(dm, viewer);
   if (others.length === 0) return false;
   return others.every(m => m.isDeleted === true);
 }

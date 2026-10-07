@@ -51,6 +51,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   peer_pending_local_admin: 'Your admin has not approved federation with this instance yet',
   peer_unreachable: 'The remote instance is unreachable',
   PEER_EXISTS_RESET_REQUIRED: 'A peer record for this instance already exists; reset it first',
+  PEER_REVOKED: 'Peering with this instance has been revoked',
+  PEER_HANDSHAKE_IN_PROGRESS: 'This instance is completing its own peering handshake with you; yours will not be used',
 
   recipient_deleted: "This user's account was deleted",
 

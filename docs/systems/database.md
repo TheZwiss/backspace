@@ -1,7 +1,7 @@
 # Database Schema Reference
 
 Source of truth: `packages/server/src/db/schema.ts` (Drizzle ORM)
-Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, instance epoch, `installedAt` backfill, first-admin promotion), `backfillOneOnOneDmMembership()` and `backfillOneOnOneKeys()` (every 1-on-1 `dm_channels` row gets the key of its two members; see dm-system.md "Federated ID Algorithm"). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2). Databases created before the squash keep the tables the old hand-written statements made, which differ from what the baseline creates (inline `UNIQUE` constraints instead of named unique indexes, text primary keys without `NOT NULL`, extra columns), so a migration must not assume an index or column only the baseline creates. `packages/server/test/fixtures/pre-squash-schema.sql` holds that shape, and `src/db/preSquashUpgrade.test.ts` boots it, a squashed install and an empty database through `initDatabase()` and checks the outbox ends identical on all three.
+Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, instance epoch, `installedAt` backfill, first-admin promotion), `backfillOneOnOneDmMembership()` and `backfillOneOnOneKeys()` (every 1-on-1 `dm_channels` row gets the key of its two members; see dm-system.md "Federated ID Algorithm"). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2). Databases created before the squash keep the tables the old hand-written statements made, which differ from what the baseline creates (inline `UNIQUE` constraints instead of named unique indexes, text primary keys without `NOT NULL`, extra columns), so a migration must not assume an index or column only the baseline creates. `packages/server/test/fixtures/pre-squash-schema.sql` holds that shape, and `src/db/preSquashUpgrade.test.ts` boots it, a squashed install and an empty database through `initDatabase()` and checks the outbox ends identical on all three, and that the reaction tables end with their unique indexes and without repeated rows.
 Engine: SQLite via `better-sqlite3`
 IDs: Snowflake text, permissions: bigint decimal strings
 
@@ -149,6 +149,8 @@ PK: id
 | emoji | text NOT NULL | |
 | createdAt | integer NOT NULL | |
 
+Indexes: `idx_reactions_message_id` (messageId); `idx_reactions_message_user_emoji` UNIQUE (messageId, userId, emoji), one reaction per user and emoji on a message. Writers insert with `ON CONFLICT DO NOTHING` and treat no row written as "already reacted" (`reaction_add` in `ws/events.ts`). See "Reaction uniqueness (0024)" below.
+
 ---
 
 ## DM Tables
@@ -174,6 +176,7 @@ PK: (dmChannelId, userId)
 | dmChannelId | text NOT NULL | | FK → dm_channels.id CASCADE |
 | userId | text NOT NULL | | FK → users.id CASCADE |
 | closed | integer | 0 | Soft-close flag |
+| closedChangedAt | integer NOT NULL | 0 | When `closed` took its value: insertion or local change (local clock), or a relayed close/reopen's timestamp. Last-writer-wins against relayed close/reopen; written only by `utils/dmMemberClosed.ts` (dm-system.md "Closed state is last-writer-wins"). Rows present at migration 0022 were stamped with the migration time |
 
 ### dm_messages
 | Column | Type | Default | Notes |
@@ -199,6 +202,11 @@ PK: id
 | userId | text NOT NULL | FK → users.id CASCADE |
 | emoji | text NOT NULL | |
 | createdAt | integer NOT NULL | |
+
+Indexes: `idx_dm_reactions_dm_message_id` (dmMessageId); `idx_dm_reactions_message_user_emoji` UNIQUE (dmMessageId, userId, emoji). Both writers, the local `reaction_add` and the relayed one (`processReactionAddEvent`, live delivery and the catch-up pull alike), insert with `ON CONFLICT DO NOTHING`; a relayed add that writes nothing is accepted as already held.
+
+#### Reaction uniqueness (0024)
+The squashed baseline (0000) created both reaction tables without a unique key; only pre-squash installs had one, as an inline `UNIQUE(message_id, user_id, emoji)` / `UNIQUE(dm_message_id, user_id, emoji)` from the old hand-written statements. On installs created after the squash the same user's reaction could be stored several times (#393). Migration `0024_reaction_unique` first deletes the repeats, keeping per key the row with the lowest `created_at` and, of equally early rows, the lowest `rowid` (any one of equal rows would do; the rowid only makes the choice definite), then creates the two named unique indexes. On a pre-squash install there are no repeats, and the named index is created beside the inline constraint (`sqlite_autoindex_*`), which stays.
 
 ---
 
@@ -404,6 +412,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | directoryBrowseEnabled | integer NOT NULL | 1 | The admin allows people on this instance to see spaces from other instances in Explore ("Outer Space"). The incoming half of the directory, independent of `directoryEnabled`, which is the outgoing half. `GET /api/directory` answers `404 directory_disabled` while it is 0, and `instance/info` reports `directoryAvailable: false`. Default 1, which is what every instance did before the column existed. `DIRECTORY_ENDPOINT` sits above it: with no endpoint there is nothing to browse whatever it says. Nowhere in the served document, so changing it never marks `directoryDirty`. See [directory.md](directory.md). |
 | supportCardEnabled | integer (boolean mode) NOT NULL | 1 | The web client's Backspace page shows the Support card, which links to the project's Ko-fi page. Read only by the web client, through `supportCardEnabled` on `GET /api/instance/info`; it hides only that card and changes nothing the server does. Default 1; migration `0017_fat_rafael_vega.sql` adds it, and an existing row takes the default. Written through `PATCH /api/settings/instance`. |
 | installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |
+| ledgerStartedAt | integer | | When this instance began recording applied relay events in `federation_applied_events` (epoch ms): set by migration 0022 on an existing instance, null on one that ran it before its first boot. The pull reads no friend event older than it (federation.md "Pull sync", "Cursor") |
 | updatedAt | integer NOT NULL | | |
 
 ---
@@ -417,21 +426,21 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | origin | text NOT NULL UNIQUE | | `https://domain.tld` |
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
-| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention |
-| initiatedBy | text NOT NULL | `'auto'` | Provenance — who caused this row to exist. `'admin'` = `POST /peer/initiate` or an approve/deny decision in `routes/federation/handlers/approvals.ts`; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
+| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention. Written only by `utils/federationPeerState.ts`; states and transitions in [federation.md → Peer state](federation.md#peer-state). |
+| initiatedBy | text NOT NULL | `'auto'` | Provenance: who caused this row to exist. `'admin'` = `POST /peer/initiate`, an approval, or an inbound deny that inserted the row; `'auto'` = local traffic with no admin decision (the outbox placeholder, `ensurePeered` auto-peering); `'remote'` = created by an inbound `/peer/accept`. Only `'admin'` counts as admin authorization at the two peering gates. Rows predating migration `0012_absurd_shiver_man` read as `'auto'` (fail closed). See [federation.md → Peer-row provenance](federation.md#peer-row-provenance). |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |
 | consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
-| lastProbeAt | integer | | Epoch ms of the last reachability probe in the current `unreachable` episode. `NULL` = probe immediately due (set on entry into `unreachable` and on recovery). Paces `processRecoveryTick`. |
-| probeAttempts | integer NOT NULL | 0 | Consecutive failed recovery probes; indexes `RECOVERY_BACKOFF_MS`. Reset to 0 on recovery and on entry into `unreachable`. Counter — never null. Migration `0006_spicy_scourge`. |
+| lastProbeAt | integer | | Epoch ms when the last paced attempt started: a reachability probe for an `unreachable` row, a handshake for a `pending` one. `NULL` = next attempt immediately due (set on entry into `pending`, `unreachable` and `active`). |
+| probeAttempts | integer NOT NULL | 0 | Failed paced attempts since the pacing began; after n failures the wait is `RECOVERY_BACKOFF_MS[n - 1]`. Reset to 0 on entry into `pending`, `unreachable` and `active`. Counter, never null. Migration `0006_spicy_scourge`. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
 | approvalToken | text | | Single-use 64-hex-char token stored when this row is in `awaiting_approval` (received from remote's 202 response). Verified against the inbound `/peer/accept` `approvalToken` field before promoting to `active`. Cleared (`NULL`) on promotion. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
 | peerInstanceId | text | | Instance-epoch self-healing: the peer's persistent instance epoch (UUID) as last confirmed. `NULL` until first observed. Compared against `observedPeerInstanceId` to detect a factory-reset peer on the same origin. |
 | observedPeerInstanceId | text | | Instance-epoch self-healing: the instance epoch most recently reported by the peer. A mismatch with `peerInstanceId` signals the peer was reset. |
-| needsAttentionReason | text | | Instance-epoch self-healing: machine-readable reason a peer was moved to `needs_attention` (e.g. epoch reset detected), for admin surfacing. `NULL` when healthy. |
+| statusReason | text | | Why the row is in its status: for `needs_attention` one of `auth_failures`, `peer_reset_detected`, `repeer_incomplete`; for `rejected` one of `denied_by_local_admin`, `denied_by_remote`, `revoked_by_remote`, `expired_on_remote`, `stale_peering_on_remote`. `NULL` for every other status, and for `rejected` rows from before the column was renamed (which keep their old behaviour). Renamed from `needs_attention_reason` by migration `0023_peer_status_reason`, which also clears the value on every row that is not `needs_attention` (before it, a row our admin denied or revoked out of `needs_attention` kept its old reason, which would now read as the remote's refusal) and sets `auth_failures` on `needs_attention` rows without a reason (the auth-failure threshold was the only path that wrote none). |
 
 ### federation_reset_events
 Instance-epoch self-healing ledger. One row per origin recording a detected federated-peer reset (same origin, new instance epoch). Upserted when a live epoch change is observed; `resolvedAt` is stamped once stale replicated identities from the dead epoch are healed.
@@ -562,11 +571,62 @@ Index `idx_outbox_queue` on (peerId, queueKey, createdAt); `idx_outbox_retry` on
 | id | text PK | | |
 | entityId | text NOT NULL | | |
 | contextId | text NOT NULL | | |
-| contextType | text NOT NULL | `'dm'` | dm/friend |
-| mutationType | text NOT NULL | | create/update/delete |
-| mutatedAt | integer NOT NULL | | Checkpoint for sync |
+| contextType | text NOT NULL | `'dm'` | dm/friend/profile |
+| mutationType | text NOT NULL | | the relay event type (federation.md "Mutation log coverage") |
+| mutatedAt | integer NOT NULL | | With `id`, the `(mutated_at, id)` order `/sync` pages in |
 | payload | text | | JSON |
 Retention: 90 days (cleaned by federation janitor)
+
+### federation_sync_cursors
+Pull-sync position per peer and context (federation.md "Pull sync"). Migration 0022 created all three for every peer with `last_synced_at > 0`, at that time.
+PK: (peerId, contextType)
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
+| contextType | text NOT NULL | | dm/friend/profile |
+| cursorTs | integer NOT NULL | 0 | `mutated_at` of the last log row consumed, in the PEER's clock |
+| cursorId | text | | That row's id; null against a server that does not return `checkpointId` |
+| peerEpoch | text | | The peer's instance id the cursor was taken against; a different one restarts the cursor at 0 |
+| lastPulledAt | integer | | Local time of the last completed pass |
+
+### federation_sync_retry
+Pulled events kept for a later retry: refused for a reason that can pass (federation.md "Pull sync", "Outcomes"), or held behind one of the same subject.
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | snowflake; tiebreak for order |
+| peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
+| contextType | text NOT NULL | | dm/friend/profile |
+| subjectKey | text NOT NULL | | The subject the event changes (`syncSubjectKey`): a message, a group member, a friend pair, ... |
+| eventType | text NOT NULL | | |
+| messageId | text NOT NULL | | The event's `messageId` |
+| eventTs | integer NOT NULL | | The event's `timestamp` (peer clock); replay order |
+| eventHash | text NOT NULL | | sha256 of the event's canonical JSON (keys sorted): one row per distinct event |
+| eventJson | text NOT NULL | | The whole event, replayed locally |
+| lastReason | text NOT NULL | | Last refusal, or `held_behind_earlier_event` |
+| attempts | integer NOT NULL | 1 | |
+| firstFailedAt | integer NOT NULL | | Dropped 7 days after this |
+| nextRetryAt | integer NOT NULL | | When the subject's first row is next tried |
+Indexes: `idx_sync_retry_event` UNIQUE (peerId, eventHash); `idx_sync_retry_subject` (peerId, subjectKey); `idx_sync_retry_order` (peerId, eventTs)
+
+### federation_applied_events
+Ledger of relay events applied here, for events a processor cannot recognize as applied from state alone (federation.md "Receiver guarantees").
+PK: (sourceOrigin, eventKey)
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| sourceOrigin | text NOT NULL | | `normalizeOriginForCompare` of the origin the event is attributed to |
+| eventKey | text NOT NULL | | `dm_delete:<messageId>` (a delete's tombstone) or `<eventType>:<messageId>` |
+| appliedAt | integer NOT NULL | | Local time |
+Index: `idx_applied_events_applied_at`. Retention: 100 days (janitor `sweepAppliedEvents`)
+
+### federation_subject_clocks
+The last applied change per federated subject: a group member or a friend pair. Relayed member and friend events apply last-writer-wins against it on the live relay and the pull; local changes record it too (federation.md "Subject clocks"). Read and written only through `utils/federationSubjectClock.ts`. Migration 0022 creates it empty.
+PK: subjectKey
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| subjectKey | text NOT NULL | | JSON array: `["member", <federatedId>, <homeUserId>, <home domain>]` or `["friend", <homeUserId>, <home domain>, <homeUserId>, <home domain>]` (the two sides sorted) |
+| changedAt | integer NOT NULL | | Timestamp of the last change: the relayed event's `timestamp`, or local time for a change made here. Never moves back |
+| recordedAt | integer NOT NULL | | Local time of the last write, for the sweep |
+Index: `idx_subject_clocks_recorded_at`. Retention: 400 days after the last write (janitor `sweepSubjectClocks`)
 
 ### user_federation_registry
 Persistent registry of all instances a user has federated with. Tracks full lifecycle.

@@ -11,12 +11,15 @@ import { Avatar } from '../ui/Avatar';
 
 function TransferMemberRow({
   member,
+  origin,
   onSelect,
 }: {
   member: MemberWithUser;
+  /** The space's instance, which issued the member rows. */
+  origin: string;
   onSelect: (userId: string) => void;
 }) {
-  const canonical = useCanonicalUserView(member.user);
+  const canonical = useCanonicalUserView(member.user, origin);
   const displayName = canonical.displayName || canonical.username;
   return (
     <button
@@ -208,6 +211,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                   <TransferMemberRow
                     key={member.userId}
                     member={member}
+                    origin={(space as TaggedSpace)._instanceOrigin ?? ''}
                     onSelect={setSelectedUserId}
                   />
                 ))

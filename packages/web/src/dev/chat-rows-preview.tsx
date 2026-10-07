@@ -40,7 +40,7 @@ import { useSpaceStore } from '../stores/spaceStore';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import { ALL_PERMISSIONS, permissionsToString } from '../utils/permissions';
-import { canonicalUserKey } from '../utils/identity';
+import { userKey } from '../utils/identity';
 import '../styles/globals.css';
 
 const STATES = {
@@ -212,7 +212,7 @@ function seedStores(state: RowState): void {
     members: [MIRA, OSKAR, TOVE, ME].map((user) => ({ spaceId: SPACE, userId: user.id, nickname: null, joinedAt: 1, user, roles: [] })),
     spaces: [],
     currentSpaceId: SPACE,
-    userViews: new Map([[canonicalUserKey(ALEKSANDR_STUB), {
+    userViews: new Map([[userKey(ALEKSANDR_STUB, ''), {
       user: ALEKSANDR_HOME,
       deliveredBy: 'https://nova.example',
       isHome: true,

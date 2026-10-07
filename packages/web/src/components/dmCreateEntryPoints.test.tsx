@@ -23,6 +23,7 @@ const auth = vi.hoisted(() => ({
   state: {
     user: { id: 'alice-home', username: 'alice', homeInstance: null as string | null, homeUserId: null as string | null },
     token: 't',
+    myRowIds: new Map<string, string>(),
   },
 }));
 
@@ -36,12 +37,8 @@ vi.mock('../hooks/useWebSocket', () => ({
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
 }));
-vi.mock('../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector(auth.state),
-    { getState: () => auth.state, setState: vi.fn(), subscribe: vi.fn() },
-  ),
-}));
+vi.mock('../stores/authStore', async () =>
+  (await import('../test/authStoreMock')).authStoreMock(() => auth.state));
 vi.mock('../stores/instanceStore', async () => {
   const { create } = await import('zustand');
   const store = create<{ instances: unknown[] }>()(() => ({ instances: [] }));
@@ -50,7 +47,18 @@ vi.mock('../stores/instanceStore', async () => {
 vi.mock('../utils/mutuals', () => ({
   loadFederatedMutuals: vi.fn().mockResolvedValue({ mutualFriends: [], mutualSpaces: [] }),
 }));
-vi.mock('../hooks/useShownStatus', () => ({ useShownStatus: (_u: User, status: User['status']) => status }));
+vi.mock('../hooks/useShownStatus', () => ({ useShownStatus: (_u: User, _origin: string, status: User['status']) => status }));
+// `api/client` and `crossStoreResolvers` import each other, so the resolver
+// module can hold the unmocked client; route the page's own origin to the
+// mocked one, as `getApiForOrigin('')` does in the app.
+const pageApi = vi.hoisted(() => ({ client: null as unknown }));
+vi.mock('../utils/crossStoreResolvers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/crossStoreResolvers')>();
+  return {
+    ...actual,
+    getApiForOrigin: (origin: string) => (origin ? actual.getApiForOrigin(origin) : pageApi.client),
+  };
+});
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   api: {
@@ -63,11 +71,11 @@ vi.mock('../api/client', async (importOriginal) => ({
 
 import { useSpaceStore } from '../stores/spaceStore';
 import { setOriginFromHostnameResolver } from '../utils/crossStoreResolvers';
-import { registerSelfId } from '../utils/identity';
 import { useChatStore } from '../stores/chatStore';
 import { useUIStore } from '../stores/uiStore';
 import { useSocialStore, type TaggedFriend } from '../stores/socialStore';
 import { api } from '../api/client';
+pageApi.client = api;
 import { wireDm, copyDm } from '../test/dmWireShape';
 import { UserProfilePopout } from './ui/UserProfilePopout';
 import { UserProfileModal } from './modals/UserProfileModal';
@@ -124,7 +132,7 @@ beforeEach(() => {
   auth.state.user = { id: 'alice-home', username: 'alice', homeInstance: null, homeUserId: null };
   setOriginFromHostnameResolver((host) => (host === 'remote.example' ? REMOTE : ''));
   // alice's account on REMOTE, as REMOTE's ready registers it.
-  registerSelfId('alice-on-remote');
+  auth.state.myRowIds = new Map([[REMOTE, 'alice-on-remote']]);
   useSpaceStore.getState().reset();
   useChatStore.setState({ messages: new Map(), unreadChannels: new Set(), currentChannelId: null });
   useUIStore.setState({ activeModal: null, modalData: {}, isMobile: false });
@@ -142,7 +150,7 @@ beforeEach(() => {
 
 describe('a DM created from each UI entry point lands in the conversation\'s one row', () => {
   it('the profile popout\'s Send Message', async () => {
-    renderAt(<UserProfilePopout user={bobOnHome} onClose={() => {}} anchor={{ top: 0, left: 0, right: 40, bottom: 40, width: 40, height: 40 }} />);
+    renderAt(<UserProfilePopout user={bobOnHome} origin="" onClose={() => {}} anchor={{ top: 0, left: 0, right: 40, bottom: 40, width: 40, height: 40 }} />);
 
     await userEvent.click(screen.getByText('Send Message'));
 
@@ -187,7 +195,7 @@ describe('a DM created from each UI entry point lands in the conversation\'s one
   });
 
   it('the add-member modal: the new group gets one row and is opened', async () => {
-    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _origin: '' } as TaggedFriend;
+    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _instanceOrigin: '' } as TaggedFriend;
     useSocialStore.setState({ friends: [carol] });
     useSpaceStore.getState().populateFromReady('', [], [], [copyDm(bobDmHome)]);
     const group: DmChannel = wireDm({
@@ -216,7 +224,7 @@ describe('the add-member modal names the 1-on-1 by the id of the instance it ask
     useSpaceStore.getState().populateFromReady('', [], [], [copyDm(bobDmHome)]);
     expect(rowIds()).toEqual(['dm-bob-remote']);
 
-    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _origin: '' } as TaggedFriend;
+    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _instanceOrigin: '' } as TaggedFriend;
     useSocialStore.setState({ friends: [carol] });
     vi.mocked(api.dm.createGroup).mockResolvedValue(wireDm({
       id: 'dm-group-new', ownerId: 'alice-home', createdAt: 9, members: [aliceHome, bobOnHome, user('carol-home')],
@@ -237,7 +245,7 @@ describe('the add-member modal names the 1-on-1 by the id of the instance it ask
   });
 
   it('sends no source id when the asked instance holds no copy of the conversation', async () => {
-    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _origin: '' } as TaggedFriend;
+    const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _instanceOrigin: '' } as TaggedFriend;
     useSocialStore.setState({ friends: [carol] });
     vi.mocked(api.dm.createGroup).mockResolvedValue(wireDm({
       id: 'dm-group-new', ownerId: 'alice-home', createdAt: 9, members: [aliceHome, bobOnHome, user('carol-home')],
@@ -266,7 +274,7 @@ describe('the add-member modal adds to a group through home\'s copy of it', () =
     id: 'dm-group-home', federatedId: FID_GROUP, ownerId: 'alice-home', createdAt: 4,
     members: [aliceHome, bobOnHome],
   });
-  const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _origin: '' } as TaggedFriend;
+  const carol: TaggedFriend = { ...user('carol-home', null, null, 'carol'), _instanceOrigin: '' } as TaggedFriend;
 
   beforeEach(() => {
     // alice's account is homed on REMOTE, so REMOTE's copy is the pinned row.
@@ -301,5 +309,51 @@ describe('the add-member modal adds to a group through home\'s copy of it', () =
 
     expect(await screen.findByText('Failed to add members')).toBeInTheDocument();
     expect(api.dm.addMember).not.toHaveBeenCalled();
+  });
+});
+
+describe('the add-member modal knows who is in a DM pinned to another instance', () => {
+  // The group is REMOTE's copy: its member rows carry REMOTE's ids. Friends
+  // come from the page's instance, under its ids.
+  const FID_GROUP = '1e1e1e1e-0000-4000-8000-000000000000';
+  const groupRemote = wireDm({
+    id: 'dm-group-remote', federatedId: FID_GROUP, ownerId: 'alice-on-remote', createdAt: 5,
+    members: [aliceOnRemote, bobUnlinkedOnRemote],
+  });
+
+  beforeEach(() => {
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(groupRemote)]);
+  });
+
+  it('shows a friend who is a member under the other instance\'s id as already in the DM', async () => {
+    // Home's row for bob names REMOTE's native bob.
+    const bob: TaggedFriend = { ...user('bob-on-home', 'bob-unlinked-remote', 'remote.example', 'bob'), _instanceOrigin: '' } as TaggedFriend;
+    useSocialStore.setState({ friends: [bob] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    expect(screen.getByText('Already in this DM')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /bob/ })).toBeDisabled();
+  });
+
+  it('does not take a friend whose id on home equals a member\'s id on REMOTE for that member', async () => {
+    const dave: TaggedFriend = { ...user('bob-unlinked-remote', null, null, 'dave'), _instanceOrigin: '' } as TaggedFriend;
+    useSocialStore.setState({ friends: [dave] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    expect(screen.queryByText('Already in this DM')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /dave/ })).toBeEnabled();
+  });
+
+  it('selects two friends from different instances that share a row id separately', async () => {
+    const dave: TaggedFriend = { ...user('same-id', null, null, 'dave'), _instanceOrigin: '' } as TaggedFriend;
+    const erin: TaggedFriend = { ...user('same-id', null, null, 'erin'), _instanceOrigin: REMOTE } as TaggedFriend;
+    useSocialStore.setState({ friends: [dave, erin] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    await userEvent.click(screen.getByText('dave'));
+    expect(screen.getByText('Add 1 Friend')).toBeInTheDocument();
   });
 });

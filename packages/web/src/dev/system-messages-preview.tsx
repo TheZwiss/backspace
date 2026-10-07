@@ -11,7 +11,8 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { DmChannel, DmLastMessagePreview, MessageWithUser, User } from '@backspace/shared';
 import { SystemMessage } from '../components/chat/SystemMessage';
-import { formatDmSidebarPreview } from '../utils/dmFormatters';
+import { formatDmSidebarPreview, type DmViewer } from '../utils/dmFormatters';
+import { selfIdentityOf } from '../utils/identity';
 import { initI18n } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
@@ -59,9 +60,12 @@ function message(row: Row, index: number): MessageWithUser {
   } as unknown as MessageWithUser;
 }
 
+// The viewer is a user outside the roster, so every row reads as someone else's.
+const VIEWER: DmViewer = { origin: '', self: selfIdentityOf({ id: 'SELF' }, new Map()) };
+
 function preview(row: Row): string | null {
   const lastMessage = { type: 'system', userId: row.author.id, content: row.content, createdAt: 1 } as DmLastMessagePreview;
-  return formatDmSidebarPreview({ ownerId: 'U1', members: roster.members as User[], lastMessage }, { id: 'SELF', username: 'self' });
+  return formatDmSidebarPreview({ ownerId: 'U1', members: roster.members as User[], lastMessage }, VIEWER);
 }
 
 function Frame() {

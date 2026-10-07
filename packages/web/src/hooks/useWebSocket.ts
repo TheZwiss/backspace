@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -10,7 +10,6 @@ import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '..
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessageRouting';
-import { registerSelfId } from '../utils/identity';
 import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
@@ -132,6 +131,7 @@ function buildWsUrl(origin: string): string {
 // ─── Call relay helpers ───────────────────────────────────────────────────────
 
 import { buildCallUndeliverableToast } from '../utils/callUndeliverableToast';
+import { peerRejectedToast } from '../utils/peerRejectedToast';
 
 export { buildCallUndeliverableToast };
 
@@ -194,8 +194,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
   switch (event.type) {
     case 'ready':
-      // Register this user's ID for cross-instance self-identification
-      registerSelfId(event.user.id);
+      // This instance names the signed-in user's row there (the home's is the
+      // session row itself, set below). The one record of "my ids".
+      if (!isHome) useAuthStore.getState().recordMyRow(origin, event.user.id);
 
       if (isHome) {
         setUser(event.user);
@@ -232,11 +233,6 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Pending messages restored at boot wait for the ready that lists their channel.
       notePendingOriginReady(origin);
 
-      // Cache authoritative identity for this origin (federation-safe)
-      if (!isHome) {
-        setMyUserIdForOrigin(origin, event.user.id);
-      }
-
       // The user's own chosen status (utils/selfStatus.ts): take it from this
       // socket when it is the owner's report (the true home, for a session on
       // a replicated row), and re-send it to this remote when this session owns
@@ -246,7 +242,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         const report = ownStatusReport(authUser, { origin, isHome }, { userId: event.user.id, status: event.user.status });
         if (report) useAuthStore.getState().applyOwnStatus(report);
         if (!isHome) {
-          const status = statusToAssertOnRemote(authUser, event.user, window.location.host);
+          const status = statusToAssertOnRemote(authUser, event.user);
           if (status) wsSend({ type: 'presence_update', status }, origin);
         }
       }
@@ -642,9 +638,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
     case 'user_updated': {
       if (!isHome) normalizeUserAssets(event.user, origin);
       upsertUserView(event.user, origin);
-      useSpaceStore.getState().updateUserEverywhere(event.user);
-      useSocialStore.getState().updateFriendProfile(event.user);
-      useChatStore.getState().updateUserInMessages(event.user);
+      useSpaceStore.getState().updateUserEverywhere(event.user, origin);
+      useSocialStore.getState().updateFriendProfile(event.user, origin);
+      useChatStore.getState().updateUserInMessages(event.user, origin);
       // If this is the current user (other tab changed profile), update authStore
       const myId = isHome
         ? useAuthStore.getState().user?.id
@@ -665,11 +661,11 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
       // Deleted user cleanup: remove from caches the existing pipeline doesn't cover
       if (event.user.isDeleted) {
-        useSocialStore.getState().removeFriendLocally(event.user.id, origin);
-        useSocialStore.getState().removeRequestsForUser(event.user.id);
+        // Each removal goes through userUpdateReach, as the updates above do.
+        useSocialStore.getState().removeDeletedUser(event.user, origin);
         useActivityStore.getState().clearUserActivities(event.user, origin);
-        useDiscoverStore.getState().removeUser(event.user.id);
-        useChatStore.getState().clearTypingForUser(event.user.id);
+        useDiscoverStore.getState().removeDeletedUser(event.user, origin);
+        useChatStore.getState().clearTypingForDeletedUser(event.user, origin);
       }
       break;
     }
@@ -839,12 +835,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       rejectedPeerOrigins.add(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       activePeerOrigins.delete(event.peerOrigin);
-      const label = event.peerLabel || event.peerOrigin;
-      addToast(
-        `Cannot relay messages to ${label} — ${event.reason}`,
-        'warning',
-        10000,
-      );
+      addToast(peerRejectedToast(event), 'warning', 10000);
       notifyFederationChangeListeners();
       break;
     }
@@ -1466,12 +1457,19 @@ export function getHomeWsConnected(): boolean {
   return !!conn?.ws && conn.ws.readyState === WebSocket.OPEN;
 }
 
-/** Send an event over the WebSocket. Can be used outside of React components. */
-export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): void {
+/**
+ * Send an event over the origin's WebSocket. Can be used outside of React
+ * components. Returns whether the event was handed to an open socket; when
+ * the origin has none (not connected, or reconnecting) the event is dropped
+ * and the result is false.
+ */
+export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): boolean {
   const conn = connections.get(origin);
   if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
     conn.ws.send(JSON.stringify(event));
+    return true;
   }
+  return false;
 }
 
 /** Send an event to ALL connected WebSocket instances (home + remotes). */

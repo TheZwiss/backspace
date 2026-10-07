@@ -13,7 +13,7 @@ Source files:
 - `packages/web/src/stores/authStore.ts` -- Client session state, login/register/logout/password/delete actions
 - `packages/web/src/hooks/useAuth.ts` -- Route guard hook (redirect to `/login` when no token)
 - `packages/web/src/App.tsx` -- `ProtectedRoute` and `AuthRedirect` route wrappers
-- `packages/web/src/utils/identity.ts` -- Federation-aware identity helpers (`parseFederatedUsername`, `isSelf`, `canonicalUserMatch`)
+- `packages/web/src/utils/identity.ts` -- Federation-aware identity helpers (`parseFederatedUsername`, `homeIdentityOf`, `userKey`, `isMine`; see `client-federation.md` section 5)
 - `packages/web/src/utils/federationOps.ts` -- Account deletion propagation to connected remote instances
 - `packages/web/src/stores/instanceStore.ts` -- `resolveCredentialHomeApi()` / `ensureRemoteCredential()`: per-remote federation credentials (§5b)
 - `packages/server/src/config.ts` -- `jwtSecret`, `jwtExpiresIn`, `registrationOpen` config
@@ -526,9 +526,9 @@ interface AuthState {
 ### `initSession(token, user)`
 
 Called after successful login or registration:
-1. `resetUserStores()` -- clears every user-scoped store and `clearSelfIds()` from the identity registry (see below)
+1. `resetUserStores()` -- clears every user-scoped store (see below)
 2. Saves token to localStorage
-3. Sets token + user in Zustand state
+3. Sets token + user in Zustand state, empties `myRowIds` (the user's row id per connected instance, client-federation.md §5) and starts `trueHomeStatus` from the kept true-home report (`seedTrueHomeStatus`, activity-presence.md)
 4. Fires `useInstanceStore.autoConnectAll()` (fire-and-forget) for federation
 
 ### `loadUser()`
@@ -546,17 +546,18 @@ go through the fan-out, and it would need the call if it ever ran mid-session.
 ### `logout()`
 
 1. Removes token from localStorage
-2. Calls `resetUserStores()` (see below)
-3. Sets token and user to null
+2. Calls `resetUserStores()` (see below) and cancels the expiry of a kept true-home status
+3. Sets token and user to null and empties `trueHomeStatus` and `myRowIds`
 
 ### `resetUserStores()`
 
 The one place a session's client state is dropped. Called by `initSession`
 (so signing in as another account without a reload cannot inherit the
-previous one's rows), by `logout`, and by `deleteAccount`. It clears the
-identity registry's self IDs and then, in order: chat messages, the space,
-social, voice, instance, activity, explore and directory stores, and the
-settings store's update state.
+previous one's rows), by `logout`, and by `deleteAccount`. It clears, in
+order: chat messages, the space, social, voice, instance, activity, explore
+and directory stores, and the settings store's update state. The signed-in
+user's own records (`myRowIds`, `trueHomeStatus`) live on `authStore`
+itself; each caller resets them in the same `set` that replaces the user.
 
 `exploreStore` and `directoryStore` were added to it on the space directory
 branch. `exploreStore.myRequests` holds the signed-in user's own pending
@@ -635,32 +636,9 @@ Splits a potentially federated username:
 "erin"                -> { baseName: "erin", domain: null }
 ```
 
-### Self-ID Registry
+### Who a user is, and whether it is the signed-in user
 
-Module-level `Set<string>` tracking all Snowflake IDs belonging to the current user across connected instances:
-
-```
-registerSelfId(id: string)   -- adds ID (called from WS ready events)
-clearSelfIds()               -- clears all (called on logout/session reset)
-```
-
-### `isSelf(user, homeUser)`
-
-Determines if a user object represents the current user. Cascading checks:
-1. Same `id` (same instance, trivial)
-2. `_knownSelfIds.has(user.id)` (cross-instance via registry)
-3. `user.homeInstance === window.location.host` AND base usernames match
-
-### `canonicalUserMatch(a, b)`
-
-Federation-safe comparison of two user-like objects. Cascading strategies:
-1. Same `id` -- trivial match
-2. `homeUserId` cross-matching (both have it, or one matches the other's `id`)
-3. Username + home instance fallback: parse base names, derive home from `homeInstance` or domain part of username, compare
-
-### `resolveDisplayIdentity(user, homeUser)`
-
-If `user` is a replicated alias of `homeUser` (via `isSelf`), returns `homeUser` for display purposes. Otherwise returns `user` unchanged.
+`homeIdentityOf` / `userKey` (the person a row names, given the instance that issued it), `authStore.myRowIds` with `getMyUserIdForOrigin`, and `isMine` / `isMe` (the signed-in user) are described once, in `client-federation.md` section 5.
 
 ---
 

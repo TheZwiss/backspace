@@ -571,7 +571,7 @@ export type ServerEvent =
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
   | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
-  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
+  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; reasonCode?: FederationPeerStatusReason; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
   | { type: 'federation_peer_active'; peerOrigin: string }
   | { type: 'federation_peers_changed' }
   | { type: 'federation_peer_reset_detected'; origin: string }
@@ -1219,6 +1219,13 @@ export interface FederationRelayEvent {
   rejectionReason?: string;
   rejectionLimit?: number;
   affectedUserIds?: string[];
+  /**
+   * `file_rejected`: the same users as `affectedUserIds`, each with the
+   * instance that homes them, so the receiver matches the whole identity.
+   * Optional: absent from older senders, whose bare ids are matched only when
+   * exactly one local user carries that home user id.
+   */
+  affectedUsers?: Array<{ homeUserId: string; homeInstance: string }>;
   call?: FederationCallPayload;
   typing?: {
     homeUserId: string;
@@ -1471,9 +1478,16 @@ export interface FederationRelayResponse {
 
 export interface FederationSyncRequest {
   sinceTimestamp: number;
+  /**
+   * Keyset tiebreak: with it, the server returns the log rows after the row
+   * `(sinceTimestamp, afterId)` in `(mutated_at, id)` order, so rows sharing a
+   * millisecond across a page boundary are all served. Older servers ignore it
+   * and return rows with `mutated_at > sinceTimestamp`.
+   */
+  afterId?: string;
   dmChannelId?: string;
   federatedId?: string;
-  contextType?: 'dm' | 'friend';
+  contextType?: 'dm' | 'friend' | 'profile';
   limit: number;
 }
 
@@ -1481,6 +1495,12 @@ export interface FederationSyncResponse {
   events: FederationRelayEvent[];
   hasMore: boolean;
   checkpoint: number;
+  /**
+   * The id of the last log row the page covered (before any filtering), to be
+   * sent back as `afterId` with `sinceTimestamp: checkpoint`. Absent from older
+   * servers, whose next page has to start at `checkpoint - 1`.
+   */
+  checkpointId?: string;
 }
 
 // Detached-account re-attach (re-attach spec §3.1–3.2).
@@ -1540,7 +1560,7 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
+  statusReason: FederationPeerStatusReason | null;
 }
 
 // ─── Reset-cleanup admin surface (instance-epoch self-healing §6.4) ──────────
@@ -1805,3 +1825,33 @@ export interface TelemetryStatus {
 }
 
 export type { DmSystemEvent } from './dmSystemEvents.js';
+
+// ─── Federation peer state (docs/systems/federation.md, "Peer state") ────────
+
+/** Every value `federation_peers.status` takes. */
+export type FederationPeerStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'active'
+  | 'unreachable'
+  | 'needs_attention'
+  | 'rejected'
+  | 'revoked';
+
+/** Why a peer is in `needs_attention`. */
+export type FederationNeedsAttentionReason = 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete';
+
+/**
+ * Why a peer is `rejected`. `denied_by_local_admin` is our own refusal; every
+ * other value is the remote refusing us, or holding an older peering with us
+ * that its admin has to reset (`stale_peering_on_remote`).
+ */
+export type FederationRejectedReason =
+  | 'denied_by_local_admin'
+  | 'denied_by_remote'
+  | 'revoked_by_remote'
+  | 'expired_on_remote'
+  | 'stale_peering_on_remote';
+
+/** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
+export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;

@@ -1,6 +1,8 @@
 import { schema } from '../../db/index.js';
 import { getOurOrigin } from '../../utils/federationAuth.js';
+import { peerStatusReasonOf } from '../../utils/federationPeerState.js';
 import { or } from 'drizzle-orm';
+import type { FederationPeerStatusReason } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 export interface SanitizedPeer {
@@ -16,7 +18,7 @@ export interface SanitizedPeer {
   rotationInProgress: boolean;
   secretRotatedAt: number | null;
   autoRotateIntervalDays: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
+  statusReason: FederationPeerStatusReason | null;
 }
 
 
@@ -34,7 +36,7 @@ export function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): S
     rotationInProgress: row.pendingHmacSecret !== null,
     secretRotatedAt: row.secretRotatedAt,
     autoRotateIntervalDays: row.autoRotateIntervalDays,
-    needsAttentionReason: row.needsAttentionReason as SanitizedPeer['needsAttentionReason'],
+    statusReason: peerStatusReasonOf(row),
   };
 }
 

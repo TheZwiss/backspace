@@ -236,12 +236,17 @@ describe('POST /api/federation/peer/initiate — an auto-created pending row', (
     expect(outboxIds()).toEqual(['queued-dm']);
   });
 
-  it('on a refusal from the remote, is handed back to local traffic with its entries', async () => {
+  it('on a 409 from the remote, is parked until the remote resets its older peering (#309)', async () => {
     seedPendingRow('auto');
     seedQueuedDm();
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED',
-    }), { status: 409, headers: { 'content-type': 'application/json' } })));
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith('/api/federation/epoch')) {
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
+      }
+      return new Response(JSON.stringify({ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED' }), {
+        status: 409, headers: { 'content-type': 'application/json' },
+      });
+    }));
 
     const response = await initiate(app);
 
@@ -249,9 +254,11 @@ describe('POST /api/federation/peer/initiate — an auto-created pending row', (
     expect((response.json() as { code?: string }).code).toBe('PEER_EXISTS_RESET_REQUIRED');
     const rows = peerRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.status).toBe('pending');
-    expect(rows[0]!.initiatedBy).toBe('auto');
-    expect(outboxIds()).toEqual(['queued-dm']);
+    expect(rows[0]!.status).toBe('rejected');
+    expect(rows[0]!.statusReason).toBe('stale_peering_on_remote');
+    // Parked rows are not retried; the conversation replays from the mutation
+    // log once the peering is whole.
+    expect(outboxIds()).toEqual([]);
   });
 
   it('answers 409 without a second exchange while ensurePeered is handshaking with the origin', async () => {
@@ -314,8 +321,8 @@ describe('POST /api/federation/peer/initiate — pending rows the admin or the r
     sqlite.close();
   });
 
-  it.each(['admin', 'remote'] as const)('answers 409 for a %s-created pending row and leaves it alone', async (initiatedBy) => {
-    seedPendingRow(initiatedBy);
+  it('answers 409 for a remote-created pending row and leaves it alone', async () => {
+    seedPendingRow('remote');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -325,7 +332,29 @@ describe('POST /api/federation/peer/initiate — pending rows the admin or the r
     expect(fetchMock).not.toHaveBeenCalled();
     const rows = peerRows();
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.initiatedBy).toBe(initiatedBy);
+    expect(rows[0]!.initiatedBy).toBe('remote');
     expect(rows[0]!.hmacSecret).toBe(AUTO_SECRET);
+  });
+
+  it("retries an admin's own pending row with its secret and keeps the row on a transient failure", async () => {
+    seedPendingRow('admin');
+    const sentSecrets: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/api/federation/peer/accept')) {
+        sentSecrets.push((JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret);
+      }
+      throw new TypeError('fetch failed');
+    }));
+
+    const response = await initiate(app);
+
+    expect(response.statusCode).toBe(502);
+    expect(sentSecrets).toEqual([AUTO_SECRET]);
+    const rows = peerRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('pending');
+    expect(rows[0]!.initiatedBy).toBe('admin');
+    expect(rows[0]!.hmacSecret).toBe(AUTO_SECRET);
+    expect(rows[0]!.probeAttempts).toBe(1);
   });
 });

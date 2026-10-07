@@ -1,7 +1,7 @@
 import type { DmChannel, DmMessageWithUser, MessageWithUser } from '@backspace/shared';
-import { useAuthStore } from '../stores/authStore';
+import { isMe } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
-import { useSpaceStore, getMyUserIdForOrigin, resolveDmChannelId } from '../stores/spaceStore';
+import { useSpaceStore, resolveDmChannelId } from '../stores/spaceStore';
 
 /**
  * Routing of DM WebSocket events to the conversation they belong to.
@@ -28,8 +28,6 @@ import { useSpaceStore, getMyUserIdForOrigin, resolveDmChannelId } from '../stor
  * one copy every relay of the conversation is guaranteed to reach.
  */
 
-const HOME_ORIGIN = '';
-
 /** The chat store keys DM messages alongside space messages under one shape. */
 function asChatMessage(message: DmMessageWithUser): MessageWithUser {
   return message as unknown as MessageWithUser;
@@ -55,8 +53,7 @@ function learnDmChannelsFromOrigin(origin: string): Promise<boolean> {
 }
 
 function isOwnMessage(origin: string, message: DmMessageWithUser): boolean {
-  const myId = origin === HOME_ORIGIN ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
-  return message.userId === myId;
+  return isMe(message.user ?? { id: message.userId }, origin);
 }
 
 /** Set the sidebar preview of `channelId` and mark it unread when it is someone else's message in a DM not on screen. */
@@ -95,8 +92,10 @@ function deliverToConversation(origin: string, primaryId: string, message: DmMes
 
 /** A conversation no list placed: give it its own entry under the origin that sent it. */
 function deliverAsNewConversation(origin: string, message: DmMessageWithUser): void {
-  useChatStore.getState().addRealtimeMessage(message.dmChannelId, asChatMessage(message));
+  // The conversation is placed first: filing the message tells the alert
+  // subscribers, which ask whether the channel is a DM.
   useSpaceStore.getState().placeUnplacedDmMessage(origin, message);
+  useChatStore.getState().addRealtimeMessage(message.dmChannelId, asChatMessage(message));
   const { currentChannelId, markChannelUnread } = useChatStore.getState();
   if (message.dmChannelId !== currentChannelId && !isOwnMessage(origin, message)) {
     markChannelUnread(message.dmChannelId);

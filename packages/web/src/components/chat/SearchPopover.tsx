@@ -39,16 +39,19 @@ const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, rep
 
 function SearchResultRow({
   msg,
+  origin,
   query,
   onJumpToMessage,
 }: {
   msg: AnyMessage;
+  /** The instance that issued the result (the searched channel's). */
+  origin: string;
   query: string;
   onJumpToMessage: (id: string) => void;
 }) {
   useEmojiShortcodeNames();
   const { t } = useTranslation(['search']);
-  const canonical = useCanonicalUserView(msg.user ?? _FALLBACK_USER);
+  const canonical = useCanonicalUserView(msg.user ?? _FALLBACK_USER, origin);
   const displayName = canonical.displayName ?? canonical.username ?? '?';
   const avatar = msg.user ? canonical.avatar : undefined;
   return (
@@ -330,6 +333,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
               <SearchResultRow
                 key={msg.id}
                 msg={msg}
+                origin={getChannelOrigin(channelId)}
                 query={query}
                 onJumpToMessage={onJumpToMessage}
               />

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, DmMessageWithUser, User, UpdateSpaceRequest, CreateSpaceRequest, UpdateChannelRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { isSelf, canonicalUserKey, isDeliveryFromHome, activityKey, type PresenceSubject } from '../utils/identity';
+import { userKey, isIssuedByHome, withUserUpdate, type IdentityFields, type PresenceSubject } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import { locateDmChannel } from '../utils/dmChannelLookup';
 import { deriveMissingOneOnOneKeys, type PeerDmChannel } from '../utils/dmConversationKey';
@@ -40,11 +40,8 @@ import {
 import {
   getApiForOrigin,
   resolveOriginFromHostname,
-  resolveUserIdFromInstances,
-  getCachedUserIdForOrigin,
-  clearMyUserIdCache,
 } from '../utils/crossStoreResolvers';
-import { useAuthStore } from './authStore';
+import { useAuthStore, getMyUserIdForOrigin, isMe } from './authStore';
 import { useChatStore } from './chatStore';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
@@ -67,7 +64,7 @@ export class NotConnectedError extends Error {
 /**
  * A single cached view of a user, populated from one delivering origin.
  *
- * The userViews cache stores the best-known view of each canonical identity
+ * The userViews cache stores the best-known view of each person (`userKey`)
  * across every connected instance, regardless of whether the carrying channel
  * survived dedup. Mirrors `dmAlternatives` philosophy: information from
  * skipped ready payloads is still load-bearing for rendering.
@@ -319,7 +316,7 @@ interface SpaceState {
    */
   dmAlternatives: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /**
-   * canonicalUserKey → best-known view of that user. Populated from every wire
+   * userKey → best-known view of that person. Populated from every wire
    * surface that delivers a User object (DM members, message authors, friends,
    * space members, profile updates). Pruned only on full instance removal
    * (`removeInstanceSpaces`) and `reset`, never on transient WS disconnect —
@@ -433,10 +430,15 @@ interface SpaceState {
   /**
    * Set the status of the person `subject` names, as `origin` delivered it,
    * wherever the client shows them: roster rows and cached views, matched by
-   * `activityKey` (their home identity), never by a raw row id.
+   * `userKey` (their home identity), never by a raw row id.
    */
   updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => void;
-  updateUserEverywhere: (user: User) => void;
+  /**
+   * Apply a `user_updated` row issued by `origin` to the roster and DM member
+   * rows it is about (`withUserUpdate`): that instance's row with its id, and
+   * other instances' rows of the same person when it is their home's row.
+   */
+  updateUserEverywhere: (user: User, origin: string) => void;
   /** A member joined `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
   addMember: (spaceId: string, member: MemberWithUser) => void;
   /** A member left `spaceId`, the open space. Also replayed onto an in-flight detail fetch's roster. */
@@ -457,7 +459,11 @@ interface SpaceState {
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
   removeInstanceSpaces: (origin: string) => void;
   transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
-  findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
+  /**
+   * The open 1-on-1 DM with the person `target` names (as `targetOrigin`
+   * issued it), matched by `userKey`, or null.
+   */
+  findExistingDmForUser: (target: IdentityFields, targetOrigin: string) => { dm: DmChannel; origin: string } | null;
   reset: () => void;
 }
 
@@ -515,7 +521,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   _layoutUpdatedAt: 0,
 
   reset: () => {
-    clearMyUserIdCache();
     set({
       spaces: [],
       currentSpaceId: null,
@@ -620,8 +625,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   upsertUserView: (user, deliveringOrigin) => set((state) => {
-    const key = canonicalUserKey(user);
-    const incomingIsHome = isDeliveryFromHome(user, deliveringOrigin);
+    const key = userKey(user, deliveringOrigin);
+    const incomingIsHome = isIssuedByHome(user, deliveringOrigin);
     const existing = state.userViews.get(key);
 
     // Stub view never overwrites a home view.
@@ -1076,18 +1081,18 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   updateMemberPresence: (subject: PresenceSubject, origin: string, status: string) => {
-    const key = activityKey(subject, origin);
+    const key = userKey(subject, origin);
     set((state) => {
       const typedStatus = status as 'online' | 'idle' | 'dnd' | 'offline';
       // Mirror the status into the userViews cache so any component reading via
       // useCanonicalUserView (e.g. the FriendItem avatar dot) re-renders with
-      // fresh status — not just spaceStore.members which only feeds space UIs.
-      // Each entry is keyed as the origin that delivered it saw the user.
+      // fresh status, not just spaceStore.members which only feeds space UIs.
+      // The cache is keyed by the same `userKey`.
+      const entry = state.userViews.get(key);
       let changedViews: Map<string, UserViewEntry> | null = null;
-      for (const [viewKey, entry] of state.userViews) {
-        if (activityKey(entry.user, entry.deliveredBy) !== key) continue;
-        changedViews ??= new Map(state.userViews);
-        changedViews.set(viewKey, { ...entry, user: { ...entry.user, status: typedStatus } });
+      if (entry) {
+        changedViews = new Map(state.userViews);
+        changedViews.set(key, { ...entry, user: { ...entry.user, status: typedStatus } });
       }
       const nextUserViews = changedViews ?? state.userViews;
 
@@ -1104,24 +1109,35 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
       return {
         members: state.members.map(m =>
-          activityKey(m.user, spaceOriginOf(m.spaceId)) === key ? { ...m, user: { ...m.user, status: typedStatus } } : m
+          userKey(m.user, spaceOriginOf(m.spaceId)) === key ? { ...m, user: { ...m.user, status: typedStatus } } : m
         ),
         userViews: nextUserViews,
       };
     });
   },
 
-  updateUserEverywhere: (user: User) => {
-    set((state) => ({
-      members: state.members.map(m =>
-        m.userId === user.id ? { ...m, user: { ...m.user, ...user } } : m
-      ),
+  updateUserEverywhere: (user: User, origin: string) => {
+    set((state) => {
+      // A roster row is issued by its space's origin.
+      const spaceOrigins = new Map(state.spaces.map(s => [s.id, s._instanceOrigin ?? '']));
+      let changed = false;
+      const members = state.members.map(m => {
+        const updated = withUserUpdate(m.user, spaceOrigins.get(m.spaceId) ?? '', user, origin);
+        if (updated === m.user) return m;
+        changed = true;
+        return { ...m, user: updated };
+      });
+      return changed ? { members } : state;
+    });
+    commitDmOperation(patchEveryCopy(get().dmConversations, (dm, dmOrigin) => {
+      let changed = false;
+      const members = dm.members.map(m => {
+        const updated = withUserUpdate(m, dmOrigin, user, origin);
+        if (updated !== m) changed = true;
+        return updated;
+      });
+      return changed ? { ...dm, members } : dm;
     }));
-    commitDmOperation(patchEveryCopy(get().dmConversations, (dm) =>
-      dm.members.some(m => m.id === user.id)
-        ? { ...dm, members: dm.members.map(m => (m.id === user.id ? { ...m, ...user } : m)) }
-        : dm,
-    ));
   },
 
   addMember: (spaceId: string, member: MemberWithUser) => {
@@ -1344,26 +1360,23 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }));
   },
 
-  findExistingDmForUser: (targetUser) => {
+  findExistingDmForUser: (target, targetOrigin) => {
     const { dmChannels, channelOriginMap } = get();
-    const me = useAuthStore.getState().user;
-    if (!me) return null;
-
-    const targetHomeId = targetUser.homeUserId || targetUser.id;
+    const targetKey = userKey(target, targetOrigin);
 
     for (const dm of dmChannels) {
       if (dm.members.length !== 2) continue;
-      const other = dm.members.find(m => !isSelf(m, me));
-      if (!other) continue;
-      const otherHomeId = other.homeUserId || other.id;
-      if (otherHomeId === targetHomeId) {
-        return { dm, origin: channelOriginMap.get(dm.id) || '' };
-      }
+      const origin = channelOriginMap.get(dm.id) || '';
+      const other = dm.members.find(m => !isMe(m, origin));
+      if (other && userKey(other, origin) === targetKey) return { dm, origin };
     }
     return null;
   },
 
   removeInstanceSpaces: (origin: string) => {
+    // The instance is gone: the id its `ready` gave the user says nothing now.
+    useAuthStore.getState().forgetMyRow(origin);
+
     // Collect channel IDs before set() for chatStore cleanup
     const currentState = get();
     const channelIdsToRemove = new Set<string>();
@@ -1533,9 +1546,8 @@ export function dmCopyOnOrigin(channelId: string, origin: string): DmChannel | n
 }
 
 // ─── Cross-store resolvers (federation) ───────────────────────────────────────
-// The resolver/setter pairs and the WS-populated user-ID cache live in
-// `utils/crossStoreResolvers.ts` — a neutral module with no store imports —
-// to break a TDZ cycle: instanceStore registers these at top-level load, but
+// The resolver/setter pairs live in `utils/crossStoreResolvers.ts` — a
+// neutral module with no store imports — to break a TDZ cycle: instanceStore registers these at top-level load, but
 // a spaceStore-rooted import chain leaves spaceStore mid-load when that code
 // runs. Re-exported here for backward compatibility with existing import
 // sites. See the header comment in crossStoreResolvers.ts for details.
@@ -1543,21 +1555,9 @@ export {
   setApiForOriginResolver,
   getApiForOrigin,
   setOriginFromHostnameResolver,
-  setUserIdForOriginResolver,
-  setMyUserIdForOrigin,
   setTokenForOriginResolver,
   getTokenForOrigin,
 } from '../utils/crossStoreResolvers';
-
-/**
- * Returns the instance origin for a federated user based on their homeInstance.
- * '' = home/local user, 'https://...' = remote instance.
- */
-export function resolveUserOrigin(user: { homeInstance?: string | null }): string {
-  const host = user.homeInstance;
-  if (!host || host === window.location.host) return '';
-  return resolveOriginFromHostname(host);
-}
 
 /**
  * Returns the origin that is authoritative for this user's space layout.
@@ -1570,16 +1570,5 @@ export function getLayoutHomeOrigin(): string {
   return resolveOriginFromHostname(user.homeInstance);
 }
 
-/**
- * Returns the local user's ID on a given instance origin.
- * '' or falsy = home instance (returns authStore user ID).
- * 'https://...' = remote instance (returns the federated user ID on that instance).
- */
-export function getMyUserIdForOrigin(origin: string): string | undefined {
-  if (!origin) return useAuthStore.getState().user?.id;
-  // Direct cache (populated from WS ready) takes priority — always correct
-  const cached = getCachedUserIdForOrigin(origin);
-  if (cached) return cached;
-  // Fallback to instanceStore resolver (may have placeholder user during connection)
-  return resolveUserIdFromInstances(origin);
-}
+/** The signed-in user's row id on an instance; defined with the record it reads (`authStore.myRowIds`). */
+export { getMyUserIdForOrigin };

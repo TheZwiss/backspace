@@ -3,6 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore, addedRealtimeMessageEvents } from '../../stores/chatStore';
 import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import { homeIdentityOf } from '../../utils/identity';
 import { AudioManager } from '../../audio/AudioManager';
 import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
 import { getSfxVolume } from '../../utils/sfx';
@@ -47,14 +48,18 @@ function localShareOf(participants: readonly ParticipantInfo[]): { identity: str
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
-  // Federation-aware self-check: in federated calls, the participant userId
-  // can flip between localSnowflake (when activeDmCall resolves identity) and
-  // homeUserId (when activeDmCall is cleared during disconnect). We must
-  // recognize BOTH as "self" to prevent phantom join/leave sounds.
-  const myIds = new Set<string>();
-  if (currentUser?.id) myIds.add(currentUser.id);
-  if (currentUser?.homeUserId) myIds.add(currentUser.homeUserId);
-  const isSelf = (id: string) => myIds.has(id);
+  // A participant id is either the call's instance's row id or, in a
+  // federated call while the DM is not resolved (e.g. during disconnect), the
+  // LiveKit identity's home user id. Both name the signed-in user when they
+  // are the id that instance gave them or the id of their home identity.
+  const isSelf = (id: string): boolean => {
+    const voice = useVoiceStore.getState();
+    const callChannelId = voice.currentVoiceChannelId ?? voice.activeDmCall?.dmChannelId ?? null;
+    const callOrigin = callChannelId ? getChannelOrigin(callChannelId) : '';
+    if (id === getMyUserIdForOrigin(callOrigin)) return true;
+    const user = useAuthStore.getState().user;
+    return !!user && id === homeIdentityOf(user, '')?.userId;
+  };
 
   const isInitialMount = useRef(true);
   const initialState = useVoiceStore.getState();

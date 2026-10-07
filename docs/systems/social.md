@@ -8,7 +8,7 @@ Source files:
 - `packages/web/src/components/chat/FriendsPage.tsx` -- Friends page UI: tabs (Online/All/Pending/Add Friend/Activity), discover grid, search
 - `packages/web/src/components/modals/UserProfileModal.tsx` -- Profile modal with friendship actions and mutual display
 - `packages/web/src/utils/mutuals.ts` -- Cross-instance mutual friend/space loading with dedup
-- `packages/web/src/utils/identity.ts` -- Federated identity helpers (parseFederatedUsername, isSelf, canonicalUserMatch)
+- `packages/web/src/utils/identity.ts` -- Federated identity helpers (parseFederatedUsername, userKey, isMine; see `client-federation.md` section 5)
 - `packages/web/src/hooks/useWebSocket.ts` -- WS event handlers for social events (friend_request_received, etc.)
 - `packages/server/src/routes/federation.ts` -- Inbound friend relay event processors (5 functions)
 - `packages/server/src/utils/federationOutbox.ts` -- `buildFriendContextId()`, `getFriendEventTargets()`
@@ -357,9 +357,9 @@ The wire format of the queued event is identical to the pre-2026-04-25 flow; onl
 
 ### Failure Handling: Async Rollback
 
-When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`, `not_message_author`, `invalid_target` (a `friend_add` answering no pending request is `invalid_target`). Any other reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. `classifyRejection` (`utils/federationRejections.ts`) decides what each reason means; the list is in [federation.md "Rejection reasons"](federation.md#rejection-reasons). A `refused` reason (among them `recipient_not_found` and `invalid_target`, which a `friend_add` answering no pending request gets) deletes the outbox entry with no retry and runs the rollback below; a `retry` reason (for example `attribution_unproven`, see [federation.md §3](federation.md#3-identity-resolution)) keeps the request pending while the outbox retries it on backoff.
 
-For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
+For `refused` rejections, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
 
 1. Looks up the `friend_requests` row by `relayMessageId` (the stored `entityId`).
 2. Deletes the row.
@@ -430,20 +430,27 @@ The client handler in `useWebSocket.ts` removes the row from `socialStore` and s
 
 ---
 
-## 7. Initial Sync: Friend Backfill
+## 7. Pull Sync of Friend Events
 
-When a peer transitions to `active` (including at startup for peers with `lastSyncedAt = 0`), the federation worker calls `onPeerActivated(peerId, reason)`. One of its two unconditional invariants is `syncPeerMutationLog`, which pulls missed events from the peer's `/api/federation/sync` endpoint — including a dedicated friend sync pass.
+Friend events are pulled from each active peer's mutation log like DM and profile events: on every activation and periodically, with a cursor in the peer's clock and refusals kept for retry. The mechanism is in [federation.md "Pull sync"](federation.md#pull-sync); the `friend` context is its second pass, and its ordering unit is the friend pair.
 
-**Flow (`federationPeerActivation.ts:syncPeerMutationLog`):**
+### Applied-event ledger
 
-1. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), processing each batch via `processRelayEvents()` directly
-2. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same direct processing
-3. **Third pass (profile events):** Paginates through `POST /federation/sync` with `contextType: 'profile'`, same direct processing
-4. After all three passes complete, updates `lastSyncedAt = Date.now()` so the window advances on the next activation
+A friend processor acts on whatever request or friendship the pair has now, so it cannot tell a second delivery of an event from a new one: a replayed `friend_request_create` would recreate a request the recipient declined, a replayed `friend_request_update` or `friend_request_cancel` would answer a newer request, and a replayed `friend_remove` would end a friendship formed again after it. `processRelayEvents` therefore applies the five friend event types through the ledger `federation_applied_events`, on the live relay and the pull alike:
 
-At startup, `startupBootstrapSync()` scans for `status = 'active' AND lastSyncedAt = 0` peers and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each, preserving the original startup-sync semantics while using the unified path.
+- before dispatch, an event whose key `<eventType>:<messageId>` is recorded for its signing peer is answered `duplicate` and not applied;
+- an event the processor accepts is recorded;
+- a refused event is not recorded, so a retry can still apply it.
 
-The sync endpoint (`POST /api/federation/sync`) returns events from the `federation_mutation_log` table, which retains entries for 90 days. This means friend relationships established within the last 90 days are backfilled when a new peer connection is created.
+The key works because each friend event's `messageId` is its entity id (`friend_req:<pair>:<ms>`, `friend:<pair>:<ms>`, see "Entity ID Format"), unique per event and the same on the live relay and in the log. Ledger rows live 100 days, longer than the 90-day log a pull reads.
+
+**Order.** The ledger only stops a second delivery of one event. The order between different events of a pair (a request delivered after its cancel, a `friend_add` after the removal that followed it) is the pair's clock: an event older than the pair's last change here is accepted and changes nothing, on both paths, and the friend routes move the clock for changes made here. The rule is in [federation.md "Subject clocks"](federation.md#subject-clocks-member-and-friend-events-are-last-writer-wins).
+
+**Before the upgrade.** The ledger only knows events applied since migration 0022, whose time is `instance_settings.ledger_started_at`. The pull never reads a peer's friend events from before it, for any peer, including one peered again after the upgrade (federation.md "Pull sync", "Cursor"), so friend history from before it is never re-applied. The cost, accepted: a friend event lost before the upgrade is not healed by the pull.
+
+**Rolled-back requests.** When the outbox rolls back a `friend_request_create` (a `refused` answer, "Failure Handling" above), `invokePermanentFailureCallback` also deletes that event's mutation-log row, so `/sync` stops serving a request the sender no longer has.
+
+At startup, `startupBootstrapSync()` scans for `status = 'active' AND lastSyncedAt = 0` peers and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each. The sync endpoint (`POST /api/federation/sync`) serves friend events one of whose sides is homed at the requester, from the `federation_mutation_log` table, which retains entries for 90 days, so friend relationships established within the last 90 days are backfilled when a new peer connection is created.
 
 ---
 
@@ -520,7 +527,7 @@ All handlers also update `discoverStore` relationship state via lazy import.
 | WS Event | Store Method | Effect |
 |----------|-------------|--------|
 | `presence_update` | `updateFriendPresence(userId, status)` | Updates `status` on matching friend by ID (all origins). Server broadcasts to friends + DM co-members + space co-members (`collectProfileBroadcastTargetIds`). For federated friends, status is projected by the home instance via S2S `presence_update` relay (see `federation.md` §10 — Presence Sync) and broadcast to the same recipient set on the receiving instance. |
-| `user_updated` | `updateFriendProfile(user)` | Updates displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status on matching friend by ID |
+| `user_updated` | `updateFriendProfile(user, origin)` | Updates displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status (`profileFieldsOf`) on the friend rows the event is about (`userUpdateReach`, `identity.ts`): the issuing instance's row with that id, and other instances' rows of the same person when the event is their home's row. Never a friend on another instance who only has the same id. With `isDeleted`, `removeDeletedUser(user, origin)` drops the friend rows and pending requests it is about by the same rule (client-federation.md §5) |
 
 ---
 
@@ -605,21 +612,9 @@ Source: `packages/web/src/utils/identity.ts`
 
 Splits `"erin@nova.ddns.net"` into `{ baseName: "erin", domain: "nova.ddns.net" }`. Uses `indexOf('@')` (first occurrence). Returns `{ baseName: username, domain: null }` for non-federated usernames.
 
-### `isSelf(user, homeUser)`
+### Matching people
 
-Determines if a user object represents the current user (including cross-instance replicas):
-1. Same `id` -> true
-2. `user.id` in `_knownSelfIds` set (populated from WS `ready` events) -> true
-3. `user.homeInstance === window.location.host` AND base username matches -> true
-
-### `canonicalUserMatch(a, b)`
-
-Federation-safe identity comparison with cascading strategies:
-1. Same `id` -> true
-2. `homeUserId` cross-matching: `a.homeUserId === b.homeUserId`, or `a.homeUserId === b.id`, or `b.homeUserId === a.id` -> true
-3. **Username + homeInstance fallback:** Parse base names, compare home instances (accounting for null = local)
-
-Used by `UserProfileModal:getFriendshipStatus()` to find the correct friend/request for a viewed user across instances.
+Whether two rows are the same person (`userKey`) and whether a row is the signed-in user (`isMine`) are described in `client-federation.md` section 5. `UserProfileModal:getFriendshipStatus()` matches friends and requests to the viewed user by `userKey` of each row with its own origin.
 
 ---
 
@@ -633,7 +628,7 @@ Source: `packages/web/src/components/chat/FriendsPage.tsx`
 |-----|---------|--------------|
 | Online | Online friends only | Filters by `status !== 'offline'` |
 | All | Complete friend list | No filter |
-| Pending | Incoming + outgoing requests | Split into sections; incoming shows badge count in tab |
+| Pending | Incoming + outgoing requests | Split into sections; incoming shows badge count in tab (and on the mobile nav). A request is incoming when its other party (`user`) is its sender (`isIncomingRequest`, `isOutgoingRequest` in `socialStore.ts`): its ids are the holding instance's, so `fromId` is never compared with the session row's id |
 | Add Friend | Search + discover grid | Unified search/discover with direct-add |
 | Activity | Friends grouped by activity | Active (rich presence) / Online (no activity) / Offline sections |
 
@@ -675,16 +670,18 @@ Source: `packages/web/src/components/modals/UserProfileModal.tsx`
 
 ### Friendship Status Resolution
 
-Uses `getFriendshipStatus()` with `canonicalUserMatch()` for federation-safe matching:
+Uses `getFriendshipStatus()`, matching by person (`userKey`, client-federation.md section 5), never by id or username:
 
 ```typescript
-function getFriendshipStatus(viewedUser, currentUser, friends, requests): FriendshipStatus
-  → { state: 'self' }              // isSelf() check
-  | { state: 'friends', friend }   // canonicalUserMatch against friends list
-  | { state: 'outbound_pending', request }  // request.user matches viewed user, user.id === toId
-  | { state: 'inbound_pending', request }   // request.user matches viewed user, user.id === fromId
+function getFriendshipStatus(viewedUser, origin, self, friends, requests): FriendshipStatus
+  → { state: 'self' }              // isMine(viewedUser, origin, self)
+  | { state: 'friends', friend }   // userKey(friend, friend._instanceOrigin) === userKey(viewedUser, origin)
+  | { state: 'outbound_pending', request }  // request.user is the viewed person, user.id === toId
+  | { state: 'inbound_pending', request }   // request.user is the viewed person, user.id === fromId
   | { state: 'none' }
 ```
+
+On the user's own profile the action bar (Send Message, friend actions) is not shown.
 
 ### Tabs
 
@@ -697,7 +694,7 @@ function getFriendshipStatus(viewedUser, currentUser, friends, requests): Friend
 ### Action Buttons
 
 Displayed in footer based on friendship state:
-- Always: "Send Message" (opens/creates DM)
+- Every state except `self`: "Send Message" (opens/creates DM)
 - `none`: "Add Friend"
 - `outbound_pending`: "Cancel Request"
 - `inbound_pending`: "Accept" + "Ignore" (decline)

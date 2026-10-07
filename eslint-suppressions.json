@@ -115,11 +115,6 @@
   },
   "packages/server/src/routes/federation/handlers/peerHandshake.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    }
-  },
-  "packages/server/src/routes/federation/handlers/relay.ts": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 2
     }
   },
@@ -200,7 +195,7 @@
   },
   "packages/server/src/ws/events.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 8
+      "count": 6
     }
   },
   "packages/server/src/ws/handler.ts": {
@@ -248,7 +243,7 @@
   },
   "packages/web/src/components/chat/FriendsPage.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -411,9 +406,6 @@
     }
   },
   "packages/web/src/components/modals/spaceSettingsPanels/OverviewPanel.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -516,7 +508,7 @@
   },
   "packages/web/src/stores/chatStore.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 2
     }
   },
   "packages/web/src/stores/directoryStore.test.ts": {

@@ -5,7 +5,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
-import type { Friend, Activity, User } from '@backspace/shared';
+import type { Activity, User } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -18,14 +18,14 @@ function ActivityFriendRow({
   accentClass,
   onClickFriend,
 }: {
-  friend: Friend;
+  friend: TaggedFriend;
   isOffline: boolean;
   activities: Activity[];
   isRichActivity: boolean;
   accentClass: string;
-  onClickFriend: (e: React.MouseEvent, friend: Friend) => void;
+  onClickFriend: (e: React.MouseEvent, friend: TaggedFriend) => void;
 }) {
-  const canonical = useCanonicalUserView(friend as unknown as User);
+  const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   const { baseName } = parseFederatedUsername(canonical.username);
   const friendDisplayName = canonical.displayName ?? baseName;
 
@@ -100,7 +100,7 @@ export function ActivityPanel() {
 
   if (!memberListOpen) return null;
 
-  const handleFriendClick = (e: React.MouseEvent, friend: Friend) => {
+  const handleFriendClick = (e: React.MouseEvent, friend: TaggedFriend) => {
     e.stopPropagation();
     openUserProfile(
       {
@@ -120,6 +120,7 @@ export function ActivityPanel() {
         isAdmin: false,
         replicatedInstances: [],
       },
+      friend._instanceOrigin,
       e.currentTarget.getBoundingClientRect(),
       'left',
     );

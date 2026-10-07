@@ -37,6 +37,8 @@
   "peer_pending_local_admin": "Your admin has to approve federation with that instance first. Your request is listed in Connections.",
   "peer_unreachable": "The other instance cannot be reached right now.",
   "PEER_EXISTS_RESET_REQUIRED": "A connection with that instance already exists. Reset it before connecting again.",
+  "PEER_REVOKED": "That instance has revoked federation with this one.",
+  "PEER_HANDSHAKE_IN_PROGRESS": "That instance is connecting to this one right now. Try again in a moment.",
   "recipient_deleted": "That account was deleted.",
   "username_length_invalid": "Usernames must be between {{min}} and {{max}} characters long.",
   "username_characters_invalid": "Usernames can only contain lowercase letters, numbers and underscores.",

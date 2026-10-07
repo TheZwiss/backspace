@@ -6,7 +6,9 @@
 //
 // `?view=<view>&profile=<profile>` picks what to render; `?lang=ru|zh` (the
 // development language preview) switches the UI language and with it the
-// `:lang()` font stack.
+// `:lang()` font stack. `?as=self` signs in as the profile's own user, so the
+// card and the full profile show what the user sees on their own profile (no
+// Send Message, no friend actions).
 //
 // Views:
 //   popout   the profile card (`UserProfilePopout`), anchored top left.
@@ -135,6 +137,7 @@ function Workbench({ view, user }: { view: View; user: User }) {
   return (
     <UserProfilePopout
       user={user}
+      origin=""
       onClose={() => undefined}
       anchor={{ top: 16, left: 8, right: 8, bottom: 16, width: 0, height: 0 }}
     />
@@ -150,7 +153,8 @@ async function main(): Promise<void> {
 
   const view = readView(window.location.search);
   const user = PROFILES[readProfile(window.location.search)];
-  useAuthStore.setState({ user: VIEWER });
+  const asSelf = new URLSearchParams(window.location.search).get('as') === 'self';
+  useAuthStore.setState({ user: asSelf ? user : VIEWER });
   if (view === 'modal') {
     useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
   }

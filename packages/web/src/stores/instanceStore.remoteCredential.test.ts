@@ -77,12 +77,10 @@ const NATIVE_USER: Partial<User> = {
 // browsing somebody else's instance.
 const session: { user: Partial<User> | null } = { user: NATIVE_USER };
 
-vi.mock('./authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ user: session.user, token: 'tok' }),
-    { getState: () => ({ user: session.user, token: 'tok' }), setState: vi.fn(), subscribe: vi.fn() },
-  ),
-}));
+vi.mock('./authStore', async () => {
+  const state = { get user() { return session.user; }, token: 'tok' };
+  return (await import('../test/authStoreMock')).authStoreMock(() => state);
+});
 
 import { useInstanceStore, ensureRemoteCredential, RemoteLoginRequiredError } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';

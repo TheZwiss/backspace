@@ -11,7 +11,7 @@ vi.mock('../../audio/AudioManager', () => ({
 }));
 
 import { MemberRolesModal } from './MemberRolesModal';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { api, HttpError, type BackspaceApiClient } from '../../api/client';
@@ -247,7 +247,7 @@ describe('MemberRolesModal: hierarchy and held bits', () => {
       space: { ...SPACE, _instanceOrigin: ORBIT },
       members: [member('owner', []), member('lead-local', [LEADS]), member('helper', [HELPERS])],
     });
-    setMyUserIdForOrigin(ORBIT, 'lead-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
     open('helper');
     expect(checkbox('Council')).toBeDisabled();
     expect(checkbox('Helpers')).toBeEnabled();
@@ -358,7 +358,7 @@ describe('MemberRolesModal: saving', () => {
       space: { ...SPACE, _instanceOrigin: ORBIT },
       members: [member('owner', []), member('lead-local', [LEADS]), member('helper', [HELPERS])],
     });
-    setMyUserIdForOrigin(ORBIT, 'lead-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
     const remote = { spaces: { updateMember: vi.fn(async () => member('helper', [])) }, roles: { update: vi.fn() } };
     setApiForOriginResolver((origin) => (origin === ORBIT ? (remote as unknown as BackspaceApiClient) : api));
     const home = vi.spyOn(api.spaces, 'updateMember');

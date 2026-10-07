@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { generateSnowflake } from './snowflake.js';
+import { insertDmMember, setDmMemberClosed } from './dmMemberClosed.js';
 
 /**
  * DM conversation identity (docs/decisions/0002-dm-conversation-identity.md).
@@ -189,14 +190,13 @@ export function reconcileDmChannelFederatedId(
   // (under this local id or another) keeps the target's row, opened when this
   // row was open for them; anyone else moves over. Each read pointer follows
   // its person to the local id they keep (`keepNewerReadPointer`).
-  const reopen = rawDb.prepare(`UPDATE dm_members SET closed = 0 WHERE dm_channel_id = ? AND user_id = ?`);
   const drop = rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`);
   const move = rawDb.prepare(`UPDATE dm_members SET dm_channel_id = ? WHERE dm_channel_id = ? AND user_id = ?`);
   const keptIdOf = new Map<string, string>();
   for (const member of members) {
     const held = targetMembers.find(t => identityOfRow(t) === identityOfRow(member));
     if (held) {
-      if (member.closed === 0 && held.closed !== 0) reopen.run(targetId, held.user_id);
+      if (member.closed === 0 && held.closed !== 0) setDmMemberClosed(rawDb, targetId, held.user_id, false);
       drop.run(channelId, member.user_id);
       keptIdOf.set(member.user_id, held.user_id);
     } else {
@@ -345,7 +345,7 @@ function collapseToOneRowPerPerson(rawDb: Database.Database, channelId: string, 
       keepNewerReadPointer(rawDb, { userId: row.user_id, channelId }, { userId: kept.user_id, channelId });
     }
     if (kept.closed !== 0 && rows.some(r => r.closed === 0)) {
-      rawDb.prepare(`UPDATE dm_members SET closed = 0 WHERE dm_channel_id = ? AND user_id = ?`).run(channelId, kept.user_id);
+      setDmMemberClosed(rawDb, channelId, kept.user_id, false);
     }
   }
 }
@@ -366,8 +366,8 @@ function alignToPair(rawDb: Database.Database, channelId: string, a: HomeIdentif
       keepNewerReadPointer(rawDb, { userId: underOtherId.user_id, channelId }, { userId: party.id, channelId });
       continue;
     }
-    const closed = options.open === 'first' && party === b ? 1 : 0;
-    rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`).run(channelId, party.id, closed);
+    const closed = options.open === 'first' && party === b;
+    insertDmMember(rawDb, channelId, party.id, { closed });
   }
 }
 
@@ -435,9 +435,8 @@ export function findOrCreateOneOnOne(
 
     const channelId = generateSnowflake();
     rawDb.prepare(`INSERT INTO dm_channels (id, owner_id, federated_id, created_at) VALUES (?, NULL, ?, ?)`).run(channelId, key, Date.now());
-    const insertMember = rawDb.prepare(`INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, ?)`);
-    insertMember.run(channelId, a.id, 0);
-    insertMember.run(channelId, b.id, options.open === 'first' ? 1 : 0);
+    insertDmMember(rawDb, channelId, a.id);
+    insertDmMember(rawDb, channelId, b.id, { closed: options.open === 'first' });
     return { channelId, created: true, reconciled };
   })();
 }

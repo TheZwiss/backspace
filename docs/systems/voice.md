@@ -204,7 +204,7 @@ When the relayed first message creates a local 1-on-1 copy (`findOrCreateOneOnOn
 
 ### SoundController Federation Awareness
 
-The `SoundController` uses `isSelf(id)` which checks against BOTH `currentUser.id` (local snowflake) and `currentUser.homeUserId` (federated home ID). In federated calls, `updateParticipants` resolves identity to the local snowflake when `activeDmCall` is set, but reverts to raw `homeUserId` when it's cleared during disconnect. Both formats must be recognized as "self" to prevent phantom join/leave sounds.
+A participant id is the call's instance's row id, or, in a federated call while the DM is not resolved (when `activeDmCall` is cleared during disconnect), the LiveKit identity's home user id. `SoundController`'s `isSelf(id)` accepts both: the id the call's instance gave the user (`getMyUserIdForOrigin` of the origin of `currentVoiceChannelId ?? activeDmCall.dmChannelId`, `''` when there is no call, so the session row's `id` counts only when there is no call or the call is on the page's instance) and the user's home identity id (`homeIdentityOf(user, '').userId`). Without either, the user's own join and leave would play the sounds for someone else's. The identity rule is client-federation.md §5.
 
 **Disconnect teardown:** `roomRef` is set to `null` before calling `destroyRoom()`. This prevents `ParticipantDisconnected` events (fired during teardown) from triggering `updateParticipants`, which would cause `user_leave` sounds for departing participants alongside the disconnect sound.
 

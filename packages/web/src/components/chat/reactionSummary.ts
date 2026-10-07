@@ -1,15 +1,15 @@
 import type { TFunction } from 'i18next';
-import type { Reaction, User } from '@backspace/shared';
+import type { Reaction } from '@backspace/shared';
 import type { Formatters } from '../../i18n/formatters';
-import { isSelf } from '../../utils/identity';
+import { isMine, type SelfIdentity } from '../../utils/identity';
 
 /**
- * The current user's own reaction. Reactions carry the reacting user, which
- * `isSelf` matches across the user's instance ids; a row without one (older
- * payloads) falls back to the local id.
+ * The current user's own reaction, on a message the instance at `origin`
+ * issued. A reaction carries the reacting user's row (older payloads only its
+ * id); `isMine` reads either.
  */
-export function isOwnReaction(reaction: Reaction, currentUser: User | null): boolean {
-  return reaction.user ? isSelf(reaction.user, currentUser) : reaction.userId === currentUser?.id;
+export function isOwnReaction(reaction: Reaction, origin: string, self: SelfIdentity | null): boolean {
+  return isMine(reaction.user ?? { id: reaction.userId }, origin, self);
 }
 
 /** Who reacted with one emoji, as the tooltip says it. */
