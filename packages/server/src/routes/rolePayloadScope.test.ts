@@ -35,6 +35,7 @@ let currentUserId: string = USERS.owner;
 
 const sendToUser = vi.fn();
 const announceSpaceAccessChange = vi.fn();
+const announceUserAccessChange = vi.fn();
 
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
@@ -42,7 +43,8 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-vi.mock('../utils/auth.js', () => ({
+vi.mock('../utils/auth.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../utils/auth.js')>()),
   authenticate: async (req: { userId?: string }) => {
     req.userId = currentUserId;
   },
@@ -54,6 +56,7 @@ vi.mock('../ws/handler.js', () => ({
     sendToSpace: vi.fn(),
     sendToUser: (...args: unknown[]) => sendToUser(...args),
     announceSpaceAccessChange: (...args: unknown[]) => announceSpaceAccessChange(...args),
+    announceUserAccessChange: (...args: unknown[]) => announceUserAccessChange(...args),
     getUserSpaceEntries: () => new Map<string, Set<string>>().entries(),
   },
 }));
@@ -73,14 +76,17 @@ beforeEach(async () => {
   currentUserId = USERS.owner;
   sendToUser.mockReset();
   announceSpaceAccessChange.mockReset();
+  announceUserAccessChange.mockReset();
 
   const { spaceRoutes } = await import('./spaces.js');
   const { channelRoutes } = await import('./channels.js');
   const { exploreRoutes } = await import('./explore.js');
+  const { adminRoutes } = await import('./admin.js');
   app = Fastify();
   await app.register(spaceRoutes);
   await app.register(channelRoutes);
   await app.register(exploreRoutes);
+  await app.register(adminRoutes);
 });
 
 function as(userId: string): void {
@@ -332,5 +338,70 @@ describe('a member whose roles change', () => {
     expect(res.statusCode).toBe(200);
     expect(announceSpaceAccessChange).toHaveBeenCalledWith(SPACE_ID, [USERS.member]);
     expectStoredBits((await getDetail(USERS.member)).body.roles);
+  });
+});
+
+describe('an ownership transfer', () => {
+  it('is announced for the former and the new owner, and their refetches carry or drop the bits', async () => {
+    expectStoredBits((await getDetail(USERS.owner)).body.roles);
+    expectNoBits((await getDetail(USERS.member)).body.roles);
+
+    as(USERS.owner);
+    const res = await app.inject({
+      method: 'PATCH', url: `/api/spaces/${SPACE_ID}/transfer-ownership`, payload: { newOwnerId: USERS.member },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(announceSpaceAccessChange).toHaveBeenCalledTimes(1);
+    expect(announceSpaceAccessChange).toHaveBeenCalledWith(SPACE_ID, [USERS.owner, USERS.member]);
+
+    expectNoBits((await getDetail(USERS.owner)).body.roles);
+    expect(stringToPermissions((await getDetail(USERS.owner)).body.myPermissions) & PermissionBits.MANAGE_ROLES).toBe(0n);
+    expectStoredBits((await getDetail(USERS.member)).body.roles);
+  });
+
+  it('announces nothing when refused', async () => {
+    as(USERS.manager);
+    const res = await app.inject({
+      method: 'PATCH', url: `/api/spaces/${SPACE_ID}/transfer-ownership`, payload: { newOwnerId: USERS.member },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(announceSpaceAccessChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('an instance admin change', () => {
+  function setAdmin(userId: string, isAdmin: boolean) {
+    as(USERS.instanceAdmin);
+    return app.inject({ method: 'PATCH', url: `/api/admin/users/${userId}/role`, payload: { isAdmin } });
+  }
+
+  it('is announced to the promoted user alone, once for each of their spaces, and their refetch carries the bits', async () => {
+    testDb.insert(schema.spaceMembers).values({ spaceId: REQUEST_SPACE_ID, userId: USERS.member, joinedAt: 1 }).run();
+    expectNoBits((await getDetail(USERS.member)).body.roles);
+
+    expect((await setAdmin(USERS.member, true)).statusCode).toBe(200);
+    expect(announceUserAccessChange).toHaveBeenCalledTimes(1);
+    const [userId, spaceIds] = announceUserAccessChange.mock.calls[0] as [string, string[]];
+    expect(userId).toBe(USERS.member);
+    expect([...spaceIds].sort()).toEqual([REQUEST_SPACE_ID, SPACE_ID].sort());
+    expect(announceSpaceAccessChange).not.toHaveBeenCalled();
+
+    expectStoredBits((await getDetail(USERS.member)).body.roles);
+  });
+
+  it('is announced to the demoted user, and their refetch drops the bits', async () => {
+    expect((await setAdmin(USERS.member, true)).statusCode).toBe(200);
+    announceUserAccessChange.mockClear();
+
+    expect((await setAdmin(USERS.member, false)).statusCode).toBe(200);
+    expect(announceUserAccessChange).toHaveBeenCalledTimes(1);
+    expect(announceUserAccessChange).toHaveBeenCalledWith(USERS.member, [SPACE_ID]);
+
+    expectNoBits((await getDetail(USERS.member)).body.roles);
+  });
+
+  it('announces nothing when the flag does not change', async () => {
+    expect((await setAdmin(USERS.member, false)).statusCode).toBe(200);
+    expect(announceUserAccessChange).not.toHaveBeenCalled();
   });
 });

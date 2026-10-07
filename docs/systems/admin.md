@@ -495,6 +495,7 @@ Request: { isAdmin: boolean }
 **Side effects on success:**
 - Updates `users.isAdmin` to 1 or 0
 - Sends `user_updated` WebSocket event to target user via `connectionManager.sendToUser()` so their UI reflects the change immediately
+- When the flag changed: an instance admin holds every permission in every space, so the target is sent `space_access_changed` once for each space they belong to on this instance (`connectionManager.announceUserAccessChange`, with that space's `space_voice_state`), and voice permissions are re-checked in each. Their client refetches each space's detail, which carries role bits only while they hold `MANAGE_ROLES` (permissions.md, "Who receives role and override data"). No other member is sent anything.
 
 ### Reset Password (POST /api/admin/users/:id/reset-password)
 

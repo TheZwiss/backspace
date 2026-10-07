@@ -149,7 +149,7 @@ handler alike, so both paths reach the same audience. (`reaction_added` and
 | `category_updated` | category, spaceId | space |
 | `category_deleted` | categoryId, spaceId | space |
 | `channel_layout_updated` | spaceId, channels[], categories[] | space |
-| `space_access_changed` | spaceId | space |
+| `space_access_changed` | spaceId | space; one user for an instance admin change |
 | `space_layout_updated` | layout[], folders[], updatedAt? | user |
 | `notification_settings_updated` | setting: NotificationSetting | user (all of their sockets on this instance) |
 
@@ -169,9 +169,15 @@ old server gets a 404 from the list route, logs it and uses the defaults.
 `space_access_changed` follows any change to the space's roles or to a
 member's roles: `POST`, `PATCH`, `DELETE /spaces/:id/roles[/:rid]`,
 `PATCH /spaces/:id/members/:uid`, `POST`/`DELETE /spaces/:id/members/:uid/roles`.
-What the receiver may see or do there, and how the roles and members look,
-may be different now. The client refetches the space's detail from its own
-instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
+It also follows `PATCH /spaces/:id/transfer-ownership` (sent to the space,
+after `space_updated`; the former and the new owner are the members whose own
+permissions changed), and `PATCH /admin/users/:id/role` when the admin flag
+changes: an instance admin holds every permission in every space on the
+instance, so that user alone is sent one event for each space they belong to
+(`ConnectionManager.announceUserAccessChange`), followed by the
+`space_voice_state` they can see there now. What the receiver may see or do
+there, and how the roles and members look, may be different now. The client
+refetches the space's detail from its own instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
 (no skeleton) and no message cache touched. One action can send several of
 these events (a member role edit, quick role moves), and their refetches can
 answer out of order; which load lands, and what lands for a space that is
@@ -181,7 +187,8 @@ goes through the `channel_deleted` path, which also closes it when it is
 open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). The detail carries no
 voice presence, so the members whose own permissions the change may reach
 (the member whose roles changed; the holders of a changed or deleted role;
-everyone for @everyone; nobody for a new role) are each sent a
+everyone for @everyone; nobody for a new role; the former and the new owner)
+are each sent a
 `space_voice_state` right after the event, built by `pushSpaceVoiceState`
 exactly as for a mid-session join (below): a voice channel a member just
 gained shows who is in it at once (`ConnectionManager.announceSpaceAccessChange`).

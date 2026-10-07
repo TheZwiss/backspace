@@ -565,15 +565,26 @@ role, `memberRolesView` a member row's roles. Every send site goes through it:
 | `POST /api/spaces/:id/roles`, `PATCH /api/spaces/:id/roles/:rid` answers | the actor | `roleView`, with the actor's permissions after the change (an actor who switched off their own `MANAGE_ROLES` gets no bits back) |
 | `GET /channels/:id/overrides`, `GET /categories/:id/overrides` | managers | refused unless `viewerReadsPermissionData` |
 | `member_joined` | the space | a new member has no roles: `roles: []` |
-| `space_access_changed` | the space | carries only `spaceId` |
+| `space_access_changed` | the space; after an instance admin change, that user alone | carries only `spaceId` |
 | `GET /api/spaces/explore`, `GET /api/spaces/invite/:code/preview`, `GET /api/directory/spaces` | anyone | carry no role or override data |
 
-**When a member's roles change.** Every role write and member role write is
-followed by `space_access_changed` (websocket.md), and the client refetches
-`GET /api/spaces/:id`, which is shaped for what the member holds now. A member
-given `MANAGE_ROLES` gets the bits on that refetch; a member who loses it gets
-the list without them, which replaces the one in the store. A `ready` is
-shaped the same way at every connect.
+**When a member's permissions change.** Three kinds of change move
+`MANAGE_ROLES`, and each is followed by `space_access_changed` (websocket.md):
+
+- a role write or member role write: sent to the space;
+- an ownership transfer (`PATCH /api/spaces/:id/transfer-ownership`): sent to
+  the space, after `space_updated`, with the former and the new owner as the
+  members whose own permissions changed;
+- an instance admin promoting or demoting a user
+  (`PATCH /api/admin/users/:id/role`), when the flag changes: sent to that
+  user alone, one event for each space they belong to on this instance
+  (`ConnectionManager.announceUserAccessChange`), since no other member's
+  permissions changed.
+
+The client refetches `GET /api/spaces/:id`, which is shaped for what the
+member holds now. A member who gains `MANAGE_ROLES` gets the bits on that
+refetch; a member who loses it gets the list without them, which replaces the
+one in the store. A `ready` is shaped the same way at every connect.
 
 **Federation.** A user whose home is another instance connects to the space's
 instance directly and is a member there under their local replicated id, so

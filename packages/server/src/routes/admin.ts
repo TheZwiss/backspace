@@ -5,6 +5,7 @@ import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
 import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia, cleanupStaleTusSessions } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from '../ws/handler.js';
+import { checkVoicePermissions } from '../ws/events.js';
 import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
 import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { sanitizeUser } from '../utils/sanitize.js';
@@ -255,6 +256,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         type: 'user_updated',
         user: sanitizeUser(updated),
       });
+
+      // An instance admin holds every permission in every space on this
+      // instance, so the target's own permissions changed in each space they
+      // belong to. Nobody else's did: only the target refetches those spaces.
+      if (target.isAdmin !== updated.isAdmin) {
+        const spaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
+          .from(schema.spaceMembers)
+          .where(eq(schema.spaceMembers.userId, targetId))
+          .all()
+          .map(m => m.spaceId);
+        connectionManager.announceUserAccessChange(targetId, spaceIds);
+        for (const spaceId of spaceIds) checkVoicePermissions(spaceId);
+      }
 
       return reply.code(200).send(toAdminUser(updated));
     },

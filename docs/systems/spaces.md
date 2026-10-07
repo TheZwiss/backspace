@@ -454,7 +454,7 @@ All paths: insert `space_members`, register in `connectionManager`, broadcast `m
 **Body:** `{ newOwnerId: string }`
 **Validation:** New owner must be a member, cannot transfer to self.
 
-Updates `spaces.ownerId`, broadcasts `space_updated` WS event.
+Updates `spaces.ownerId`, broadcasts `space_updated` WS event, then `space_access_changed` to the space with the former and the new owner as the members whose own permissions changed (each also gets a `space_voice_state`; websocket.md). Their clients refetch the detail, so the new owner gets the role bits and the former owner loses them unless a role still grants `MANAGE_ROLES` (permissions.md, "Who receives role and override data"). Voice permissions are re-checked.
 
 **Client (`TransferOwnershipModal`):** Member picker with search, two-step confirm. Shows warning "You will become a regular member." Uses toast notification on success.
 

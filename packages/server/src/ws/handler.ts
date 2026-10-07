@@ -492,6 +492,21 @@ class ConnectionManager implements ReplicaSessionHost {
     }
   }
 
+  /**
+   * After a change to one user's own permissions in each of `spaceIds` that
+   * no other member's view depends on (an instance admin promoted or demoted:
+   * websocket.md, `space_access_changed`). Only that user is told, with one
+   * `space_access_changed` per space on each of their connections, and is
+   * then sent the voice state they can see there now (`pushSpaceVoiceState`).
+   */
+  announceUserAccessChange(userId: string, spaceIds: Iterable<string>): void {
+    if (this.getUserConnections(userId).size === 0) return;
+    for (const spaceId of new Set(spaceIds)) {
+      this.sendToUser(userId, { type: 'space_access_changed', spaceId });
+      this.pushSpaceVoiceState(userId, spaceId);
+    }
+  }
+
   getUserSpaces(userId: string): Set<string> {
     return this.userSpaces.get(userId) ?? new Set();
   }

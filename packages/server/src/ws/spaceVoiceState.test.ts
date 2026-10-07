@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { PermissionBits, permissionsToString } from '../utils/permissions.js';
@@ -357,5 +358,73 @@ describe('connectionManager.announceSpaceAccessChange', () => {
     cm.announceSpaceAccessChange(spaceId, ['u-quiet']);
 
     expect(frames(ws).map((e) => e.type)).toEqual(['space_access_changed']);
+  });
+});
+
+describe('connectionManager.announceUserAccessChange', () => {
+  // An instance admin promoted or demoted: their own permissions changed in
+  // every space they belong to, and nobody else's did.
+  function frames(ws: FakeWs): { type: string; [key: string]: unknown }[] {
+    return ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+  }
+
+  async function twoSpaces() {
+    const cm = await importManager();
+    const voiceSpace = 'sp-admin-voice';
+    const plainSpace = 'sp-admin-plain';
+    const privateCh = `${voiceSpace}-vc-private`;
+    seedSpace(voiceSpace);
+    seedEveryoneRole(voiceSpace);
+    seedChannel(privateCh, voiceSpace, 'voice');
+    seedDenyViewOverride(privateCh, voiceSpace);
+    testDb.insert(schema.spaces).values({ id: plainSpace, name: 'Plain', ownerId: 'owner', createdAt: Date.now() }).run();
+    seedEveryoneRole(plainSpace);
+    cm.createRoom(privateCh, 'space', { type: 'space', spaceId: voiceSpace });
+    cm.joinRoom(privateCh, 'u-admin-occupant');
+    cm.setVoiceUserStatus('u-admin-occupant', false, false, false, false);
+    return { cm, voiceSpace, plainSpace, privateCh };
+  }
+
+  it('sends the user one space_access_changed per space on each connection, and nothing to other members', async () => {
+    const { cm, voiceSpace, plainSpace, privateCh } = await twoSpaces();
+    seedMember(voiceSpace, 'u-promoted');
+    testDb.insert(schema.spaceMembers).values({ spaceId: plainSpace, userId: 'u-promoted', joinedAt: Date.now() }).run();
+    const tabA = fakeWs();
+    const tabB = fakeWs();
+    cm.addConnection('u-promoted', tabA as never);
+    cm.addConnection('u-promoted', tabB as never);
+    cm.setUserSpaces('u-promoted', [voiceSpace, plainSpace]);
+    seedMember(voiceSpace, 'u-other');
+    const other = fakeWs();
+    cm.addConnection('u-other', other as never);
+    cm.setUserSpaces('u-other', [voiceSpace]);
+    testDb.update(schema.users).set({ isAdmin: 1 }).where(eq(schema.users.id, 'u-promoted')).run();
+
+    cm.announceUserAccessChange('u-promoted', [voiceSpace, plainSpace, voiceSpace]);
+
+    for (const ws of [tabA, tabB]) {
+      const sent = frames(ws);
+      expect(sent.filter((e) => e.type === 'space_access_changed')).toEqual([
+        { type: 'space_access_changed', spaceId: voiceSpace },
+        { type: 'space_access_changed', spaceId: plainSpace },
+      ]);
+      const voice = sent.find((e) => e.type === 'space_voice_state') as unknown as { spaceId: string; voiceStates: Record<string, string[]> };
+      expect(voice.spaceId).toBe(voiceSpace);
+      expect(voice.voiceStates[privateCh]).toEqual(['u-admin-occupant']);
+    }
+    expect(frames(other)).toEqual([]);
+  });
+
+  it('sends nothing when the user has no connection', async () => {
+    const { cm, voiceSpace } = await twoSpaces();
+    seedMember(voiceSpace, 'u-offline');
+    seedMember(voiceSpace, 'u-online');
+    const online = fakeWs();
+    cm.addConnection('u-online', online as never);
+    cm.setUserSpaces('u-online', [voiceSpace]);
+
+    cm.announceUserAccessChange('u-offline', [voiceSpace]);
+
+    expect(frames(online)).toEqual([]);
   });
 });

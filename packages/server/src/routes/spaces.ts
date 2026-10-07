@@ -74,10 +74,11 @@ function generateInviteCode(): string {
 }
 
 /**
- * After a change to the space's roles or to a member's roles: every connected
- * member is told with `space_access_changed` (docs/systems/websocket.md) and
- * refetches the space's detail, which carries their permissions, the channels
- * they can see, the roles and the member list. `affectedUserIds` are the
+ * After a change to the space's roles, to a member's roles or to its owner
+ * (the owner holds every permission): every connected member is told with
+ * `space_access_changed` (docs/systems/websocket.md) and refetches the
+ * space's detail, which carries their permissions, the channels they can
+ * see, the roles and the member list. `affectedUserIds` are the
  * members whose own permissions may have changed; each is also sent the voice
  * state they can see now (`announceSpaceAccessChange`). Voice permissions are
  * re-checked here too, since a role can carry SPEAK or STREAM.
@@ -1466,6 +1467,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       type: 'space_updated',
       space: spaceData,
     });
+
+    // The owner holds every permission, so the former owner's and the new
+    // owner's own permissions both changed: their clients refetch the detail,
+    // which carries role bits only for what each holds now.
+    announceAccessChange(id, [request.userId, newOwnerId]);
 
     return reply.code(200).send(spaceData);
   });
