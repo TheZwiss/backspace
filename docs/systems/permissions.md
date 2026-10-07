@@ -545,7 +545,7 @@ and category Permissions tabs, and every one of those needs `MANAGE_ROLES`
 | Viewer | Roles | Member rows' roles | Override rows | Own permissions |
 |---|---|---|---|---|
 | Not a member (explore, invite preview, directory, join previews) | none | none | none | none |
-| Member without `MANAGE_ROLES` (a `MANAGE_CHANNELS` holder and a member whose role has overrides included) | every role: `id`, `spaceId`, `name`, `color`, `position`, `isEveryone`, `createdAt`; no `permissions` field | display fields only | refused (`403 missing_permission`) | `myPermissions` on the space and on each channel it can see; `isPrivate` on channels and categories |
+| Member without `MANAGE_ROLES` (a `MANAGE_CHANNELS` holder and a member whose role has overrides included) | every role: `id`, `spaceId`, `name`, `color`, `position`, `isEveryone`, `createdAt`; no `permissions` field | display fields only | refused (`403 missing_permission`) | `myPermissions` on the space and on each channel it can see. `isPrivate` comes on channels and categories in `GET /api/spaces/:id`, on channels only in `ready`, and on neither in the `public-join` answer and `join_request_accepted` |
 | Member who holds `MANAGE_ROLES` in the space (the owner, instance admins and `ADMINISTRATOR` holders hold it) | every role with its display fields and `permissions` | display fields only | `GET /channels/:id/overrides`, `GET /categories/:id/overrides` | the same |
 
 `MANAGE_ROLES` counts at space level only: a member whose role is allowed it
