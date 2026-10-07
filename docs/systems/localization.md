@@ -136,7 +136,13 @@ keep in step; for the shipped languages that is:
 | en | `_one`, `_other` |
 | de | `_one`, `_other` |
 | ru | `_one`, `_few`, `_many`, `_other` |
+| pt | `_one`, `_many`, `_other` |
 | zh | `_other` |
+
+Portuguese `_many` is CLDR's category for exact millions (`1000000`,
+`2000000`), the counts a spelled-out form would write as "1 milhão de
+membros". i18next selects it for those counts, so every Portuguese plural key
+carries it; with the count rendered as digits it reads the same as `_other`.
 
 A catalog directory whose code `Intl` does not know is a finding of its own,
 because the runtime could not pluralize it either.
@@ -247,10 +253,11 @@ Detection order on startup:
 Each entry in `supportedLanguages` carries a `released` flag. Only released
 languages appear in the picker (`availableLanguages`) or can be chosen by
 detection; a stored choice for an unreleased language is ignored. English,
-Russian, German and Chinese are all released. The flag exists for the next
-language: it lands surface by surface with `released: false`, so a release cut
-in between stays free of that language rather than shipping it half
-translated, and the PR that finishes it flips the flag. Tests reach an
+Russian, German, Brazilian Portuguese and Chinese are all released. The flag
+exists for the next language: it lands surface by surface with
+`released: false`, so a release cut in between stays free of that language
+rather than shipping it half translated, and the PR that finishes it flips the
+flag. Tests reach an
 unreleased language with `setLanguage` or `initI18n({ releasedLanguages })`;
 people reach it with `?lang=<code>` on the URL, which works in development
 builds only and is never persisted.
@@ -262,8 +269,8 @@ language keeps following their browser; only the picker persists.
 
 The selector lives in the user settings modal, Account panel, section
 "Language". It lists `supportedLanguages`, showing each language by its
-`nativeName` (English, Русский, Deutsch, 简体中文); the list is not translated,
-because a user who cannot read the current language needs to find their own.
+`nativeName` (English, Русский, Deutsch, Português do Brasil, 简体中文); the
+list is not translated, because a user who cannot read the current language needs to find their own.
 
 Changing the language:
 - Persists the choice.
@@ -424,8 +431,8 @@ The main process shows a handful of strings outside the renderer: tray menu
 items, the application menu (macOS, and the accelerator-only Edit menu on
 Windows and Linux), the update items, the recovery page and the instance
 picker. The menu strings live in `packages/desktop/src/l10n.ts` as a small
-typed catalog with `en`, `ru`, `de` and `zh` entries; `translateDesktop(language,
-key, values?)` reads it. The recovery and instance-picker pages carry their
+typed catalog with `en`, `ru`, `de`, `pt` and `zh` entries;
+`translateDesktop(language, key, values?)` reads it. The recovery and instance-picker pages carry their
 own inline `STRINGS` tables, because they are shown precisely when the
 renderer is unavailable.
 
@@ -582,7 +589,8 @@ treatment differs by script:
   UI and Microsoft YaHei, then the Noto CJK family). A Han webfont is several
   megabytes, and the OS pairs are designed to sit together, so vendoring buys
   nothing there.
-- **English and German** stay on DM Sans.
+- **English, German and Brazilian Portuguese** stay on DM Sans, whose `latin`
+  subset covers the Portuguese diacritics.
 
 Each surface is internally consistent, although the landing page keeps a
 platform stack for Russian while the app uses Inter, so the same Russian words
@@ -601,8 +609,8 @@ is omitted, so the Russian page uses it and the English page does not.
 
 1. Create `packages/web/src/locales/<lng>/` with every namespace file.
 2. Add `{ code, nativeName, dir }` to `supportedLanguages`.
-3. Add the entry to the desktop catalog in `l10n.ts` and the recovery
-   window's inline catalog.
+3. Add the entry to the desktop catalog in `l10n.ts` and to the inline
+   catalogs of the recovery window and the instance picker.
 4. Run `pnpm typecheck`; the check script confirms parity.
 
 Nothing else. If a fifth step turns out to be needed, the fix is to remove

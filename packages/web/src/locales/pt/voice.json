@@ -131,6 +131,14 @@
     "electronWindowsAudioNote": "O loopback do Windows pode capturar o áudio da chamada quando restrictOwnAudio não é compatível",
     "electronMacAudioNote": "O macOS 13+ exige a permissão de Gravação de Tela e Áudio do Sistema",
     "electronLinuxAudioNote": "O Linux exige compatibilidade com PulseAudio; o áudio do Backspace também pode ser capturado",
+    "systemAudioNote": {
+      "excluded": "Os espectadores ouvem o som do seu computador, mas não o chat de voz nem outros áudios do Backspace.",
+      "excludedMac": "Os espectadores ouvem o som do seu Mac, mas não o chat de voz nem outros áudios do Backspace. O macOS pede a permissão de Gravação de Tela e Áudio do Sistema.",
+      "includedWindows": "Esta versão do Windows compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. No Windows 11, o áudio do próprio Backspace fica de fora.",
+      "includedMac": "Esta versão do macOS compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. No macOS 14.2 e posteriores, o áudio do próprio Backspace fica de fora. O macOS pede a permissão de Gravação de Tela e Áudio do Sistema.",
+      "includedLinux": "O Linux compartilha todo o som, inclusive o chat de voz: os espectadores vão ouvir a própria voz. Requer PulseAudio, ou PipeWire com pipewire-pulse.",
+      "unavailableMac": "O áudio do sistema requer o macOS 13 ou posterior."
+    },
     "systemAudioStartFailed": "Não foi possível iniciar a transmissão com o áudio do sistema. Desative Compartilhar áudio do sistema se esta plataforma não for compatível.",
     "systemAudioAddFailed": "Não foi possível adicionar o áudio do sistema à transmissão.",
     "systemAudioAdding": "Adicionando áudio do sistema…",
@@ -217,6 +225,7 @@
   },
   "joinSheet": {
     "peopleInVoice_one": "{{count}} pessoa na voz",
+    "peopleInVoice_many": "{{count}} pessoas na voz",
     "peopleInVoice_other": "{{count}} pessoas na voz",
     "switchNotice": "Você vai sair de <current>{{current}}</current> e entrar em <target>{{target}}</target>",
     "checkingCamera": "Verificando câmera…",
@@ -237,12 +246,12 @@
     "unmuteMicrophone": "Reativar microfone",
     "muteMicrophone": "Silenciar microfone",
     "switchChannel": "Trocar de canal",
-    "join": "Entrar na voz",
-    "peopleInVoice_many": "{{count}} pessoas na voz"
+    "join": "Entrar na voz"
   },
   "mobileCall": {
     "collapse": "Recolher chamada",
     "connectedCount_one": "{{count}} conectado",
+    "connectedCount_many": "{{count}} conectados",
     "connectedCount_other": "{{count}} conectados",
     "viewMembers": "Ver membros",
     "micDenied": {
@@ -252,7 +261,7 @@
     },
     "shareScreen": "Compartilhar tela",
     "stopSharingScreen": "Parar de compartilhar a tela",
-    "disconnect": "Desconectar da chamada",
-    "connectedCount_many": "{{count}} conectados"
-  }
+    "disconnect": "Desconectar da chamada"
+  },
+  "connectLocked": "Você não tem permissão para se conectar a este canal"
 }

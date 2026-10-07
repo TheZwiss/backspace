@@ -102,11 +102,11 @@
       "toast": {
         "disconnected": "Desconectado com sucesso",
         "deleted_one": "Identidade excluída com sucesso",
+        "deleted_many": "Identidade excluída em {{count}} instâncias",
         "deleted_other": "Identidade excluída em {{count}} instâncias",
         "ownsSpaces": "{{host}}: transfira primeiro a propriedade dos espaços",
         "failed": "{{host}}: {{error}}",
-        "failedGeneric": "Falhou",
-        "deleted_many": "Identidade excluída em {{count}} instâncias"
+        "failedGeneric": "Falhou"
       }
     },
     "action": {
@@ -170,7 +170,6 @@
       "active": "Ativa",
       "pending": "Pendente",
       "unreachable": "Inacessível",
-      "rejected": "Rejeitada (peering automático negado)",
       "rejectedShort": "Rejeitada",
       "revoked": "Revogada",
       "awaitingApproval": "Aguardando aprovação",
@@ -196,6 +195,7 @@
       "unreachableMeta": "Visto por último: {{lastSeen}} · {{failures}}",
       "activeMeta": "Visto por último: {{lastSeen}} · Sincronizada: {{synced}}",
       "failures_one": "{{count}} falha",
+      "failures_many": "{{count}} falhas",
       "failures_other": "{{count}} falhas",
       "reinitiate": "Reiniciar peering",
       "deletePermanently": "Excluir permanentemente",
@@ -207,6 +207,7 @@
       "autoRotate": "Rotação automática",
       "rotationStatus": "Status da rotação",
       "rotateEvery_one": "A cada {{count}} dia",
+      "rotateEvery_many": "A cada {{count}} dias",
       "rotateEvery_other": "A cada {{count}} dias",
       "defaultTag": "(padrão)",
       "inProgress": "Em andamento",
@@ -220,12 +221,31 @@
       "rotationInProgress": "Já há uma rotação em andamento",
       "revoke": "Revogar",
       "editInterval": "Editar intervalo de rotação",
-      "failures_many": "{{count}} falhas",
-      "rotateEvery_many": "A cada {{count}} dias"
+      "reason": {
+        "auth_failures": "Entregas assinadas continuam falhando",
+        "peer_reset_detected": "Reinstalada com uma nova identidade",
+        "repeer_incomplete": "Não foi possível verificar o novo peering",
+        "denied_by_local_admin": "Recusado pelo seu administrador",
+        "denied_by_remote": "Recusado pelo administrador de lá",
+        "revoked_by_remote": "Revogado pelo administrador de lá",
+        "expired_on_remote": "A solicitação expirou do lado de lá",
+        "stale_peering_on_remote": "O outro lado mantém um peering antigo"
+      },
+      "reasonDetail": {
+        "auth_failures": "{{host}} recusou cinco entregas assinadas seguidas, então as duas instâncias não compartilham mais o mesmo segredo. Redefina o peering e depois faça o peering de novo.",
+        "peer_reset_detected": "{{host}} foi reinstalada: ela informa uma identidade de instância diferente da anterior. Use Refazer peering no aviso acima para se conectar à nova instância e limpar as contas da antiga.",
+        "repeer_incomplete": "{{host}} aceitou um handshake, mas uma verificação assinada com o novo segredo falhou, então o peering não é usado. Redefina-o e tente de novo. Se falhar outra vez, o administrador de lá precisa redefinir o lado dele.",
+        "denied_by_local_admin": "Um administrador daqui recusou a solicitação de peering de {{host}}. As solicitações dela são recusadas até que você reinicie o peering ou exclua esta entrada.",
+        "denied_by_remote": "O administrador de {{host}} recusou o peering com esta instância. Reinicie o peering quando ele concordar.",
+        "revoked_by_remote": "O administrador de {{host}} revogou o peering com esta instância. Ele volta quando o administrador de lá reiniciar o peering.",
+        "expired_on_remote": "O administrador de {{host}} não respondeu à solicitação de peering em 30 dias. Reinicie o peering para pedir de novo.",
+        "stale_peering_on_remote": "{{host}} ainda mantém um peering antigo com esta instância e recusa um novo até que o administrador de lá o redefina. Esta instância verifica a cada 15 minutos e se conecta assim que isso acontecer."
+      }
     },
     "approvals": {
       "title": "Solicitações de aprovação pendentes",
       "outboundTitle_one": "{{name}} — {{count}} usuário quer que façamos peering",
+      "outboundTitle_many": "{{name}} — {{count}} usuários querem que façamos peering",
       "outboundTitle_other": "{{name}} — {{count}} usuários querem que façamos peering",
       "requested": "Solicitada {{time}}",
       "subscriber": {
@@ -242,19 +262,18 @@
         "approveTitle": "Aprovar solicitação de peering",
         "denyTitle": "Negar solicitação de peering",
         "approveOutbound_one": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuário solicitante. A instância remota precisa estar acessível.",
+        "approveOutbound_many": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuários solicitantes. A instância remota precisa estar acessível.",
         "approveOutbound_other": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuários solicitantes. A instância remota precisa estar acessível.",
         "approveInbound": "Isso iniciará um handshake de peering com {{name}}. A instância remota precisa estar acessível.",
         "denyOutbound_one": "Isso negará a solicitação de peering de saída e notificará o usuário solicitante. Ele poderá pedir de novo repetindo o que fez.",
+        "denyOutbound_many": "Isso negará a solicitação de peering de saída e notificará os usuários solicitantes. Eles poderão pedir de novo repetindo o que fizeram.",
         "denyOutbound_other": "Isso negará a solicitação de peering de saída e notificará os usuários solicitantes. Eles poderão pedir de novo repetindo o que fizeram.",
         "denyInbound": "Isso negará a solicitação e bloqueará futuras solicitações de peering automático de {{name}}. Você poderá desbloquear essa instância depois, na lista de parceiros rejeitados.",
         "approveAndPeer": "Aprovar e fazer peering",
         "approve": "Aprovar",
         "denyAndNotify": "Negar e notificar",
-        "deny": "Negar",
-        "approveOutbound_many": "Isso iniciará um handshake de peering com {{name}} em nome de {{count}} usuários solicitantes. A instância remota precisa estar acessível.",
-        "denyOutbound_many": "Isso negará a solicitação de peering de saída e notificará os usuários solicitantes. Eles poderão pedir de novo repetindo o que fizeram."
-      },
-      "outboundTitle_many": "{{name}} — {{count}} usuários querem que façamos peering"
+        "deny": "Negar"
+      }
     },
     "resetCleanup": {
       "title": "Limpeza após redefinição",
@@ -269,12 +288,16 @@
       "staleRemote": "A instância remota ainda mantém um peering obsoleto com você. Peça ao administrador dela que redefina o lado dele e depois refaça o peering.",
       "eventSummary": "<host>{{host}}</host> foi redefinida — {{identities}} limpas automaticamente, {{accounts}} com conteúdo local desvinculadas. As contas desvinculadas continuam funcionando localmente — os donos mantêm o acesso com a senha atual. O dono pode revincular uma conta desvinculada à sua nova identidade de origem nas configurações dela (Conta → aviso de desvinculação) estando conectado às duas.",
       "identitiesCleaned_one": "{{count}} identidade replicada",
+      "identitiesCleaned_many": "{{count}} identidades replicadas",
       "identitiesCleaned_other": "{{count}} identidades replicadas",
       "accountsDetached_one": "{{count}} conta",
+      "accountsDetached_many": "{{count}} contas",
       "accountsDetached_other": "{{count}} contas",
       "memberships_one": "{{count}} participação",
+      "memberships_many": "{{count}} participações",
       "memberships_other": "{{count}} participações",
       "messages_one": "{{count}} mensagem",
+      "messages_many": "{{count}} mensagens",
       "messages_other": "{{count}} mensagens",
       "owns": "Possui: {{spaces}}",
       "dismissKeep": "Dispensar — manter todas as contas desvinculadas",
@@ -285,11 +308,7 @@
         "removeDescription": "Excluir permanentemente {{username}} e todo o seu conteúdo nesta instância? Isso não pode ser desfeito.",
         "repeerConfirm": "Refazer peering e corrigir",
         "removeConfirm": "Excluir permanentemente"
-      },
-      "identitiesCleaned_many": "{{count}} identidades replicadas",
-      "accountsDetached_many": "{{count}} contas",
-      "memberships_many": "{{count}} participações",
-      "messages_many": "{{count}} mensagens"
+      }
     },
     "peers": {
       "title": "Instâncias em peering",
@@ -332,5 +351,16 @@
         }
       }
     }
+  },
+  "peerRejected": {
+    "auth_failures": "As mensagens para {{name}} não estão sendo entregues: o segredo compartilhado da conexão parou de funcionar. Um administrador precisa redefinir o peering.",
+    "peer_reset_detected": "As mensagens para {{name}} não estão sendo entregues: a instância foi reinstalada. Um administrador precisa refazer o peering.",
+    "repeer_incomplete": "As mensagens para {{name}} não estão sendo entregues: não foi possível verificar o novo peering. Um administrador precisa redefinir o peering.",
+    "denied_by_local_admin": "As mensagens para {{name}} não podem ser entregues: seu administrador recusou a federação com essa instância.",
+    "denied_by_remote": "As mensagens para {{name}} não podem ser entregues: o administrador de lá recusou a federação com esta instância.",
+    "revoked_by_remote": "As mensagens para {{name}} não podem ser entregues: o administrador de lá revogou a federação com esta instância.",
+    "expired_on_remote": "As mensagens para {{name}} não podem ser entregues: o administrador de lá não respondeu à solicitação de federação a tempo.",
+    "stale_peering_on_remote": "As mensagens para {{name}} ainda não podem ser entregues: a instância mantém uma conexão antiga com esta, que o administrador de lá precisa redefinir.",
+    "fallback": "As mensagens para {{name}} não podem ser entregues: {{reason}}"
   }
 }

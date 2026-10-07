@@ -310,7 +310,7 @@
   </div>
 
   <script>
-    // Strings for the three shipped languages. The main process passes the
+    // Strings for every shipped language. The main process passes the
     // language as ?lang= when it loads this page; before the renderer has ever
     // run, that is the OS locale. Keep in step with packages/desktop/src/l10n.ts.
     const STRINGS = {
@@ -361,6 +361,22 @@
         errorStatus: 'Verbindung nicht möglich. Der Server hat mit Status {status} geantwortet.',
         errorNotBackspace: 'Unter dieser Adresse läuft keine Backspace-Instanz.',
         errorOther: 'Verbindung nicht möglich: {message}',
+      },
+      pt: {
+        welcomeTitle: 'Boas-vindas ao Backspace',
+        welcomeSubtitle: 'Conecte-se à sua instância',
+        switchTitle: 'Mudar instância',
+        switchSubtitle: 'Conecte-se a outra instância do Backspace ou cancele para continuar nesta.',
+        urlLabel: 'URL da instância',
+        connect: 'Conectar',
+        cancel: 'Cancelar',
+        connecting: 'Conectando…',
+        errorEmpty: 'Digite a URL de uma instância',
+        errorTimeout: 'A conexão expirou. Verifique a URL e tente de novo.',
+        errorUnreachable: 'Não foi possível conectar. Verifique a URL e tente de novo.',
+        errorStatus: 'Não foi possível conectar. O servidor respondeu com o status {status}.',
+        errorNotBackspace: 'Esse endereço não é uma instância do Backspace.',
+        errorOther: 'Não foi possível conectar: {message}',
       },
       zh: {
         welcomeTitle: '欢迎使用 Backspace',

@@ -110,6 +110,7 @@
     "removeSelected": "Remover {{name}}",
     "selectFriends": "Selecionar amigos",
     "send_one": "Enviar {{count}} convite",
+    "send_many": "Enviar {{count}} convites",
     "send_other": "Enviar {{count}} convites",
     "sending": "Enviando...",
     "retryFailed": "Tentar novamente os que falharam",
@@ -131,8 +132,7 @@
       "invalidTarget": "Destino inválido",
       "unreachable": "Não foi possível acessar sua instância",
       "serverError": "Não foi possível enviar (erro do servidor)"
-    },
-    "send_many": "Enviar {{count}} convites"
+    }
   },
   "join": {
     "title": "Entrar em um espaço",
@@ -200,8 +200,8 @@
       "subtitle": "Espaços nas suas instâncias",
       "noneAnswered": "Nenhuma instância respondeu. O Espaço Interno fica vazio até que uma responda.",
       "unreachable_one": "Não foi possível acessar {{hosts}}. Os espaços dessa instância não são exibidos.",
-      "unreachable_other": "Não foi possível acessar {{hosts}}. Os espaços dessas instâncias não são exibidos.",
-      "unreachable_many": "Não foi possível acessar {{hosts}}. Os espaços dessas instâncias não são exibidos."
+      "unreachable_many": "Não foi possível acessar {{hosts}}. Os espaços dessas instâncias não são exibidos.",
+      "unreachable_other": "Não foi possível acessar {{hosts}}. Os espaços dessas instâncias não são exibidos."
     },
     "outer": {
       "title": "Espaço Externo",
@@ -234,6 +234,7 @@
     },
     "noDescription": "Sem descrição",
     "memberCount_one": "{{count}} membro",
+    "memberCount_many": "{{count}} membros",
     "memberCount_other": "{{count}} membros",
     "viewSpace": "Ver espaço",
     "join": "Entrar no espaço",
@@ -249,8 +250,7 @@
       "pending": "Pendente",
       "request": "Solicitar",
       "sending": "Enviando…"
-    },
-    "memberCount_many": "{{count}} membros"
+    }
   },
   "settings": {
     "title": "Configurações do espaço",
@@ -454,6 +454,7 @@
       "allow": "Permitir"
     },
     "overrideCount_one": "{{count}} substituição",
+    "overrideCount_many": "{{count}} substituições",
     "overrideCount_other": "{{count}} substituições",
     "removeOverride": "Remover substituição",
     "removeOverrideFor": "Remover substituição de {{name}}",
@@ -468,6 +469,7 @@
     "loadFailed": "Falha ao carregar as substituições",
     "saveFailed": "Falha ao salvar as substituições",
     "partialFailure_one": "{{count}} substituição não foi salva",
+    "partialFailure_many": "{{count}} substituições não foram salvas",
     "partialFailure_other": "{{count}} substituições não foram salvas",
     "unheldLocked": "Você só pode alternar permissões que você mesmo tem. As outras ficam bloqueadas.",
     "unheldPermission": "Você não tem esta permissão",
@@ -475,9 +477,7 @@
     "removeUnheldShort": "Somente quem tem estas permissões pode removê-la",
     "aboveYouRole": "Este cargo tem hierarquia igual ou superior ao seu cargo mais alto. Você pode ver a substituição dele, mas não alterá-la nem removê-la.",
     "aboveYouMember": "Este membro tem hierarquia igual ou superior à sua. Você pode ver a substituição dele, mas não alterá-la nem removê-la.",
-    "aboveYouShort": "Hierarquia igual ou superior ao seu cargo mais alto",
-    "overrideCount_many": "{{count}} substituições",
-    "partialFailure_many": "{{count}} substituições não foram salvas"
+    "aboveYouShort": "Hierarquia igual ou superior ao seu cargo mais alto"
   },
   "sidebar": {
     "directMessages": "Mensagens diretas",
@@ -486,8 +486,10 @@
     "exploreSpaces": "Explorar espaços",
     "folder": {
       "tooltip_one": "Pasta ({{count}})",
+      "tooltip_many": "Pasta ({{count}})",
       "tooltip_other": "Pasta ({{count}})",
       "spaceCount_one": "{{count}} espaço",
+      "spaceCount_many": "{{count}} espaços",
       "spaceCount_other": "{{count}} espaços",
       "unnamed": "Pasta sem nome",
       "rename": "Renomear pasta",
@@ -499,9 +501,7 @@
       "created": "Pasta criada",
       "moved": "Movido para a pasta",
       "removed": "Removido da pasta",
-      "ungrouped": "Pasta desagrupada",
-      "tooltip_many": "Pasta ({{count}})",
-      "spaceCount_many": "{{count}} espaços"
+      "ungrouped": "Pasta desagrupada"
     },
     "space": {
       "inviteCopied": "Link de convite copiado para a área de transferência",
@@ -575,12 +575,12 @@
   },
   "members": {
     "titleWithCount_one": "Membros — {{count}}",
+    "titleWithCount_many": "Membros — {{count}}",
     "titleWithCount_other": "Membros — {{count}}",
     "loading": "Carregando membros",
     "groups": {
       "owner": "Dono"
-    },
-    "titleWithCount_many": "Membros — {{count}}"
+    }
   },
   "mobile": {
     "addSheet": {
@@ -599,13 +599,13 @@
       "connected": "Conectado",
       "connecting": "Conectando…",
       "participants_one": "{{count}} conectado",
+      "participants_many": "{{count}} conectados",
       "participants_other": "{{count}} conectados",
       "inCall_one": "{{count}} na chamada",
+      "inCall_many": "{{count}} na chamada",
       "inCall_other": "{{count}} na chamada",
       "empty": "Ninguém está neste canal de voz no momento.",
-      "join": "Entrar na voz",
-      "participants_many": "{{count}} conectados",
-      "inCall_many": "{{count}} na chamada"
+      "join": "Entrar na voz"
     },
     "dm": {
       "fallbackName": "Mensagem direta",
@@ -614,11 +614,11 @@
       "groupSettings": "Configurações do grupo",
       "openGroupSettings": "Abrir configurações do grupo",
       "memberCount_one": "({{count}} membro)",
+      "memberCount_many": "({{count}} membros)",
       "memberCount_other": "({{count}} membros)",
       "startVoiceCall": "Iniciar chamada de voz",
       "startVideoCall": "Iniciar chamada de vídeo",
-      "addFriends": "Adicionar amigos à DM",
-      "memberCount_many": "({{count}} membros)"
+      "addFriends": "Adicionar amigos à DM"
     }
   },
   "ownership": {

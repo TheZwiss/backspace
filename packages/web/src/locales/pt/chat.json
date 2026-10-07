@@ -4,6 +4,7 @@
       "hint": "esc para <cancel>cancelar</cancel> • enter para <save>salvar</save>"
     },
     "edited": "(editada)",
+    "rowLabel": "{{author}}, {{time}}",
     "gifAlt": "GIF",
     "upload": {
       "failed": "Falha no envio",
@@ -21,22 +22,28 @@
     "reactions": {
       "you": "Você",
       "others_one": "{{count}} outra pessoa",
+      "others_many": "{{count}} outras pessoas",
       "others_other": "{{count}} outras pessoas",
       "bySelf": "Você reagiu",
       "byOne": "{{name}} reagiu",
-      "byMany": "{{names}} reagiram",
-      "others_many": "{{count}} outras pessoas"
+      "byMany": "{{names}} reagiram"
     }
   },
   "list": {
     "noHistoryPermission": "Você não tem permissão para ver o histórico de mensagens neste canal",
     "loading": "Carregando mensagens",
     "loadingOlder": "Carregando mensagens mais antigas",
+    "loadFailed": "Não foi possível carregar as mensagens",
     "jumpToPresent": "Ir para o presente",
     "jump": {
       "unavailable": "Essa mensagem não está mais disponível",
       "failed": "Não foi possível carregar essa mensagem",
       "presentFailed": "Não foi possível carregar as mensagens mais recentes"
+    },
+    "unread": {
+      "label": "Novas",
+      "divider": "Novas mensagens",
+      "dividerWithDate": "Novas mensagens, {{date}}"
     },
     "welcome": {
       "channel": {
@@ -71,6 +78,7 @@
     "uploading": "Enviando…",
     "uploadingLabel": "Enviando",
     "failedCount_one": "{{count}} falhou",
+    "failedCount_many": "{{count}} falharam",
     "failedCount_other": "{{count}} falharam",
     "failedHint": "Remova o anexo que falhou ou tente enviá-lo de novo para poder enviar a mensagem",
     "gif": "GIF",
@@ -84,11 +92,10 @@
     "sendFailed": "Falha ao enviar a mensagem",
     "typing": {
       "named_one": "{{names}} está digitando",
+      "named_many": "{{names}} estão digitando",
       "named_other": "{{names}} estão digitando",
-      "several": "Várias pessoas estão digitando",
-      "named_many": "{{names}} estão digitando"
-    },
-    "failedCount_many": "{{count}} falharam"
+      "several": "Várias pessoas estão digitando"
+    }
   },
   "menu": {
     "saveImage": "Salvar imagem",
@@ -131,7 +138,7 @@
     "searchPlaceholder": "Pesquisar GIFs",
     "noResults": "Nenhum GIF encontrado",
     "noTrending": "Nenhum GIF em alta",
-    "attribution": "Powered by Klipy"
+    "attribution": "Fornecido pelo Klipy"
   },
   "preview": {
     "save": "Salvar imagem",
@@ -141,15 +148,24 @@
   "invite": {
     "sentBy": "{{name}} enviou um convite",
     "memberCount_one": "{{count}} membro",
+    "memberCount_many": "{{count}} membros",
     "memberCount_other": "{{count}} membros",
     "revoked": "Convite não é mais válido",
     "join": "Entrar",
     "joining": "Entrando…",
-    "joinFailed": "Falha ao entrar",
-    "memberCount_many": "{{count}} membros"
+    "joinFailed": "Falha ao entrar"
   },
   "notification": {
     "unknownSender": "Alguém",
     "attachmentOnly": "Enviou um anexo"
+  },
+  "embed": {
+    "loadAction": "Clique para carregar",
+    "loadNamed": "Carregar {{name}}",
+    "loadUnnamed": "Carregar conteúdo incorporado",
+    "frameTitle": "Conteúdo incorporado",
+    "playNamed": "Reproduzir {{title}}",
+    "playUnnamed": "Reproduzir vídeo",
+    "videoTitle": "Vídeo"
   }
 }

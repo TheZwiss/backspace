@@ -31,6 +31,7 @@
       "showMeWhere": "Mostrar onde",
       "saveAndShowMeWhere": "Salvar e mostrar onde",
       "listedCount_one": "{{count}} espaço listado",
+      "listedCount_many": "{{count}} espaços listados",
       "listedCount_other": "{{count}} espaços listados",
       "registrationClosed": "Novas contas de outras instâncias estão fechadas, então os espaços listados aparecerão como fechados para novas contas.",
       "openFederatedRegistration": "Abrir contas federadas",
@@ -48,8 +49,7 @@
         "origin": "o diretório recusou o endereço desta instância; ele deve ser um domínio https sem porta (defina DOMAIN ou PUBLIC_ORIGIN)",
         "network": "esta instância não conseguiu acessar o diretório",
         "timeout": "o diretório não respondeu a tempo"
-      },
-      "listedCount_many": "{{count}} espaços listados"
+      }
     },
     "browse": {
       "toggleLabel": "Mostrar espaços globais em Explorar",
@@ -130,11 +130,11 @@
       "exhausted": "Esgotado",
       "noExpiration": "Sem validade",
       "inDays_one": "Expira em {{count}} dia",
+      "inDays_many": "Expira em {{count}} dias",
       "inDays_other": "Expira em {{count}} dias",
       "inHours_one": "Expira em {{count}} hora",
-      "inHours_other": "Expira em {{count}} horas",
-      "inDays_many": "Expira em {{count}} dias",
-      "inHours_many": "Expira em {{count}} horas"
+      "inHours_many": "Expira em {{count}} horas",
+      "inHours_other": "Expira em {{count}} horas"
     },
     "form": {
       "name": "Nome",
@@ -187,16 +187,16 @@
       "revokedNotice": "Este convite foi revogado. Os usos abaixo representam usuários que se cadastraram antes da revogação.",
       "revokedNoticeDated": "Este convite foi revogado em {{date}}. Os usos abaixo representam usuários que se cadastraram antes da revogação.",
       "usesOfMax_one": "{{count}} de {{max}} usos",
+      "usesOfMax_many": "{{count}} de {{max}} usos",
       "usesOfMax_other": "{{count}} de {{max}} usos",
       "uses_one": "{{count}} uso",
+      "uses_many": "{{count}} usos",
       "uses_other": "{{count}} usos",
       "loadFailed": "Falha ao carregar os usos",
       "loadFailedInline": "Não foi possível carregar os usos.",
       "empty": "Nenhum uso ainda.",
       "now": "(agora {{name}})",
-      "deletedUser": "Usuário excluído",
-      "usesOfMax_many": "{{count}} de {{max}} usos",
-      "uses_many": "{{count}} usos"
+      "deletedUser": "Usuário excluído"
     },
     "row": {
       "usage": "{{usage}} usos",
@@ -254,8 +254,8 @@
     "breakdown": {
       "label": "Distribuição por tipo de arquivo",
       "entry_one": "{{count}} arquivo — {{size}}",
-      "entry_other": "{{count}} arquivos — {{size}}",
-      "entry_many": "{{count}} arquivos — {{size}}"
+      "entry_many": "{{count}} arquivos — {{size}}",
+      "entry_other": "{{count}} arquivos — {{size}}"
     },
     "uploadLimit": {
       "label": "Limite de upload",
@@ -272,30 +272,30 @@
       "previewResult": "Prévia — nenhum arquivo excluído",
       "complete": "Limpeza concluída",
       "orphanedFiles_one": "{{count}} arquivo órfão/pendente ({{size}})",
+      "orphanedFiles_many": "{{count}} arquivos órfãos/pendentes ({{size}})",
       "orphanedFiles_other": "{{count}} arquivos órfãos/pendentes ({{size}})",
       "staleRecords_one": ", {{count}} registro de upload obsoleto",
+      "staleRecords_many": ", {{count}} registros de upload obsoletos",
       "staleRecords_other": ", {{count}} registros de upload obsoletos",
       "errors_one": "{{count}} erro: {{first}}",
+      "errors_many": "{{count}} erros: {{first}}",
       "errors_other": "{{count}} erros: {{first}}",
       "cleanedToast_one": "{{count}} arquivo limpo ({{size}})",
+      "cleanedToast_many": "{{count}} arquivos limpos ({{size}})",
       "cleanedToast_other": "{{count}} arquivos limpos ({{size}})",
-      "failed": "Falha na limpeza",
-      "orphanedFiles_many": "{{count}} arquivos órfãos/pendentes ({{size}})",
-      "staleRecords_many": ", {{count}} registros de upload obsoletos",
-      "errors_many": "{{count}} erros: {{first}}",
-      "cleanedToast_many": "{{count}} arquivos limpos ({{size}})"
+      "failed": "Falha na limpeza"
     },
     "stale": {
       "label": "Uploads obsoletos",
       "description": "Sessões de upload tus abandonadas em <code>.tus/</code> (pausadas/interrompidas sem DELETE). A expiração automática ocorre a cada 24 horas; isto permite fazer uma limpeza antecipada.",
       "maxAge": "Idade máxima (horas)",
       "sessionFiles_one": "{{count}} arquivo de sessão ({{size}})",
+      "sessionFiles_many": "{{count}} arquivos de sessão ({{size}})",
       "sessionFiles_other": "{{count}} arquivos de sessão ({{size}})",
       "cleanedToast_one": "{{count}} sessão de upload obsoleta limpa ({{size}})",
+      "cleanedToast_many": "{{count}} sessões de upload obsoletas limpas ({{size}})",
       "cleanedToast_other": "{{count}} sessões de upload obsoletas limpas ({{size}})",
-      "failed": "Falha na limpeza de uploads obsoletos",
-      "sessionFiles_many": "{{count}} arquivos de sessão ({{size}})",
-      "cleanedToast_many": "{{count}} sessões de upload obsoletas limpas ({{size}})"
+      "failed": "Falha na limpeza de uploads obsoletos"
     },
     "media": {
       "label": "Retenção de mídia",
@@ -304,12 +304,12 @@
       "run": "Excluir agora",
       "running": "Excluindo…",
       "files_one": "{{count}} arquivo ({{size}})",
+      "files_many": "{{count}} arquivos ({{size}})",
       "files_other": "{{count}} arquivos ({{size}})",
       "deletedToast_one": "{{count}} arquivo excluído ({{size}})",
+      "deletedToast_many": "{{count}} arquivos excluídos ({{size}})",
       "deletedToast_other": "{{count}} arquivos excluídos ({{size}})",
-      "failed": "Falha na limpeza de mídia",
-      "files_many": "{{count}} arquivos ({{size}})",
-      "deletedToast_many": "{{count}} arquivos excluídos ({{size}})"
+      "failed": "Falha na limpeza de mídia"
     }
   },
   "streaming": {
@@ -446,6 +446,7 @@
     },
     "pagination": "Página {{page}} de {{total}} ({{users}})",
     "count_one": "{{count}} usuário",
+    "count_many": "{{count}} usuários",
     "count_other": "{{count}} usuários",
     "roleFailed": "Falha ao atualizar a função",
     "resetFailed": "Falha ao redefinir a senha",
@@ -464,8 +465,7 @@
       "title": "Excluir usuário",
       "description": "Excluir permanentemente <strong>{{username}}</strong>? Isso removerá a pessoa de todos os espaços, DMs e listas de amigos. Isso não pode ser desfeito.",
       "confirm": "Excluir usuário"
-    },
-    "count_many": "{{count}} usuários"
+    }
   },
   "mobile": {
     "title": "Instância",

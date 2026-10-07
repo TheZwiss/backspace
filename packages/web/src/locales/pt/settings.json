@@ -230,11 +230,11 @@
       },
       "ownedSpaces": {
         "prompt_one": "Você possui {{count}} espaço. Resolva cada um antes de continuar:",
+        "prompt_many": "Você possui {{count}} espaços. Resolva cada um antes de continuar:",
         "prompt_other": "Você possui {{count}} espaços. Resolva cada um antes de continuar:",
         "transfer": "Transferir",
         "delete": "Excluir espaço",
-        "selectOwner": "Selecione o novo dono…",
-        "prompt_many": "Você possui {{count}} espaços. Resolva cada um antes de continuar:"
+        "selectOwner": "Selecione o novo dono…"
       },
       "processing": "Processando…",
       "confirm": {

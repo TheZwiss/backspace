@@ -13,7 +13,7 @@ export const supportedLanguages = [
   // Brazilian Portuguese. Detection sends every pt-* tag here, as with zh
   // below: a pt-PT reader gets Portuguese rather than English, and the picker
   // names the variant.
-  { code: 'pt', nativeName: 'Português do Brasil', dir: 'ltr', released: false },
+  { code: 'pt', nativeName: 'Português do Brasil', dir: 'ltr', released: true },
   // Simplified Chinese. Detection sends every zh-* tag here, Traditional
   // included: a zh-TW reader gets a script they can read rather than English,
   // and the picker names the variant so they know what they got.

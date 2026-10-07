@@ -12,23 +12,23 @@
     "video": "Vídeo",
     "audio": "Áudio",
     "files_one": "📎 {{count}} arquivo",
+    "files_many": "📎 {{count}} arquivos",
     "files_other": "📎 {{count}} arquivos",
-    "withSender": "{{name}}: {{text}}",
-    "files_many": "📎 {{count}} arquivos"
+    "withSender": "{{name}}: {{text}}"
   },
   "system": {
     "spaceInviteNamed": "📨 Enviou convite para {{spaceName}}",
-    "spaceInvite": "📨 Enviou um convite para um espaço",
     "memberAdded": "{{actor}} adicionou {{target}}",
+    "memberAddedToGroup": "{{actor}} adicionou {{target}} ao grupo",
     "memberLeft": "{{target}} saiu do grupo",
     "memberRemoved": "{{actor}} removeu {{target}}",
+    "memberRemovedFromGroup": "{{actor}} removeu {{target}} do grupo",
     "ownerChanged": "{{newOwner}} agora é o dono do grupo",
     "renamed": "{{actor}} renomeou o grupo",
+    "renamedTo": "{{actor}} renomeou o grupo para \"{{name}}\"",
     "nameCleared": "{{actor}} apagou o nome do grupo",
     "iconChanged": "{{actor}} atualizou o ícone do grupo",
-    "generic": "Mensagem do sistema",
-    "someone": "alguém",
-    "aMember": "Um membro"
+    "generic": "Mensagem do sistema"
   },
   "deletedNotice": {
     "accountDeleted": "A conta deste usuário foi excluída"
@@ -84,14 +84,15 @@
     "leaveGroup": "Sair do grupo",
     "justNow": "agora",
     "minutesShort_one": "{{count}} min",
+    "minutesShort_many": "{{count}} min",
     "minutesShort_other": "{{count}} min",
     "hoursShort_one": "{{count}} h",
+    "hoursShort_many": "{{count}} h",
     "hoursShort_other": "{{count}} h",
     "daysShort_one": "{{count}} d",
+    "daysShort_many": "{{count}} d",
     "daysShort_other": "{{count}} d",
-    "minutesShort_many": "{{count}} min",
-    "hoursShort_many": "{{count}} h",
-    "daysShort_many": "{{count}} d"
+    "close": "Fechar conversa"
   },
   "newDm": {
     "title": "Nova mensagem direta",
@@ -109,11 +110,11 @@
     "noFriends": "Nenhum amigo ainda",
     "selectFriends": "Selecionar amigos",
     "addCount_one": "Adicionar {{count}} amigo",
+    "addCount_many": "Adicionar {{count}} amigos",
     "addCount_other": "Adicionar {{count}} amigos",
     "adding": "Adicionando…",
     "noOtherMember": "Não foi possível identificar o outro membro desta conversa.",
-    "failed": "Falha ao adicionar membros",
-    "addCount_many": "Adicionar {{count}} amigos"
+    "failed": "Falha ao adicionar membros"
   },
   "groupSettings": {
     "title": "Configurações do grupo",
@@ -141,7 +142,11 @@
     "cancelEdit": "Cancelar edição",
     "federated": "Grupo federado",
     "memberCount_one": "{{count}} membro",
-    "memberCount_other": "{{count}} membros",
-    "memberCount_many": "{{count}} membros"
+    "memberCount_many": "{{count}} membros",
+    "memberCount_other": "{{count}} membros"
+  },
+  "ownerActions": {
+    "ownerNotConnected": "Este grupo é gerenciado em {{host}}. Conecte-se a essa instância para alterá-lo.",
+    "ownerNotListed": "{{host}} ainda não lista este grupo para você. Tente de novo em instantes."
   }
 }

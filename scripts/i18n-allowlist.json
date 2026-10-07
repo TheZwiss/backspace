@@ -60,7 +60,6 @@
   "Online — {{n}}",
   "Offline — {{n}}",
   "via {{host}}",
-  "Online — {{n}}",
   "Volume",
   "Mouse {{button}}",
   "Mouse 5",
@@ -69,7 +68,6 @@
   "{{value}} ms",
   "Coral",
   "GIF",
-  "Powered by Klipy",
   "Emoji",
   "commit {{commit}} · "
 ]
