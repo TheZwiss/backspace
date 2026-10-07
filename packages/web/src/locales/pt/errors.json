@@ -213,6 +213,8 @@
   "internal_error": "Algo deu errado no servidor. Tente novamente.",
   "voice_disabled": "Voz e vídeo não estão configurados nesta instância.",
   "voice_connect_forbidden": "Você não tem permissão para entrar neste canal de voz.",
+  "dm_call_in_progress": "Já há uma chamada em andamento nesta conversa.",
+  "dm_call_not_found": "Essa chamada já foi encerrada.",
   "file_not_found": "Não foi possível encontrar esse arquivo.",
   "directory_disabled": "Esta instância não está conectada a um diretório.",
   "directory_unreachable": "O Espaço Externo não está acessível no momento. O Espaço Interno continua funcionando.",

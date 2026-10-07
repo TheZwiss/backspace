@@ -630,6 +630,7 @@
       "memberCount_many": "({{count}} membros)",
       "memberCount_other": "({{count}} membros)",
       "startVoiceCall": "Iniciar chamada de voz",
+      "joinCall": "Entrar na chamada",
       "startVideoCall": "Iniciar chamada de vídeo",
       "addFriends": "Adicionar amigos à DM"
     }
