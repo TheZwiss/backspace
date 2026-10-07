@@ -660,11 +660,11 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
       // Deleted user cleanup: remove from caches the existing pipeline doesn't cover
       if (event.user.isDeleted) {
-        useSocialStore.getState().removeFriendLocally(event.user.id, origin);
-        useSocialStore.getState().removeRequestsForUser(event.user.id);
+        // Each removal goes through userUpdateReach, as the updates above do.
+        useSocialStore.getState().removeDeletedUser(event.user, origin);
         useActivityStore.getState().clearUserActivities(event.user, origin);
-        useDiscoverStore.getState().removeUser(event.user.id);
-        useChatStore.getState().clearTypingForUser(event.user.id);
+        useDiscoverStore.getState().removeDeletedUser(event.user, origin);
+        useChatStore.getState().clearTypingForDeletedUser(event.user, origin);
       }
       break;
     }

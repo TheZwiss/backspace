@@ -5,7 +5,7 @@ import { HttpError } from '../api/client';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
 import { myRowForOrigin } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
-import { withUserUpdate } from '../utils/identity';
+import { updateIsAboutRowId, withUserUpdate, type IdentityFields } from '../utils/identity';
 import { usePendingMessageStore } from './pendingMessageStore';
 import type { ScrollAnchor } from '../components/chat/scrollAnchor';
 
@@ -288,7 +288,13 @@ interface ChatState {
    * (`withUserUpdate`); each channel's rows are its origin's.
    */
   updateUserInMessages: (user: User, origin: string) => void;
-  clearTypingForUser: (userId: string) => void;
+  /**
+   * Drop the typing entries of the deleted user's `user_updated` row (issued
+   * by `origin`): a typing entry keeps only a row id, so only the issuing
+   * instance's channels (`updateIsAboutRowId`). Each instance that holds a
+   * row of the person sends its own event for it.
+   */
+  clearTypingForDeletedUser: (user: IdentityFields, origin: string) => void;
 }
 
 /** The client for the instance that owns `channelId`, and that instance's origin. */
@@ -1194,12 +1200,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  clearTypingForUser: (userId: string) => {
+  clearTypingForDeletedUser: (user: IdentityFields, origin: string) => {
     set((state) => {
       const newTyping = new Map(state.typingUsers);
       let changed = false;
       for (const [channelId, users] of newTyping) {
-        const filtered = users.filter(t => t.userId !== userId);
+        const channelOrigin = getChannelOrigin(channelId);
+        const filtered = users.filter(t => !updateIsAboutRowId(t.userId, channelOrigin, user, origin));
         if (filtered.length !== users.length) {
           newTyping.set(channelId, filtered);
           changed = true;

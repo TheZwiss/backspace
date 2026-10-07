@@ -3,7 +3,7 @@ import type { Friend, FriendRequest, SendFriendRequest, User } from '@backspace/
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
-import { profileFieldsOf, userKey, userUpdateReach, type PresenceSubject } from '../utils/identity';
+import { profileFieldsOf, updateIsAbout, updateIsAboutRowId, userKey, userUpdateReach, type IdentityFields, type PresenceSubject } from '../utils/identity';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
@@ -66,7 +66,8 @@ interface SocialState {
   updateFriendProfile: (user: User, origin: string) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
   removeRequestById: (requestId: string, origin: string, userId?: string) => void;
-  removeRequestsForUser: (userId: string) => void;
+  /** Drop the friends and pending requests the deleted user's `user_updated` row (issued by `origin`) is about (`updateIsAbout`). */
+  removeDeletedUser: (user: IdentityFields, origin: string) => void;
   reset: () => void;
 }
 
@@ -414,11 +415,17 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     }));
   },
 
-  // Called when a user is deleted — remove all pending requests involving them
-  removeRequestsForUser: (userId: string) => {
-    set((state) => ({
-      requests: state.requests.filter(r => r.fromId !== userId && r.toId !== userId),
-    }));
+  removeDeletedUser: (user: IdentityFields, origin: string) => {
+    set((state) => {
+      const friends = state.friends.filter(f => !updateIsAbout(f, f._instanceOrigin, user, origin));
+      const requests = state.requests.filter(r => {
+        const rowOrigin = r._instanceOrigin;
+        if (r.user && updateIsAbout(r.user, rowOrigin, user, origin)) return false;
+        return !updateIsAboutRowId(r.fromId, rowOrigin, user, origin) && !updateIsAboutRowId(r.toId, rowOrigin, user, origin);
+      });
+      if (friends.length === state.friends.length && requests.length === state.requests.length) return state;
+      return { friends, requests };
+    });
   },
 
   // Called from WS handler on presence_update to keep friend status live.

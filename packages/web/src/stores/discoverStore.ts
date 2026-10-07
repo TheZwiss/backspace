@@ -3,6 +3,7 @@ import type { DiscoverUser, User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
+import { updateIsAbout, type IdentityFields } from '../utils/identity';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,7 +21,8 @@ interface DiscoverState {
   fetchUsers: (query?: string) => Promise<void>;
   setSearchQuery: (q: string) => void;
   updateRelationship: (userId: string, origin: string, relationship: DiscoverUser['relationship'], requestId?: string) => void;
-  removeUser: (userId: string) => void;
+  /** Drop the cards the deleted user's `user_updated` row (issued by `origin`) is about (`updateIsAbout`). */
+  removeDeletedUser: (user: IdentityFields, origin: string) => void;
   reset: () => void;
 }
 
@@ -104,9 +106,10 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
     }));
   },
 
-  removeUser: (userId: string) => {
+  removeDeletedUser: (user: IdentityFields, origin: string) => {
     set((state) => {
-      const filtered = state.users.filter(u => u.id !== userId);
+      const filtered = state.users.filter(u => !updateIsAbout(u, u._instanceOrigin, user, origin));
+      if (filtered.length === state.users.length) return state;
       return {
         users: filtered,
         total: Math.max(0, state.total - (state.users.length - filtered.length)),

@@ -18,6 +18,8 @@ vi.mock('../audio/AudioManager', () => ({
 import { useSpaceStore, type TaggedSpace } from './spaceStore';
 import { useSocialStore, type TaggedFriend } from './socialStore';
 import { useChatStore } from './chatStore';
+import { useDiscoverStore, type TaggedDiscoverUser } from './discoverStore';
+import type { TaggedFriendRequest } from './socialStore';
 
 /**
  * A `user_updated` row applies to the rows of the person it is about: the
@@ -152,5 +154,77 @@ describe('updateUserInMessages', () => {
     useChatStore.getState().updateUserInMessages(bobRenamed, ORBIT);
     expect(author('c-nova', 'm2').displayName).toBe('Robert');
     expect(author('c-nova', 'm2').id).toBe('nb');
+  });
+});
+
+describe('cleanup after a deletion', () => {
+  const cleoDeleted = { ...cleoOnOrbit, isDeleted: true };
+  const bobDeletedAtHome = { ...bobOnOrbit, isDeleted: true };
+  const bobCopyDeletedOnNova = { ...bobOnNova, isDeleted: true };
+  const jan = user('me-nova', 'jan', 'Jan');
+  const janOnOrbit = user('me-orbit', 'jan@nova.example', 'Jan', { homeInstance: 'nova.example', homeUserId: 'me-nova' });
+
+  /** A stored row named by its issuing instance and its id there. */
+  function rowAt(row: { id: string; _instanceOrigin: string }): string {
+    return `${row._instanceOrigin === ORBIT ? 'orbit' : 'nova'} ${row.id}`;
+  }
+
+  function request(id: string, origin: string, me: User, other: User): TaggedFriendRequest {
+    return { id, fromId: other.id, toId: me.id, status: 'pending', createdAt: 1, user: other, _instanceOrigin: origin };
+  }
+
+  function card(row: User, origin: string): TaggedDiscoverUser {
+    return {
+      id: row.id, username: row.username, displayName: row.displayName, avatar: null, banner: null, avatarColor: null,
+      bio: null, status: 'online', customStatus: null, createdAt: 1, homeInstance: row.homeInstance, homeUserId: row.homeUserId,
+      mutualFriendCount: 0, mutualSpaceCount: 0, relationship: 'none', _instanceOrigin: origin,
+    } as TaggedDiscoverUser;
+  }
+
+  beforeEach(() => {
+    useSocialStore.setState({
+      friends: [friend(daveOnNova, ''), friend(cleoOnOrbit, ORBIT), friend(bobOnNova, '')],
+      requests: [request('r-nova', '', jan, daveOnNova), request('r-orbit', ORBIT, janOnOrbit, cleoOnOrbit), request('r-bob', '', jan, bobOnNova)],
+    });
+    useDiscoverStore.setState({
+      users: [card(daveOnNova, ''), card(cleoOnOrbit, ORBIT), card(bobOnNova, '')],
+      total: 3,
+    });
+    useSpaceStore.setState({ channelOriginMap: new Map([['c-nova', ''], ['c-orbit', ORBIT]]) });
+    useChatStore.setState({
+      typingUsers: new Map([
+        ['c-nova', [{ userId: 'u-1', username: 'dave', timestamp: 1 }]],
+        ['c-orbit', [{ userId: 'u-1', username: 'cleo', timestamp: 1 }]],
+      ]),
+    });
+  });
+
+  it("drops what is stored about the deleted user, not about another instance's user with the same id", () => {
+    useSocialStore.getState().removeDeletedUser(cleoDeleted, ORBIT);
+    useDiscoverStore.getState().removeDeletedUser(cleoDeleted, ORBIT);
+    useChatStore.getState().clearTypingForDeletedUser(cleoDeleted, ORBIT);
+
+    expect(useSocialStore.getState().friends.map(rowAt)).toEqual(['nova u-1', 'nova nb']);
+    expect(useSocialStore.getState().requests.map(r => r.id)).toEqual(['r-nova', 'r-bob']);
+    expect(useDiscoverStore.getState().users.map(rowAt)).toEqual(['nova u-1', 'nova nb']);
+    expect(useDiscoverStore.getState().total).toBe(2);
+    expect(useChatStore.getState().typingUsers.get('c-nova')).toEqual([{ userId: 'u-1', username: 'dave', timestamp: 1 }]);
+    expect(useChatStore.getState().typingUsers.get('c-orbit')).toEqual([]);
+  });
+
+  it("drops another instance's rows of the person when their home deletes them", () => {
+    useSocialStore.getState().removeDeletedUser(bobDeletedAtHome, ORBIT);
+    useDiscoverStore.getState().removeDeletedUser(bobDeletedAtHome, ORBIT);
+
+    expect(useSocialStore.getState().friends.map(rowAt)).toEqual(['nova u-1', 'orbit u-1']);
+    expect(useSocialStore.getState().requests.map(r => r.id)).toEqual(['r-nova', 'r-orbit']);
+    expect(useDiscoverStore.getState().users.map(rowAt)).toEqual(['nova u-1', 'orbit u-1']);
+  });
+
+  it("keeps the home's rows of the person when only another instance's copy is deleted", () => {
+    useSocialStore.setState({ friends: [friend(bobOnOrbit, ORBIT), friend(bobOnNova, '')] });
+    useSocialStore.getState().removeDeletedUser(bobCopyDeletedOnNova, '');
+
+    expect(useSocialStore.getState().friends.map(rowAt)).toEqual(['orbit b-1']);
   });
 });

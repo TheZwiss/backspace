@@ -313,6 +313,25 @@ export function userUpdateReach(
 }
 
 /**
+ * Whether the `user_updated` row `user` (issued by `origin`) is about the
+ * stored row `row` (issued by `rowOrigin`) at all: `userUpdateReach` is not
+ * null. For dropping what is stored about a deleted user: the home's own row
+ * reaches every instance's row of the person, a copy only that instance's row.
+ */
+export function updateIsAbout(row: IdentityFields, rowOrigin: string, user: IdentityFields, origin: string): boolean {
+  return userUpdateReach(row, rowOrigin, user, origin) !== null;
+}
+
+/**
+ * `updateIsAbout` for a stored entry that keeps only a row id (a typing
+ * entry, a friend request's party ids). An id alone names no person on
+ * another instance, so only the issuing instance's own row (`'row'`) matches.
+ */
+export function updateIsAboutRowId(rowId: string, rowOrigin: string, user: IdentityFields, origin: string): boolean {
+  return userUpdateReach({ id: rowId }, rowOrigin, user, origin) === 'row';
+}
+
+/**
  * `row` (issued by `rowOrigin`) with the `user_updated` row `user` (issued by
  * `origin`) applied as `userUpdateReach` says; `row` itself when it does not
  * apply, so callers can tell nothing changed.
