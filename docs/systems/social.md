@@ -628,7 +628,7 @@ Source: `packages/web/src/components/chat/FriendsPage.tsx`
 |-----|---------|--------------|
 | Online | Online friends only | Filters by `status !== 'offline'` |
 | All | Complete friend list | No filter |
-| Pending | Incoming + outgoing requests | Split into sections; incoming shows badge count in tab |
+| Pending | Incoming + outgoing requests | Split into sections; incoming shows badge count in tab (and on the mobile nav). A request is incoming when its other party (`user`) is its sender (`isIncomingRequest`, `isOutgoingRequest` in `socialStore.ts`): its ids are the holding instance's, so `fromId` is never compared with the session row's id |
 | Add Friend | Search + discover grid | Unified search/discover with direct-add |
 | Activity | Friends grouped by activity | Active (rich presence) / Online (no activity) / Offline sections |
 

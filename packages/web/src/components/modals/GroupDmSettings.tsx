@@ -31,7 +31,8 @@ type Tab = 'overview' | 'members';
  * Reads its target channel from `useUIStore.modalData.dmChannelId`. Optional
  * `initialTab` selects which tab opens first.
  *
- * Owner detection: `dmChannel.ownerId === currentUser.id` — local id compare.
+ * Owner detection: `isMine` of the owner id on the DM copy's origin
+ * (`useDmViewer`), the identity rule of client-federation.md section 5.
  * Non-owners see read-only fields (icon click is a no-op, name input disabled,
  * Save button absent). "Leave Group" is enabled for everyone.
  *
@@ -251,7 +252,7 @@ export function GroupDmSettings() {
   };
 
   // ── Members panel data ────────────────────────────────────────────────
-  // Friend lookup mirrors DmRosterPanel — local-id compare is federation-safe.
+  // Friend lookup by person (`userKey`), each row with its own origin.
   const isFriendOfCaller = (m: User): boolean => {
     const key = userKey(m, viewer.origin);
     return friends.some((f) => userKey(f, f._instanceOrigin) === key);

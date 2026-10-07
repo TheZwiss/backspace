@@ -59,11 +59,15 @@ new-message OS notification, so the two outputs cannot drift apart.
 a message whose content mentions the user (`<@id>`). Every other message does
 not alert.
 
-**The user's ids.** The home account's `id`, its `homeUserId`, and the id the
-user holds on the channel's instance (`getMyUserIdForOrigin` of the channel's
-origin). On a remote instance's channel, the user's own messages carry that
-instance's id and mentions of the user are written with it, so without it the
-user's own messages there would alert and mentions there would not.
+**Whose message, whose mention.** Both are decided with the channel's origin
+(`getChannelOrigin`). The author is the user when `isMe(author, origin)` holds
+(the identity rule, client-federation.md §5). A mention is of the user when the
+content has `<@id>` for the id the channel's instance gave them
+(`getMyUserIdForOrigin(origin)`); until that instance's `ready` named it,
+nothing there mentions the user. On a remote instance's channel the user's
+own messages carry that instance's row and mentions are written with its id,
+so checking against the session row alone would alert on their own messages
+there and miss mentions.
 
 **The every-message preference.** `messageSoundAllChannels` ("Play sound for
 every message") widens the sound only. `SoundController` passes it as

@@ -1546,9 +1546,8 @@ export function dmCopyOnOrigin(channelId: string, origin: string): DmChannel | n
 }
 
 // ─── Cross-store resolvers (federation) ───────────────────────────────────────
-// The resolver/setter pairs and the WS-populated user-ID cache live in
-// `utils/crossStoreResolvers.ts` — a neutral module with no store imports —
-// to break a TDZ cycle: instanceStore registers these at top-level load, but
+// The resolver/setter pairs live in `utils/crossStoreResolvers.ts` — a
+// neutral module with no store imports — to break a TDZ cycle: instanceStore registers these at top-level load, but
 // a spaceStore-rooted import chain leaves spaceStore mid-load when that code
 // runs. Re-exported here for backward compatibility with existing import
 // sites. See the header comment in crossStoreResolvers.ts for details.

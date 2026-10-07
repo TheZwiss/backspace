@@ -196,7 +196,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   const memberCount = dmChannel.members.length;
   const canAddMembers = memberCount < MAX_GROUP_MEMBERS;
 
-  // Friend lookup — federation-safe local-id compare (mirrors DmRosterPanel).
+  // Friend lookup by person (`userKey`), each row with its own origin.
   const isFriendOfCaller = (m: User): boolean => {
     const key = userKey(m, viewer.origin);
     return friends.some((f) => userKey(f, f._instanceOrigin) === key);
