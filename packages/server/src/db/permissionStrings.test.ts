@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,6 +37,10 @@ beforeEach(() => {
   db.prepare("INSERT INTO spaces (id, name, owner_id, invite_code, visibility, created_at) VALUES ('s', 'S', 'owner', 'c', 'public', ?)").run(now);
   db.prepare("INSERT INTO channel_categories (id, space_id, name, position, created_at) VALUES ('cat', 's', 'cat', 0, ?)").run(now);
   db.prepare("INSERT INTO channels (id, space_id, name, type, position, category_id, created_at) VALUES ('ch', 's', 'general', 'text', 0, 'cat', ?)").run(now);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 function role(id: string, permissions: string): void {
@@ -108,5 +112,63 @@ describe('normalizeStoredPermissions', () => {
     expect(normalizeStoredPermissions(db)).toBe(0);
     expect(roleValue('fine')).toBe(SEND);
     expect(channelRow('fine')).toEqual({ allow: '0', deny: SEND });
+  });
+});
+
+describe('normalizeStoredPermissions before it changes anything', () => {
+  it('calls beforeChanges once, before the first write, when a value would be rewritten', () => {
+    role('hex', '0x10');
+    channelOverride('a', '0x400', '0');
+    const seen: string[] = [];
+    const beforeChanges = vi.fn(() => {
+      // The database is still as it was: this is where boot takes its snapshot.
+      seen.push(roleValue('hex'), channelRow('a').allow);
+    });
+
+    normalizeStoredPermissions(db, { beforeChanges });
+
+    expect(beforeChanges).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(['0x10', '0x400']);
+    expect(roleValue('hex')).toBe('16');
+  });
+
+  it('does not call beforeChanges when every value is already canonical', () => {
+    role('fine', SEND);
+    channelOverride('fine', '0', SEND);
+    categoryOverride('fine', SEND, '0');
+    const beforeChanges = vi.fn();
+
+    expect(normalizeStoredPermissions(db, { beforeChanges })).toBe(0);
+    expect(beforeChanges).not.toHaveBeenCalled();
+  });
+
+  it('does not write when beforeChanges throws (a failed snapshot aborts the pass)', () => {
+    role('hex', '0x10');
+    expect(() => normalizeStoredPermissions(db, {
+      beforeChanges: () => { throw new Error('snapshot failed'); },
+    })).toThrow('snapshot failed');
+    expect(roleValue('hex')).toBe('0x10');
+  });
+
+  it('logs each unreadable value it replaces with its row and old text, and only once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    role('garbage', 'not-bits');
+    channelOverride('x', '0', 'zz');
+    categoryOverride('y', '["VIEW_CHANNEL","NOT_A_PERMISSION"]', '0');
+    role('hex', '0x10');
+
+    normalizeStoredPermissions(db);
+
+    const lines = warn.mock.calls.map((c) => c.join(' '));
+    expect(lines).toHaveLength(3);
+    expect(lines.some((l) => l.includes('roles') && l.includes('id=garbage') && l.includes('permissions') && l.includes('"not-bits"'))).toBe(true);
+    expect(lines.some((l) => l.includes('channel_overrides') && l.includes('channel_id=ch') && l.includes('target_id=x') && l.includes('deny') && l.includes('"zz"'))).toBe(true);
+    expect(lines.some((l) => l.includes('category_overrides') && l.includes('target_id=y') && l.includes('allow') && l.includes('NOT_A_PERMISSION'))).toBe(true);
+    // A readable value keeps its meaning and is not logged.
+    expect(lines.some((l) => l.includes('0x10'))).toBe(false);
+
+    warn.mockClear();
+    normalizeStoredPermissions(db);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

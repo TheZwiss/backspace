@@ -60,24 +60,26 @@ export function initDatabase() {
   // Recover pre-fix broken 1-on-1 DM threads (deleted partner's membership row
   // lost before the tombstone fix). Idempotent — safe no-op on every later boot.
   backfillOneOnOneDmMembership(sqlite);
+  // A boot pass that rewrites rows takes the same snapshot as a migration
+  // before its first change (unless this boot already took one); a failed
+  // snapshot aborts the boot, as it does for migrations. Each pass calls this
+  // only when it is about to change something.
+  const snapshotBefore = (pass: string) => (): void => {
+    if (config.backup.disabled || snapshotTaken) return;
+    try {
+      const snap = createSnapshot(sqlite, 'pre-migration');
+      snapshotTaken = true;
+      console.log(`[backup] pre-migration snapshot before the ${pass} written: ${snap}`);
+    } catch (err) {
+      console.error(`[backup] snapshot before the ${pass} FAILED, aborting to protect data: ${(err as Error).message}`);
+      throw err;
+    }
+  };
+
   // Every 1-on-1 row holds the key of its two members (ADR 0002): keys rows
   // made while relay was off and heals drifted ones, merging rows where two
-  // hold one conversation. Idempotent. Before it changes anything, the
-  // database is snapshotted like before a migration (unless this boot already
-  // did); a failed snapshot aborts, as it does for migrations.
-  backfillOneOnOneKeys(sqlite, {
-    beforeChanges: () => {
-      if (config.backup.disabled || snapshotTaken) return;
-      try {
-        const snap = createSnapshot(sqlite, 'pre-migration');
-        snapshotTaken = true;
-        console.log(`[backup] pre-migration snapshot before the 1-on-1 DM key backfill written: ${snap}`);
-      } catch (err) {
-        console.error(`[backup] snapshot before the 1-on-1 DM key backfill FAILED — aborting to protect data: ${(err as Error).message}`);
-        throw err;
-      }
-    },
-  });
+  // hold one conversation. Idempotent.
+  backfillOneOnOneKeys(sqlite, { beforeChanges: snapshotBefore('1-on-1 DM key backfill') });
 
   // Key every outbox row queued before queue keys existed (migration 0021)
   // by the rule the outbox queues by today. Idempotent.
@@ -90,7 +92,9 @@ export function initDatabase() {
 
   // Store every permissions value in the canonical form the routes write, with
   // the meaning it already had (permissions.md, "Stored form"). No-op once applied.
-  const permissionValuesRewritten = normalizeStoredPermissions(sqlite);
+  const permissionValuesRewritten = normalizeStoredPermissions(sqlite, {
+    beforeChanges: snapshotBefore('permission value normalisation'),
+  });
   if (permissionValuesRewritten > 0) {
     console.log(`[permissions] rewrote ${permissionValuesRewritten} stored permission value(s) to canonical form`);
   }

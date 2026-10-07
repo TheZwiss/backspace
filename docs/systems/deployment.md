@@ -303,7 +303,7 @@ Backspace takes **DB-only** SQLite snapshots via `VACUUM INTO`, which produces a
 
 | Trigger | Where | Reason tag | When |
 |---------|-------|-----------|------|
-| **Pre-migration** | `packages/server/src/db/index.ts` (`initDatabase`) | `pre-migration` | On startup, **only when a migration is actually pending** (see gating). |
+| **Pre-migration** | `packages/server/src/db/index.ts` (`initDatabase`) | `pre-migration` | On startup, **only when a migration is actually pending** or a boot pass is about to rewrite rows (see gating). |
 | **Scheduled** | `packages/server/src/utils/backupWorker.ts` (`startBackupWorker`) | `scheduled` | Every `BACKUP_INTERVAL_HOURS`, via an `unref`'d `setInterval`. |
 | **Manual** | `./backup.sh` → `src/scripts/snapshot.ts` | `manual` | On demand by the operator. |
 
@@ -314,6 +314,7 @@ Snapshot filenames encode a millisecond-precision UTC timestamp and the reason t
 The pre-migration snapshot is deliberately conservative:
 
 - **Gated on a pending migration.** `initDatabase` snapshots only when **(a)** the DB file already existed before this boot (captured *before* opening the handle, since opening creates the file — a post-open check would snapshot an empty 0-row DB on first boot) **and (b)** `hasPendingMigrations(sqlite, migrationsFolder)` returns true. `hasPendingMigrations` (`db/pendingMigrations.ts`) compares the applied-migration count in `__drizzle_migrations` against the journal's entry count; a missing table (pre-drizzle / empty DB) counts as pending. Because schema history is stable across most restarts, this avoids churning the pre-migration retention with identical copies on every reboot.
+- **Boot passes that rewrite rows take it too.** After migrating, `initDatabase` runs passes that repair stored data: the 1-on-1 DM key backfill (dm-system.md) and the stored permission normalisation (permissions.md, "Stored form"). Each calls `snapshotBefore` only when it is about to change a row, before the first write, so a clean database gets no snapshot; one snapshot per boot covers the migration and every pass.
 - **Fail-closed: a snapshot failure aborts startup by design.** If the snapshot throws (e.g. **disk full**), `initDatabase` logs and **re-throws — the migration does not run and the server does not start.** The box stays on the *old* code with its data intact until the operator frees space and restarts. **Backspace never migrates the schema without first securing a backup.** This is intentional: a failed-but-applied migration on an unbacked-up DB is the one unrecoverable scenario, so we refuse to enter it.
 
 `BACKUP_DISABLED=true` turns off both the pre-migration snapshot **and** the scheduled worker (the gate at the top of `initDatabase` and the early return in `startBackupWorker`). Use it only when an external backup system owns `data/`.

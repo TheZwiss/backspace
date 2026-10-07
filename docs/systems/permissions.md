@@ -27,8 +27,14 @@ older role routes the request's string as given, so an old database can hold
 `normalizeStoredPermissions` (`server/src/db/permissionStrings.ts`), rewrites
 each to `canonicalPermissionString`: the value as `stringToPermissions` reads
 it, so every check gives the same answer; a negative value, which reads as
-every bit, becomes the defined bits (`& ALL_PERMISSIONS`). It logs how many
-values it rewrote and is a no-op once applied.
+every bit, becomes the defined bits (`& ALL_PERMISSIONS`). Before its first
+rewrite the database is snapshotted (deployment.md, "Pre-migration
+snapshot"). A value
+`stringToPermissions` cannot read in full (text that is neither an integer
+nor a JSON list of permission names, or a list naming something that is not
+a permission) is logged as it is replaced, with its table, row key, column
+and old text, so it can be put back by hand. It logs how many values it
+rewrote and is a no-op once applied, so each such value is logged once.
 
 
 ---
