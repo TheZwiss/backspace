@@ -4,6 +4,8 @@ import { VoiceChannel } from './VoiceChannel';
 import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
+import type { MemberWithUser } from '@backspace/shared';
 
 vi.mock('../../audio/AudioManager', () => ({
   AudioManager: { getInstance: () => ({}) },
@@ -31,13 +33,14 @@ function participant(userId: string, username: string, isLocal: boolean) {
 }
 
 beforeEach(() => {
-  useAuthStore.setState({ user: { id: '1', username: 'ada' } } as any);
+  useAuthStore.setState({ user: { id: '1', username: 'ada' }, myRowIds: new Map() } as any);
   useSpaceStore.setState({
     members: [
       { userId: '1', user: { id: '1', username: 'ada', displayName: 'Ada', avatar: null }, roles: [] },
       { userId: '2', user: { id: '2', username: 'bob', displayName: 'Bob', avatar: null }, roles: [] },
     ],
     channelToSpaceMap: new Map([['voice-1', 'space-1']]),
+    channelOriginMap: new Map(),
   } as any);
   useVoiceStore.setState({
     currentVoiceChannelId: 'voice-1',
@@ -177,5 +180,57 @@ describe('VoiceChannel occupancy timer', () => {
 
     expect(screen.getByTestId('voice-channel-timer')).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByRole('button', { name: 'Voice' })).toBeInTheDocument();
+  });
+});
+
+describe('VoiceChannel own row', () => {
+  const ORBIT = 'https://orbit.example';
+  const dragHandlers = () => ({ draggable: true, isBeingDragged: false, onDragStart: () => {}, onDragEnd: () => {} });
+
+  function renderWithDrag() {
+    return render(
+      <VoiceChannel channelId="voice-1" channelName="Voice" onClick={() => {}} voiceUserHandlers={dragHandlers} />,
+    );
+  }
+
+  function rowOf(name: string): HTMLElement {
+    return screen.getByText(name).closest('[draggable]') as HTMLElement;
+  }
+
+  it("is the user's row on a remote space's instance, not the row that has the session row's id", () => {
+    // orbit knows the user as o-7; orbit's Cleo has the id the session row has.
+    useAuthStore.setState({ myRowIds: new Map([[ORBIT, 'o-7']]) });
+    useSpaceStore.setState({
+      channelOriginMap: new Map([['voice-1', ORBIT]]),
+      members: [
+        { spaceId: 'space-1', userId: 'o-7', user: { id: 'o-7', username: 'ada@nova', displayName: 'Ada', avatar: null }, roles: [] },
+        { spaceId: 'space-1', userId: '1', user: { id: '1', username: 'cleo', displayName: 'Cleo', avatar: null }, roles: [] },
+      ] as unknown as MemberWithUser[],
+    });
+    useVoiceStore.setState({
+      participants: [participant('o-7', 'ada', true), participant('1', 'cleo', false)],
+      voiceUsers: new Map([['voice-1', ['o-7', '1']]]),
+    });
+    const open = vi.fn();
+    useContextMenuStore.setState({ open });
+    renderWithDrag();
+
+    expect(rowOf('Ada')).toHaveAttribute('draggable', 'false');
+    expect(rowOf('Cleo')).toHaveAttribute('draggable', 'true');
+    fireEvent.contextMenu(rowOf('Ada'));
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.contextMenu(rowOf('Cleo'));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("is the session row's on the page instance", () => {
+    const open = vi.fn();
+    useContextMenuStore.setState({ open });
+    renderWithDrag();
+
+    expect(rowOf('Ada')).toHaveAttribute('draggable', 'false');
+    expect(rowOf('Bob')).toHaveAttribute('draggable', 'true');
+    fireEvent.contextMenu(rowOf('Ada'));
+    expect(open).not.toHaveBeenCalled();
   });
 });
