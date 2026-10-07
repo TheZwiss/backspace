@@ -1457,12 +1457,19 @@ export function getHomeWsConnected(): boolean {
   return !!conn?.ws && conn.ws.readyState === WebSocket.OPEN;
 }
 
-/** Send an event over the WebSocket. Can be used outside of React components. */
-export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): void {
+/**
+ * Send an event over the origin's WebSocket. Can be used outside of React
+ * components. Returns whether the event was handed to an open socket; when
+ * the origin has none (not connected, or reconnecting) the event is dropped
+ * and the result is false.
+ */
+export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): boolean {
   const conn = connections.get(origin);
   if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
     conn.ws.send(JSON.stringify(event));
+    return true;
   }
+  return false;
 }
 
 /** Send an event to ALL connected WebSocket instances (home + remotes). */

@@ -9,7 +9,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { Message } from './Message';
 
-vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn(), wsSendAll: vi.fn() }));
+// An open socket: every send is taken.
+vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn(() => true), wsSendAll: vi.fn() }));
 // The picker as a single choice: picking 👍.
 vi.mock('./EmojiPicker', () => ({
   EmojiPicker: ({ onEmojiSelect }: { onEmojiSelect: (emoji: { native: string }) => void }) => (

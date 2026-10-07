@@ -236,10 +236,10 @@ interface ChatState {
    */
   presentReturns: Map<string, number>;
   /**
-   * The `reaction_add`s this client sent and has not seen answered, keyed by
-   * `reactionKey`, with the time each was sent. The server answers a stored
-   * reaction with `reaction_added` and a refused one with nothing, so an
-   * entry counts only for `REACTION_ADD_IN_FLIGHT_MS`.
+   * The `reaction_add`s this client handed to an open socket and has not
+   * seen answered, keyed by `reactionKey`, with the time each was sent. The
+   * server answers a stored reaction with `reaction_added` and a refused one
+   * with nothing, so an entry counts only for `REACTION_ADD_IN_FLIGHT_MS`.
    */
   reactionAddsInFlight: Map<string, number>;
   setCurrentChannel: (channelId: string | null) => void;
@@ -934,12 +934,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Resolve the channel from our message cache so the UI doesn't need to pass it
     const channelId = findHeldMessage(get(), messageId)?.channelId;
     const origin = channelId ? getChannelOrigin(channelId) : '';
+    // An add the socket did not take (the origin is reconnecting, say) is
+    // not in flight: the next tap sends it again.
+    if (!wsSend({ type: 'reaction_add', messageId, emoji }, origin)) return;
     set((state) => {
       const reactionAddsInFlight = new Map(state.reactionAddsInFlight);
       reactionAddsInFlight.set(reactionKey(messageId, emoji), Date.now());
       return { reactionAddsInFlight };
     });
-    wsSend({ type: 'reaction_add', messageId, emoji }, origin);
   },
 
   removeReaction: (messageId: string, emoji: string) => {

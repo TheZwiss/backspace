@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { MessageWithUser, Reaction, User } from '@backspace/shared';
 
+// An open socket: every send is taken.
 vi.mock('../hooks/useWebSocket', () => ({
-  wsSend: vi.fn(),
+  wsSend: vi.fn(() => true),
   wsSendAll: vi.fn(),
 }));
 
@@ -93,6 +94,18 @@ describe('addReaction', () => {
     useChatStore.setState({ messages: new Map([[CHANNEL, [message([reaction('r1', orbitMira, '👍'), reaction('r2', orbitMe, '🎉')])]]]) });
     useChatStore.getState().addReaction(MESSAGE, '👍');
     expect(sent('reaction_add')).toHaveLength(1);
+  });
+
+  it('does not count an add the socket did not take as in flight, so the next call sends it', () => {
+    vi.mocked(wsSend).mockReturnValueOnce(false);
+    const { addReaction } = useChatStore.getState();
+    addReaction(MESSAGE, '👍');
+    expect(useChatStore.getState().reactionAddsInFlight.size).toBe(0);
+    expect(useChatStore.getState().hasOwnReaction(MESSAGE, '👍')).toBe(false);
+
+    addReaction(MESSAGE, '👍');
+    expect(sent('reaction_add')).toHaveLength(2);
+    expect(useChatStore.getState().reactionAddsInFlight.size).toBe(1);
   });
 
   it('sends the add again once an unanswered one has timed out', () => {
