@@ -2074,10 +2074,14 @@ Four relay event types are processed in `processRelayEvents()`:
 
 | Event Type | Direction | Key Payload Fields |
 |---|---|---|
-| `dm_call_start` | Host → each participant-homing peer | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`, **scoped to the recipient's own members**), `memberTokens?` (the same tokens as `{ homeUserId, homeInstance, token }`; see "Token Scoping"), `caller: { homeUserId, homeInstance, displayName }`, `participants` (full roster) |
+| `dm_call_start` | Host → each participant-homing peer | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`, **scoped to the recipient's own members**), `memberTokens?` (the same tokens as `{ homeUserId, homeInstance, token }`; see "Token Scoping"), `caller: { homeUserId, homeInstance, displayName }`, `participants` (full roster), `perMember?` (group call: the host applies the group rules) |
 | `dm_call_accept` | Participant → Host, then Host → All Peers | `federatedId`, `acceptor: { homeUserId, homeInstance }` |
-| `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }` |
-| `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }` |
+| `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }`, `perMember?` (group call: only this member declined) |
+| `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }`, `perMember?` (group call: only this member left) |
+
+`perMember` is new after 1.8.0 and absent from older senders. The group call
+rules it carries, and how a 1.8.0 peer meets this version, are in voice.md,
+"Group calls across instances".
 
 All events carry standard relay fields: `eventType`, `messageId`, `encryptionVersion: 0`, `timestamp`. All events pass through `attributionRefusal()` before any DB or state mutations.
 
@@ -2108,9 +2112,9 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 
 **Accept:** Remote instance sends `dm_call_accept` S2S to host. Host transitions `ringing → active`, broadcasts `dm_call_accepted` locally, fans out `dm_call_accept` to all other remote instances.
 
-**Reject:** Remote sends `dm_call_reject` to host. Host destroys room, sends `dm_call_end` to all peers. (For 1-on-1 DMs, reject = end.)
+**Reject:** Remote sends `dm_call_reject` to host. In a 1-on-1 the host destroys the room and sends `dm_call_end` to the other peers. In a group the host records the decline and ends the call only when nobody is left to answer it.
 
-**End:** Initiating instance (host or not) routes through the host. Host destroys room, fans out `dm_call_end` to all remote instances.
+**End:** Initiating instance (host or not) routes through the host. In a 1-on-1 the host destroys the room and fans out `dm_call_end` to the other remote instances. In a group the member leaves, and the host ends the call and fans out `dm_call_end` to every remote instance, in the caller's name, only when its last participant is gone.
 
 **Timeout:** Both host and remote instances auto-clean stale ringing calls after 60 seconds.
 

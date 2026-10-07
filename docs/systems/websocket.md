@@ -74,10 +74,10 @@ All four also need the actor to outrank the target (permissions.md, "Role hierar
 ### DM Calls
 | type | fields | notes |
 |------|--------|-------|
-| `dm_call_start` | dmChannelId?, federatedCallId? | `dmChannelId` can be null when `federatedCallId` is provided. 60s auto-timeout if not accepted |
-| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active |
-| `dm_call_reject` | dmChannelId?, federatedCallId? | |
-| `dm_call_end` | dmChannelId?, federatedCallId? | |
+| `dm_call_start` | dmChannelId | 60s auto-timeout if not accepted. In a DM whose call is hosted here, a member not in it joins it (handled as `dm_call_accept`). A member already in it, or a DM whose call is hosted on another instance, gets `error` with `code: 'dm_call_in_progress'` and the `dmChannelId`, on the sending socket only; a non-member gets `code: 'not_dm_member'`, a missing `dmChannelId` `code: 'validation_failed'` |
+| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active; later accepts join the active call (late join) |
+| `dm_call_reject` | dmChannelId?, federatedCallId? | 1-on-1: ends the call. Group: stops only the sender's ring; ends the call only when it still rings and every member but the caller has declined. Ignored from the caller or a participant |
+| `dm_call_end` | dmChannelId?, federatedCallId? | 1-on-1: ends the call. Group: takes only the sender out; the caller of a call nobody joined ends it; the call ends with its last participant. Ignored from a member who is not in the call |
 
 ### System
 | type | fields |
@@ -94,7 +94,7 @@ All four also need the actor to outrank the target (permissions.md, "Role hierar
 |------|--------|-------|
 | `ready` | (see Ready Payload below) | user |
 | `pong` | — | user |
-| `error` | message, code? | user |
+| `error` | message, code?, dmChannelId? | user; a refused `dm_call_start` goes to the sending socket only and names its `dmChannelId` |
 
 ### Messages
 | type | fields | scope |
@@ -192,9 +192,12 @@ and misses live role changes in that space until it reconnects; a new client
 connected to an old server still gets the old `ready` push.
 
 An `error` that carries a `code` is the refusal of something the user just
-did (so far `role_hierarchy` from the voice moderation events); the client
-shows it as a warning toast in the user's language (`describeErrorCode`).
-An `error` without a code is only logged.
+did (`role_hierarchy` from the voice moderation events, `dm_call_in_progress`,
+`not_dm_member` and `validation_failed` from `dm_call_start`); the client shows it as a warning
+toast in the user's language (`describeErrorCode`). An `error` without a code
+is only logged. An `error` with a `dmChannelId` equal to the DM the client is
+calling, from the instance that serves that DM, also clears the calling state
+(`outgoingCall`), which stops the outgoing ring.
 
 ### DM Channel Management
 | type | fields | scope |
@@ -222,9 +225,9 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 | type | fields | scope |
 |------|--------|-------|
 | `dm_call_incoming` | dmChannelId?, federatedCallId, callerId, callerName, callOrigin?, livekitUrl?, livekitToken? | DM members (excludes caller). `dmChannelId` can be null for Path B federated calls (no local DM channel). `callOrigin` identifies the hosting instance for cross-instance calls. |
-| `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members |
-| `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members |
-| `dm_call_ended` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members, on every accept including late joins. A client acts on it only when it names the call it holds (`dmCallEventIsOurs`) |
+| `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members when the call ends as rejected; only the decliner (all sessions) for a group decline that leaves the call running |
+| `dm_call_ended` | dmChannelId?, federatedCallId? | DM members. Preceded by a `voice_state_update` leave for each participant still in the call. A client tears down its call state only when the event names the call it holds (`dmCallEventIsOurs`) |
 | `dm_call_undeliverable` | Sent to the originator when a call relay (start / accept / reject / end) to one or more peers fails. Includes `phase: 'start' \| 'accept' \| 'reject' \| 'end' \| 'host_unreachable'` identifying the action; `failures[]` enumerates failed peers with a `reason` (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `livekit_unavailable` / `no_recipient`). `terminal: true` means local call state should be (or has been) torn down; `terminal: false` is informational. See `docs/systems/voice.md` for the full phase × terminal matrix. | originator (caller / acceptor / rejector / ender) |
 
 ### Social

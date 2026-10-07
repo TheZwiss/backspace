@@ -85,19 +85,59 @@ current channel as a reconnect whenever `voiceConnectionStatus` is
 
 States: `ringing` → `active` → destroyed
 
-| Event | Action | State |
-|-------|--------|-------|
-| `dm_call_start` | Room created, caller bound, 60s timeout starts | ringing |
-| `dm_call_incoming` | Broadcast to DM members (excludes caller) | ringing |
-| `dm_call_accept` | First accept: ringing→active. Late joins welcome (group DM) | active |
-| `dm_call_reject` | Room destroyed, caller unbound | — |
-| `dm_call_end` | All participants unbound, room destroyed | — |
-| Timeout (60s) | Auto-cleanup if still ringing, broadcast `dm_call_ended` | — |
+A call's rules depend on its conversation. A 1-on-1 call ends when either side
+ends or declines it. A group call is shared: members come and go, and it ends
+only when nobody is left in it. The room records which kind it is when it is
+created (`DmRoomMeta.group`, from `isGroupConversation` in
+`utils/dmConversation.ts`: every DM row that may not be a 1-on-1, so an owned
+row or a row with a UUID key).
+
+| Event | 1-on-1 | Group | State |
+|-------|--------|-------|-------|
+| `dm_call_start` | Room created, caller bound, 60s timeout starts | same | ringing |
+| `dm_call_incoming` | Broadcast to DM members (excludes caller) | same | ringing |
+| `dm_call_accept` | First accept: ringing→active, caller and acceptor seated | same; later accepts join the running call (late join) | active |
+| `dm_call_reject` | Room destroyed, `dm_call_rejected` to all members | Decliner added to `declinedUserIds`, `dm_call_rejected` to the decliner only. If the call still rings and every member but the caller has declined, it ends as in a 1-on-1. Ignored from the caller or a participant | — / unchanged |
+| `dm_call_end` | Room destroyed, `dm_call_ended` to all members | From the caller of a call nobody joined: ends it. From a participant: that participant leaves (`voice_state_update` leave), and the call ends when it was the last one. From anyone else: ignored | — / unchanged |
+| Timeout (60s) | Still ringing: room destroyed, `dm_call_ended` | same (nobody but the caller joined) | — |
+
+Ends go through `ConnectionManager.endDmRoom`, which unbinds the voice
+sessions, sends a `voice_state_update` leave for each participant still
+seated, then the end event. The exception is a ringing call its caller leaves
+behind by starting another call or joining a voice channel: that room is
+destroyed with a bare `dm_call_ended` and the end is not relayed. The group
+rules live in `leaveGroupDmCall` and `declineGroupDmCall` on the
+ConnectionManager, used by both the local handlers (`ws/events.ts`) and the
+relayed ones (`routes/federation/events/calls.ts`).
+
+**Starting a call in a DM that has one.** `dm_call_start` in a DM whose call
+is hosted here joins that call for a member who is not in it (the same path as
+`dm_call_accept`), so two members pressing call at once end up in one call. A
+member already in it (a participant, or the caller of a call still ringing,
+from another tab) gets `error { code: 'dm_call_in_progress', dmChannelId }` on
+the sending socket only. So does any member when the DM's call is hosted on
+another instance: a second call here would split the conversation, and the
+host minted the room tokens when its call started, so a late join through this
+instance is not possible. The client clears its calling state on that refusal.
+
+**Client.** The DM header call button (desktop `MainContent`, mobile
+`MobileChatScreen`) becomes a join button when the DM's instance reports
+people in its call (`voiceUsers` for the DM id, `isDmCallRunning`).
+`joinDmCall` does what accepting a ring does: sets `activeDmCall`, sends
+`dm_call_accept` and connects within the click. A call that is still ringing
+has nobody seated, so the button still reads start there; the server turns that
+start into a join. `dm_call_accepted`, `dm_call_ended` and `dm_call_rejected`
+change the client's call state only when they name the call it holds
+(`dmCallEventIsOurs`: the DM id, or the conversation key through the DM list).
+Every member of a DM hears each accept (late joins included) and the call's
+end, and a member calling another DM, in another call, or in a voice channel
+must stay where it is.
 
 **Edge cases:**
 - Starting new call cancels any other ringing calls by same caller
 - Socket close during ringing → auto-cleanup
-- Participants drop to 0 in active state → room destroyed
+- Socket close during ringing also relays the end to the peers
+- Participants drop to 0 in active state → room destroyed, also when the last one leaves through a voice-session grace expiry or by joining another room, and the end is relayed to the peers (the ring-timeout fan-out hook covers the ConnectionManager's own ends)
 
 ---
 
@@ -128,9 +168,30 @@ All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relaye
 
 **Reject / end are optimistic.** Local state is cleared before the relay is awaited because the user's intent is to terminate. If the relay fails, the originator receives an informational `dm_call_undeliverable { terminal: false }` so they know remote peers may briefly display stale state; no local rollback.
 
-**Ring-timeout fan-out.** When the host's 60 s ringing timeout fires without an accept, `dm_call_end` is fanned out to all remote peers so stranded Path-A/B ringees on other instances exit their ring state instead of lingering. Registered via `connectionManager.setRingTimeoutFanoutHook` from the WS events module.
+**Group calls across instances.** The group rules above hold on both sides
+when both run this version. `FederationCallPayload.perMember` says so on the
+wire: the host sets it on a group call's `dm_call_start` ("I apply the group
+rules and relay the end to every peer"), and an entry holder sets it on a
+group member's relayed `dm_call_end` / `dm_call_reject` ("only this member
+left or declined; I keep the call for my other members"). Peers up to 1.8.0
+never send it.
 
-**Remaining edge.** When a non-host participant ends an active call and the relay to the host fails, the host's `activeDmCall` marker lingers until manual end — LK `ParticipantDisconnected` tears down the voice UI but does not clear the DM-call marker on the host side. This is the caller-side mirror of the remote-participant problem and is not covered by the Remote-Participant Host Unreachable Eviction mechanism above (which only reasons about FederatedCallEntry state). Tracked separately.
+- *Host.* A relayed `dm_call_accept` seats the remote member in the room under their local row (`DmRoomMeta.remoteParticipants` records the peer that relayed them), so the room is not empty while they are in it and voice states list them. A relayed `dm_call_end` with `perMember` takes that member out and ends the call only when they were the last one in; a relayed `dm_call_reject` with `perMember` only records the decline. Either one from a member who is not in the call changes nothing. When a group call ends, `dm_call_end` goes to every peer that homes a member, the sender too, since its other members may still be ringing. That end names the call's caller (homed here), because a peer refuses an end attributed to a user homed on another instance. When a peer leaves `active`, `onPeerDeactivated` calls `dropRemoteCallParticipants`, which takes that peer's members out of the calls hosted here and ends a call it leaves empty.
+- *Entry holder.* `FederatedCallEntry.group` is set only for a group call whose `dm_call_start` carried `perMember`. For such a call, `handleDmCallAccept` Path 2 records the acceptor in `FederatedCallEntry.joinedUserIds`. Path 2 `dm_call_end` from a joined member drops them and relays the end with `perMember`; from anyone else it is ignored and nothing is relayed. Path 2 `dm_call_reject` from a member not in the call removes them from `ringedUserIds`, sends `dm_call_rejected` to that member only and relays the decline with `perMember`. In both cases the entry stays for its other members until the host's own `dm_call_end` says the call is over.
+
+How a 1.8.0 peer and this version meet:
+
+| Case | What happens |
+|------|--------------|
+| Host here, a member on a 1.8.0 peer hangs up | The 1.8.0 peer ends the call for all its own members and relays the end without `perMember`. The host takes every participant that peer relayed in out of the call, and ends the call if that leaves it empty. Members here and on other peers stay in. |
+| Host here, a member on a 1.8.0 peer declines | The 1.8.0 peer stops the ring for all its members and relays the decline without `perMember`. The host records the decline and takes that peer's participants out, as above. A ringing call then ends on its 60 s timeout unless someone answers. |
+| Host here, call ends | The end reaches a 1.8.0 peer as before; it ends the call for its members. |
+| Host on a 1.8.0 peer, members here | The `dm_call_start` has no `perMember`, so the entry here keeps the 1.8.0 rules: a member's end or decline ends the call for every member here and is relayed. The 1.8.0 host ends the whole call on it, as it always did. |
+| Accepts in either direction | Unchanged: a 1.8.0 host does not seat remote acceptors, a host here does. |
+
+**Ring-timeout fan-out.** When the host's 60 s ringing timeout fires without an accept, `dm_call_end` is fanned out to all remote peers so stranded Path-A/B ringees on other instances exit their ring state instead of lingering. Registered via `connectionManager.setRingTimeoutFanoutHook` from the WS events module. The same hook (`fanOutCallEnd`) relays the other ends the host makes on its own: a ringing caller's socket closing, the last participant's voice grace running out, a peer's participants dropped by `dropRemoteCallParticipants`, and a group call ended by a relayed end or decline.
+
+**Remaining edge.** A remote participant's leave reaches the host only through the relayed `dm_call_end`. If that relay fails while the peer stays `active`, the host keeps them seated and the group call does not end when everyone else leaves; it ends when the peer stops being active or the server restarts. The other direction: if the host's final `dm_call_end` does not reach an entry holder, its group entry stays (and `dm_call_start` there is refused with `dm_call_in_progress`) until the host stops being active or the server restarts. When a non-host participant ends an active 1-on-1 call and the relay to the host fails, the host's `activeDmCall` marker lingers until manual end: LK `ParticipantDisconnected` tears down the voice UI but does not clear the DM-call marker on the host side. This is the caller-side mirror of the remote-participant problem and is not covered by the Remote-Participant Host Unreachable Eviction mechanism above (which only reasons about FederatedCallEntry state). Tracked separately.
 
 ### Remote-Participant Host Unreachable Eviction
 
@@ -159,7 +220,9 @@ Path B enables calls to ring for federated users even when no local DM channel h
 The in-memory call state (`FederatedCallEntry`) is keyed by `federatedId` (not `dmChannelId`):
 
 - `dmChannelId` is **nullable** — null for Path B scenarios where no local DM channel exists
-- `ringedUserIds` tracks all users who were notified of the incoming call, used for end-call cleanup
+- `ringedUserIds` tracks all users who were notified of the incoming call, used for end-call cleanup. A group decliner is removed from it
+- `joinedUserIds` tracks the local users who joined through this instance; in a group call only they can end their part of it
+- `group` is set at creation when the conversation is a group (from the local row, or from the key's shape when there is none, Path B) and the host's `dm_call_start` carried `perMember`
 - `callerId`, `callerHomeUserId`, `callerHomeInstance` identify the caller across instances
 
 ### Late-Bind dmChannelId
