@@ -319,10 +319,14 @@ describe('MemberRolesModal: saving', () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(update.mock.calls[0]![1]).toBe('r-helper');
     expect(stringToPermissions(update.mock.calls[0]![2].permissions!)).toBe(PermissionBits.KICK_MEMBERS | PermissionBits.SEND_MESSAGES);
-    expect(loadSpaceDetail).toHaveBeenCalledWith(SPACE_ID);
+    // What the server answered is shown at once; the space itself is not
+    // reloaded (space_access_changed refreshes it, #374).
+    expect(loadSpaceDetail).not.toHaveBeenCalled();
+    const holder = useSpaceStore.getState().members.find((m) => m.userId === 'holder');
+    expect(holder?.roles.map((r) => r.id).sort()).toEqual(['r-banner', 'r-helper']);
   });
 
-  it('shows a partial failure, reloads, and retries only what did not save', async () => {
+  it('shows a partial failure, keeps what landed, and retries only what did not save', async () => {
     seed();
     const updateMember = vi.spyOn(api.spaces, 'updateMember').mockResolvedValue(member('helper', []));
     const update = vi.spyOn(api.roles, 'update')
@@ -339,7 +343,7 @@ describe('MemberRolesModal: saving', () => {
     await userEvent.click(saveButton()!);
 
     expect(screen.getByText('You can only do that to members and roles ranked below your highest role.')).toBeInTheDocument();
-    expect(loadSpaceDetail).toHaveBeenCalledWith(SPACE_ID);
+    expect(loadSpaceDetail).not.toHaveBeenCalled();
     expect(saveButton()).not.toBeNull();
 
     update.mockClear();

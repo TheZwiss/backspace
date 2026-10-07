@@ -3,5 +3,10 @@
     "editProfile": "Profil bearbeiten",
     "homeInstance": "Heimatinstanz: {{domain}}",
     "logOutConfirm": "Möchtest du dich wirklich abmelden?"
+  },
+  "chat": {
+    "openCall": "Anruf öffnen",
+    "cancelCall": "Anruf abbrechen",
+    "unknownChannel": "Kanal"
   }
 }

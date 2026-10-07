@@ -158,7 +158,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
               ? 'bg-surface-elevated text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
         }`}
-        title={locked ? "You don't have permission to connect to this channel" : undefined}
+        title={locked ? t('connectLocked') : undefined}
       >
         {isActive && !locked && (
           <div

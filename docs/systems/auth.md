@@ -275,7 +275,7 @@ When local bcrypt verification fails for a user with `homeInstance` set:
 1. Extract base username (strip `@domain` if present)
 2. POST to `https://{homeInstance}/api/auth/login` with base username and provided password
 3. Timeout: 10 seconds (`AbortController`)
-4. **If home instance accepts (200):** run the **epoch guard** (see below) before re-hashing. If the guard passes:
+4. **If home instance accepts (200):** check that the account the home signed in is this row's home identity: the answer's `user.id` or `user.homeUserId` equals the row's `homeUserId` (the identity a native account presents is `homeUserId ?? id`, as registration and `/users/by-home-id` read it). Otherwise, and for a row without a `homeUserId`, reject with "Invalid username or password" and leave the hash alone: a 200 only says that some account on the home has that name and password, and the name sent is the row's local part, which a pre-1.8 re-attach suffixed (`kai_1`) and which can be another person's handle there. Then run the **epoch guard** (see below). If both pass:
    - Re-hash password locally: `hashPassword(password)`
    - Update local `passwordHash` -- but **do NOT set `passwordChangedAt`** (this is a state correction, not a password change; setting it would invalidate existing valid JWTs on this instance)
    - Log the self-healing event

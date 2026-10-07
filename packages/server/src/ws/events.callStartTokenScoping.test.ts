@@ -43,6 +43,7 @@ type CallRelayEvent = {
   federatedId?: string;
   call?: {
     tokens?: Record<string, string>;
+    memberTokens?: Array<{ homeUserId: string; homeInstance: string; token: string }>;
     participants?: Array<{ homeUserId: string; homeInstance: string }>;
     caller?: { homeUserId: string; homeInstance: string };
   };
@@ -260,6 +261,25 @@ describe('sendFederatedCallStart — LiveKit token scoping', () => {
       'bob-home': 'token:fed-same-peer:bob-home',
       'erin-home': 'token:fed-same-peer:erin-home',
     });
+  });
+
+  it('names each token\'s holder by federated identity, with its home instance', async () => {
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
+    seedLocalUser('bob-stub', { homeUserId: 'bob-home', homeInstance: 'https://orbit.example' });
+    seedDmChannel('dm-ids', 'fed-ids', 'alice');
+    seedDmMember('dm-ids', 'alice');
+    seedDmMember('dm-ids', 'bob-stub');
+    seedActivePeer('https://orbit.example', 'Orbit');
+
+    const cm = await importManager();
+    cm.createDmRoom('dm-ids', 'alice');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-ids', 'alice', 'Alice');
+
+    expect(relayTo('https://orbit.example')!.call?.memberTokens).toEqual([
+      { homeUserId: 'bob-home', homeInstance: 'https://orbit.example', token: 'token:fed-ids:bob-home' },
+    ]);
   });
 });
 

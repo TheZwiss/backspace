@@ -460,14 +460,25 @@ It fails on:
 6. A direct `toLocale*` or `Intl.*` call in the web package outside
    `formatters.ts`.
 7. An `ErrorCode` with no entry in `errors.json`.
-8. A literal user-facing string in JSX or in a `addToast(...)` call, in any
-   file not listed in `scripts/i18n-pending.txt`. That file listed the
-   source files not yet swept while the sweeps ran; it has been empty since
-   they finished, so the rule covers every file, and it stays as the
-   mechanism for a surface that has to land untranslated for a while.
-   `node scripts/check-i18n.mjs --write-pending` regenerates it from the
-   current tree. A line that is a false positive carries
-   `// i18n-check: allow-literal` on the line above. Files under
+8. A literal user-facing string in JSX or in an `addToast(...)` call (bare or
+   through a store, `useUIStore.getState().addToast(...)`), in any
+   file not listed in `scripts/i18n-pending.txt`. The rule reads each
+   component's TypeScript syntax tree (the compiler is resolved from the web
+   package), so it sees text wherever JSX puts it: JSX text inside
+   conditionals and maps, literal JSX children (`{open ? 'Open' : t('x')}`),
+   and the `placeholder`, `title`, `aria-label` and `alt` attributes whether
+   quoted or computed (`title={name ?? 'Embed'}`, `` aria-label={`Load ${x}`} ``).
+   It follows a value through `?:` branches, `||`, `??`, the right side of
+   `&&`, `+` and template literals, and never into a condition or a call's
+   arguments, so `t('key')` and `kind === 'approve'` are not text. An earlier
+   regex version treated every `{...}` block as opaque and missed all of
+   these (#328). The pending file listed the source files not yet swept
+   while the sweeps ran; it stays as the mechanism for a surface that has to
+   land untranslated for a while, and a `#` line above an entry says why it
+   is there. `node scripts/check-i18n.mjs --write-pending` regenerates it
+   from the current tree. A line that is a false positive carries
+   `// i18n-check: allow-literal` (or `{/* i18n-check: allow-literal */}` in
+   JSX) on the line itself or the line above. Files under
    `packages/web/src/dev/` are exempt from this rule alone: each is the entry
    of a design workbench page that the app never imports, and their copy
    addresses whoever is building the component rather than a user.

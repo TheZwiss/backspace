@@ -205,6 +205,7 @@ function seedStores(state: RowState): void {
   useAuthStore.setState({ user: ME });
   useSpaceStore.setState({
     channelOriginMap: new Map([[CHANNEL, '']]),
+    spaceChannelIndex: new Map([[CHANNEL, { spaceId: SPACE, origin: '', type: 'text' as const }]]),
     channelToSpaceMap: new Map([[CHANNEL, SPACE]]),
     channelPermissions: new Map([[CHANNEL, permissionsToString(ALL_PERMISSIONS)]]),
     dmChannels: [],
@@ -222,7 +223,7 @@ function seedStores(state: RowState): void {
     messages: new Map([[CHANNEL, isReactionState(state) ? reactionConversation() : conversation()]]),
     hasMore: new Map([[CHANNEL, false]]),
     // present-failed starts in a window loaded by an earlier jump.
-    detachedChannels: new Set(state === 'present-failed' ? [CHANNEL] : []),
+    detachedChannels: new Map(state === 'present-failed' ? [[CHANNEL, []]] : []),
   });
 }
 

@@ -58,19 +58,20 @@ const UNHIDE_NOTE = 'Saving makes this channel visible to every member.';
 function renderEditor(overrides: Override[], permDefs: PermissionDef[] = PERM_DEFS) {
   const deleteOverride = vi.fn().mockResolvedValue({ success: true });
   const putOverride = vi.fn().mockResolvedValue({ success: true });
-  const getOverrides = vi.fn().mockResolvedValue(overrides);
+  const onSaved = vi.fn();
   render(
     <PermissionsEditor
       entityId="channel-1"
       spaceId={SPACE_ID}
       permDefs={permDefs}
       unhideNote={UNHIDE_NOTE}
-      getOverrides={getOverrides}
+      overrides={overrides}
+      onSaved={onSaved}
       putOverride={putOverride}
       deleteOverride={deleteOverride}
     />,
   );
-  return { deleteOverride, putOverride, getOverrides };
+  return { deleteOverride, putOverride, onSaved };
 }
 
 beforeEach(() => {

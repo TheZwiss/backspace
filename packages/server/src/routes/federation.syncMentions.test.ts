@@ -195,7 +195,11 @@ describe('POST /api/federation/sync — a replayed message has the live relay\'s
     seedDm(home.db, 'ch-home', ['alice', 'bob-on-home']);
     home.db.insert(schema.dmMessages).values({
       id: 'msg-on-home', dmChannelId: 'ch-home', userId: 'alice', type: 'system',
-      content: JSON.stringify({ event: 'member_added', targetUserId: 'bob-on-home', targetDisplayName: 'bob' }),
+      // A space invite: the one system message that is relayed as a message.
+      content: JSON.stringify({
+        event: 'space_invite', spaceId: 'space-1', spaceInstanceOrigin: HOME_ORIGIN, inviteCode: 'abc123',
+        snapshot: { spaceName: 'Lounge', icon: null, avatarColor: null, memberCount: 2, description: null, instanceName: 'Home' },
+      }),
       createdAt: 100,
     }).run();
     home.db.insert(schema.federationMutationLog).values({

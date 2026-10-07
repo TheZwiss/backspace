@@ -595,7 +595,11 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  | { type: 'error'; message: string; code?: ErrorCode };
+  | { type: 'error'; message: string; code?: ErrorCode }
+  // The space's roles or a member's roles changed: what the receiver may see
+  // or do there, and how its roles and members look, may be different now.
+  // The client refetches that space's detail (docs/systems/websocket.md).
+  | { type: 'space_access_changed'; spaceId: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
 
@@ -778,8 +782,18 @@ export interface SpaceInviteSystemPayload {
 
 export interface PaginatedQuery {
   before?: string;
+  after?: string;
   limit?: number;
 }
+
+/**
+ * Set by the message history endpoints on a response that honoured `after`.
+ * A server that predates forward paging ignores `after` and answers with the
+ * newest page, without this header. Contract: docs/systems/api.md, "Message
+ * history paging".
+ */
+export const MESSAGE_PAGING_HEADER = 'X-Backspace-Paging';
+export const MESSAGE_PAGING_AFTER = 'after';
 
 export interface ApiError {
   error: string;
@@ -1227,6 +1241,13 @@ export interface FederationRelayEvent {
 export interface FederationCallPayload {
   livekitUrl?: string;
   tokens?: Record<string, string>;  // homeUserId → LiveKit token
+  /**
+   * The same tokens with each holder's federated identity. Optional: older
+   * senders omit it, and every key of `tokens` is then a user homed on the
+   * receiving instance. A receiver gives a token only to the local user its
+   * identity resolves to; a home user id alone is unique only where issued.
+   */
+  memberTokens?: Array<{ homeUserId: string; homeInstance: string; token: string }>;
   caller?: { homeUserId: string; homeInstance: string; displayName: string };
   acceptor?: { homeUserId: string; homeInstance: string };
   rejector?: { homeUserId: string; homeInstance: string };
@@ -1493,6 +1514,12 @@ export interface FederationUserLookupProfile {
   // Carried so the requester can seed the stub's status at creation time.
   // Optional for backwards compat with peers that pre-date the field.
   status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
+  // `/users/by-home-id` only, from homes that send it: the profile's version
+  // (the value `profile_update` carries; a never-edited profile is at its
+  // account's creation time) and the accent colour, so the answer can be
+  // applied like a `profile_update`. Absent from older homes.
+  profileUpdatedAt?: number | null;
+  accentColor?: string | null;
 }
 
 export type FederationUserLookupResponse =
@@ -1776,3 +1803,5 @@ export interface TelemetryStatus {
    */
   askDue: boolean;
 }
+
+export type { DmSystemEvent } from './dmSystemEvents.js';

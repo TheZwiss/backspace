@@ -525,7 +525,15 @@ export const federationOutbox = sqliteTable('federation_outbox', {
   id: text('id').primaryKey(),
   peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
   contextId: text('context_id').notNull(),
+  /** The id the peer knows the event by (the relay event's `messageId`). */
   entityId: text('entity_id').notNull(),
+  /**
+   * The queue the row belongs to: the events of one entity, sent one at a
+   * time in order and folded only by the rules in federationOutboxQueue.ts.
+   * Derived there from the event (`outboxQueueKey`). Null only on rows queued
+   * before the column existed, until the boot backfill fills it.
+   */
+  queueKey: text('queue_key'),
   contextType: text('context_type').notNull().default('dm'),
   eventType: text('event_type').notNull(),
   payload: text('payload').notNull(),
@@ -534,8 +542,14 @@ export const federationOutbox = sqliteTable('federation_outbox', {
   nextRetryAt: integer('next_retry_at').notNull(),
   expiresAt: integer('expires_at').notNull(),
   createdAt: integer('created_at').notNull(),
+  /**
+   * When some path first possibly handed this event to the peer: the worker
+   * putting it on the wire, or the peer pulling `/sync`. Null: the peer
+   * cannot have it. Never cleared.
+   */
+  offeredAt: integer('offered_at'),
 }, (table) => ({
-  uniquePerPeerMessage: unique().on(table.peerId, table.entityId),
+  queueIdx: index('idx_outbox_queue').on(table.peerId, table.queueKey, table.createdAt),
   retryIdx: index('idx_outbox_retry').on(table.nextRetryAt),
 }));
 

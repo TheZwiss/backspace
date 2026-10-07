@@ -1,9 +1,9 @@
 # OSV-Scanner ratchet. Consumed by .github/workflows/security.yml.
 #
 # The dependency scan blocks on any vulnerability that is NOT listed here, so a
-# newly introduced one fails the build. The entries below are the backlog that
-# existed when enforcement was turned on: every one is fixable, and every one
-# needs a major upgrade that is its own compatibility decision. They are
+# newly introduced one fails the build. Each entry below is in one of two
+# shapes: the fix needs a major upgrade that is its own compatibility decision,
+# or no fixed release exists and the package is build-time only. They are
 # deferred, not dismissed. The argument for each lives in
 # docs/systems/security-scanning.md, section "What is left open, and why".
 #
@@ -35,6 +35,37 @@ id = "CVE-2026-25224"
 ignoreUntil = 2026-12-01
 reason = "fastify 4.29.1, fixed in 5.x. Major upgrade, tracked in security-scanning.md."
 
+# Five more fastify 4.29.1 findings, fixed in 5.12.2 (5.12.5 for the HTTP/2
+# trailer one). Same major upgrade as above. None of the five reaches this
+# server as it is written: it does not enable http2 or call reply.trailer(),
+# uses no $async schema, no header schema with the `dependencies` keyword and no
+# `false` request-part schema, and registers a single root-level not-found
+# handler (the SPA fallback) with no auth hook to skip.
+[[IgnoredVulns]]
+id = "CVE-2026-92081"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.12.5. Needs http2 plus reply.trailer(); the server uses neither. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-84504"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.12.2. Needs an $async request schema; the server has none. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-84428"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.12.2. Needs a header schema using `dependencies`; the server has none. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-84469"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.12.2. Needs a `false` request-part schema; the server has none. Major upgrade, tracked in security-scanning.md."
+
+[[IgnoredVulns]]
+id = "CVE-2026-76169"
+ignoreUntil = 2026-12-01
+reason = "fastify 4.29.1, fixed in 5.12.2. Needs encapsulated not-found handlers behind auth; the server has one root-level SPA fallback. Major upgrade, tracked in security-scanning.md."
+
 # @fastify/static 7.0.4 -> 10.1.2 or later. Gated behind the fastify 5 upgrade
 # above. Note the two advisories below need different floors, and the higher one
 # wins: 10.1.1 still carries CVE-2026-7120.
@@ -54,29 +85,6 @@ id = "CVE-2026-47219"
 ignoreUntil = 2026-12-01
 reason = "find-my-way 8.2.2, fixed in 9.7.0. Transitive through fastify 4."
 
-# react-router 6.30.6 -> 7.18.0. Major upgrade across every route in the SPA.
-[[IgnoredVulns]]
-id = "CVE-2026-53666"
-ignoreUntil = 2026-12-01
-reason = "react-router 6.30.6, fixed in 7.18.0. Major upgrade, tracked in security-scanning.md."
-
-[[IgnoredVulns]]
-id = "CVE-2026-53669"
-ignoreUntil = 2026-12-01
-reason = "react-router 6.30.6, fixed in 7.18.0. Major upgrade, tracked in security-scanning.md."
-
-# lodash 4.17.23 -> 4.18.0. Build-time only: electron-builder to
-# @malept/flatpak-bundler. Never ships in the app or the server image.
-[[IgnoredVulns]]
-id = "CVE-2021-23337"
-ignoreUntil = 2026-12-01
-reason = "lodash 4.17.23, build-time only via electron-builder. Does not ship to users."
-
-[[IgnoredVulns]]
-id = "CVE-2025-13465"
-ignoreUntil = 2026-12-01
-reason = "lodash 4.17.23, build-time only via electron-builder. Does not ship to users."
-
 # esbuild 0.18.20 -> 0.25.0. Build-time only: drizzle-kit to
 # @esbuild-kit/core-utils. Note the separate 0.28.2 copy that tsx pulls into the
 # server image is a different instance and is not affected by this advisory.
@@ -84,3 +92,30 @@ reason = "lodash 4.17.23, build-time only via electron-builder. Does not ship to
 id = "GHSA-67mh-4wv8-2f99"
 ignoreUntil = 2026-12-01
 reason = "esbuild 0.18.20, build-time only via drizzle-kit. The runtime copy is 0.28.2."
+
+# postcss-selector-parser 6.1.4 -> 7.1.6. Build-time only: tailwindcss 3 and
+# its postcss-nested, both devDependencies of @backspace/web. The parser runs
+# while Vite builds the stylesheet and is not in the bundle a browser loads. No
+# 6.x release carries the fix and tailwindcss 3 does not accept 7.x, so it is
+# gated behind the tailwindcss 4 port in the Dependabot table.
+[[IgnoredVulns]]
+id = "CVE-2026-104844"
+ignoreUntil = 2026-12-01
+reason = "postcss-selector-parser 6.1.4, fixed in 7.1.6 only. Build-time only via tailwindcss 3, which does not accept 7.x."
+
+# braces 3.0.3. No fixed release exists: the advisory covers every version
+# through 3.0.3, which is the latest. Build-time only: tailwindcss 3 through
+# chokidar and micromatch, devDependencies of @backspace/web.
+[[IgnoredVulns]]
+id = "CVE-2026-93687"
+ignoreUntil = 2026-12-01
+reason = "braces 3.0.3, no fixed release exists. Build-time only via tailwindcss 3. Does not ship to users."
+
+# sprintf-js 1.1.3. No fixed release exists: the advisory covers every version
+# through 1.1.3, which is the latest. Build-time only: electron-builder to
+# @electron/get to global-agent to roarr, used to download Electron while
+# packaging. Not in the packaged app or the server image.
+[[IgnoredVulns]]
+id = "CVE-2026-97058"
+ignoreUntil = 2026-12-01
+reason = "sprintf-js 1.1.3, no fixed release exists. Build-time only via electron-builder. Does not ship to users."

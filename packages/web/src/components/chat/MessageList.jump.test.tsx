@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { MessageWithUser, User } from '@backspace/shared';
@@ -20,12 +20,16 @@ vi.mock('../../audio/AudioManager', () => ({
 
 const messagesAround = vi.fn();
 const latestMessages = vi.fn();
+// A detached window pages forward near its end; these tests are about the
+// jump, so that page never arrives.
+const newerMessages = vi.fn(() => new Promise<never>(() => {}));
 vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../utils/crossStoreResolvers')>()),
   getApiForOrigin: () => ({
     channels: {
       messagesAround: (...args: unknown[]) => messagesAround(...args),
       messages: (...args: unknown[]) => latestMessages(...args),
+      messagesAfter: () => newerMessages(),
     },
   }),
 }));
@@ -86,11 +90,14 @@ beforeEach(() => {
     dmChannels: [],
   });
   useUIStore.setState({ toasts: [] });
+  // An unmount saves the list's anchor and an ack records a read position;
+  // each test opens the channel fresh.
+  useChatStore.setState({ scrollPositions: new Map(), readStates: new Map() });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set() });
+  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Map(), scrollPositions: new Map() });
   useSpaceStore.setState({ members: [], currentSpaceId: null, channelToSpaceMap: new Map() });
 });
 
@@ -130,6 +137,80 @@ function stubLayout(layout: Layout): void {
 function followedToBottom(): boolean {
   return scrollIntoView.mock.contexts.some((el) => el instanceof HTMLElement && el.id === '');
 }
+
+describe('message viewport resizing', () => {
+  let observers: TestResizeObserver[];
+
+  class TestResizeObserver {
+    targets = new Set<Element>();
+    constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+    observe(target: Element) { this.targets.add(target); }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  }
+
+  function resize(target: Element) {
+    act(() => {
+      for (const observer of observers) {
+        if (observer.targets.has(target)) {
+          observer.callback([{ target } as ResizeObserverEntry], observer as unknown as ResizeObserver);
+        }
+      }
+    });
+  }
+
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [msg('10', 'latest message')]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+      scrollPositions: new Map(),
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the latest message visible through keyboard open/close without content growth', async () => {
+    const layout: Layout = { scrollHeight: 2000, clientHeight: 800, scrollTop: 0, rowTop: {} };
+    stubLayout(layout);
+    const { container } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    await waitFor(() => expect(layout.scrollTop).toBe(1200));
+
+    for (const height of [600, 400, 550, 800]) {
+      layout.clientHeight = height;
+      // Only the viewport changes: no message, embed or composer resize.
+      resize(viewport);
+      expect(layout.scrollTop).toBe(layout.scrollHeight - height);
+      fireEvent.scroll(viewport);
+    }
+  });
+
+  it('preserves the reading position when the user has scrolled up', async () => {
+    const layout: Layout = { scrollHeight: 2000, clientHeight: 800, scrollTop: 0, rowTop: {} };
+    stubLayout(layout);
+    const { container } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    await waitFor(() => expect(layout.scrollTop).toBe(1200));
+    layout.scrollTop = 500;
+    fireEvent.scroll(viewport);
+
+    for (const height of [400, 800]) {
+      layout.clientHeight = height;
+      resize(viewport);
+      expect(layout.scrollTop).toBe(500);
+    }
+  });
+
+  it('disconnects viewport observation on unmount', () => {
+    const { container, unmount } = renderList();
+    const viewport = container.querySelector('.overflow-y-auto')!;
+    expect(observers.some((observer) => observer.targets.has(viewport))).toBe(true);
+    unmount();
+    expect(observers.every((observer) => observer.targets.size === 0)).toBe(true);
+  });
+});
 
 describe('reply preview jump', () => {
   it('is a button that scrolls to and highlights a loaded original', async () => {
@@ -199,6 +280,23 @@ describe('reply preview jump', () => {
     // Once focus moves on, the row goes back to not being a tab stop.
     preview.focus();
     expect(target).not.toHaveAttribute('tabindex');
+  });
+
+  it('names the row it focuses by author and time, so a screen reader announces it (issue #329)', async () => {
+    const original = msg('10', 'where is the release checklist?');
+    const reply = msg('11', 'in the wiki', { replyToId: '10', replyTo: original });
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, [original, reply]]]),
+      hasMore: new Map([[CHANNEL, false]]),
+    });
+    renderList();
+
+    await userEvent.click(screen.getByRole('button', { name: /jump to the original message/i }));
+
+    const target = document.getElementById('msg-10');
+    expect(target).toHaveFocus();
+    expect(target).toHaveAttribute('role', 'article');
+    expect(target).toHaveAccessibleName(/^mira, .+/);
   });
 
   it('leaves focus alone when the user moved it while the jump was loading (issue #313)', async () => {
@@ -373,7 +471,7 @@ describe('reply preview jump', () => {
     // though the list is close to the window's end.
     await userEvent.click(screen.getByRole('button', { name: /jump to present/i }));
 
-    expect(latestMessages).toHaveBeenCalledWith(CHANNEL);
+    expect(latestMessages).toHaveBeenCalledWith(CHANNEL, undefined, 50);
     await waitFor(() => expect(document.getElementById('msg-500')).toBeInTheDocument());
     expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
     expect(document.getElementById('msg-100')).not.toBeInTheDocument();

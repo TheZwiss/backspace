@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
 
@@ -136,6 +136,55 @@ describe('what the role list offers', () => {
   });
 });
 
+/** The row of the role named `name` in the order list: the element a user grabs. */
+function roleRow(name: string): HTMLElement {
+  const label = screen.getAllByText(name).find((el) => el.closest('[data-role-row]'));
+  const row = label?.closest<HTMLElement>('[data-role-row]');
+  if (!row) throw new Error(`no row for ${name}`);
+  return row;
+}
+
+/** A drag of `from`'s row dropped on the lower half of `onto`'s row (jsdom rows have no height). */
+function dragRow(from: HTMLElement, onto: HTMLElement): void {
+  const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+  fireEvent.dragStart(from, { dataTransfer });
+  fireEvent.dragOver(onto, { dataTransfer, clientY: 1 });
+  fireEvent.drop(onto, { dataTransfer, clientY: 1 });
+  fireEvent.dragEnd(from, { dataTransfer });
+}
+
+describe('dragging a role (#373)', () => {
+  it('moves a role dragged by its row, through the same move as the arrows', async () => {
+    seed('owner');
+    const update = vi.spyOn(api.roles, 'update').mockResolvedValue({ ...ADMINS, position: 1 });
+    render(<RolesPanel spaceId={SPACE_ID} />);
+
+    expect(roleRow('Admins')).toHaveAttribute('draggable', 'true');
+    // Each event is its own act, so the drag state is there for the next one.
+    dragRow(roleRow('Admins'), roleRow('Guests'));
+    await act(async () => {});
+
+    expect(rankedIds()).toEqual(['r-mod', 'r-regular', 'r-guest', 'r-admin']);
+    expect(update).toHaveBeenCalledWith(SPACE_ID, 'r-admin', { position: 1, below: 'r-guest' });
+  });
+
+  it('leaves locked roles and @everyone undraggable', () => {
+    seed('moderator');
+    render(<RolesPanel spaceId={SPACE_ID} />);
+    expect(roleRow('Admins')).not.toHaveAttribute('draggable', 'true');
+    expect(roleRow('Moderators')).not.toHaveAttribute('draggable', 'true');
+    expect(roleRow('@everyone')).not.toHaveAttribute('draggable', 'true');
+    expect(roleRow('Regulars')).toHaveAttribute('draggable', 'true');
+  });
+
+  it('does not drag on a phone, where the buttons move the role', () => {
+    seed('owner');
+    useUIStore.setState({ isMobile: true });
+    render(<RolesPanel spaceId={SPACE_ID} />);
+    expect(roleRow('Admins')).not.toHaveAttribute('draggable', 'true');
+  });
+});
+
 describe('moving a role', () => {
   it('shows the new order at once and sends the move to the space\'s instance', async () => {
     seed('owner');
@@ -146,10 +195,11 @@ describe('moving a role', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Move Guests up' }));
 
     expect(rankedIds()).toEqual(['r-admin', 'r-mod', 'r-guest', 'r-regular']);
-    expect(update).toHaveBeenCalledWith(SPACE_ID, 'r-guest', { position: 2 });
+    expect(update).toHaveBeenCalledWith(SPACE_ID, 'r-guest', { position: 2, above: 'r-regular' });
 
     await act(async () => { pending.resolve({ ...GUESTS, position: 2 }); });
-    expect(loadSpaceDetail).toHaveBeenCalledWith(SPACE_ID);
+    // No reload of its own: space_access_changed refreshes every member (#374).
+    expect(loadSpaceDetail).not.toHaveBeenCalled();
     expect(rankedIds()).toEqual(['r-admin', 'r-mod', 'r-guest', 'r-regular']);
   });
 
@@ -193,10 +243,27 @@ describe('moving a role', () => {
     handle.focus();
     await userEvent.keyboard('{ArrowDown}');
 
-    expect(update).toHaveBeenCalledWith(SPACE_ID, 'r-admin', { position: 3 });
+    expect(update).toHaveBeenCalledWith(SPACE_ID, 'r-admin', { position: 3, below: 'r-mod' });
     expect(rankedIds()).toEqual(['r-mod', 'r-admin', 'r-regular', 'r-guest']);
     expect(screen.getByRole('button', { name: 'Move Admins' })).toHaveFocus();
     expect(screen.getByRole('status')).toHaveTextContent('Admins moved to position 2 of 4');
+  });
+
+  it('names the role shown next to it, so a move from an out-of-date list does what the list showed', async () => {
+    seed('owner');
+    const update = vi.spyOn(api.roles, 'update').mockResolvedValue({ ...ADMINS, position: 3 });
+    render(<RolesPanel spaceId={SPACE_ID} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move Admins down' }));
+    expect(update).toHaveBeenLastCalledWith(SPACE_ID, 'r-admin', { position: 3, below: 'r-mod' });
+
+    // A refresh built before that move lands and shows Admins on top again.
+    act(() => { useSpaceStore.setState({ roles: ROLES }); });
+    await userEvent.click(screen.getByRole('button', { name: 'Move Admins down' }));
+
+    // Below Moderators, as the list showed: the server, which has Admins
+    // there already, leaves it there instead of moving it a second rank down.
+    expect(update).toHaveBeenLastCalledWith(SPACE_ID, 'r-admin', { position: 3, below: 'r-mod' });
   });
 
   it('does not send a move the viewer may not make', async () => {
@@ -239,7 +306,7 @@ describe('a space on another instance', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Move Guests up' }));
 
-    expect(remoteUpdate).toHaveBeenCalledWith(SPACE_ID, 'r-guest', { position: 2 });
+    expect(remoteUpdate).toHaveBeenCalledWith(SPACE_ID, 'r-guest', { position: 2, above: 'r-regular' });
     expect(homeUpdate).not.toHaveBeenCalled();
   });
 });

@@ -74,12 +74,8 @@ afterEach(() => {
 });
 
 async function readyFor(userId: string): Promise<ReadyMessage> {
-  const { connectionManager } = await import('./handler.js');
-  const ws = { readyState: 1, send: vi.fn() };
-  connectionManager.addConnection(userId, ws as never);
-  connectionManager.pushReadyPayload(userId);
-  connectionManager.removeConnection(ws as never);
-  return JSON.parse(ws.send.mock.calls[0]?.[0] as string) as ReadyMessage;
+  const { buildReadyPayload } = await import('./handler.js');
+  return JSON.parse(JSON.stringify({ type: 'ready', ...buildReadyPayload(userId) })) as ReadyMessage;
 }
 
 describe("ready payload: friends' activities (#340)", () => {

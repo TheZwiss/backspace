@@ -46,7 +46,7 @@ export interface ChannelUser {
  */
 interface ChannelUserSources {
   dmChannels: DmChannel[];
-  dmAlternatives: Map<string, Map<string, string>>;
+  dmAlternatives: ReadonlyMap<string, ReadonlyMap<string, string>>;
   members: MemberWithUser[];
   spaces: TaggedSpace[];
 }
@@ -55,11 +55,9 @@ interface ChannelUserSources {
  * What the lookup maps say about one channel: its space and the origin that
  * issued its id ('' is home).
  *
- * `channelToSpaceMap` and `channelOriginMap` are updated in place
- * (`upsertChannel`, several WS channel handlers), so their identity says
- * nothing about their content and cannot be a memo input. The hooks read the
- * channel's two entries as values instead: a selector returning a string is
- * re-run on every store update, so a write in place is seen with the next one.
+ * The hooks read the channel's two entries as values rather than selecting
+ * the maps (which are replaced on every change, see `stores/spaceChannels.ts`),
+ * so a change to another channel does not re-render them.
  */
 interface ChannelFacts {
   spaceId: string | undefined;

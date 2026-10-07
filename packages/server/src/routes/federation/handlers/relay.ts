@@ -15,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import { processRelayEvents } from '../events/dispatch.js';
 import { extractDomain } from '../identity.js';
 import { isRelayRateLimited } from '../rateLimits.js';
+import { markOutboxOfferedForPeer } from '../../../utils/federationOutboxQueue.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 
 /**
@@ -317,6 +318,13 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       // Clamp limit: min 1, max 500, default 100
       let limit = typeof body.limit === 'number' ? body.limit : 100;
       limit = Math.max(1, Math.min(500, Math.floor(limit)));
+
+      // What this page serves may already sit in our outbox for the peer.
+      markOutboxOfferedForPeer(
+        peer.id,
+        Date.now(),
+        contextTypeFilter === 'friend' || contextTypeFilter === 'profile' ? contextTypeFilter : 'dm',
+      );
 
       // 3. Query mutation log — branch by contextType
       let mutationRows: Array<{

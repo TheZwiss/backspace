@@ -4,6 +4,7 @@ import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { findOrCreateOneOnOne, oneOnOneKey } from '../../../utils/dmConversation.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
+import { announceDmReconcile } from '../../../utils/dmConversationEvents.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -12,6 +13,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
+import { parseDmSystemEvent, RELAYABLE_DM_SYSTEM_EVENTS } from '@backspace/shared/src/dmSystemEvents.js';
 import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
@@ -57,6 +59,21 @@ export async function processCreateEvent(
   if (existingMsg) {
     rejected.push({ messageId: event.messageId, reason: 'duplicate' });
     return;
+  }
+
+  // Relayed system content is validated before anything is written: only an
+  // event a peer relays as a message (a space invite) is stored, in its
+  // canonical form (dm-system.md, "System messages").
+  const isSystem = event.message.type === 'system';
+  let systemContent: string | null = null;
+  if (isSystem) {
+    const systemEvent = parseDmSystemEvent(event.message.content);
+    if (!systemEvent || !RELAYABLE_DM_SYSTEM_EVENTS.has(systemEvent.event)) {
+      console.warn(`[federation] Refused relayed system message ${event.messageId} from ${extractDomain(sourceInstance)}: not a well-formed relayable system event`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_system_message' });
+      return;
+    }
+    systemContent = JSON.stringify(systemEvent);
   }
 
   // Resolve ALL participants to local users, auto-creating replicated stubs
@@ -135,7 +152,9 @@ export async function processCreateEvent(
     }
     // Both members open: the message that creates a copy here is delivered
     // with it.
-    localDmChannelId = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' }).channelId;
+    const opened = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' });
+    announceDmReconcile(opened.reconciled);
+    localDmChannelId = opened.channelId;
     // A call that rang here before this copy existed is bound to it now.
     connectionManager.lateBindFederatedCall(oneOnOneKey(pair[0]!, pair[1]!), localDmChannelId);
   }
@@ -145,11 +164,8 @@ export async function processCreateEvent(
   const replyToId = resolveRelayedReplyTarget(event.message.replyTo, sourceInstance, localDmChannelId, db);
 
   // Mention tokens carry the sender's ids; store them as this instance's.
-  // System content is not text with tokens and is stored as sent.
-  const isSystem = event.message.type === 'system';
-  const content = isSystem
-    ? event.message.content
-    : rewriteRelayedMentions(event.message.content, event.message.mentions, db);
+  // System content was validated and canonicalized above.
+  const content = systemContent ?? rewriteRelayedMentions(event.message.content, event.message.mentions, db);
 
   // Insert the message
   const localMessageId = generateSnowflake();
@@ -226,9 +242,11 @@ export async function processCreateEvent(
     }
   }
 
-  // Broadcast to local WebSocket clients, but skip members whose home instance
-  // is the source instance — they already have the original message via their
-  // home instance's WebSocket connection.
+  // Broadcast to every local member, members homed on the source instance
+  // included. Federated DMs are mirrored: a client connected here and to the
+  // source holds both copies of the conversation, and its DM merge module
+  // (web `stores/dmConversations.ts`) decides which copy it shows, so each
+  // copy gets its own messages.
   const fullMessage = getDmMessageWithUser(localMessageId);
   if (fullMessage) {
     const dmMembers = db.select()
@@ -449,10 +467,15 @@ export function processUpdateEvent(
   }
   const localMsg = resolved.localMsg;
 
+  // System messages cannot be edited (dm-system.md, "System messages").
+  if (localMsg.type === 'system') {
+    console.warn(`[federation] Refused relayed update of system message ${localMsg.id} from ${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'system_message_immutable' });
+    return;
+  }
+
   // Mention tokens carry the sender's ids; store them as this instance's.
-  const content = localMsg.type === 'system'
-    ? event.message?.content ?? null
-    : rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
+  const content = rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
   const editedAt = event.message?.editedAt ?? Date.now();
 
   db.update(schema.dmMessages)

@@ -8,29 +8,32 @@ import { generateSnowflake } from '../../utils/snowflake.js';
 import { collectProfileBroadcastTargetIds } from '../../utils/userDeletion.js';
 import { safeFetch } from '../../utils/ssrf.js';
 import { connectionManager } from '../../ws/handler.js';
-import { and, eq, or, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayProfileSnapshot, FederationUserLookupProfile } from '@backspace/shared';
 import { extractDomain, resolveRelayActor } from './identity.js';
-import { announceUserUpdated, applyPlaceholderRename } from './stubName.js';
+import { announceUserUpdated, applyPlaceholderRename, handleFromHint } from './stubName.js';
 
 /**
  * Hydrate a replicated user stub with profile data from a relay event.
- * Only fills fields that are still null/empty on the local row and never
- * rewrites one. The snapshot carries no version, and a DM or friend event may
- * carry one that a third instance built from its own, possibly stale, replica
- * of the user, so it cannot tell whether it is newer than what is stored.
- * Stored profile fields change only through the home's version-checked
- * `profile_update` (`processProfileUpdateEvent`). The one rewrite is the
- * username of a row that still carries a placeholder name
- * (`applyPlaceholderRename`).
+ * The snapshot carries no version, and a DM or friend event may carry one
+ * that a third instance built from its own, possibly stale, replica of the
+ * user, so it cannot tell whether it is newer than what is stored. Hydration
+ * therefore only fills profile columns that are empty, and only on a row the
+ * home has not yet answered with a version (`profile_updated_at` is null);
+ * once it has, the home's profile (`applyHomeProfile`) stands as written,
+ * empty columns included. Both conditions are checked in the UPDATE, not on
+ * the row passed in, so a home answer that lands while images download wins.
+ * The one rewrite is the username of a row with a placeholder name or a
+ * `~<n>` name for the same handle (`applyPlaceholderRename`), which follows
+ * the handle rules, not this one.
  *
  * When the row changed (renamed, or a field filled), the users who can see it
- * get one `user_updated` with the final row (`announceUserUpdated`), after
- * every field is written. A rename just before by `resolveOrCreateReplicatedUser`
- * announced the row without the display name this fills, so this is the event
- * that carries it.
+ * get one `user_updated` with the row as stored (`announceUserUpdated`), after
+ * every field is written. Returns the row as stored. A rename just before by
+ * `resolveOrCreateReplicatedUser` announced the row without the display name
+ * this fills, so this is the event that carries it.
  */
 export async function hydrateReplicatedUserProfile(
   userIn: typeof schema.users.$inferSelect,
@@ -67,38 +70,65 @@ export async function hydrateReplicatedUserProfile(
     return localFile ?? absoluteUrl;
   };
 
-  const updates: Record<string, string | null> = {};
-  // Use displayName from profile, falling back to the home username (without
-  // the @domain suffix that the local replicated username carries).  This
-  // ensures federated users show a human-readable name instead of the raw
-  // "user@instance.example" federation username.
-  const effectiveDisplayName = profile.displayName || profile.username || null;
-  if (effectiveDisplayName && !user.displayName) updates.displayName = effectiveDisplayName;
+  const fills: Partial<Record<FillColumn, string>> = {};
+  // A row with a home version takes its profile from the home only, so there
+  // is nothing to fill or download. The UPDATE checks this again at write time.
+  const homeAnswered = user.profileUpdatedAt !== null;
+  // Use displayName from profile, falling back to the handle the snapshot
+  // names. Senders put the handle there (`relayHandleOf`); an older sender put
+  // its own row name (`kai@host`, `kai~1@host`), which is not a name to show,
+  // so only a handle-shaped value counts (`handleFromHint`).
+  const effectiveDisplayName = profile.displayName || handleFromHint(profile.username);
   // Hydrate is best-effort: only fill empty fields. Never overwrite an
-  // existing value: that is exclusively processProfileUpdateEvent's job (it
-  // carries a monotonic version and comes from the home). Overwriting from an
+  // existing value: that is exclusively applyHomeProfile's job (it carries a
+  // monotonic version and comes from the home). Overwriting from an
   // unversioned snapshot let a third instance's stale replica flip a field
   // back and forth, announcing each flip. Locally-downloaded bare filenames
   // produced by that path must not be clobbered back to URLs either.
-  if (profile.avatar && !user.avatar) updates.avatar = await resolveAsset(profile.avatar);
-  if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
-  if (profile.banner && !user.banner) updates.banner = await resolveAsset(profile.banner);
-  if (profile.bio && !user.bio) updates.bio = profile.bio;
+  if (!homeAnswered) {
+    if (effectiveDisplayName && !user.displayName) fills.displayName = effectiveDisplayName;
+    if (profile.avatar && !user.avatar) fills.avatar = await resolveAsset(profile.avatar);
+    if (profile.avatarColor && !user.avatarColor) fills.avatarColor = profile.avatarColor;
+    if (profile.banner && !user.banner) fills.banner = await resolveAsset(profile.banner);
+    if (profile.bio && !user.bio) fills.bio = profile.bio;
+  }
 
-  if (Object.keys(updates).length === 0) {
+  const columns = Object.keys(fills) as FillColumn[];
+  if (columns.length === 0) {
     if (renamed) announceUserUpdated(user);
     return user;
   }
 
+  // The row was read before the images downloaded, and the home's answer to
+  // the creation pull (`scheduleHomeRecordPull`) or a `profile_update` may
+  // have written it since. Whether the home has answered and which columns
+  // are empty are therefore decided in the write itself, so the home's
+  // profile written meanwhile stands, empty columns included.
+  const set: Partial<Record<FillColumn, SQL>> = {};
+  for (const column of columns) {
+    set[column] = sql`COALESCE(NULLIF(${schema.users[column]}, ''), ${fills[column]})`;
+  }
   db.update(schema.users)
-    .set(updates)
-    .where(eq(schema.users.id, user.id))
+    .set(set)
+    .where(and(eq(schema.users.id, user.id), isNull(schema.users.profileUpdatedAt)))
     .run();
 
-  const hydrated = { ...user, ...updates };
-  announceUserUpdated(hydrated);
-  return hydrated;
+  const stored = db.select().from(schema.users).where(eq(schema.users.id, user.id)).get();
+  // A downloaded image that did not land (the home answered, or the column
+  // was filled meanwhile) is nobody's file.
+  for (const column of ['avatar', 'banner'] as const) {
+    const file = fills[column];
+    if (file && !file.startsWith('http') && stored?.[column] !== file) deleteUploadFile(file);
+  }
+  if (!stored) return user;
+
+  const filled = columns.some(column => stored[column] === fills[column] && user[column] !== fills[column]);
+  if (renamed || filled) announceUserUpdated(stored);
+  return stored;
 }
+
+/** The columns fill-empty hydration (`hydrateReplicatedUserProfile`) may fill. */
+type FillColumn = 'displayName' | 'avatar' | 'avatarColor' | 'banner' | 'bio';
 
 
 /**
@@ -200,6 +230,136 @@ export async function downloadProfileAsset(
 }
 
 
+type UserRow = typeof schema.users.$inferSelect;
+
+/**
+ * A user's profile as their home reports it: a `profile_update` payload or a
+ * `/users/by-home-id` answer. `profileUpdatedAt` is the home's version; null
+ * when the home sent none (an older home's by-home-id answer). `accentColor`
+ * undefined means the home did not say (an older home's answer), and the
+ * stored value is kept. `username` is the home handle.
+ */
+export interface HomeProfile {
+  profileUpdatedAt: number | null;
+  username: string | null;
+  displayName: string | null;
+  avatar: string | null;
+  banner: string | null;
+  accentColor?: string | null;
+  avatarColor: string | null;
+  bio: string | null;
+}
+
+/** A `/users/by-home-id` answer's profile as a `HomeProfile`. */
+export function homeProfileFromAnswer(answer: { username: string; profile: FederationUserLookupProfile }): HomeProfile {
+  const { profile } = answer;
+  return {
+    profileUpdatedAt: profile.profileUpdatedAt ?? null,
+    username: answer.username,
+    displayName: profile.displayName,
+    avatar: profile.avatar,
+    banner: profile.banner,
+    ...(profile.accentColor !== undefined ? { accentColor: profile.accentColor } : {}),
+    avatarColor: profile.avatarColor,
+    bio: profile.bio,
+  };
+}
+
+/**
+ * Whether a home profile at version `incoming` replaces what a row stores at
+ * `stored`. A version replaces no version and any older one. No version (an
+ * older home) replaces only no version: it cannot be ordered against one.
+ */
+function isNewerHomeProfile(incoming: number | null, stored: number | null): boolean {
+  if (incoming === null) return stored === null;
+  return stored === null || incoming > stored;
+}
+
+/**
+ * Resolve a profile image the home names (an absolute URL, or a bare filename
+ * on the home) to a local copy, or to the absolute URL when the download
+ * fails, so it still renders while the home is reachable.
+ */
+async function resolveHomeAsset(value: string | null, homeOrigin: string): Promise<string | null> {
+  if (!value) return null;
+  const baseUrl = homeOrigin.startsWith('http') ? homeOrigin : `https://${homeOrigin}`;
+  const absoluteUrl = value.startsWith('http') ? value : `${baseUrl}/api/uploads/${value}`;
+  return (await downloadProfileAsset(absoluteUrl, baseUrl)) ?? absoluteUrl;
+}
+
+/**
+ * Apply a user's profile as their home reports it (`HomeProfile`) to the row
+ * homed there, and return the row as stored afterwards. The one writer of a
+ * remote user's profile besides fill-empty hydration: a `profile_update`
+ * (`processProfileUpdateEvent`), and every by-home-id answer (the pull when a
+ * row is created, the peer-activation pass, client DM routes, re-attach).
+ *
+ * Applies only a newer version (`isNewerHomeProfile`), checked again in the
+ * write itself, so a slower answer that lost the race to a newer one while its
+ * images downloaded changes nothing (its downloads are removed). Overwrites
+ * displayName (falling back to the handle, never a row name), avatar, banner,
+ * accentColor (unless not given), avatarColor, bio and the version. Replaced
+ * local image files are removed. Never renames the row. The users who can see
+ * the row, and the row's own sessions, get one `user_updated`.
+ *
+ * Native rows and detached rows (`federation_home_orphaned = 1`) are returned
+ * unchanged: a detached account's home domain now belongs to another
+ * incarnation, which never writes its profile.
+ */
+export async function applyHomeProfile(
+  row: UserRow,
+  profile: HomeProfile,
+  homeOrigin: string,
+  db: ReturnType<typeof getDb>,
+): Promise<UserRow> {
+  if (!row.homeInstance || row.federationHomeOrphaned === 1) return row;
+  if (!isNewerHomeProfile(profile.profileUpdatedAt, row.profileUpdatedAt)) return row;
+
+  const avatar = await resolveHomeAsset(profile.avatar, homeOrigin);
+  const banner = await resolveHomeAsset(profile.banner, homeOrigin);
+
+  const updates: Partial<typeof schema.users.$inferInsert> = {
+    displayName: profile.displayName ?? handleFromHint(profile.username),
+    avatar,
+    banner,
+    avatarColor: profile.avatarColor,
+    bio: profile.bio,
+    profileUpdatedAt: profile.profileUpdatedAt,
+  };
+  if (profile.accentColor !== undefined) updates.accentColor = profile.accentColor;
+
+  // The version is checked again in the write: another apply for this row may
+  // have written a newer one while the images downloaded.
+  const versionStillNewer = profile.profileUpdatedAt === null
+    ? isNull(schema.users.profileUpdatedAt)
+    : or(isNull(schema.users.profileUpdatedAt), lt(schema.users.profileUpdatedAt, profile.profileUpdatedAt));
+  const written = db.update(schema.users)
+    .set(updates)
+    .where(and(eq(schema.users.id, row.id), versionStillNewer))
+    .run();
+
+  if (written.changes === 0) {
+    for (const file of [avatar, banner]) {
+      if (file && !file.startsWith('http') && file !== row.avatar && file !== row.banner) deleteUploadFile(file);
+    }
+    return db.select().from(schema.users).where(eq(schema.users.id, row.id)).get() ?? row;
+  }
+
+  if (row.avatar && !row.avatar.startsWith('http') && row.avatar !== avatar) deleteUploadFile(row.avatar);
+  if (row.banner && !row.banner.startsWith('http') && row.banner !== banner) deleteUploadFile(row.banner);
+
+  const updated = db.select().from(schema.users).where(eq(schema.users.id, row.id)).get();
+  if (!updated) return row;
+  const userUpdatedEvent = { type: 'user_updated' as const, user: sanitizeUser(updated, false) };
+  const targetUserIds = collectProfileBroadcastTargetIds(updated.id);
+  targetUserIds.add(updated.id); // the row's own sessions (a federated account's other tabs)
+  for (const uid of targetUserIds) {
+    connectionManager.sendToUser(uid, userUpdatedEvent);
+  }
+  return updated;
+}
+
+
 export async function processProfileUpdateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -226,7 +386,8 @@ export async function processProfileUpdateEvent(
   // The row updated is the one that IS the payload's identity, homed on the
   // sending peer (`resolveRelayActor`). A native user of this instance is never
   // one, so its profile is only ever changed here. No such row: accept as a
-  // no-op, this instance holds no replica of the user.
+  // no-op, this instance holds no replica of the user. A row created later
+  // asks the home for the current profile then (`scheduleHomeRecordPull`).
   const identity = resolveRelayActor(payload, db);
   if (identity.kind !== 'found' || !identity.user.homeInstance) {
     accepted.push(event.messageId);
@@ -244,83 +405,16 @@ export async function processProfileUpdateEvent(
     return;
   }
 
-  // Version check: reject stale/duplicate events
-  const storedTs = localUser.profileUpdatedAt ?? 0;
-  const incomingTs = payload.profileUpdatedAt ?? 0;
-  if (incomingTs <= storedTs) {
-    accepted.push(event.messageId);
-    return;
-  }
-
-  // ── Resolve avatar/banner: download locally, fall back to absolute URL ──
-  let resolvedAvatar: string | null = payload.avatar ?? null;
-  let resolvedBanner: string | null = payload.banner ?? null;
-
-  // Download avatar
-  if (resolvedAvatar && resolvedAvatar.startsWith('http')) {
-    const localFile = await downloadProfileAsset(resolvedAvatar, sourceInstance);
-    resolvedAvatar = localFile ?? resolvedAvatar; // local filename or absolute URL fallback
-  } else if (resolvedAvatar && !resolvedAvatar.startsWith('http')) {
-    // Bare filename (shouldn't happen) — resolve to absolute URL
-    const baseUrl = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    const absoluteUrl = `${baseUrl}/api/uploads/${resolvedAvatar}`;
-    const localFile = await downloadProfileAsset(absoluteUrl, sourceInstance);
-    resolvedAvatar = localFile ?? absoluteUrl;
-  }
-
-  // Download banner
-  if (resolvedBanner && resolvedBanner.startsWith('http')) {
-    const localFile = await downloadProfileAsset(resolvedBanner, sourceInstance);
-    resolvedBanner = localFile ?? resolvedBanner;
-  } else if (resolvedBanner && !resolvedBanner.startsWith('http')) {
-    const baseUrl = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    const absoluteUrl = `${baseUrl}/api/uploads/${resolvedBanner}`;
-    const localFile = await downloadProfileAsset(absoluteUrl, sourceInstance);
-    resolvedBanner = localFile ?? absoluteUrl;
-  }
-
-  // Clean up old local files being replaced
-  const oldAvatar = localUser.avatar;
-  const oldBanner = localUser.banner;
-  if (oldAvatar && !oldAvatar.startsWith('http') && oldAvatar !== resolvedAvatar) {
-    deleteUploadFile(oldAvatar);
-  }
-  if (oldBanner && !oldBanner.startsWith('http') && oldBanner !== resolvedBanner) {
-    deleteUploadFile(oldBanner);
-  }
-
-  // Authoritative overwrite — home instance is always right.
-  // displayName falls back to the home user's canonical username when null,
-  // mirroring hydrateReplicatedUserProfile so stubs whose home user has no
-  // displayName show the real handle instead of getting clobbered to null.
-  // (The username field on the wire is the home's canonical handle, not the
-  // stub's local-part; usernames are immutable on the home instance, so we
-  // never rewrite the stub's username column here.)
-  const effectiveDisplayName = payload.displayName ?? payload.username ?? null;
-  db.update(schema.users)
-    .set({
-      displayName: effectiveDisplayName,
-      avatar: resolvedAvatar,
-      banner: resolvedBanner,
-      accentColor: payload.accentColor,
-      avatarColor: payload.avatarColor,
-      bio: payload.bio,
-      profileUpdatedAt: payload.profileUpdatedAt,
-    })
-    .where(eq(schema.users.id, localUser.id))
-    .run();
-
-  // Broadcast user_updated to local clients
-  const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, localUser.id)).get();
-  if (updatedUser) {
-    const sanitized = sanitizeUser(updatedUser, false);
-    const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
-    targetUserIds.add(localUser.id); // Include self (other tabs/connections)
-    const userUpdatedEvent = { type: 'user_updated' as const, user: sanitized };
-    for (const uid of targetUserIds) {
-      connectionManager.sendToUser(uid, userUpdatedEvent);
-    }
-  }
+  await applyHomeProfile(localUser, {
+    profileUpdatedAt: payload.profileUpdatedAt ?? null,
+    username: payload.username,
+    displayName: payload.displayName,
+    avatar: payload.avatar,
+    banner: payload.banner,
+    accentColor: payload.accentColor,
+    avatarColor: payload.avatarColor,
+    bio: payload.bio,
+  }, sourceInstance, db);
 
   accepted.push(event.messageId);
 }

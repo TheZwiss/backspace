@@ -74,20 +74,11 @@ afterEach(() => {
 
 describe('ready payload directoryListed projection', () => {
   it('reports each space with its stored directory_listed flag', async () => {
-    const { connectionManager } = await import('./handler.js');
+    const { buildReadyPayload } = await import('./handler.js');
     seedListedSpace('sp-listed', 1);
     seedListedSpace('sp-unlisted', 0);
 
-    const ws = { readyState: 1, send: vi.fn() };
-    connectionManager.addConnection(OWNER_ID, ws as never);
-    connectionManager.pushReadyPayload(OWNER_ID);
-    connectionManager.removeConnection(ws as never);
-
-    expect(ws.send).toHaveBeenCalledTimes(1);
-    const raw = ws.send.mock.calls[0]?.[0];
-    expect(typeof raw).toBe('string');
-    const message = JSON.parse(raw as string) as ReadyMessage;
-    expect(message.type).toBe('ready');
+    const message = JSON.parse(JSON.stringify({ type: 'ready', ...buildReadyPayload(OWNER_ID) })) as ReadyMessage;
     const byId = new Map(message.spaces.map(s => [s.id, s.directoryListed]));
     expect(byId.get('sp-listed')).toBe(true);
     expect(byId.get('sp-unlisted')).toBe(false);

@@ -4,6 +4,7 @@
       "hint": "escape to <cancel>cancel</cancel> • enter to <save>save</save>"
     },
     "edited": "(edited)",
+    "rowLabel": "{{author}}, {{time}}",
     "gifAlt": "GIF",
     "upload": {
       "failed": "Upload failed",
@@ -31,11 +32,17 @@
     "noHistoryPermission": "You do not have permission to view message history in this channel",
     "loading": "Loading messages",
     "loadingOlder": "Loading older messages",
+    "loadFailed": "Couldn't load messages",
     "jumpToPresent": "Jump to Present",
     "jump": {
       "unavailable": "That message is no longer available",
       "failed": "Couldn't load that message",
       "presentFailed": "Couldn't load the latest messages"
+    },
+    "unread": {
+      "label": "New",
+      "divider": "New messages",
+      "dividerWithDate": "New messages, {{date}}"
     },
     "welcome": {
       "channel": {
@@ -147,5 +154,14 @@
   "notification": {
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
+  },
+  "embed": {
+    "loadAction": "Click to load",
+    "loadNamed": "Load {{name}}",
+    "loadUnnamed": "Load embed",
+    "frameTitle": "Embed",
+    "playNamed": "Play {{title}}",
+    "playUnnamed": "Play video",
+    "videoTitle": "Video"
   }
 }

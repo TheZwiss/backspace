@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld('backspace', {
   preselectScreenSource: (sourceId: string, shareAudio?: boolean) =>
     ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true),
   getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
+  getSystemAudioCapability: () => ipcRenderer.invoke('get-system-audio-capability'),
   setScreenShareAudioPreference: (shareAudio: boolean) => {
     ipcRenderer.send('screen-share-audio-preference', shareAudio);
   },

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Role } from '@backspace/shared';
 import type { HierarchyStanding } from '@backspace/shared/src/permissions';
-import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder } from './roleOrder';
+import { rolesInRankOrder, canReorderRoles, canMoveRole, moveRoleInRankOrder, roleMoveRequest } from './roleOrder';
 
 // The move rule for Space Settings > Roles (permissions.md, "Role hierarchy",
 // "Setting the order"): a role moves only when it and the slot it moves to are
@@ -112,5 +112,32 @@ describe('moveRoleInRankOrder', () => {
     moveRoleInRankOrder(ranked, 0, 4);
     expect(ranked.map((r) => r.id)).toEqual(['admins', 'mods', 'helpers', 'regulars', 'guests']);
     expect(ranked[0]?.position).toBe(5);
+  });
+});
+
+describe('roleMoveRequest', () => {
+  it('moves a role up to directly above the role shown in that place', () => {
+    expect(roleMoveRequest(ranked, indexOf('guests'), indexOf('mods'))).toEqual({ position: 4, above: 'mods' });
+  });
+
+  it('moves a role down to directly below the role shown in that place', () => {
+    expect(roleMoveRequest(ranked, indexOf('admins'), indexOf('regulars'))).toEqual({ position: 2, below: 'regulars' });
+  });
+
+  it('lands where moveRoleInRankOrder shows it', () => {
+    for (const [from, to] of [[0, 4], [4, 0], [1, 2], [3, 1]] as const) {
+      const request = roleMoveRequest(ranked, from, to)!;
+      const shown = moveRoleInRankOrder(ranked, from, to).map((r) => r.id);
+      const moved = ranked[from]!.id;
+      const anchor = 'above' in request ? request.above : request.below;
+      const offset = 'above' in request ? -1 : 1;
+      expect(shown[shown.indexOf(anchor) + offset]).toBe(moved);
+      expect(shown.length - shown.indexOf(moved)).toBe(request.position);
+    }
+  });
+
+  it('is null when there is no move', () => {
+    expect(roleMoveRequest(ranked, 2, 2)).toBeNull();
+    expect(roleMoveRequest(ranked, 0, 9)).toBeNull();
   });
 });

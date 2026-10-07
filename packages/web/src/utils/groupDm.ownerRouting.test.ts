@@ -32,37 +32,11 @@ vi.mock('../stores/authStore', () => ({
   ),
 }));
 
-// Spy-able getApiForOrigin: returns a remote-flavoured client when given a
-// non-empty origin, the home stub otherwise. Used to assert which origin
-// owner-only DM calls route to. We mock the resolver module directly so the
-// real api/client.ts (which imports it) ends up calling our spy at runtime.
-// Hoisted via vi.hoisted so the factory below — which is itself hoisted
-// above the rest of the file — can reference the spies without TDZ errors.
-const { remoteClient, homeClient, mockGetApiForOrigin } = vi.hoisted(() => {
-  const remote = {
-    dm: {
-      updateMetadata: vi.fn().mockResolvedValue({}),
-      kickMember: vi.fn().mockResolvedValue({}),
-      transferOwnership: vi.fn().mockResolvedValue({}),
-      sendMessage: vi.fn().mockResolvedValue({}),
-    },
-  };
-  const home = {
-    dm: {
-      updateMetadata: vi.fn().mockResolvedValue({}),
-      kickMember: vi.fn().mockResolvedValue({}),
-      transferOwnership: vi.fn().mockResolvedValue({}),
-      sendMessage: vi.fn().mockResolvedValue({}),
-    },
-  };
-  return {
-    remoteClient: remote,
-    homeClient: home,
-    mockGetApiForOrigin: vi.fn((origin: string) =>
-      origin ? (remote as never) : (home as never),
-    ),
-  };
-});
+// Spy-able getApiForOrigin, so the sendMessage test below can assert that
+// a non-owner request never consults the owner's instance.
+const { mockGetApiForOrigin } = vi.hoisted(() => ({
+  mockGetApiForOrigin: vi.fn(() => ({ dm: {} }) as never),
+}));
 
 vi.mock('./crossStoreResolvers', async () => {
   const actual = await vi.importActual<typeof import('./crossStoreResolvers')>('./crossStoreResolvers');
@@ -128,87 +102,9 @@ describe('getOwnerInstanceForDm — helper', () => {
   });
 });
 
-describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
-  it('baseline (no transfer): owner-only ops route to home (empty origin)', async () => {
-    useSpaceStore.setState({ dmChannels: [{ ...baseDm }] });
-
-    await api.dm.updateMetadata('dm-1', { name: 'X' });
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('');
-    // Home client is returned for empty origin; the singleton delegates to it,
-    // and the spy on homeClient.dm.updateMetadata records the call.
-    expect(homeClient.dm.updateMetadata).toHaveBeenCalledWith('dm-1', { name: 'X' });
-    expect(remoteClient.dm.updateMetadata).not.toHaveBeenCalled();
-  });
-
-  it('after transfer: api.dm.updateMetadata routes to new owner instance', async () => {
-    useSpaceStore.setState({
-      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
-    });
-
-    await api.dm.updateMetadata('dm-1', { name: 'Renamed' });
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.updateMetadata).toHaveBeenCalledWith('dm-1', { name: 'Renamed' });
-  });
-
-  it('after transfer: api.dm.kickMember routes to new owner instance', async () => {
-    useSpaceStore.setState({
-      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
-    });
-
-    await api.dm.kickMember('dm-1', 'target-user');
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    // Third arg is the optional federated identity (undefined when target is local)
-    expect(remoteClient.dm.kickMember).toHaveBeenCalledWith('dm-1', 'target-user', undefined);
-  });
-
-  it('after transfer: api.dm.kickMember forwards federated identity when supplied', async () => {
-    useSpaceStore.setState({
-      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
-    });
-
-    await api.dm.kickMember('dm-1', 'target-user', {
-      homeUserId: 'target-home-id',
-      homeInstance: 'https://orbit.test',
-    });
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.kickMember).toHaveBeenCalledWith('dm-1', 'target-user', {
-      homeUserId: 'target-home-id',
-      homeInstance: 'https://orbit.test',
-    });
-  });
-
-  it('after transfer: api.dm.transferOwnership routes to new owner instance', async () => {
-    useSpaceStore.setState({
-      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
-    });
-
-    await api.dm.transferOwnership('dm-1', 'next-owner');
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.transferOwnership).toHaveBeenCalledWith('dm-1', 'next-owner', undefined);
-  });
-
-  it('after transfer: api.dm.transferOwnership forwards federated identity when supplied', async () => {
-    useSpaceStore.setState({
-      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
-    });
-
-    await api.dm.transferOwnership('dm-1', 'next-owner', {
-      homeUserId: 'next-owner-home-id',
-      homeInstance: 'https://orbit.test',
-    });
-
-    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.transferOwnership).toHaveBeenCalledWith('dm-1', 'next-owner', {
-      homeUserId: 'next-owner-home-id',
-      homeInstance: 'https://orbit.test',
-    });
-  });
-
+// Which instance an owner-only request goes to, and how it names the
+// conversation and the member there, is `groupDmOwnerActions.test.ts`.
+describe('group DM owner routing: the owner instance the store keeps', () => {
   it('updateDmOwner keeps ownerHomeInstance in sync so the next owner-only op routes correctly', () => {
     // Regression: the `dm_owner_updated` WS handler used to call
     // updateDmOwner(channelId, newOwnerId) without the home-identity fields.

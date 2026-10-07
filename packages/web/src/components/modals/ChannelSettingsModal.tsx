@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
-import { PermissionBits, permissionsToString, stringToPermissions, hasPermissionBit } from '../../utils/permissions';
-import { Toggle } from '../ui/Toggle';
+import { PermissionBits, hasPermissionBit } from '../../utils/permissions';
 import { InlineNameEditor } from '../ui/InlineNameEditor';
 import { PermissionsEditor } from '../ui/PermissionsEditor';
 import type { PermissionDef } from '../ui/OverrideEntry';
 import { describeError } from '../../i18n/errors';
+import { useEntityOverrides } from '../../hooks/useEntityOverrides';
+import { isHiddenFromEveryone } from '../../utils/overrideBits';
+import { PrivacySetting } from './PrivacySetting';
+import { LOCK_ICON } from '../ui/LockNote';
 import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Channel Overrides ──────────────────────────────
@@ -34,7 +37,6 @@ const VOICE_CHANNEL_PERMISSIONS: PermissionDef[] = [
   { key: 'DISCONNECT_MEMBERS', bit: PermissionBits.DISCONNECT_MEMBERS },
 ];
 
-const CHANNEL_ICON_PRIVATE = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
 const CHANNEL_ICON_PUBLIC = 'M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z';
 
 // ─── Overview Tab ───────────────────────────────────────────────────────────────
@@ -77,7 +79,7 @@ function OverviewTab({
           name={channelName}
           icon={
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60 flex-shrink-0">
-              <path d={isPrivate ? CHANNEL_ICON_PRIVATE : CHANNEL_ICON_PUBLIC} />
+              <path d={isPrivate ? LOCK_ICON : CHANNEL_ICON_PUBLIC} />
             </svg>
           }
           canEdit={canManageChannels}
@@ -98,30 +100,14 @@ function OverviewTab({
       {/* Privacy is an @everyone override: reading and writing it both need
           MANAGE_ROLES, so without it the row would only show a guess. */}
       {canManageRoles && (
-        <div className="pt-2 border-t border-border-soft">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">{t('spaces:channel.settings.private.label')}</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">
-                {t('spaces:channel.settings.private.description')}
-              </div>
-            </div>
-            <div className={`flex-shrink-0 ml-4 ${(isLoading || isFetching) ? 'opacity-50 pointer-events-none' : ''}`}>
-              <Toggle enabled={isPrivate} onChange={onTogglePrivate} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {canManageRoles && isPrivate && !isFetching && (
-        <div className="flex items-start gap-2 p-2 bg-surface-input/50 rounded text-xs text-txt-tertiary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 mt-0.5 text-txt-secondary">
-            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-          </svg>
-          <span>
-            {t('spaces:channel.settings.private.note')}
-          </span>
-        </div>
+        <PrivacySetting
+          label={t('spaces:channel.settings.private.label')}
+          description={t('spaces:channel.settings.private.description')}
+          note={t('spaces:channel.settings.private.note')}
+          isPrivate={isPrivate}
+          busy={isLoading || isFetching}
+          onToggle={onTogglePrivate}
+        />
       )}
 
       {canManageChannels && (
@@ -153,9 +139,7 @@ export function ChannelSettingsModal() {
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
 
   const [tab, setTab] = useState<'overview' | 'permissions'>('overview');
-  const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -179,72 +163,24 @@ export function ChannelSettingsModal() {
     }
   }, [isOpen]);
 
-  // Fetch overrides for the private toggle (overview tab)
-  const fetchPrivateState = useCallback(() => {
-    if (!channelId || !currentSpaceId) return;
-
-    setIsFetching(true);
-    setError('');
-
-    const space = spaces.find(s => s.id === currentSpaceId);
-    const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
-
-    channelApi.channels.getOverrides(channelId)
-      .then((data: { targetType: string; targetId: string; allow: string; deny: string }[]) => {
-        // Check if @everyone role (id === spaceId) has VIEW_CHANNEL denied
-        const everyoneOverride = data.find(
-          o => o.targetType === 'role' && o.targetId === currentSpaceId
-        );
-        if (everyoneOverride) {
-          const denyBits = stringToPermissions(everyoneOverride.deny);
-          setIsPrivate((denyBits & PermissionBits.VIEW_CHANNEL) !== 0n);
-        } else {
-          setIsPrivate(false);
-        }
-      })
-      .catch((err: Error) => {
-        setError(describeError(err));
-      })
-      .finally(() => {
-        setIsFetching(false);
-      });
-  }, [channelId, currentSpaceId, spaces]);
-
-  useEffect(() => {
-    if (isOpen && channelId && currentSpaceId && canManageRoles) {
-      fetchPrivateState();
-    } else {
-      setIsFetching(false);
-    }
-  }, [isOpen, channelId, currentSpaceId, canManageRoles, fetchPrivateState]);
+  // One list of this channel's overrides for the whole dialog: the Overview
+  // derives privacy from it and the Permissions tab edits it, so neither
+  // shows a copy the other has made stale.
+  const space = spaces.find(s => s.id === currentSpaceId);
+  const entityOverrides = useEntityOverrides('channel', isOpen ? channelId : undefined, space, canManageRoles);
+  const isPrivate = currentSpaceId ? isHiddenFromEveryone(entityOverrides.overrides, currentSpaceId) : false;
+  const isFetching = !entityOverrides.loaded;
+  const shownError = error || entityOverrides.error;
 
   if (!isOpen || !channel || !channelId || !currentSpaceId) return null;
-
-  const space = spaces.find(s => s.id === currentSpaceId);
 
   const handleToggle = async () => {
     setError('');
     setIsLoading(true);
-
-    const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
-
     try {
-      if (!isPrivate) {
-        // Make private: deny VIEW_CHANNEL for @everyone role
-        await channelApi.channels.putOverride(channelId, {
-          targetType: 'role',
-          targetId: currentSpaceId,
-          allow: '0',
-          deny: permissionsToString(PermissionBits.VIEW_CHANNEL),
-        });
-        setIsPrivate(true);
-      } else {
-        // Make public: remove the @everyone VIEW_CHANNEL deny override
-        await channelApi.channels.deleteOverride(channelId, 'role', currentSpaceId);
-        setIsPrivate(false);
-      }
-      // Re-fetch to keep in sync
-      fetchPrivateState();
+      // Only the View Channels bit of the @everyone override changes; any
+      // other @everyone bit on this channel stays (#327, #365).
+      await entityOverrides.setBits('role', currentSpaceId, PermissionBits.VIEW_CHANNEL, isPrivate ? 'neutral' : 'deny');
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -309,7 +245,7 @@ export function ChannelSettingsModal() {
                   isPrivate={isPrivate}
                   isFetching={isFetching}
                   isLoading={isLoading}
-                  error={error}
+                  error={shownError}
                   canManageChannels={canManageChannels}
                   canManageRoles={canManageRoles}
                   onTogglePrivate={handleToggle}
@@ -321,21 +257,13 @@ export function ChannelSettingsModal() {
                 <PermissionsEditor
                   entityId={channelId}
                   spaceId={currentSpaceId}
-                  instanceOrigin={space?._instanceOrigin}
                   permDefs={channel.type === 'voice' ? VOICE_CHANNEL_PERMISSIONS : TEXT_CHANNEL_PERMISSIONS}
-                  getOverrides={() => {
-                    const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return channelApi.channels.getOverrides(channelId);
-                  }}
-                  putOverride={(data) => {
-                    const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return channelApi.channels.putOverride(channelId, data);
-                  }}
+                  overrides={entityOverrides.overrides}
+                  loadError={entityOverrides.error}
+                  putOverride={entityOverrides.put}
+                  deleteOverride={entityOverrides.remove}
+                  onSaved={entityOverrides.reload}
                   unhideNote={t('spaces:channel.settings.private.unhideOnSave')}
-                  deleteOverride={(targetType, targetId) => {
-                    const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
-                    return channelApi.channels.deleteOverride(channelId, targetType, targetId);
-                  }}
                 />
               )}
             </div>
@@ -348,7 +276,7 @@ export function ChannelSettingsModal() {
             isPrivate={isPrivate}
             isFetching={isFetching}
             isLoading={isLoading}
-            error={error}
+            error={shownError}
             canManageChannels={canManageChannels}
             canManageRoles={canManageRoles}
             onTogglePrivate={handleToggle}

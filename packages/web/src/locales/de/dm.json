@@ -17,17 +17,17 @@
   },
   "system": {
     "spaceInviteNamed": "📨 Einladung zu {{spaceName}} gesendet",
-    "spaceInvite": "📨 Space-Einladung gesendet",
     "memberAdded": "{{actor}} hat {{target}} hinzugefügt",
+    "memberAddedToGroup": "{{actor}} hat {{target}} zur Gruppe hinzugefügt",
     "memberLeft": "{{target}} hat die Gruppe verlassen",
     "memberRemoved": "{{actor}} hat {{target}} entfernt",
+    "memberRemovedFromGroup": "{{actor}} hat {{target}} aus der Gruppe entfernt",
     "ownerChanged": "{{newOwner}} ist jetzt Besitzer der Gruppe",
     "renamed": "{{actor}} hat die Gruppe umbenannt",
+    "renamedTo": "{{actor}} hat die Gruppe in „{{name}}“ umbenannt",
     "nameCleared": "{{actor}} hat den Gruppennamen entfernt",
     "iconChanged": "{{actor}} hat das Gruppensymbol geändert",
-    "generic": "Systemmeldung",
-    "someone": "jemanden",
-    "aMember": "Ein Mitglied"
+    "generic": "Systemmeldung"
   },
   "deletedNotice": {
     "accountDeleted": "Das Konto dieser Person wurde gelöscht"
@@ -87,7 +87,8 @@
     "hoursShort_one": "{{count}} Std",
     "hoursShort_other": "{{count}} Std",
     "daysShort_one": "{{count}} T",
-    "daysShort_other": "{{count}} T"
+    "daysShort_other": "{{count}} T",
+    "close": "Unterhaltung schließen"
   },
   "newDm": {
     "title": "Neue Direktnachricht",
@@ -137,5 +138,9 @@
     "federated": "Föderierte Gruppe",
     "memberCount_one": "{{count}} Mitglied",
     "memberCount_other": "{{count}} Mitglieder"
+  },
+  "ownerActions": {
+    "ownerNotConnected": "Diese Gruppe wird auf {{host}} verwaltet. Verbinde dich mit dieser Instanz, um sie zu ändern.",
+    "ownerNotListed": "{{host}} führt diese Gruppe für dich noch nicht. Versuch es gleich noch einmal."
   }
 }

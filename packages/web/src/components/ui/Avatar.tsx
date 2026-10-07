@@ -1,6 +1,6 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
-import { getAvatarGradient } from '../../utils/gradients';
+import { getAvatarGradient, getSpaceGradient } from '../../utils/gradients';
 
 interface AvatarProps {
   src?: string | null;
@@ -13,6 +13,12 @@ interface AvatarProps {
   userId?: string;
   ring?: { width: number; color: string };
   avatarColor?: string | null;
+  /**
+   * Which gradient family the initials fallback is painted from. A space's
+   * icon is `space`, so it matches the space sidebar and every other space
+   * icon (`getSpaceGradient`); people use `user`, the default.
+   */
+  palette?: 'user' | 'space';
 }
 
 const statusColors: Record<string, string> = {
@@ -54,10 +60,12 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user' }: AvatarProps) {
   const initials = name.charAt(0).toUpperCase();
   const fontPx = Math.round(size * 0.4);
-  const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, avatarColor ?? user?.avatarColor);
+  const gradient = palette === 'space'
+    ? getSpaceGradient(userId, name, avatarColor)
+    : getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, avatarColor ?? user?.avatarColor);
 
   const ringWidth = ring?.width ?? 0;
   const outerSize = size + ringWidth * 2;

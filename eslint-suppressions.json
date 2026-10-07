@@ -188,11 +188,6 @@
       "count": 1
     }
   },
-  "packages/server/src/utils/fileCleanup.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "packages/server/src/utils/spaceInviteSnapshot.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 7
@@ -281,7 +276,7 @@
   },
   "packages/web/src/components/chat/MessageList.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/web/src/components/chat/OuterSpaceSection.test.tsx": {
@@ -433,11 +428,6 @@
       "count": 1
     }
   },
-  "packages/web/src/components/ui/PermissionsEditor.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "packages/web/src/components/ui/UserProfilePopout.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -488,7 +478,7 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     }
   },
   "packages/web/src/hooks/useMascotAnimation.ts": {
@@ -565,9 +555,6 @@
     }
   },
   "packages/web/src/stores/spaceStore.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     }

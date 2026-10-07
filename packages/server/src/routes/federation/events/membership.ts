@@ -12,6 +12,7 @@ import type { DmMessageWithUser, FederationRelayEvent } from '@backspace/shared'
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
 import { dmChannelMembers, mayRelayInto, memberWithIdentity } from '../dmChannels.js';
+import { dmSystemContent, dmSystemName } from '../../../utils/dmSystemMessages.js';
 
 export async function processMemberAddEvent(
   event: FederationRelayEvent,
@@ -229,13 +230,12 @@ export async function processMemberAddEvent(
     ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status, deleted: event.membership.addedBy.profile?.deleted })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
-  const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
   const addSysMsgId = generateSnowflake();
   const addSysCreatedAt = Date.now();
-  const addSysContent = JSON.stringify({
+  const addSysContent = dmSystemContent({
     event: 'member_added',
     targetUserId: localUser.id,
-    targetDisplayName: localUser.displayName ?? addBaseName,
+    targetDisplayName: dmSystemName(localUser),
   });
 
   db.insert(schema.dmMessages).values({
@@ -394,14 +394,13 @@ export function processMemberRemoveEvent(
 
   // Insert system message for member leaving (before deletion so the broadcast
   // still reaches the departing user's connections). Tagged with source for dedup.
-  const leaveBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
   const leaveSysMsgId = generateSnowflake();
   const leaveSysCreatedAt = Date.now();
-  const leaveSysContent = JSON.stringify({
+  const leaveSysContent = dmSystemContent({
     event: 'member_removed',
     targetUserId: localUser.id,
-    targetDisplayName: localUser.displayName ?? leaveBaseName,
-    reason: event.membership?.reason ?? 'leave',
+    targetDisplayName: dmSystemName(localUser),
+    reason: event.membership?.reason === 'kick' ? 'kick' : 'leave',
   });
   db.insert(schema.dmMessages).values({
     id: leaveSysMsgId,
@@ -596,12 +595,11 @@ export function processOwnershipTransferEvent(
 
   const ownerSysMsgId = generateSnowflake();
   const ownerSysCreatedAt = Date.now();
-  const newOwnerBaseName = newOwnerLocal?.username?.includes('@') ? newOwnerLocal.username.split('@')[0] : (newOwnerLocal?.username ?? 'Unknown');
   const prevOwnerId = prevOwnerLocal?.id ?? channel.ownerId ?? 'system';
-  const ownerSysContent = JSON.stringify({
+  const ownerSysContent = dmSystemContent({
     event: 'owner_changed',
     newOwnerId: newOwnerLocal.id,
-    newOwnerDisplayName: newOwnerLocal.displayName ?? newOwnerBaseName,
+    newOwnerDisplayName: dmSystemName(newOwnerLocal),
   });
 
   db.insert(schema.dmMessages).values({
@@ -818,7 +816,7 @@ export async function processGroupMetadataUpdateEvent(
 
     if (nameChanged && !existingNameRow) {
       const sysId = generateSnowflake();
-      const content = JSON.stringify({ event: 'name_changed', oldName, newName: metadata.name });
+      const content = dmSystemContent({ event: 'name_changed', oldName, newName: metadata.name });
       tx.insert(schema.dmMessages).values({
         id: sysId,
         dmChannelId: channel.id,
@@ -839,7 +837,7 @@ export async function processGroupMetadataUpdateEvent(
 
     if (iconChanged && !existingIconRow) {
       const sysId = generateSnowflake();
-      const content = JSON.stringify({ event: 'icon_changed' });
+      const content = dmSystemContent({ event: 'icon_changed' });
       tx.insert(schema.dmMessages).values({
         id: sysId,
         dmChannelId: channel.id,

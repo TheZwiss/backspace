@@ -211,12 +211,16 @@ variable.
   border: 1px solid rgba(255, 255, 255, 0.07);  /* --glass-border */
 }
 .glass-modal {
-  /* Higher opacity: 82%, stronger shadow */
+  /* Higher opacity: 82%, stronger shadow. Blur and tint on ::before (see Nested glass) */
 }
 .glass-pill {
   backdrop-filter: blur(12px) saturate(110%);
 }
 ```
+
+### Nested glass
+
+A glass control inside a dialog (the Save/Discard pill over a scrolling list, the Cancel/Join pill of Join Space, a sticky blurred header) must blur the dialog's own rows under it. An element with `backdrop-filter` is the backdrop root for everything inside it, and a nested `backdrop-filter` then blurs nothing: rows show through sharp. So `.glass-modal` never puts `backdrop-filter` on the dialog element. Its blur and tint sit on a `::before` layer behind the content (`z-index: -1` inside `isolation: isolate`, `position: relative` unless a `fixed`/`absolute` utility places the dialog), and any tier nested in it blurs as it would on the page. Keep it that way for any new surface that hosts glass: filter on a layer, not on the container. The reduced-transparency fallback makes the layer solid (`--bg-elevated`). Workbench: `dev-glass-modals.html`.
 
 **Vendor prefix order is load-bearing.** In `globals.css`, write `-webkit-backdrop-filter` **first** and the unprefixed `backdrop-filter` **last**. Vite 8 minifies CSS with Lightning CSS, which folds a prefixed and an unprefixed declaration of the same property into one and keeps whichever came last. With the unprefixed line first, the build ships only `-webkit-backdrop-filter`, which Firefox does not implement, so every glass surface loses its blur there with nothing in the console. The same order applies to any other property written in both forms.
 
@@ -378,6 +382,8 @@ Two components, one deliberate split:
 **Rule:** an avatar is only a profile trigger when it is a `ProfileAvatar`. Never re-add an implicit "open the profile if a `user` prop is present" branch to `Avatar` — passing `user` is how *every* avatar gets its colour, so that branch silently turns the picture inside the profile card, the settings preview, the avatar-upload button and every row in a modal into a trigger. It also made the card re-anchor to its own picture and walk across the screen on repeated clicks (issue #37).
 
 Use `ProfileAvatar` when the avatar is the primary way to reach that person's profile and nothing else owns the click. Use `Avatar` when an enclosing row, button or list item already handles clicks, or when the avatar depicts the surface it already sits on.
+
+**Spaces through `Avatar`.** A space drawn with `Avatar` (the space settings header, the join page, the invite card in chat) passes `palette="space"`, the space id as `userId` and the space's `avatarColor`. The initials fallback then comes from `getSpaceGradient`, the function the space sidebar and every other space icon use, so a space has one colour everywhere. The default `palette="user"` uses `getAvatarGradient`, whose presets and hash order differ (`rose` and `coral` are other gradients, and a space with no stored colour hashes to a different preset).
 
 **Escalation chain.** Clicking a face always moves one step deeper, never sideways and never nowhere:
 

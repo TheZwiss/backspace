@@ -3,7 +3,8 @@
  *
  * `stream_watch` announces a viewer has begun (or stopped) watching a screen
  * share. Sent only from explicit user-action sites (StreamTile click handlers);
- * the receiver maintains the streamer-side watcher set.
+ * the receiver maintains the streamer-side watcher set, keyed by the sharer's
+ * LiveKit identity (see `streamWatchKey`).
  *
  * `stream_republish` is sent by a sharer just before it unpublishes its screen
  * share to publish the same capture again (a codec change). Viewers keep the
@@ -13,8 +14,24 @@
  */
 export interface StreamWatchPayload {
   type: 'stream_watch';
+  /**
+   * The sharer's user id as the viewer's client lists it. Per instance, so it
+   * only names the sharer on clients that list it under the same id. Kept for
+   * sharers that predate `targetIdentity` and read nothing else.
+   */
   target: string;
+  /**
+   * The sharer's LiveKit identity, the same string on every client in the
+   * room. Optional: viewers that predate it send only `target`.
+   */
+  targetIdentity?: string;
   watching: boolean;
+}
+
+/** A sharer as the viewer's client lists it. */
+export interface StreamWatchTarget {
+  userId: string;
+  identity: string;
 }
 
 export interface StreamRepublishPayload {
@@ -23,6 +40,26 @@ export interface StreamRepublishPayload {
 
 export function encodeStreamWatch(payload: StreamWatchPayload): Uint8Array<ArrayBuffer> {
   return encodeJson(payload);
+}
+
+/** The ping a viewer sends when it starts or stops watching `sharer`. */
+export function streamWatchFor(sharer: StreamWatchTarget, watching: boolean): StreamWatchPayload {
+  return { type: 'stream_watch', target: sharer.userId, targetIdentity: sharer.identity, watching };
+}
+
+/**
+ * The watcher-set key a received ping belongs to: the sharer's LiveKit
+ * identity. A ping from an older viewer carries only `target`, which is
+ * resolved through the participants this client lists; when nobody is listed
+ * under it (the viewer's client knows the sharer by an id this one does not)
+ * the ping cannot be placed and is dropped (null).
+ */
+export function streamWatchKey(
+  payload: StreamWatchPayload,
+  participants: readonly StreamWatchTarget[],
+): string | null {
+  if (payload.targetIdentity !== undefined) return payload.targetIdentity;
+  return participants.find((p) => p.userId === payload.target)?.identity ?? null;
 }
 
 export function encodeStreamRepublish(): Uint8Array<ArrayBuffer> {
@@ -36,6 +73,7 @@ export function isStreamWatchPayload(value: unknown): value is StreamWatchPayloa
   return (
     v.type === 'stream_watch' &&
     typeof v.target === 'string' &&
+    (v.targetIdentity === undefined || typeof v.targetIdentity === 'string') &&
     typeof v.watching === 'boolean'
   );
 }

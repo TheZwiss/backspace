@@ -1,7 +1,7 @@
 # Database Schema Reference
 
 Source of truth: `packages/server/src/db/schema.ts` (Drizzle ORM)
-Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, instance epoch, `installedAt` backfill, first-admin promotion), `backfillOneOnOneDmMembership()` and `backfillOneOnOneKeys()` (every 1-on-1 `dm_channels` row gets the key of its two members; see dm-system.md "Federated ID Algorithm"). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2).
+Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, instance epoch, `installedAt` backfill, first-admin promotion), `backfillOneOnOneDmMembership()` and `backfillOneOnOneKeys()` (every 1-on-1 `dm_channels` row gets the key of its two members; see dm-system.md "Federated ID Algorithm"). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2). Databases created before the squash keep the tables the old hand-written statements made, which differ from what the baseline creates (inline `UNIQUE` constraints instead of named unique indexes, text primary keys without `NOT NULL`, extra columns), so a migration must not assume an index or column only the baseline creates. `packages/server/test/fixtures/pre-squash-schema.sql` holds that shape, and `src/db/preSquashUpgrade.test.ts` boots it, a squashed install and an empty database through `initDatabase()` and checks the outbox ends identical on all three.
 Engine: SQLite via `better-sqlite3`
 IDs: Snowflake text, permissions: bigint decimal strings
 
@@ -520,21 +520,23 @@ Inserted by `onPeerActivated` (`'approved'`), the outbound `/deny` handler (`'de
 **Migration `0018_peering_reason_instance_connect` (data only).** Before `instance_connect` existed, `POST /api/federation/peer/ensure` stored every call as `trigger_reason = 'friend_add'` with the remote's `URL.origin` as `trigger_target`, although only connection flows called it. The migration relabels those rows in both `peer_approval_subscribers` and `peer_approval_notifications` to `'instance_connect'`, keeping the target, which is already the shape the current code writes. It matches a `friend_add` row only when the target starts with `http://` or `https://` and contains no `@`; a genuine friend-add target is `name@domain` with a `[a-z0-9_]` username, so it never matches. On subscribers it first deletes a legacy row whose `instance_connect` twin (same request, user and target) already exists, which would otherwise break the unique key. It is idempotent. Unread notifications are never auto-cleaned, which is why this is a migration and not left to expiry: an unmigrated approved row keeps offering to retry a friend request prefilled with a URL.
 
 ### federation_outbox
-UNIQUE: (peerId, entityId)
+Index `idx_outbox_queue` on (peerId, queueKey, createdAt); `idx_outbox_retry` on (nextRetryAt). Several rows may share (peerId, entityId): see federation.md "Outbox queues" for what a queue is and how events are folded into it.
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
 | id | text PK | | |
 | peerId | text NOT NULL | | FK → federation_peers.id CASCADE |
 | contextId | text NOT NULL | | DM channel / friend context |
-| entityId | text NOT NULL | | Message / reaction / request ID |
-| contextType | text NOT NULL | `'dm'` | dm/friend |
+| entityId | text NOT NULL | | The id the peer knows the event by (relay `messageId`) |
+| queueKey | text | | The entity's queue (`outboxQueueKey`). Null only on rows from before migration 0021 until the boot backfill |
+| contextType | text NOT NULL | `'dm'` | dm/friend/profile |
 | eventType | text NOT NULL | | create/update/delete/reaction_add/etc |
 | payload | text NOT NULL | | JSON event data |
 | encryptionVersion | integer | 0 | |
 | attempts | integer | 0 | |
 | nextRetryAt | integer NOT NULL | | |
 | expiresAt | integer NOT NULL | | TTL-based |
-| createdAt | integer NOT NULL | | |
+| createdAt | integer NOT NULL | | Queue order, and the relayed event's `timestamp` |
+| offeredAt | integer | | When some path first possibly handed the row to the peer (worker POST or `/sync` pull). Null: the peer cannot have it. Never cleared |
 
 ### federation_file_queue
 | Column | Type | Default | Notes |

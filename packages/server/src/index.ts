@@ -43,6 +43,7 @@ import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
 import fs from 'fs';
+import { MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
 async function main(): Promise<void> {
   const app = Fastify({
@@ -93,8 +94,10 @@ async function main(): Promise<void> {
     ],
     // Expose tus response headers so tus-js-client can read them across origins
     // (Location is the per-upload URL returned on POST; the rest are standard
-    // tus protocol headers).
+    // tus protocol headers). MESSAGE_PAGING_HEADER tells a client talking to
+    // another instance that a history request honoured `after`.
     exposedHeaders: [
+      MESSAGE_PAGING_HEADER,
       'Location',
       'Tus-Resumable',
       'Tus-Version',

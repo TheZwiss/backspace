@@ -8,6 +8,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { api } from '../../api/client';
+import { kickFromGroupDm, transferGroupDmOwnership, updateGroupDmMetadata } from '../../utils/groupDmOwnerActions';
 import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { AvatarStack } from '../ui/AvatarStack';
@@ -266,7 +267,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         body.icon = filename;
       }
 
-      await api.dm.updateMetadata(channelId, body);
+      await updateGroupDmMetadata(channelId, body);
       // Reset state and exit edit mode. The WS `dm_channel_updated` event
       // will refresh `dmChannels` in-place.
       setIconState((prev) => {
@@ -334,11 +335,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     if (!pendingKick || !channelId) return;
     setSubmittingMemberAction(true);
     try {
-      // See DmRosterPanel.confirmKick for federated identity rationale.
-      const federated = pendingKick.homeUserId && pendingKick.homeInstance
-        ? { homeUserId: pendingKick.homeUserId, homeInstance: pendingKick.homeInstance }
-        : undefined;
-      await api.dm.kickMember(channelId, pendingKick.id, federated);
+      await kickFromGroupDm(channelId, pendingKick);
       addToast(
         t('dm:kick.success', { name: pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName }),
         'success',
@@ -360,11 +357,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     if (!pendingTransfer || !channelId) return;
     setSubmittingMemberAction(true);
     try {
-      // See DmRosterPanel.confirmKick for federated identity rationale.
-      const federated = pendingTransfer.homeUserId && pendingTransfer.homeInstance
-        ? { homeUserId: pendingTransfer.homeUserId, homeInstance: pendingTransfer.homeInstance }
-        : undefined;
-      await api.dm.transferOwnership(channelId, pendingTransfer.id, federated);
+      await transferGroupDmOwnership(channelId, pendingTransfer);
       addToast(
         t('dm:transfer.success', { name: pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName }),
         'success',

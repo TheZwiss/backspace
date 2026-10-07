@@ -261,3 +261,101 @@ describe('connectionManager.addUserSpace voice-state push', () => {
     expect(frames).toHaveLength(0);
   });
 });
+
+describe('connectionManager.announceSpaceAccessChange', () => {
+  // A member gains a private voice channel through a role. The access change
+  // reaches every connected member; each affected one also gets the voice
+  // state they can see now, so the people already in that channel show at
+  // once instead of after the next join or leave.
+  async function privateVoiceSpace(spaceId: string) {
+    const cm = await importManager();
+    const publicCh = `${spaceId}-vc-public`;
+    const privateCh = `${spaceId}-vc-private`;
+    seedSpace(spaceId);
+    seedEveryoneRole(spaceId);
+    seedChannel(publicCh, spaceId, 'voice');
+    seedChannel(privateCh, spaceId, 'voice');
+    seedDenyViewOverride(privateCh, spaceId);
+    testDb.insert(schema.roles).values({
+      id: `${spaceId}-vip`, spaceId, name: 'VIP', color: '#c4b5fd', position: 1, permissions: '0', createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.channelOverrides).values({
+      channelId: privateCh, targetType: 'role', targetId: `${spaceId}-vip`,
+      allow: permissionsToString(PermissionBits.VIEW_CHANNEL), deny: '0',
+    }).run();
+    for (const [ch, occupant] of [[publicCh, 'u-in-public'], [privateCh, 'u-in-private']] as const) {
+      cm.createRoom(ch, 'space', { type: 'space', spaceId });
+      cm.joinRoom(ch, occupant);
+      cm.setVoiceUserStatus(occupant, false, false, false, false);
+    }
+    return { cm, publicCh, privateCh, vip: `${spaceId}-vip` };
+  }
+
+  function connect(cm: Awaited<ReturnType<typeof importManager>>, spaceId: string, userId: string): FakeWs {
+    seedMember(spaceId, userId);
+    const ws = fakeWs();
+    cm.addConnection(userId, ws as never);
+    cm.setUserSpaces(userId, [spaceId]);
+    return ws;
+  }
+
+  function frames(ws: FakeWs): { type: string; [key: string]: unknown }[] {
+    return ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+  }
+
+  it('sends an affected member who gained a private voice channel its occupants, after the access change', async () => {
+    const spaceId = 'sp-gain';
+    const { cm, publicCh, privateCh, vip } = await privateVoiceSpace(spaceId);
+    const ws = connect(cm, spaceId, 'u-gainer');
+    testDb.insert(schema.memberRoles).values({ spaceId, userId: 'u-gainer', roleId: vip }).run();
+
+    cm.announceSpaceAccessChange(spaceId, ['u-gainer']);
+
+    const sent = frames(ws);
+    expect(sent.map((e) => e.type)).toEqual(['space_access_changed', 'space_voice_state']);
+    expect(sent[0]).toEqual({ type: 'space_access_changed', spaceId });
+    const voice = sent[1] as unknown as { spaceId: string; voiceStates: Record<string, string[]>; voiceUserStates: Record<string, unknown> };
+    expect(voice.spaceId).toBe(spaceId);
+    expect(voice.voiceStates[privateCh]).toEqual(['u-in-private']);
+    expect(voice.voiceStates[publicCh]).toEqual(['u-in-public']);
+    expect(voice.voiceUserStates['u-in-private']).toBeDefined();
+  });
+
+  it('sends each affected member only the voice channels they can see', async () => {
+    const spaceId = 'sp-scope';
+    const { cm, publicCh, privateCh } = await privateVoiceSpace(spaceId);
+    const ws = connect(cm, spaceId, 'u-plain');
+
+    cm.announceSpaceAccessChange(spaceId, ['u-plain']);
+
+    const voice = frames(ws).find((e) => e.type === 'space_voice_state') as unknown as { voiceStates: Record<string, string[]>; voiceUserStates: Record<string, unknown> };
+    expect(voice.voiceStates[publicCh]).toEqual(['u-in-public']);
+    expect(voice.voiceStates[privateCh]).toBeUndefined();
+    expect(voice.voiceUserStates['u-in-private']).toBeUndefined();
+  });
+
+  it('sends members who are not affected the access change alone', async () => {
+    const spaceId = 'sp-bystander';
+    const { cm, vip } = await privateVoiceSpace(spaceId);
+    connect(cm, spaceId, 'u-gainer');
+    const bystander = connect(cm, spaceId, 'u-bystander');
+    testDb.insert(schema.memberRoles).values({ spaceId, userId: 'u-gainer', roleId: vip }).run();
+
+    cm.announceSpaceAccessChange(spaceId, ['u-gainer']);
+
+    expect(frames(bystander).map((e) => e.type)).toEqual(['space_access_changed']);
+  });
+
+  it('sends no voice state when nobody is in voice there', async () => {
+    const cm = await importManager();
+    const spaceId = 'sp-quiet';
+    seedSpace(spaceId);
+    seedEveryoneRole(spaceId);
+    seedChannel('vc-quiet', spaceId, 'voice');
+    const ws = connect(cm, spaceId, 'u-quiet');
+
+    cm.announceSpaceAccessChange(spaceId, ['u-quiet']);
+
+    expect(frames(ws).map((e) => e.type)).toEqual(['space_access_changed']);
+  });
+});

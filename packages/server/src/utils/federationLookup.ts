@@ -7,6 +7,21 @@ import type { FederationUserLookupProfile, FederationUserLookupResponse } from '
 
 const LOOKUP_TIMEOUT_MS = 10_000;
 
+/**
+ * The by-home-id answer's profile with its optional fields read strictly: a
+ * version that is not a finite number is `null` (no version, as from a home
+ * that predates the field), and an accent colour that is neither a string nor
+ * null is left out (unknown, the stored one is kept).
+ */
+function versionedProfileOf(profile: FederationUserLookupProfile): FederationUserLookupProfile {
+  const { profileUpdatedAt, accentColor, ...rest } = profile;
+  return {
+    ...rest,
+    profileUpdatedAt: typeof profileUpdatedAt === 'number' && Number.isFinite(profileUpdatedAt) ? profileUpdatedAt : null,
+    ...(typeof accentColor === 'string' || accentColor === null ? { accentColor } : {}),
+  };
+}
+
 export type LookupResult =
   | { ok: true; homeUserId: string; username: string; profile: FederationUserLookupProfile }
   | { ok: false; reason: 'not_found' }
@@ -162,6 +177,6 @@ export async function lookupRemoteUserByHomeId(
     ok: true,
     homeUserId: json.user.homeUserId,
     username: json.user.username,
-    profile: json.user.profile,
+    profile: versionedProfileOf(json.user.profile),
   };
 }

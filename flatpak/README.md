@@ -62,10 +62,9 @@ the metadata pull request only after both builds pass, and that pull request
 merges itself once CI passes. Re-run a release by dispatching the workflow with
 its tag; the re-run replaces the open pull request's branch. The full sequence,
 including what to do when the pull request job fails, is in
-`docs/systems/desktop.md` under "Release publishing".
-Ordinary dependency PRs must not regenerate the committed `node-sources.json`
-from their working-tree lockfile: it belongs to the pinned release. Release
-generation remains an automation step and uses the release lockfile.
+`docs/systems/desktop.md` under "Release publishing". The committed
+`node-sources.json` stays paired with the pinned release; see
+"Release-paired offline sources" below.
 
 The Flatpak CI workflow generates `node-sources.ci.json` automatically from the
 checked-out lockfile before building on both x86_64 and aarch64. Contributors on
@@ -100,3 +99,28 @@ the same platform limits as global keybinds; it is not disabled merely because
 the app is packaged as Flatpak. Electron's current start-at-login integration
 does not work across the sandbox boundary, so the client hides that setting;
 use the desktop environment's autostart settings instead.
+
+## Release-paired offline sources
+
+The committed `node-sources.json` belongs to the release commit the manifest
+pins, not to the working tree: it is generated from that release's lockfile,
+and the published manifest builds only with that pair. The two move together,
+and only in the release metadata pull request. Ordinary dependency PRs must not
+regenerate or hand-edit `node-sources.json`; the Flatpak workflow builds them
+against `node-sources.ci.json`, generated from their own lockfile.
+
+The `Check release pairing` job in `.github/workflows/flatpak.yml` enforces
+this on pull requests with `flatpak/sources-pairing.mjs`: it fails when
+`flatpak/node-sources.json` changes while the pinned `commit:` in
+`io.github.TheZwiss.backspace.yml` stays the same, and passes any change that
+moves the pin. The step skips on pushes and manual runs: a push to main has
+already landed, and a deliberate hand restore of the release-paired file (as in
+#147), merged over this check on its pull request, must be able to land without
+turning main red. If main ever ends up off this rule, the next release's
+metadata pull request regenerates the file and pairs it again.
+
+The same job runs `flatpak/node-sdk-version.mjs` on every run: each reference
+to the Node SDK extension in the two Flatpak workflows, this README and
+`prepare-ci-manifest.mjs` must name an extension from the manifest's
+`sdk-extensions` on its `runtime-version` branch. Moving to a new freedesktop
+runtime fails the pull request until all of them move with the manifest.

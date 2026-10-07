@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import Picker from '@emoji-mart/react';
-import data from '@emoji-mart/data';
+import { loadEmojiData } from '../../utils/emojiData';
 
 interface EmojiPickerProps {
   onEmojiSelect: (emoji: { native: string }) => void;
@@ -44,7 +44,9 @@ export function EmojiPicker({ onEmojiSelect, mobile = false }: EmojiPickerProps)
   return (
     <div ref={containerRef} className={wrapperClass}>
       <Picker
-        data={data}
+        // A loader rather than the data itself keeps the data set out of this
+        // chunk; it is normally loaded already (main.tsx waits for it).
+        data={loadEmojiData}
         onEmojiSelect={onEmojiSelect}
         theme="dark"
         set="native"

@@ -54,14 +54,15 @@ function seed(held: bigint | null): void {
 function renderEditor(overrides: Override[]) {
   const deleteOverride = vi.fn().mockResolvedValue({ success: true });
   const putOverride = vi.fn().mockResolvedValue({ success: true });
-  const getOverrides = vi.fn().mockResolvedValue(overrides);
+  const onSaved = vi.fn();
   render(
     <PermissionsEditor
       entityId="channel-1"
       spaceId={SPACE_ID}
       permDefs={PERM_DEFS}
       unhideNote="Saving makes this channel visible to every member."
-      getOverrides={getOverrides}
+      overrides={overrides}
+      onSaved={onSaved}
       putOverride={putOverride}
       deleteOverride={deleteOverride}
     />,

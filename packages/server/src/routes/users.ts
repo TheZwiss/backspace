@@ -488,7 +488,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         for (const uid of clearTargets) connectionManager.sendToUser(uid, clearPayload);
         connectionManager.sendToUser(request.userId, clearPayload);
 
-        // S2S: project the cleared-activities snapshot to all active peers.
+        // S2S: broadcast the cleared-activities snapshot to peers (see queueOutboxEvent).
         void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
           try {
             queuePresenceRelay(
@@ -580,11 +580,11 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           'profile',
         );
         queueOutboxEvent(
-          updatedUser!.id,    // entityId — user's ID (coalesces rapid edits)
+          updatedUser!.id,    // entityId — user's ID (queue `profile:<id>`: a newer edit replaces a queued one)
           updatedUser!.id,    // contextId — user-scoped
           'profile_update',
           JSON.stringify({ profileUpdate: profilePayload }),
-          undefined,          // targetPeerOrigins — broadcast to all active peers
+          undefined,          // targetPeerOrigins — broadcast to active and unreachable peers
           'profile',          // contextType
         );
       }

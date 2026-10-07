@@ -1,8 +1,8 @@
 import { layoutRect } from '../../platform/interfaceScale';
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
-import { isDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
+import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
@@ -94,6 +94,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
 
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const returnToPresent = useChatStore((s) => s.returnToPresent);
   const chatReplyTo = useChatStore((s) => s.replyTo);
   const chatSetReplyTo = useChatStore((s) => s.setReplyTo);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -112,9 +113,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
-  const isDm = isDmChannel(channelId);
-  const canSendMessages = isDm || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
-  const canAttachFiles = isDm || hasPermissionBit(channelPerms, PermissionBits.ATTACH_FILES);
+  // Undefined until the ready that lists the channel: nothing can be routed yet, so the composer stays locked.
+  const isDm = useIsDmChannel(channelId);
+  const canSendMessages = isDm === true || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
+  const canAttachFiles = isDm === true || hasPermissionBit(channelPerms, PermissionBits.ATTACH_FILES);
 
   // Derive staged transfers from composerStore staged ids + transferStore map
   const stagedTransfers: Transfer[] = useMemo(() => {
@@ -361,6 +363,9 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       .filter((x): x is number => typeof x === 'number' && x > 0);
     const tusExpiresAt = expirations.length > 0 ? Math.min(...expirations) : fallbackExpires;
 
+    // As for a text send (chatStore.sendMessage): sending from a window of
+    // older history goes back to the present, where the message will appear.
+    void returnToPresent(channelId);
     appendBubble({
       clientId,
       channelId,
@@ -710,25 +715,44 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // the full composer once permissions resolve — we need to (re-)attach the
   // ResizeObserver at that moment.
   const [composerEl, setComposerEl] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
+  // The clearance for the live composer element. The variable is written on
+  // every change and removed only when the composer element goes away: the
+  // message list holds its view against it, and a removal, even one undone in
+  // the same task, lets the browser lay the list out at the 80 px fallback and
+  // clamp its scroll offset, which leaves the newest messages under the
+  // composer (issue #361, docs/systems/message-list.md "Bottom clearance").
+  const syncClearance = useCallback((el: HTMLDivElement) => {
+    const target = el.parentElement;
+    if (!target) return;
+    // Total clearance = composer height + bottom offset + 12 px gap.
+    // We measure the bubble's visual height (including replyTo banner +
+    // staged-attachment tiles + textarea autosize) plus the distance from
+    // the parent's bottom edge to the bubble's bottom edge (which folds
+    // in `var(--safe-bottom) + 6` on mobile or `12 px` on
+    // desktop, whichever the composer's `bottom` resolves to).
+    const composerRect = layoutRect(el.getBoundingClientRect());
+    const parentRect = layoutRect(target.getBoundingClientRect());
+    const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
+    const clearance = `${Math.round(composerRect.height + bottomOffset + 12)}px`;
+    if (target.style.getPropertyValue('--composer-clearance') !== clearance) {
+      target.style.setProperty('--composer-clearance', clearance);
+    }
+  }, []);
+
+  // The region the variable was last written to. It is cleared only when the
+  // composer leaves that region (another region, or unmount), never between
+  // two elements of the same composer (the permission-denied bubble and the
+  // full one swap when channel permissions resolve).
+  const clearanceTargetRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
     if (!composerEl) return;
     const target = composerEl.parentElement;
     if (!target) return;
+    const previousTarget = clearanceTargetRef.current;
+    if (previousTarget && previousTarget !== target) previousTarget.style.removeProperty('--composer-clearance');
+    clearanceTargetRef.current = target;
     const el = composerEl;
-
-    const sync = () => {
-      // Total clearance = composer height + bottom offset + 12 px gap.
-      // We measure the bubble's visual height (including replyTo banner +
-      // staged-attachment tiles + textarea autosize) plus the distance from
-      // the parent's bottom edge to the bubble's bottom edge (which folds
-      // in `var(--safe-bottom) + 6` on mobile or `12 px` on
-      // desktop, whichever the composer's `bottom` resolves to).
-      const composerRect = layoutRect(el.getBoundingClientRect());
-      const parentRect = layoutRect(target.getBoundingClientRect());
-      const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
-      const clearance = Math.round(composerRect.height + bottomOffset + 12);
-      target.style.setProperty('--composer-clearance', `${clearance}px`);
-    };
+    const sync = () => syncClearance(el);
 
     sync();
     const ro = new ResizeObserver(sync);
@@ -742,27 +766,32 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     // updates with the layout, but if `MobileShell`'s height attribute
     // updates between paints, we want a same-frame re-measure.
     const vv = window.visualViewport;
-    const onVv = () => sync();
     if (vv) {
-      vv.addEventListener('resize', onVv);
-      vv.addEventListener('scroll', onVv);
+      vv.addEventListener('resize', sync);
+      vv.addEventListener('scroll', sync);
     }
 
     return () => {
       ro.disconnect();
       if (vv) {
-        vv.removeEventListener('resize', onVv);
-        vv.removeEventListener('scroll', onVv);
+        vv.removeEventListener('resize', sync);
+        vv.removeEventListener('scroll', sync);
       }
-      target.style.removeProperty('--composer-clearance');
     };
-    // Re-arm the observer / listeners when keyboard transitions or the
-    // composer's content materially changes — the dependency list is the
-    // set of inputs that can change the bubble's height or its bottom
-    // offset between renders. The ResizeObserver itself is what catches
-    // continuous textarea-autosize growth; these deps just ensure we're
-    // attached to the live element after a remount.
-  }, [composerEl, isMobile, keyboardOpen, textInputFocused, chatReplyTo, stagedTransfers.length]);
+  }, [composerEl, syncClearance]);
+
+  useLayoutEffect(() => () => {
+    clearanceTargetRef.current?.style.removeProperty('--composer-clearance');
+    clearanceTargetRef.current = null;
+  }, []);
+
+  // The composer's `bottom` style and its content (reply banner, staged
+  // files) change between renders without necessarily resizing the element
+  // or its parent, so the observers above may not fire. Re-measure after
+  // each such render, before paint, without touching the observers.
+  useLayoutEffect(() => {
+    if (composerEl) syncClearance(composerEl);
+  }, [composerEl, syncClearance, isMobile, keyboardOpen, textInputFocused, chatReplyTo, stagedTransfers.length]);
 
   // Combined ref: keep `popoverAnchorRef` populated (InputPopover / mention
   // popover anchor + scroll-into-view targets) AND notify the
@@ -778,8 +807,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     return (
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
         <div className="flex items-center justify-center py-[14px] px-4">
+          {/* While the channel is unknown (before its ready) nothing is refused yet:
+              the shell alone, a non-breaking space keeping its height. */}
           <span className="text-txt-tertiary text-[14px]">
-            {t('chat:composer.noPermission')}
+            {isDm === undefined ? '\u00a0' : t('chat:composer.noPermission')}
           </span>
         </div>
       </div>

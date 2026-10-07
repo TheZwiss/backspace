@@ -181,6 +181,18 @@ describe('markPeerStubsOffline', () => {
     expect(friendBroadcast!.payload.homeInstance).toBe('orbit.ddns.net');
   });
 
+  it('leaves a detached account homed on the peer alone: it owns its status', async () => {
+    testDb.insert(schema.users).values({
+      id: 'detached', username: 'detached@orbit.ddns.net', passwordHash: '!fr',
+      status: 'dnd', isAdmin: 0, homeInstance: 'orbit.ddns.net', homeUserId: 'remote-detached',
+      federationHomeOrphaned: 1, createdAt: Date.now(),
+    }).run();
+    const { markPeerStubsOffline } = await import('./federationPresence.js');
+    await markPeerStubsOffline('https://orbit.ddns.net');
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'detached')).get()!.status).toBe('dnd');
+    expect(sentToUser.some((c) => c.payload.userId === 'detached')).toBe(false);
+  });
+
   it("drops the activities kept for the peer's users (#340)", async () => {
     liveActivities.set('stub-pbtest3', [{ type: 'playing', name: 'Factorio' }]);
     const { markPeerStubsOffline } = await import('./federationPresence.js');

@@ -7,6 +7,7 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { isDmChannel, getChannelOrigin, getApiForOrigin } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 import { highlightMatch } from './searchHighlight';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { MessageWithUser, DmMessageWithUser, User } from '@backspace/shared';
 
@@ -45,6 +46,7 @@ function SearchResultRow({
   query: string;
   onJumpToMessage: (id: string) => void;
 }) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['search']);
   const canonical = useCanonicalUserView(msg.user ?? _FALLBACK_USER);
   const displayName = canonical.displayName ?? canonical.username ?? '?';

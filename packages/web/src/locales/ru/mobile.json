@@ -3,5 +3,10 @@
     "editProfile": "Редактировать профиль",
     "homeInstance": "Домашний сервер: {{domain}}",
     "logOutConfirm": "Вы уверены, что хотите выйти?"
+  },
+  "chat": {
+    "openCall": "Открыть звонок",
+    "cancelCall": "Отменить звонок",
+    "unknownChannel": "канал"
   }
 }

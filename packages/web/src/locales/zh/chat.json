@@ -4,6 +4,7 @@
       "hint": "按 Esc <cancel>取消</cancel> • 按 Enter <save>保存</save>"
     },
     "edited": "(已编辑)",
+    "rowLabel": "{{author}}，{{time}}",
     "gifAlt": "GIF 动图",
     "upload": {
       "failed": "上传失败",
@@ -30,11 +31,17 @@
     "noHistoryPermission": "您没有权限查看此频道的历史消息",
     "loading": "正在加载消息",
     "loadingOlder": "正在加载更早的消息",
+    "loadFailed": "无法加载消息",
     "jumpToPresent": "跳转至最新",
     "jump": {
       "unavailable": "该消息已不可用",
       "failed": "无法加载该消息",
       "presentFailed": "无法加载最新消息"
+    },
+    "unread": {
+      "label": "新",
+      "divider": "新消息",
+      "dividerWithDate": "新消息，{{date}}"
     },
     "welcome": {
       "channel": {
@@ -143,5 +150,14 @@
   "notification": {
     "unknownSender": "有人",
     "attachmentOnly": "发送了一个附件"
+  },
+  "embed": {
+    "loadAction": "点击加载",
+    "loadNamed": "加载 {{name}}",
+    "loadUnnamed": "加载嵌入内容",
+    "frameTitle": "嵌入内容",
+    "playNamed": "播放 {{title}}",
+    "playUnnamed": "播放视频",
+    "videoTitle": "视频"
   }
 }

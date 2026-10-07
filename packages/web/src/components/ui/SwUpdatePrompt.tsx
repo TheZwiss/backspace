@@ -5,6 +5,52 @@ import { holdVoiceSessionLock, runWhenNoVoiceSession } from '../../utils/voiceSe
 
 const UPDATE_CHECK_INTERVAL_MS = 60_000;
 
+/** Which worker serves the build this page is running, and whether a new controller is another one. */
+interface OwnBuildWorker {
+  /** True when `next` is a worker other than the one serving this page's build: the page is now stale. */
+  passesControlTo(next: ServiceWorker | null): boolean;
+}
+
+/**
+ * The worker that serves the build this page runs is, in order:
+ *
+ * 1. the controller at load, for a page loaded through the worker;
+ * 2. otherwise the registration's active worker at load. A hard reload
+ *    (Shift+reload) bypasses the worker, so the page has no controller, yet
+ *    it was loaded next to that worker's build, and when an update activates,
+ *    `clientsClaim` hands the page to the new worker with no previous
+ *    controller to compare against;
+ * 3. otherwise (no worker at all: a first visit, or a desktop launch, which
+ *    clears service workers) the first worker to take control, which
+ *    installed from the build this page loaded.
+ *
+ * Control passing to any other worker means the page runs an older build than
+ * the one now serving its chunks. After the reload that follows, the new
+ * worker is the controller at load, so the rule cannot loop. One reload too
+ * many is possible: a hard reload that fetched a build newer than the active
+ * worker's reloads once more when that build's worker takes over.
+ */
+async function ownBuildWorker(container: ServiceWorkerContainer): Promise<OwnBuildWorker> {
+  let own: ServiceWorker | null = container.controller;
+  if (!own) {
+    try {
+      own = (await container.getRegistration())?.active ?? null;
+    } catch (error: unknown) {
+      console.warn('[SwAutoUpdate] Could not read the service worker registration', error);
+    }
+  }
+  return {
+    passesControlTo(next) {
+      if (!next) return false;
+      if (!own) {
+        own = next;
+        return false;
+      }
+      return next !== own;
+    },
+  };
+}
+
 /**
  * Applies new frontend builds without dropping a voice session.
  *
@@ -21,11 +67,14 @@ const UPDATE_CHECK_INTERVAL_MS = 60_000;
  * - The reload waits until this tab has no voice session. Until then the
  *   page keeps running the old build's code.
  *
- * A reload is due whenever one worker replaces another as this page's
- * controller, whichever tab applied the update. The first worker taking
- * control of an uncontrolled page (a first visit, or every desktop launch,
- * since the desktop app clears service workers on start) is not an update and
- * never reloads, but a later replacement in the same session is.
+ * A reload is due whenever control of this page passes to a worker other
+ * than the one serving the build it runs (`ownBuildWorker`), whichever tab
+ * applied the update. That covers a page loaded with a hard reload, which has
+ * no controller until the new worker claims it. The first worker taking
+ * control of a page that had no worker at all (a first visit, or every
+ * desktop launch, since the desktop app clears service workers on start) is
+ * not an update and never reloads, but a later replacement in the same
+ * session is.
  *
  * Workers from before this flow never receive `SKIP_WAITING`, so the new
  * worker replaces them on its own (public/sw-rollover.js) and their pages
@@ -56,13 +105,19 @@ export function SwAutoUpdate() {
   useEffect(() => {
     const container = navigator.serviceWorker;
     if (!container) return;
-    let previousController = container.controller;
+    let disposed = false;
+    const ownBuild = ownBuildWorker(container);
     const onControllerChange = () => {
-      if (previousController !== null) setReloadPending(true);
-      previousController = container.controller;
+      const next = container.controller;
+      void ownBuild.then((tracker) => {
+        if (!disposed && tracker.passesControlTo(next)) setReloadPending(true);
+      });
     };
     container.addEventListener('controllerchange', onControllerChange);
-    return () => container.removeEventListener('controllerchange', onControllerChange);
+    return () => {
+      disposed = true;
+      container.removeEventListener('controllerchange', onControllerChange);
+    };
   }, []);
 
   useEffect(() => {

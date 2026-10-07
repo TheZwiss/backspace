@@ -37,6 +37,7 @@ import { useTransferStore } from '../../stores/transferStore';
 import { useMessageJump } from './messageJumpContext';
 import { ReactionPill } from './ReactionPill';
 import { isOwnReaction } from './reactionSummary';
+import { memberNameColor } from '../../utils/memberGroups';
 
 interface MessageProps {
   message: MessageWithUser | PendingMessageView;
@@ -412,12 +413,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const getMemberDisplayColor = (userId: string) => {
     if (isDmMessage) return { color: '#d8d8de' };
     const member = members.find(m => m.userId === userId);
-    if (member?.roles && member.roles.length > 0) {
-      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
-      return { color: sorted[0]!.color };
-    }
-    if (ownerId && userId === ownerId) return { color: '#fda4af' };
-    return { color: '#d8d8de' };
+    return { color: memberNameColor(member ?? { userId, roles: [] }, ownerId) ?? '#d8d8de' };
   };
 
   const roleColor = getMemberDisplayColor(message.userId);
@@ -445,6 +441,8 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const content = (
     <div
       id={`msg-${message.id}`}
+      role="article"
+      aria-label={t('chat:message.rowLabel', { author: displayName, time: formatMessageTimestamp(t, fmt, message.createdAt) })}
       className={`group relative flex gap-4 px-5 py-[3px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-primary/60 ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'

@@ -131,6 +131,14 @@
     "electronWindowsAudioNote": "Windows loopback may capture call audio when restrictOwnAudio is unsupported",
     "electronMacAudioNote": "macOS 13+ requires Screen & System Audio Recording permission",
     "electronLinuxAudioNote": "Linux requires PulseAudio compatibility; Backspace audio may also be captured",
+    "systemAudioNote": {
+      "excluded": "Viewers hear your computer's sound, but not the voice chat or other Backspace audio.",
+      "excludedMac": "Viewers hear your Mac's sound, but not the voice chat or other Backspace audio. macOS asks for Screen & System Audio Recording permission.",
+      "includedWindows": "This Windows version shares all sound, the voice chat included: viewers will hear their own voices. On Windows 11, Backspace's own audio is left out.",
+      "includedMac": "This macOS version shares all sound, the voice chat included: viewers will hear their own voices. On macOS 14.2 and later, Backspace's own audio is left out. macOS asks for Screen & System Audio Recording permission.",
+      "includedLinux": "Linux shares all sound, the voice chat included: viewers will hear their own voices. Needs PulseAudio, or PipeWire with pipewire-pulse.",
+      "unavailableMac": "System audio needs macOS 13 or later."
+    },
     "systemAudioStartFailed": "Could not start the stream with system audio. Disable Share system audio if this platform does not support it.",
     "systemAudioAddFailed": "Could not add system audio to the stream.",
     "systemAudioAdding": "Adding system audio…",
@@ -252,5 +260,6 @@
     "shareScreen": "Share screen",
     "stopSharingScreen": "Stop sharing screen",
     "disconnect": "Disconnect from call"
-  }
+  },
+  "connectLocked": "You don't have permission to connect to this channel"
 }

@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { and, eq, inArray, isNotNull, isNull, lt, lte, notExists, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, lte, notExists } from 'drizzle-orm';
 import { FileStore } from '@tus/file-store';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import { generateSnowflake } from './snowflake.js';
 import { federationFetch } from './federationFetch.js';
+import { expireOutboxQueues } from './federationOutboxQueue.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -414,15 +415,11 @@ export function cleanupOldMedia(maxAgeDays: number, dryRun: boolean): CleanupRes
 }
 
 /**
- * Delete expired federation outbox entries (expiresAt < now).
- * Returns the number of rows deleted.
+ * Delete federation outbox rows past their relay TTL, by queue: see
+ * `expireOutboxQueues`. Returns the number of rows deleted.
  */
-export function cleanupFederationOutbox(): number {
-  const db = getDb();
-  const result = db.delete(schema.federationOutbox)
-    .where(lt(schema.federationOutbox.expiresAt, Date.now()))
-    .run();
-  return result.changes;
+export function cleanupFederationOutbox(now: number = Date.now()): number {
+  return expireOutboxQueues(now);
 }
 
 /**
@@ -436,30 +433,16 @@ export function cleanupFederationOutbox(): number {
 export const AUTO_PENDING_PEER_GRACE_MS = 60 * 60 * 1000;
 
 /**
- * Outbox event types an unused auto pending row may still carry. A row is kept
- * for the entries that are waiting on its handshake, but untargeted presence
- * broadcasts (`queueOutboxEvent` with no targets reaches `pending` peers too)
- * keep landing on every row, so they cannot be what keeps one alive. Dropping
- * them loses nothing: presence never goes into the mutation log, a presence
- * event for a user the receiver has no copy of is a no-op there, and every
- * activation sends the peer a fresh snapshot (`snapshotPresenceForPeer` from
- * `onPeerActivated`). Every other entry, including a `profile_update`
- * broadcast, keeps the row until the entry's own TTL.
- */
-const DISPOSABLE_PENDING_PEER_EVENT_TYPES = ['presence_update'] as const;
-
-/**
  * Remove `pending` peer rows with `initiatedBy = 'auto'` that nothing is
- * waiting on: older than AUTO_PENDING_PEER_GRACE_MS, with no outbox entry other
- * than presence broadcasts, and no handshake with the origin in flight (that
- * handshake still writes to the row). Such a row is what local traffic leaves
- * behind once its messages have expired at the relay TTL; left alone it lives
- * forever and makes an admin's `/peer/initiate` for the origin a takeover of a
- * dead row. Rows an admin or the remote created, and auto rows that have left
- * `pending`, are never touched.
- *
- * The presence entries are deleted explicitly with the row, without relying
- * on the outbox foreign key's cascade. Returns the number of rows removed.
+ * waiting on: older than AUTO_PENDING_PEER_GRACE_MS, with no outbox entry, and
+ * no handshake with the origin in flight (that handshake still writes to the
+ * row). Broadcasts are not queued onto pending peers (`queueOutboxEvent`), so
+ * every entry on such a row was addressed to that origin and waits on its
+ * handshake. A row with none is what local traffic leaves behind once its
+ * events have expired at the relay TTL; left alone it lives forever and makes
+ * an admin's `/peer/initiate` for the origin a takeover of a dead row. Rows an
+ * admin or the remote created, and auto rows that have left `pending`, are
+ * never touched. Returns the number of rows removed.
  */
 export function cleanupUnusedAutoPendingPeers(
   isHandshakeInFlight: (origin: string) => boolean,
@@ -473,10 +456,7 @@ export function cleanupUnusedAutoPendingPeers(
     notExists(
       db.select({ id: schema.federationOutbox.id })
         .from(schema.federationOutbox)
-        .where(and(
-          eq(schema.federationOutbox.peerId, schema.federationPeers.id),
-          notInArray(schema.federationOutbox.eventType, [...DISPOSABLE_PENDING_PEER_EVENT_TYPES]),
-        )),
+        .where(eq(schema.federationOutbox.peerId, schema.federationPeers.id)),
     ),
   );
 
@@ -489,17 +469,10 @@ export function cleanupUnusedAutoPendingPeers(
 
   let removed = 0;
   for (const peer of candidates) {
-    const deleted = db.transaction((tx) => {
-      const row = tx.delete(schema.federationPeers)
-        .where(and(eq(schema.federationPeers.id, peer.id), unusedRowConditions))
-        .run();
-      if (row.changes === 0) return false;
-      tx.delete(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, peer.id))
-        .run();
-      return true;
-    });
-    if (deleted) {
+    const deleted = db.delete(schema.federationPeers)
+      .where(and(eq(schema.federationPeers.id, peer.id), unusedRowConditions))
+      .run();
+    if (deleted.changes > 0) {
       removed += 1;
       console.log(`[storage-janitor] Removed unused auto-created pending peer row for ${peer.origin}`);
     }
@@ -798,7 +771,7 @@ export function cleanupSoftDeletedDmChannels(): number {
 
       purged++;
     } catch (err) {
-      console.error(`[storage-janitor] Failed to purge soft-deleted DM channel ${channel.id}:`, err);
+      console.error('[storage-janitor] Failed to purge soft-deleted DM channel %s:', channel.id, err);
     }
   }
 

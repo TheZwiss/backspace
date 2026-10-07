@@ -39,16 +39,21 @@ function listFiles(dir, base = dir) {
 
 /**
  * Every file the size rule applies to, with its size on disk: each manifest
- * entry, plus every build asset under `assets/` that the manifest does not
- * list. Workbox drops a file that is over its limit from the manifest, so the
- * manifest alone would miss exactly the file this check exists to catch.
- * Source maps are never precached and are left out.
+ * entry, plus every build asset under `assets/` of a precached type that the
+ * manifest does not list. Workbox drops a file that is over its limit from
+ * the manifest, so the manifest alone would miss exactly the file this check
+ * exists to catch. An asset of any other type (a font, an image, a source
+ * map) was never a precache candidate, so its absence says nothing about
+ * size and it is left out.
  *
  * @param {string} distDir the web build's output directory
  * @param {string[]} manifestUrls from {@link readPrecacheManifest}
+ * @param {readonly string[]} precachedExtensions the worker's precached file
+ *   types, `PRECACHE_FILE_EXTENSIONS` in packages/web/src/build/precache.ts
  * @returns {{ path: string, bytes: number, precached: boolean }[]}
  */
-export function collectPrecacheCandidates(distDir, manifestUrls) {
+export function collectPrecacheCandidates(distDir, manifestUrls, precachedExtensions) {
+  const precachedTypes = new Set(precachedExtensions);
   const precached = new Set(manifestUrls);
   const files = manifestUrls.map((url) => {
     const full = path.join(distDir, url);
@@ -61,7 +66,7 @@ export function collectPrecacheCandidates(distDir, manifestUrls) {
   if (existsSync(assetsDir)) {
     for (const rel of listFiles(assetsDir)) {
       const url = `assets/${rel}`;
-      if (precached.has(url) || url.endsWith('.map')) continue;
+      if (precached.has(url) || !precachedTypes.has(path.extname(url).slice(1))) continue;
       files.push({ path: url, bytes: statSync(path.join(assetsDir, rel)).size, precached: false });
     }
   }

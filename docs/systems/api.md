@@ -127,7 +127,7 @@ PATCH  /spaces/:id/transfer-ownership  { newOwnerId }                          �
 ### Members
 ```
 GET    /spaces/:id/members                               → { members[] }
-PATCH  /spaces/:id/members/:uid  { nickname?, roles? }   → { member }  [MANAGE_ROLES]
+PATCH  /spaces/:id/members/:uid  { roleIds }             → { member }  [MANAGE_ROLES]
 DELETE /spaces/:id/members/:uid                          → { success }  [KICK_MEMBERS|self]
 ```
 
@@ -141,12 +141,12 @@ DELETE /spaces/:id/bans/:uid                             → { success }  [BAN_M
 ### Roles
 ```
 POST   /spaces/:id/roles              { name, color?, permissions? }              → { role }  [MANAGE_ROLES]
-PATCH  /spaces/:id/roles/:rid         { name?, color?, position?, permissions? }  → { role }  [MANAGE_ROLES]
+PATCH  /spaces/:id/roles/:rid         { name?, color?, position?, above?, below?, permissions? }  → { role }  [MANAGE_ROLES]
 DELETE /spaces/:id/roles/:rid                                                     → { success }  [MANAGE_ROLES]
 POST   /spaces/:id/members/:uid/roles { roleId }                                 → { success }  [MANAGE_ROLES]
 DELETE /spaces/:id/members/:uid/roles/:rid                                        → { success }  [MANAGE_ROLES]
 ```
-Kick, ban, the member role routes and the role routes also enforce the role hierarchy, answering `403 role_hierarchy` (permissions.md, "Role hierarchy"). `POST` and `PATCH /roles` also apply the held-bits rule (permissions.md, "Held-bits rule"): switching on a bit the actor does not hold answers `403 cannot_grant_unowned_permissions`, switching one off `403 cannot_change_unowned_permissions`; `DELETE /roles/:rid` of a role carrying a bit the actor does not hold answers `403 cannot_change_unowned_permissions`, and giving a member such a role (`PATCH /members/:uid`, `POST /members/:uid/roles`) `403 cannot_grant_unowned_permissions`; a malformed or negative `permissions` value answers `400 permissions_invalid`. `PATCH /roles/:rid` answers `404 role_not_in_space` for a role of another space. `PATCH /roles/:rid { position }` moves the role to that position (1 = just above @everyone) and renumbers the others; a new role is created at 1. The single-role routes refuse a role of another space with `400 role_not_in_space`.
+Kick, ban, the member role routes and the role routes also enforce the role hierarchy, answering `403 role_hierarchy` (permissions.md, "Role hierarchy"). `POST` and `PATCH /roles` also apply the held-bits rule (permissions.md, "Held-bits rule"): switching on a bit the actor does not hold answers `403 cannot_grant_unowned_permissions`, switching one off `403 cannot_change_unowned_permissions`; `DELETE /roles/:rid` of a role carrying a bit the actor does not hold answers `403 cannot_change_unowned_permissions`, and giving a member such a role (`PATCH /members/:uid`, `POST /members/:uid/roles`) `403 cannot_grant_unowned_permissions`; a `permissions` value that is not a canonical non-negative decimal string answers `400 permissions_invalid` (permissions.md, "Stored form"). `PATCH /members/:uid` takes `roleIds`, the member's whole role set: a list of distinct role id strings, else `400 role_ids_invalid`. Every write in this section is followed by `space_access_changed` to the space's connected members (websocket.md). `PATCH /roles/:rid` answers `404 role_not_in_space` for a role of another space. `PATCH /roles/:rid { position }` moves the role to that position (1 = just above @everyone) and renumbers the others; `{ above: roleId }` or `{ below: roleId }` instead moves it directly next to that role of the space and the request's `position` is then ignored (permissions.md, "Setting the order"): naming both, the role itself, @everyone with `below`, or a non-string answers `400 validation_failed`, a role of another space `400 role_not_in_space`. A new role is created at 1. The single-role routes refuse a role of another space with `400 role_not_in_space`.
 
 `DELETE /spaces/:id/roles/:rid` answers `404 role_not_in_space` for a role id that is not in the space, and otherwise deletes the role together with every channel and category override that names it (overrides carry no foreign key to the role).
 
@@ -165,7 +165,7 @@ GET    /channels/:id/overrides                                   → { overrides
 PUT    /channels/:id/overrides  { targetType, targetId, allow, deny } → { success }  [MANAGE_ROLES]
 DELETE /channels/:id/overrides/:targetType/:targetId              → { success }  [MANAGE_ROLES]
 ```
-All three check `MANAGE_ROLES` space-wide (permissions.md, "Client gating"). `PUT` and `DELETE` (here and on categories) also follow the role hierarchy (permissions.md, "Role hierarchy"): an override on a role at or above the actor's top role, or on another member ranked at or above the actor, answers `403 role_hierarchy`; a `PUT` naming a role that is not in the space answers `400 role_not_in_space`. `PUT` and `DELETE` (here and on categories) also apply the held-bits rule against the stored override (permissions.md, "Held-bits rule"): a newly allowed unheld bit answers `403 cannot_grant_unowned_permissions`, a newly denied one `403 cannot_deny_unowned_permissions`, and clearing one, or deleting an override that sets one, `403 cannot_change_unowned_permissions`. `DELETE` removes the override row, so the target falls back to its space-wide permissions in that channel; the category routes below do the same for a category. A `PUT` or `DELETE` is followed by `channel_updated` (with the recipient's new `myPermissions`) or `channel_deleted` for each connected member of the space, and a category write also sends `category_updated`. The editor stages removals and sends them on Save.
+All three check `MANAGE_ROLES` space-wide (permissions.md, "Client gating"). `PUT` and `DELETE` (here and on categories) also follow the role hierarchy (permissions.md, "Role hierarchy"): an override on a role at or above the actor's top role, or on another member ranked at or above the actor, answers `403 role_hierarchy`; a `PUT` naming a role that is not in the space answers `400 role_not_in_space`. `PUT` and `DELETE` (here and on categories) also apply the held-bits rule against the stored override (permissions.md, "Held-bits rule"): a newly allowed unheld bit answers `403 cannot_grant_unowned_permissions`, a newly denied one `403 cannot_deny_unowned_permissions`, and clearing one, or deleting an override that sets one, `403 cannot_change_unowned_permissions`. `DELETE` removes the override row, so the target falls back to its space-wide permissions in that channel; the category routes below do the same for a category. A `PUT` or `DELETE` is followed by `channel_updated` (with the recipient's new `myPermissions`) or `channel_deleted` for each connected member of the space, and a category write also sends `category_updated`. `allow` and `deny` are canonical non-negative decimal strings, else `400 override_bits_invalid`; one left out sets no bits (permissions.md, "Stored form"). The editor stages removals and sends them on Save.
 
 ### Categories
 ```
@@ -179,12 +179,29 @@ DELETE /categories/:id/overrides/:tt/:tid                   → { success }  [MA
 
 ## Messages (`routes/messages.ts`) — auth required
 ```
-GET    /channels/:id/messages  ?before=&limit=50          → { messages[] }  [VIEW_CHANNEL+READ_MESSAGE_HISTORY]
+GET    /channels/:id/messages  ?before=|after=&limit=50 (1-100) → MessageWithUser[]  [VIEW_CHANNEL+READ_MESSAGE_HISTORY]
 POST   /channels/:id/messages  { content, attachments?, replyToId? } → { message }  [SEND_MESSAGES, +ATTACH_FILES]
 PATCH  /messages/:id           { content }                → { message }  [author]
 DELETE /messages/:id                                      → { success }  [author|MANAGE_MESSAGES]
 ```
 `replyToId` on POST must name a message in the same channel, otherwise `400 Invalid reply target` and nothing is inserted. See permissions.md, "Reply-target confinement".
+
+### Message history paging
+
+`GET /channels/:id/messages` and `GET /dm/:id/messages` share one implementation (`utils/messagePaging.ts`) and one contract. Both answer a bare array, oldest first: ordered by `createdAt`, the id breaking ties. Permission checks and hydration (authors, attachments, reactions, embeds, reply targets) do not depend on the direction.
+
+| Query | Page |
+|-------|------|
+| neither cursor | the `limit` newest messages |
+| `before=<id>` | the `limit` messages with id less than `<id>` and the newest `createdAt` |
+| `after=<id>` | the `limit` messages with the smallest ids greater than `<id>`: the next ids after it |
+| both | `400 paging_cursor_conflict`, nothing selected |
+
+- `limit` defaults to 50 and is clamped to 1-100. An empty cursor (`after=`) counts as absent. A repeated cursor (`after=a&after=b`) is `400 validation_failed`.
+- Cursors compare snowflake ids; the cursor message need not exist (a deleted message is a valid cursor).
+- **Next forward cursor:** the greatest id in the page, not the last element. A relayed DM message keeps its sender's `createdAt` but gets a local id on arrival, so it can sort earlier in the page than its id says. Cutting at the greatest id never skips or repeats a row.
+- **End of history:** a forward page shorter than `limit` reached the newest message at the time of the request; an empty forward page means nothing is newer than the cursor.
+- **Signal:** a response that honoured `after` carries `X-Backspace-Paging: after` (`MESSAGE_PAGING_HEADER` / `MESSAGE_PAGING_AFTER` in `@backspace/shared`), the empty page included. Backward, newest and error responses never carry it. A server that predates forward paging ignores `after` and answers with the newest page and no header, so a client that sent `after` and finds no header must treat the body as the newest page, not as the page after its cursor. The header is in the CORS `exposedHeaders`, so a browser on another instance can read it (web-security.md, section 6).
 
 ## DMs (`routes/dm.ts`) — auth required
 ```
@@ -197,10 +214,10 @@ POST   /dm/:id/members         { userId } | { homeUserId, homeInstance } → DmC
 DELETE /dm/:id/members                                              → { success } (leave) [group only]
 DELETE /dm/:id/members/:targetUserId  ?homeInstance=                → { success } [owner kick; cannot self-kick; group only; segment is homeUserId when ?homeInstance is set]
 POST   /dm/:id/transfer        { newOwnerId? | (homeUserId+homeInstance) } → { success } [owner; group only; resolved member must be in channel; not self]
-POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend]
-GET    /dm/:id/messages        ?before=&limit=50 (1-100)            → DmMessageWithUser[] [member]
+POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend; 400 invite_invalid when the snapshot would not make a well-formed invite (dm-system.md, "System messages")]
+GET    /dm/:id/messages        ?before=|after=&limit=50 (1-100)     → DmMessageWithUser[] [member]
 POST   /dm/:id/messages        { content?, attachments?, replyToId? } → 201 DmMessageWithUser [member; content or attachments required]
-PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [author]
+PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [author; 403 system_message_immutable for a system message]
 DELETE /dm/messages/:id                                             → { success } [author]
 ```
 
@@ -521,7 +538,7 @@ Disposition actions reuse existing endpoints (no new mutating routes): one-click
 
 **`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
 
-**`POST /api/users/@me/reattach`** — the owner-initiated detached-account re-attach (re-attach spec §3.2). JWT-authenticated as the detached account but registered in `routes/federation.ts` (consumes the peer HMAC channel + profile machinery). Body `{ token }` (64-hex; else 400). Re-binds the sovereign detached row to the owner's new home identity **only** when both proofs hold: the session IS the detached account AND the token verifies with the home peer over signed S2S (`POST /federation/verify-attach-proof`). Guards: non-detached/native → 403; missing/tombstoned session → 404 (already 401'd at `authenticate`); home not an active peer → 409; proof invalid → 401; new identity held by a **non-stub** local account → 409. On success: merges any pre-existing replicated stub for the new identity into the detached row (repoint+dedupe every `users.id` FK a DM/friend replica can hold, then delete the stub), sets `home_user_id`/`federation_home_orphaned=0`, adopts the new home username base if it differs (collision-suffix), nulls `profile_updated_at`, pulls+applies the home profile (best-effort), and broadcasts `user_updated`. The paired mint endpoint is `POST /api/auth/attach-proof` (see Auth). See `federation.md` "Peer-Side Re-Attach" and re-attach spec §3.2–3.3.
+**`POST /api/users/@me/reattach`** — the owner-initiated detached-account re-attach (re-attach spec §3.2). JWT-authenticated as the detached account but registered in `routes/federation.ts` (consumes the peer HMAC channel + profile machinery). Body `{ token }` (64-hex; else 400). Re-binds the sovereign detached row to the owner's new home identity **only** when both proofs hold: the session IS the detached account AND the token verifies with the home peer over signed S2S (`POST /federation/verify-attach-proof`). Guards: non-detached/native → 403; missing/tombstoned session → 404 (already 401'd at `authenticate`); home not an active peer → 409; proof invalid → 401; new identity held by a **non-stub** local account → 409; the home handle held by another account on this instance → 409 `reattach_handle_taken`. On success: merges any pre-existing replicated stub for the new identity into the detached row (repoint+dedupe every `users.id` FK a DM/friend replica can hold, then delete the stub), sets `home_user_id`/`federation_home_orphaned=0`, names the account exactly `<handle>@<domain>` (`federation.md` "Account names"), nulls `profile_updated_at`, pulls+applies the home profile (best-effort), and broadcasts `user_updated`. The paired mint endpoint is `POST /api/auth/attach-proof` (see Auth). See `federation.md` "Peer-Side Re-Attach" and re-attach spec §3.2–3.3.
 
 **`POST /api/federation/verify-attach-proof`** — HMAC-authenticated S2S endpoint on the home instance that redeems a one-time attach-proof token (single-use, bound to the calling peer's domain, HMAC-signed fail-closed response). See `federation.md` "S2S Detached-Account Re-Attach Proof".
 

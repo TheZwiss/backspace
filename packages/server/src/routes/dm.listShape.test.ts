@@ -87,15 +87,9 @@ function seed(): void {
 }
 
 async function readyDmChannels(): Promise<DmChannel[]> {
-  const { connectionManager } = await import('../ws/handler.js');
-  const ws = { readyState: 1, send: vi.fn() };
-  connectionManager.addConnection(ME, ws as never);
-  connectionManager.pushReadyPayload(ME);
-  connectionManager.removeConnection(ws as never);
-  const raw = ws.send.mock.calls[0]?.[0];
-  if (typeof raw !== 'string') throw new Error('no ready payload was sent');
-  const message = JSON.parse(raw) as { type: string; dmChannels: DmChannel[] };
-  expect(message.type).toBe('ready');
+  const { buildReadyPayload } = await import('../ws/handler.js');
+  // Through JSON, as the payload travels on the socket.
+  const message = JSON.parse(JSON.stringify(buildReadyPayload(ME))) as { dmChannels: DmChannel[] };
   return message.dmChannels;
 }
 

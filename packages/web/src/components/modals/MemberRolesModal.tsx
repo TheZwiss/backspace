@@ -18,6 +18,7 @@ import {
 import { userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
+import { withSavedRole } from '../../utils/roleOrder';
 
 const ALL_PERMISSION_DEFS = PERMISSION_GROUPS.flatMap((group) => group.perms);
 
@@ -103,7 +104,6 @@ function MemberRolesBody({
   const userId = member.userId;
   const roles = useSpaceStore((s) => s.roles);
   const members = useSpaceStore((s) => s.members);
-  const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const held = useViewerHeldPermissions(spaceId);
   const addToast = useUIStore((s) => s.addToast);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
@@ -221,33 +221,32 @@ function MemberRolesBody({
     setSaving(true);
     setError('');
     try {
+      // Each write that lands is applied here at once, so a partial save (the
+      // member updated, a role write refused) shows exactly what landed. The
+      // server also sends space_access_changed for each, which refreshes the
+      // rest of the space for every member.
       if (membershipChanged) {
-        await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(draftRoleIds) });
+        const updated = await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(draftRoleIds) });
+        const { members, setMembers } = useSpaceStore.getState();
+        setMembers(members.map((m) => (m.userId === userId ? { ...m, roles: updated.roles } : m)));
         // What the server now holds becomes the new baseline.
         setInitialRoleIds(new Set(draftRoleIds));
       }
       for (const role of dirtyRoles) {
         const draft = permDrafts.get(role.id);
         if (draft === undefined) continue;
-        await spaceApi.roles.update(spaceId, role.id, { permissions: permissionsToString(draft) });
-        // Saved: out of the dirty set, whatever the reload below brings.
+        const saved = await spaceApi.roles.update(spaceId, role.id, { permissions: permissionsToString(draft) });
+        const { roles, setRoles } = useSpaceStore.getState();
+        setRoles(withSavedRole(roles, saved));
         setPermDrafts((prev) => {
           const next = new Map(prev);
           next.delete(role.id);
           return next;
         });
       }
-      await loadSpaceDetail(spaceId);
       addToast(t('spaces:memberRoles.saved'), 'success', 2000);
     } catch (err) {
       setError(describeError(err));
-      // A partial save (member updated, a role write failed) must show what
-      // actually landed, so re-read instead of trusting the drafts.
-      try {
-        await loadSpaceDetail(spaceId);
-      } catch {
-        // Keep the original error on screen; the refresh failing is not news.
-      }
     } finally {
       setSaving(false);
     }

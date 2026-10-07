@@ -6,7 +6,7 @@ import { authenticate } from '../utils/auth.js';
 import { markDirectoryDirty } from '../directory/state.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString, stringToPermissions, roleBitsChangeRefusal, type HeldBitsRefusal } from '@backspace/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString, stringToPermissions, parsePermissionString, roleBitsChangeRefusal, type HeldBitsRefusal } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -31,7 +31,7 @@ import { getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sendError } from '../utils/httpErrors';
 import { canActOnMemberInSpace, canManageRoleInSpace, getHierarchyStanding } from '../utils/roleHierarchy.js';
 import { canActOnMember, canManageRoleAt } from '@backspace/shared/src/permissions.js';
-import { moveRoleToPosition, normalizeRolePositions } from '../db/rolePositions.js';
+import { moveRoleToPosition, normalizeRolePositions, positionNextTo } from '../db/rolePositions.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -72,15 +72,30 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/** A permissions value from a request body as a non-negative bigint, or null when it is not one. */
-function parsePermissionBits(value: unknown): bigint | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null;
-  try {
-    const bits = BigInt(value);
-    return bits < 0n ? null : bits;
-  } catch {
-    return null;
+/**
+ * After a change to the space's roles or to a member's roles: every connected
+ * member is told with `space_access_changed` (docs/systems/websocket.md) and
+ * refetches the space's detail, which carries their permissions, the channels
+ * they can see, the roles and the member list. `affectedUserIds` are the
+ * members whose own permissions may have changed; each is also sent the voice
+ * state they can see now (`announceSpaceAccessChange`). Voice permissions are
+ * re-checked here too, since a role can carry SPEAK or STREAM.
+ */
+function announceAccessChange(spaceId: string, affectedUserIds: readonly string[]): void {
+  connectionManager.announceSpaceAccessChange(spaceId, affectedUserIds);
+  checkVoicePermissions(spaceId);
+}
+
+/** The members whose permissions a change to `roleId` reaches: its holders, or everyone for @everyone. */
+function membersHoldingRole(spaceId: string, roleId: string): string[] {
+  const db = getDb();
+  if (roleId === spaceId) {
+    return db.select({ userId: schema.spaceMembers.userId }).from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.spaceId, spaceId)).all().map((m) => m.userId);
   }
+  return db.select({ userId: schema.memberRoles.userId }).from(schema.memberRoles)
+    .where(and(eq(schema.memberRoles.spaceId, spaceId), eq(schema.memberRoles.roleId, roleId)))
+    .all().map((m) => m.userId);
 }
 
 type RoleChangeRefusal = {
@@ -918,7 +933,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'cannot_change_own_roles');
     }
 
-    if (!Array.isArray(roleIds)) {
+    // A set of role ids: each a string, none twice. The whole list replaces
+    // the member's roles, and the table holds each role once per member.
+    if (!Array.isArray(roleIds)
+      || !roleIds.every((roleId): roleId is string => typeof roleId === 'string')
+      || new Set(roleIds).size !== roleIds.length) {
       return sendError(reply, 400, 'role_ids_invalid');
     }
 
@@ -1006,9 +1025,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
-    // Force target user's client to re-sync with their new permissions
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id, [uid]);
 
     // Build response with populated roles
     const updatedMember = db.select()
@@ -1168,7 +1185,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const actorPerms = computePermissions(request.userId, id);
     let permStr: string;
     if (permissions !== undefined && permissions !== null) {
-      const requested = parsePermissionBits(permissions);
+      const requested = parsePermissionString(permissions);
       if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
@@ -1217,22 +1234,19 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    // A new role has no holders yet, so nobody's own access changed.
+    announceAccessChange(id, []);
 
     return reply.code(201).send(role);
   });
 
   // PATCH /api/spaces/:id/roles/:roleId - Update a role
-  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number; permissions?: string } }>('/api/spaces/:id/roles/:roleId', {
+  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number; above?: unknown; below?: unknown; permissions?: string } }>('/api/spaces/:id/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, roleId } = request.params;
-    const { name, color, position, permissions } = request.body;
+    const { name, color, permissions, above, below } = request.body;
+    let position = request.body.position;
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
@@ -1251,6 +1265,29 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const actorStanding = getHierarchyStanding(id, request.userId);
     if (!canManageRoleAt(actorStanding, role.position ?? 0)) {
       return sendError(reply, 403, 'role_hierarchy');
+    }
+    // A move by anchor (`above` or `below` another role) lands the role next
+    // to that role in the order as it is now, so it does what the mover's list
+    // showed even when that list is out of date; the request's `position`,
+    // which clients send too for servers that do not read the anchor, is
+    // ignored then (permissions.md, "Setting the order").
+    if (above !== undefined || below !== undefined) {
+      const side = above !== undefined ? 'above' : 'below';
+      const anchorId = above ?? below;
+      if (roleId === id || (above !== undefined && below !== undefined) || typeof anchorId !== 'string') {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      const anchor = db.select({ id: schema.roles.id }).from(schema.roles)
+        .where(and(eq(schema.roles.id, anchorId), eq(schema.roles.spaceId, id)))
+        .get();
+      if (!anchor) {
+        return sendError(reply, 400, 'role_not_in_space', { roleId: anchorId });
+      }
+      const placed = positionNextTo(getRawDb(), id, roleId, anchorId, side);
+      if (placed === null) {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      position = placed;
     }
     if (position !== undefined) {
       // @everyone is always at 0, and positions count from 1.
@@ -1281,7 +1318,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (color !== undefined) updates.color = color;
 
     if (permissions !== undefined) {
-      const requested = parsePermissionBits(permissions);
+      const requested = parsePermissionString(permissions);
       if (requested === null) {
         return sendError(reply, 400, 'permissions_invalid');
       }
@@ -1310,12 +1347,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    announceAccessChange(id, membersHoldingRole(id, roleId));
 
     return reply.code(200).send(updated);
   });
@@ -1356,6 +1388,9 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, deleteRefusal);
     }
 
+    // Its holders, read before the delete takes their member_roles rows with it.
+    const holders = membersHoldingRole(id, roleId);
+
     // Overrides name their target without a foreign key, so they would
     // outlive the role: invisible in the editor and impossible to remove.
     db.transaction((tx) => {
@@ -1369,12 +1404,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     });
     normalizeRolePositions(getRawDb(), id);
 
-    // Broadcast updated state to all space members
-    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
-    for (const m of memberRows) {
-      connectionManager.pushReadyPayload(m.userId);
-    }
-    checkVoicePermissions(id);
+    announceAccessChange(id, holders);
 
     return reply.code(200).send({ success: true });
   });
@@ -1396,8 +1426,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       roleId,
     }).onConflictDoNothing().run();
 
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id, [uid]);
 
     return reply.code(200).send({ success: true });
   });
@@ -1418,8 +1447,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.memberRoles.roleId, roleId)
     )).run();
 
-    connectionManager.pushReadyPayload(uid);
-    checkVoicePermissions(id);
+    announceAccessChange(id, [uid]);
 
     return reply.code(200).send({ success: true });
   });

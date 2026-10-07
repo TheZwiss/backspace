@@ -3,22 +3,22 @@ import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
-import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../../utils/identity';
 import { useCanonicalUserView } from '../../../utils/userViewLookup';
 import { hasPermissionBit, PermissionBits, stringToPermissions } from '../../../utils/permissions';
 import {
   myUserIdInSpace,
   viewerCanActOn,
+  viewerCanEditMemberRoles,
   viewerCanManageRoleAt,
   viewerHoldsEveryBit,
   useViewerHeldPermissions,
 } from '../../../utils/roleHierarchy';
 import { useFormatters } from '../../../i18n/formatters';
+import { LOCK_ICON } from '../../ui/LockNote';
 import { describeError } from '../../../i18n/errors';
 import type { MemberWithUser, Role } from '@backspace/shared';
 
-// The padlock the role editor's lock notes use.
-const LOCK_ICON = 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z';
 
 /** Why a role checkbox is locked: the role ranks too high, or it carries bits the viewer lacks. */
 type RoleLock = 'rank' | 'bits';
@@ -70,7 +70,7 @@ function MembersPanelRow({
   const { t } = useTranslation(['spaces', 'common']);
   const canonical = useCanonicalUserView(member.user);
   const isOwner = member.userId === ownerId;
-  const displayName = canonical.displayName ?? canonical.username;
+  const displayName = userDisplayName(canonical);
 
   // A role is locked when it ranks at or above the viewer (hierarchy), or when
   // giving it would hand out bits the viewer does not hold (held-bits rule).
@@ -237,13 +237,13 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const members = useSpaceStore((s) => s.members);
   const roles = useSpaceStore((s) => s.roles);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const setMembers = useSpaceStore((s) => s.setMembers);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const heldPermissions = useViewerHeldPermissions(spaceId);
 
   const space = spaces.find((s) => s.id === spaceId);
   const spaceApi = getApiForOrigin(space?._instanceOrigin ?? '');
   const myPerms = spacePermissions.get(spaceId);
-  const canManageRoles = hasPermissionBit(myPerms, PermissionBits.MANAGE_ROLES);
   const canKick = hasPermissionBit(myPerms, PermissionBits.KICK_MEMBERS);
   const canBan = hasPermissionBit(myPerms, PermissionBits.BAN_MEMBERS);
 
@@ -285,14 +285,16 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
     const roleIds = pendingRoleChanges.get(userId);
     if (!roleIds) return;
     try {
-      await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      const updated = await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      // The row shows the saved roles at once; space_access_changed
+      // refreshes the rest of the space for every member.
+      setMembers(useSpaceStore.getState().members.map((m) => (m.userId === userId ? { ...m, roles: updated.roles } : m)));
       setPendingRoleChanges((prev) => {
         const next = new Map(prev);
         next.delete(userId);
         return next;
       });
       setExpandedMemberId(null);
-      await loadSpaceDetail(spaceId);
     } catch (err) {
       setError(describeError(err));
     }
@@ -324,9 +326,6 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
     }
   };
 
-  const canExpandMember = (member: MemberWithUser) =>
-    canManageRoles && member.userId !== myUserId && member.userId !== space.ownerId
-    && manageableRoleIds.size > 0 && viewerCanActOn(space, members, member);
 
   return (
     <div className="space-y-4">
@@ -349,7 +348,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                 spaceId={spaceId}
                 ownerId={space.ownerId}
                 isExpanded={expandedMemberId === member.userId}
-                expandable={canExpandMember(member)}
+                expandable={viewerCanEditMemberRoles(space, members, roles, myPerms, member)}
                 canKick={canKick && viewerCanActOn(space, members, member)}
                 canBan={canBan && viewerCanActOn(space, members, member)}
                 isSelf={member.userId === myUserId}

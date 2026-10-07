@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePermissions } from '../utils/permissions.js';
-import { permissionsToString, stringToPermissions, overrideChangeRefusal, type HeldBitsRefusal, type OverrideBits } from '@backspace/shared/src/permissions.js';
+import { permissionsToString, stringToPermissions, parsePermissionString, overrideChangeRefusal, type HeldBitsRefusal, type OverrideBits } from '@backspace/shared/src/permissions.js';
 import {
   CATEGORY_NAME_MAX_LENGTH,
   CATEGORY_NAME_MIN_LENGTH,
@@ -170,6 +170,17 @@ function overrideTargetRefusal(
     return { status: 403, code: 'role_hierarchy' };
   }
   return null;
+}
+
+/**
+ * The allow and deny of an override write, or null when either is not a
+ * permissions string (`parsePermissionString`). A field left out means no
+ * bits, as it always has.
+ */
+function parseOverrideBits(allow: unknown, deny: unknown): OverrideBits | null {
+  const allowBits = allow === undefined ? 0n : parsePermissionString(allow);
+  const denyBits = deny === undefined ? 0n : parsePermissionString(deny);
+  return allowBits === null || denyBits === null ? null : { allow: allowBits, deny: denyBits };
 }
 
 /** A stored override row as bits, or null when there is none. */
@@ -516,7 +527,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/channels/:id/overrides - Create or update a channel override
   app.put<{
     Params: { id: string };
-    Body: { targetType: string; targetId: string; allow: string; deny: string };
+    Body: { targetType: string; targetId: string; allow?: unknown; deny?: unknown };
   }>('/api/channels/:id/overrides', {
     preHandler: authenticate,
   }, async (request, reply) => {
@@ -540,13 +551,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
-    // Validate that allow/deny are valid bigint strings
-    let allowBits: bigint;
-    let denyBits: bigint;
-    try {
-      allowBits = BigInt(allow || '0');
-      denyBits = BigInt(deny || '0');
-    } catch {
+    const bits = parseOverrideBits(allow, deny);
+    if (!bits) {
       return sendError(reply, 400, 'override_bits_invalid');
     }
 
@@ -561,7 +567,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.channelOverrides.targetType, targetType),
       eq(schema.channelOverrides.targetId, targetId),
     )).get();
-    const escalation = overrideWriteRefusal(request.userId, channel.spaceId, existingChannelOverride, { allow: allowBits, deny: denyBits });
+    const escalation = overrideWriteRefusal(request.userId, channel.spaceId, existingChannelOverride, bits);
     if (escalation) {
       return sendError(reply, 403, escalation);
     }
@@ -580,8 +586,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         channelId: id,
         targetType,
         targetId,
-        allow: allow || '0',
-        deny: deny || '0',
+        allow: permissionsToString(bits.allow),
+        deny: permissionsToString(bits.deny),
       }).run();
     });
 
@@ -681,7 +687,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/categories/:id/overrides
   app.put<{
     Params: { id: string };
-    Body: { targetType: string; targetId: string; allow: string; deny: string };
+    Body: { targetType: string; targetId: string; allow?: unknown; deny?: unknown };
   }>('/api/categories/:id/overrides', {
     preHandler: authenticate,
   }, async (request, reply) => {
@@ -706,12 +712,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
     }
 
-    let allowBits: bigint;
-    let denyBits: bigint;
-    try {
-      allowBits = BigInt(allow || '0');
-      denyBits = BigInt(deny || '0');
-    } catch {
+    const bits = parseOverrideBits(allow, deny);
+    if (!bits) {
       return sendError(reply, 400, 'override_bits_invalid');
     }
 
@@ -726,7 +728,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.categoryOverrides.targetType, targetType),
       eq(schema.categoryOverrides.targetId, targetId),
     )).get();
-    const escalation = overrideWriteRefusal(request.userId, category.spaceId, existingCategoryOverride, { allow: allowBits, deny: denyBits });
+    const escalation = overrideWriteRefusal(request.userId, category.spaceId, existingCategoryOverride, bits);
     if (escalation) {
       return sendError(reply, 403, escalation);
     }
@@ -744,8 +746,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         categoryId: id,
         targetType,
         targetId,
-        allow: allow || '0',
-        deny: deny || '0',
+        allow: permissionsToString(bits.allow),
+        deny: permissionsToString(bits.deny),
       }).run();
     });
 

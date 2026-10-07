@@ -1,4 +1,5 @@
-import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, SpaceInviteSystemPayload } from '@backspace/shared';
+import type { DmChannel, DmMessageWithUser, DmLastMessagePreview, User, DmSystemEvent } from '@backspace/shared';
+import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents';
 import { parseFederatedUsername, isSelf } from './identity';
 import i18n from '../i18n';
 import { formatters } from '../i18n/formatters';
@@ -95,25 +96,23 @@ export function formatDmPreview(lastMessage: PreviewMessage | null | undefined):
   return `${content} ${icon}`;
 }
 
-// ─── System Message Preview Formatting ───────────────────────────────────────
+// ─── System Messages ─────────────────────────────────────────────────────────
 
-interface SystemEventPayload {
-  event?: unknown;
-  targetUserId?: unknown;
-  targetDisplayName?: unknown;
-  newOwnerId?: unknown;
-  newOwnerDisplayName?: unknown;
-  reason?: unknown;
-  // name_changed payload
-  oldName?: unknown;
-  newName?: unknown;
-  // space_invite payload
-  snapshot?: { spaceName?: unknown };
-}
+/**
+ * DM system messages, read in one place for every surface that shows them:
+ * the timeline row (`SystemMessage`) and the sidebar preview
+ * (`formatDmSidebarPreview`). The content is parsed with the same
+ * `parseDmSystemEvent` the server writes and checks it with, so content this
+ * version does not know (an unknown event, a missing field, text that is not
+ * JSON) is the generic label and never shown as it is. See
+ * docs/systems/dm-system.md, "System messages".
+ */
 
-function asString(v: unknown): string | null {
-  return typeof v === 'string' && v.length > 0 ? v : null;
-}
+/**
+ * `'timeline'`: the full sentence of a timeline row. `'preview'`: the shorter
+ * line of a sidebar preview.
+ */
+export type DmSystemForm = 'timeline' | 'preview';
 
 function resolveDisplayName(user: User | null | undefined): string {
   if (!user) return i18n.t('common:states.unknown');
@@ -122,49 +121,55 @@ function resolveDisplayName(user: User | null | undefined): string {
 }
 
 /**
- * Format a system DM message (member_added, member_removed, owner_changed,
- * space_invite) into a human-readable sidebar preview. Falls back to a generic
- * label for unknown event shapes so we never leak raw JSON to the sidebar.
+ * The user who caused a system event: the conversation's roster entry for the
+ * message's author (the freshest name), else the author the message carries,
+ * else null.
  */
-function formatSystemPreview(content: string | null, actor: User | null | undefined): string {
-  let data: SystemEventPayload = {};
-  if (content) {
-    try { data = JSON.parse(content) as SystemEventPayload; } catch { /* malformed → generic fallback */ }
-  }
-  const event = asString(data.event);
-  const actorName = resolveDisplayName(actor);
+export function dmSystemActor(
+  message: { userId: string; user?: User | null },
+  members: readonly User[] | null | undefined,
+): User | null {
+  return members?.find(m => m.id === message.userId) ?? message.user ?? null;
+}
 
-  switch (event) {
-    case 'space_invite': {
-      const spaceName = asString((data as Partial<SpaceInviteSystemPayload>).snapshot?.spaceName);
-      return spaceName
-        ? i18n.t('dm:system.spaceInviteNamed', { spaceName })
-        : i18n.t('dm:system.spaceInvite');
-    }
-    case 'member_added': {
-      const target = asString(data.targetDisplayName) ?? i18n.t('dm:system.someone');
-      return i18n.t('dm:system.memberAdded', { actor: actorName, target });
-    }
-    case 'member_removed': {
-      const target = asString(data.targetDisplayName) ?? i18n.t('dm:system.someone');
-      const reason = asString(data.reason);
-      if (reason === 'leave') return i18n.t('dm:system.memberLeft', { target });
-      return i18n.t('dm:system.memberRemoved', { actor: actorName, target });
-    }
-    case 'owner_changed': {
-      const newOwner = asString(data.newOwnerDisplayName) ?? i18n.t('dm:system.aMember');
-      return i18n.t('dm:system.ownerChanged', { newOwner });
-    }
-    case 'name_changed': {
-      // newName === null is a meaningful "cleared" state — distinct from a
-      // missing field — so we check for a non-empty string explicitly.
-      return asString(data.newName)
-        ? i18n.t('dm:system.renamed', { actor: actorName })
-        : i18n.t('dm:system.nameCleared', { actor: actorName });
-    }
-    case 'icon_changed': {
+/** The display name `dmSystemText` uses for the actor. */
+export function dmSystemActorName(actor: User | null | undefined): string {
+  return resolveDisplayName(actor);
+}
+
+/** The glyph a timeline row shows before the text, or null for none. */
+export function dmSystemIcon(event: DmSystemEvent | null): string | null {
+  switch (event?.event) {
+    case 'member_added': return '\u2192'; // →
+    case 'member_removed': return '\u2190'; // ←
+    case 'owner_changed': return '\u265B'; // ♛
+    case 'name_changed': return '\u270E'; // ✎
+    case 'icon_changed': return '\u{1F5BC}'; // 🖼
+    default: return null;
+  }
+}
+
+/** The line a system event reads as, in the selected language. */
+export function dmSystemText(event: DmSystemEvent | null, actorName: string, form: DmSystemForm): string {
+  const full = form === 'timeline';
+  switch (event?.event) {
+    case 'space_invite':
+      return i18n.t('dm:system.spaceInviteNamed', { spaceName: event.snapshot.spaceName });
+    case 'member_added':
+      return i18n.t(full ? 'dm:system.memberAddedToGroup' : 'dm:system.memberAdded', { actor: actorName, target: event.targetDisplayName });
+    case 'member_removed':
+      if (event.reason === 'leave') return i18n.t('dm:system.memberLeft', { target: event.targetDisplayName });
+      return i18n.t(full ? 'dm:system.memberRemovedFromGroup' : 'dm:system.memberRemoved', { actor: actorName, target: event.targetDisplayName });
+    case 'owner_changed':
+      return i18n.t('dm:system.ownerChanged', { newOwner: event.newOwnerDisplayName });
+    case 'name_changed':
+      // A null or empty name is the "cleared" state, distinct from a rename.
+      if (!event.newName) return i18n.t('dm:system.nameCleared', { actor: actorName });
+      return full
+        ? i18n.t('dm:system.renamedTo', { actor: actorName, name: event.newName })
+        : i18n.t('dm:system.renamed', { actor: actorName });
+    case 'icon_changed':
       return i18n.t('dm:system.iconChanged', { actor: actorName });
-    }
     default:
       return i18n.t('dm:system.generic');
   }
@@ -193,17 +198,15 @@ export function formatDmSidebarPreview(
   const lastMessage = dm.lastMessage ?? null;
   if (!lastMessage) return null;
 
-  // Resolve the message author from the channel members. Falls back to the
-  // user object embedded in DmMessageWithUser if the member roster doesn't
-  // include them (e.g. a remote actor in federation bootstrap).
-  const actor: User | null = (
-    dm.members.find(m => m.id === lastMessage.userId)
-    ?? ('user' in lastMessage ? lastMessage.user : null)
-    ?? null
+  // The author: the roster entry, else the user a DmMessageWithUser carries
+  // (e.g. a remote actor in federation bootstrap).
+  const actor = dmSystemActor(
+    { userId: lastMessage.userId, user: 'user' in lastMessage ? lastMessage.user : null },
+    dm.members,
   );
 
   if (isSystemMessage(lastMessage)) {
-    return formatSystemPreview(lastMessage.content ?? null, actor);
+    return dmSystemText(parseDmSystemEvent(lastMessage.content), resolveDisplayName(actor), 'preview');
   }
 
   const text = formatDmPreview(lastMessage);

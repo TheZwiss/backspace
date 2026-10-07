@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { User } from '@backspace/shared';
 
 import { Avatar } from './Avatar';
+import { getAvatarGradient, getSpaceGradient } from '../../utils/gradients';
 import { useUIStore } from '../../stores/uiStore';
 
 function makeUser(): User {
@@ -59,5 +60,36 @@ describe('Avatar', () => {
     await userEvent.click(container.querySelector('[data-avatar]')!);
 
     expect(clicks).toBe(1);
+  });
+});
+
+/** The gradient the initials fallback is painted with. */
+function fallbackBackground(container: HTMLElement): string {
+  return container.querySelector<HTMLElement>('.avatar-fallback')!.style.background;
+}
+
+/** How jsdom serialises a gradient written as `linear-gradient(135deg, #rrggbb, #rrggbb)`. */
+function asRendered(gradient: string): string {
+  const probe = document.createElement('div');
+  probe.style.background = gradient;
+  return probe.style.background;
+}
+
+describe('Avatar palette (#328)', () => {
+  it('paints a space with the space palette, as the sidebar icon does', () => {
+    // Rose is one of the names the two palettes paint differently.
+    const { container } = render(<Avatar src={null} name="Rosewater" palette="space" userId="space-9" avatarColor="rose" />);
+    expect(fallbackBackground(container)).toBe(asRendered(getSpaceGradient('space-9', 'Rosewater', 'rose').gradient));
+    expect(fallbackBackground(container)).not.toBe(asRendered(getAvatarGradient('space-9', 'Rosewater', 'rose').gradient));
+  });
+
+  it('hashes a space without a stored colour into the space palette', () => {
+    const { container } = render(<Avatar src={null} name="Tidepool" palette="space" userId="workbench-space-7" avatarColor={null} />);
+    expect(fallbackBackground(container)).toBe(asRendered(getSpaceGradient('workbench-space-7', 'Tidepool', null).gradient));
+  });
+
+  it('keeps the user palette by default', () => {
+    const { container } = render(<Avatar src={null} name="Ada" userId="u-1" avatarColor="rose" />);
+    expect(fallbackBackground(container)).toBe(asRendered(getAvatarGradient('u-1', 'Ada', 'rose').gradient));
   });
 });

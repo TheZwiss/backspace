@@ -50,6 +50,16 @@ vi.mock('virtual:pwa-register/react', () => ({
 
 class FakeServiceWorkerContainer extends EventTarget {
   controller: ServiceWorker | null = null;
+  /** The registration's active worker, which a hard-reloaded page is not controlled by. */
+  active: ServiceWorker | null = null;
+  /** When set, getRegistration() waits for this before answering. */
+  registrationGate: Promise<void> | null = null;
+
+  async getRegistration(): Promise<ServiceWorkerRegistration | undefined> {
+    if (this.registrationGate) await this.registrationGate;
+    if (!this.active && !this.controller) return undefined;
+    return { active: this.active ?? this.controller } as unknown as ServiceWorkerRegistration;
+  }
 }
 
 function fakeWorker(name: string): ServiceWorker {
@@ -399,6 +409,52 @@ describe('SwAutoUpdate: reloading onto the new build', () => {
 
     await changeController(fakeWorker('second'));
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads a hard-reloaded page when a new worker claims it (#330)', async () => {
+    // Shift+reload bypasses the worker: the page has no controller, but the
+    // registration's active worker is the build the page was loaded next to.
+    // clientsClaim then hands the page to the new worker with no previous
+    // controller, and the page must still move to the new build.
+    container.active = fakeWorker('old');
+    render(<SwAutoUpdate />);
+    await flush();
+    await changeController(fakeWorker('new'));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the reload of a hard-reloaded page while in a call', async () => {
+    container.active = fakeWorker('old');
+    render(<SwAutoUpdate />);
+    await setVoice({ voiceConnectionStatus: 'connected', currentVoiceChannelId: 'voice-1' });
+    await changeController(fakeWorker('new'));
+    expect(reload).not.toHaveBeenCalled();
+
+    await endSession();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('decides after the registration answers when control changes first', async () => {
+    let open: () => void = () => {};
+    container.registrationGate = new Promise<void>((resolve) => { open = resolve; });
+    container.active = fakeWorker('old');
+    render(<SwAutoUpdate />);
+    await changeController(fakeWorker('new'));
+    expect(reload).not.toHaveBeenCalled();
+
+    open();
+    await flush();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload when control stays with the worker of the page's own build", async () => {
+    // The rule is "control passed to another worker", not "a controllerchange
+    // fired": after the reload the new worker is that worker, so there is no loop.
+    const own = fakeWorker('own');
+    container.controller = own;
+    render(<SwAutoUpdate />);
+    await changeController(own);
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('does not send SKIP_WAITING while a reload is pending', async () => {
