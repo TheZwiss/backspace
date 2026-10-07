@@ -467,3 +467,169 @@ describe('friend events go through the applied-event ledger', () => {
     expect((await apply(toNobody, 'catch_up')).accepted).toEqual([toNobody.messageId]);
   });
 });
+
+describe('member and friend events are last-writer-wins on their subject clock', () => {
+  // A group owned by alice (homed on HOME); bob is a member here. dave is
+  // homed here and is added and removed by alice's instance.
+  const GROUP_FED_ID = 'grp-1';
+  const GROUP = 'grp-orbit';
+  const ALICE = { homeUserId: 'alice', homeInstance: HOME_ORIGIN };
+  const DAVE = { homeUserId: 'dave', homeInstance: ORBIT_ORIGIN };
+
+  beforeEach(() => {
+    seedUser({ id: 'dave', username: 'dave', passwordHash: 'real-hash', homeInstance: null });
+    db.insert(schema.dmChannels).values({
+      id: GROUP, federatedId: GROUP_FED_ID, ownerId: 'alice-on-orbit',
+      ownerHomeUserId: 'alice', ownerHomeInstance: HOME_ORIGIN, createdAt: 1,
+    }).run();
+    db.insert(schema.dmMembers).values({ dmChannelId: GROUP, userId: 'bob', closed: 0, closedChangedAt: 1 }).run();
+    db.insert(schema.dmMembers).values({ dmChannelId: GROUP, userId: 'alice-on-orbit', closed: 0, closedChangedAt: 1 }).run();
+  });
+
+  function memberAdd(timestamp: number): FederationRelayEvent {
+    return {
+      eventType: 'member_add',
+      dmChannelId: 'grp-home',
+      messageId: `member_add:dave:${timestamp}`,
+      federatedId: GROUP_FED_ID,
+      encryptionVersion: 0,
+      timestamp,
+      membership: { user: DAVE, addedBy: ALICE },
+    };
+  }
+
+  function memberKick(timestamp: number): FederationRelayEvent {
+    return {
+      eventType: 'member_remove',
+      dmChannelId: 'grp-home',
+      messageId: `member_remove:dave:${timestamp}`,
+      federatedId: GROUP_FED_ID,
+      encryptionVersion: 0,
+      timestamp,
+      membership: { user: DAVE, removedBy: ALICE, reason: 'kick' },
+    };
+  }
+
+  function isMember(userId: string): boolean {
+    return db.select().from(schema.dmMembers)
+      .where(and(eq(schema.dmMembers.dmChannelId, GROUP), eq(schema.dmMembers.userId, userId)))
+      .get() !== undefined;
+  }
+
+  function systemMessages(): number {
+    return db.select().from(schema.dmMessages).where(eq(schema.dmMessages.dmChannelId, GROUP)).all().length;
+  }
+
+  it('an add lost live, then a remove live, then the add pulled: the member stays out', async () => {
+    // add(1000) is lost; the kick(2000) arrives live for someone not here.
+    expect((await apply(memberKick(2_000))).accepted).toEqual(['member_remove:dave:2000']);
+    expect(isMember('dave')).toBe(false);
+    const before = systemMessages();
+
+    const pulled = await apply(memberAdd(1_000), 'catch_up');
+    expect(pulled).toMatchObject({ accepted: ['member_add:dave:1000'], rejected: [] });
+    expect(isMember('dave')).toBe(false);
+    expect(systemMessages()).toBe(before);
+    expect(sentToDmMembers.filter(s => s.type === 'dm_member_added')).toEqual([]);
+
+    // A later add applies.
+    await apply(memberAdd(3_000));
+    expect(isMember('dave')).toBe(true);
+  });
+
+  it('a remove lost live, then a re-add live, then the remove pulled: the member stays in', async () => {
+    await apply(memberAdd(1_000));
+    expect(isMember('dave')).toBe(true);
+
+    // kick(2000) is lost; the re-add(3000) arrives live while dave is still here.
+    expect((await apply(memberAdd(3_000))).accepted).toEqual(['member_add:dave:3000']);
+    expect(isMember('dave')).toBe(true);
+
+    sentToDmMembers = [];
+    const pulled = await apply(memberKick(2_000), 'catch_up');
+    expect(pulled).toMatchObject({ accepted: ['member_remove:dave:2000'], rejected: [] });
+    expect(isMember('dave')).toBe(true);
+    expect(sentToDmMembers).toEqual([]);
+  });
+
+  it('a change made here orders the relayed events that follow it', async () => {
+    const { recordLocalMemberChange } = await import('../utils/federationSubjectClock.js');
+    // dave was added through this instance at 5000, after a kick alice's
+    // instance made at 4000 and delivers only now.
+    db.insert(schema.dmMembers).values({ dmChannelId: GROUP, userId: 'dave', closed: 0, closedChangedAt: 5_000 }).run();
+    recordLocalMemberChange(GROUP_FED_ID, { homeUserId: 'dave', homeInstance: 'orbit.test' }, 5_000, db);
+
+    await apply(memberKick(4_000), 'catch_up');
+    expect(isMember('dave')).toBe(true);
+    await apply(memberKick(6_000));
+    expect(isMember('dave')).toBe(false);
+  });
+
+  it('a stale add creates no copy of a group not held here', async () => {
+    const { recordLocalMemberChange } = await import('../utils/federationSubjectClock.js');
+    recordLocalMemberChange('grp-2', DAVE, 5_000, db);
+    const bootstrap: FederationRelayEvent = {
+      ...memberAdd(4_000),
+      federatedId: 'grp-2',
+      messageId: 'member_add:dave:grp-2:4000',
+      group: {
+        owner: ALICE,
+        members: [alice, { homeUserId: 'dave', homeInstance: ORBIT_ORIGIN, profile: { username: 'dave' } }],
+        name: null,
+        icon: null,
+        metadataUpdatedAt: 0,
+      },
+    };
+    expect((await apply(bootstrap, 'catch_up')).accepted).toEqual(['member_add:dave:grp-2:4000']);
+    expect(db.select().from(schema.dmChannels).where(eq(schema.dmChannels.federatedId, 'grp-2')).get()).toBeUndefined();
+  });
+
+  it('a friend request lost live, then its cancel live, then the request pulled: no request, nobody told', async () => {
+    const FROM_ALICE = { homeUserId: 'alice', homeInstance: HOME_ORIGIN };
+    const TO_DAVE = { homeUserId: 'dave', homeInstance: ORBIT_ORIGIN };
+    const create: FederationRelayEvent = {
+      eventType: 'friend_request_create', contextType: 'friend', messageId: 'friend_req:alice:dave:1000',
+      encryptionVersion: 0, timestamp: 1_000,
+      friendship: { from: FROM_ALICE, to: TO_DAVE, status: 'pending', createdAt: 1_000, fromProfile: { username: 'alice' } },
+    };
+    const cancel: FederationRelayEvent = {
+      eventType: 'friend_request_cancel', contextType: 'friend', messageId: 'friend_req:alice:dave:2000',
+      encryptionVersion: 0, timestamp: 2_000,
+      friendship: { from: FROM_ALICE, to: TO_DAVE, createdAt: 1_000 },
+    };
+
+    expect((await apply(cancel)).accepted).toEqual([cancel.messageId]);
+    expect((await apply(create, 'catch_up')).accepted).toEqual([create.messageId]);
+    expect(db.select().from(schema.friendRequests).all()).toEqual([]);
+    expect(sentToUser.filter(s => s.type === 'friend_request_received')).toEqual([]);
+
+    // The pulled cancel is then a duplicate, and a newer request applies.
+    expect((await apply(cancel, 'catch_up')).rejected).toEqual([{ messageId: cancel.messageId, reason: 'duplicate' }]);
+    const again: FederationRelayEvent = {
+      ...create, messageId: 'friend_req:alice:dave:3000', timestamp: 3_000,
+      friendship: { ...create.friendship!, createdAt: 3_000 },
+    };
+    await apply(again);
+    expect(db.select({ toId: schema.friendRequests.toId }).from(schema.friendRequests).all()).toEqual([{ toId: 'dave' }]);
+    expect(sentToUser.filter(s => s.type === 'friend_request_received').map(s => s.userId)).toEqual(['dave']);
+  });
+
+  it('a friend removal made after a friend_add that arrives late keeps the pair apart', async () => {
+    const BOB = { homeUserId: 'bob', homeInstance: ORBIT_ORIGIN };
+    db.insert(schema.friendRequests).values({ id: 'req-ab', fromId: 'bob', toId: 'alice-on-orbit', status: 'pending', createdAt: 1 }).run();
+    const remove: FederationRelayEvent = {
+      eventType: 'friend_remove', contextType: 'friend', messageId: 'friend:alice:bob:5000',
+      encryptionVersion: 0, timestamp: 5_000,
+      friendship: { from: ALICE, to: BOB, createdAt: 5_000 },
+    };
+    const add: FederationRelayEvent = {
+      eventType: 'friend_add', contextType: 'friend', messageId: 'friend:alice:bob:4000',
+      encryptionVersion: 0, timestamp: 4_000,
+      friendship: { from: BOB, to: ALICE, createdAt: 4_000 },
+    };
+    await apply(remove);
+    expect((await apply(add, 'catch_up')).accepted).toEqual([add.messageId]);
+    expect(db.select().from(schema.friends).all()).toEqual([]);
+    expect(sentToUser.filter(s => s.type === 'friend_request_accepted')).toEqual([]);
+  });
+});

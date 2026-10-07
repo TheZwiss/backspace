@@ -444,6 +444,8 @@ A friend processor acts on whatever request or friendship the pair has now, so i
 
 The key works because each friend event's `messageId` is its entity id (`friend_req:<pair>:<ms>`, `friend:<pair>:<ms>`, see "Entity ID Format"), unique per event and the same on the live relay and in the log. Ledger rows live 100 days, longer than the 90-day log a pull reads.
 
+**Order.** The ledger only stops a second delivery of one event. The order between different events of a pair (a request delivered after its cancel, a `friend_add` after the removal that followed it) is the pair's clock: an event older than the pair's last change here is accepted and changes nothing, on both paths, and the friend routes move the clock for changes made here. The rule is in [federation.md "Subject clocks"](federation.md#subject-clocks-member-and-friend-events-are-last-writer-wins).
+
 **Before the upgrade.** The ledger only knows events applied since migration 0022. For every peer that had synced before, the migration starts the friend cursor two minutes before the upgrade, so friend history from before it is never re-applied. The cost, accepted: a friend event lost before the upgrade is not healed by the pull. A peering made after the upgrade starts its friend cursor at 0, as the activation pull always did.
 
 **Rolled-back requests.** When the outbox rolls back a `friend_request_create` (a `refused` answer, "Failure Handling" above), `invokePermanentFailureCallback` also deletes that event's mutation-log row, so `/sync` stops serving a request the sender no longer has.

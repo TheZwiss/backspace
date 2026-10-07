@@ -270,6 +270,14 @@ describe('DELETE /api/dm/:id/members/:targetUserId — owner kick', () => {
     expect(wire.membership.removedBy.homeUserId).toBe('owner-A');
     expect(wire.membership.removedBy.homeInstance).toBe('https://local.test');
 
+    // The member's clock moved to the timestamp the relayed event carries, so
+    // an older relayed add of member-B arriving later is stale here.
+    const { isSubjectChangeStale, memberClockSubject } = await import('../utils/federationSubjectClock.js');
+    const subject = memberClockSubject('fed-kick-1', wire.membership.user)!;
+    const clock = testDb.select().from(schema.federationSubjectClocks).all();
+    expect(clock).toEqual([expect.objectContaining({ subjectKey: subject, changedAt: wire.timestamp })]);
+    expect(isSubjectChangeStale(subject, wire.timestamp - 1, testDb)).toBe(true);
+
     // Channel is NOT soft-deleted (kick never orphans the group)
     const channel = testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm-1')).get();
     expect(channel?.deletedAt).toBeNull();

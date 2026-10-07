@@ -1219,11 +1219,13 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 
 **Two paths:**
 
+Before either path: `attributionRefusal` on `membership.addedBy`, then the member's clock: an add older than it is accepted and changes nothing ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins)). The clock is claimed where the member row is written.
+
 **Bootstrap path** (channel does not exist locally by `federatedId`):
 1. Requires `event.group` metadata (owner + full member roster + group metadata snapshot). The owner is required, must pass `attributionRefusal`, must be in the resolved roster, and the signing peer must be one of the roster's instances (`mayRelayInto`); else `invalid_target` and nothing is created. See `dm-system.md` "Relayed member adds"
 2. Creates `dm_channels` row with `federatedId`, `ownerId` (resolved via `resolveOrCreateReplicatedUser`), `ownerHomeUserId`, `ownerHomeInstance`, plus the bootstrap `name`, `icon`, and `metadataUpdatedAt` from `event.group`
 3. When `event.group.icon` is non-null, mirrors `processGroupMetadataUpdateEvent` and calls `downloadProfileAsset(icon, sourceInstance)` — stores the local bare filename on success or the absolute URL on failure
-4. Adds ALL roster members from `event.group.members` (each resolved via `resolveOrCreateReplicatedUser`)
+4. Adds the roster members from `event.group.members` (each resolved via `resolveOrCreateReplicatedUser`), except one whose clock is newer than the add
 5. Sends `dm_channel_created` to **local-only members** (home instance matches `getOurOrigin()`, with normalization for bare domain)
 6. Sets `bootstrapped = true` to skip redundant system messages and member_add broadcasts below
 
@@ -1245,7 +1247,7 @@ interface FederationGroupPayload {
 Older peers that omit these fields fall back to safe defaults (null name/icon, `metadataUpdatedAt = 0`). Receivers never re-relay these fields — only the owner's home instance authors `group_metadata_update` events.
 
 **Incremental path** (channel already exists):
-1. Validates authority: `attributionRefusal` on `membership.addedBy`, then the channel must be a group (`ownerId` set; else `invalid_target`), and the adder must be a current member of this instance's copy with the signing peer one of its relay target origins before the add (`mayRelayInto`); else `unauthorized_source`. Any member may add, from any instance the group is relayed to; the owner's instance is not required. See `dm-system.md` "Relayed member adds".
+1. Validates authority: the channel must be a group (`ownerId` set; else `invalid_target`), and the adder must be a current member of this instance's copy with the signing peer one of its relay target origins before the add (`mayRelayInto`); else `unauthorized_source`. Any member may add, from any instance the group is relayed to; the owner's instance is not required. See `dm-system.md` "Relayed member adds".
 2. Cancels soft-delete if channel was pending GC
 3. Resolves added user via `resolveOrCreateReplicatedUser`
 4. Enforces max 10 members
@@ -1254,13 +1256,14 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 
 ### member_remove (`processMemberRemoveEvent` -- `federation.ts:1825`)
 
-1. Find channel by `federatedId` -- if not found, accept idempotently. A kick (`reason !== 'leave'`) on a 1-on-1 (no `ownerId`) is refused `invalid_target`
+1. Find channel by `federatedId` -- if not found, accept idempotently (a leave still moves the member's clock, a kick does not). A kick (`reason !== 'leave'`) on a 1-on-1 (no `ownerId`) is refused `invalid_target`
 2. Validate authority: owner's instance for kicks (`reason !== 'leave'`), any instance for self-leave
-3. Resolve user via `resolveRelayActor` -- if not found, accept idempotently
-4. Insert system message (before deletion, so broadcast includes the leaving user)
-5. Delete `dm_members` row, clean up `read_states`
-6. Broadcast `dm_member_removed` to remaining local members
-7. If zero members remain -> soft-delete channel (`deletedAt = now`)
+3. Claim the member's clock: a remove older than it is accepted and changes nothing ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins))
+4. Resolve user via `resolveRelayActor` -- if not found, accept idempotently
+5. Insert system message (before deletion, so broadcast includes the leaving user)
+6. Delete `dm_members` row, clean up `read_states`
+7. Broadcast `dm_member_removed` to remaining local members
+8. If zero members remain -> soft-delete channel (`deletedAt = now`)
 
 ### ownership_transfer (`processOwnershipTransferEvent` -- `federation.ts:1938`)
 
@@ -1820,7 +1823,7 @@ An instance pulls each active peer's mutation log through the peer's `POST /api/
 - `refused`: dropped with a warning;
 - `retry`: kept in `federation_sync_retry` with the whole event. The cursor moves on regardless; stopping it would leave the peer stuck behind one event for ever.
 
-**Order.** Events are ordered within a unit, `syncContextKey`: a conversation (the peer's `dmChannelId`), a friend pair, or a profile's user. A unit with a kept event holds its later pulled events behind it (kept with reason `held_behind_earlier_event`), so a retried `member_add` can never land after the `member_remove` that followed it. Different units never wait for each other.
+**Order.** Events are ordered within a unit, `syncContextKey`: a conversation (the peer's `dmChannelId`), a friend pair, or a profile's user. A unit with a kept event holds its later pulled events behind it (kept with reason `held_behind_earlier_event`), so the pull applies one unit's events in the peer's order. Different units never wait for each other. This order covers one peer's pull only; member and friend events are ordered across the live relay, the pull and every peer by their subject clocks ([below](#subject-clocks-member-and-friend-events-are-last-writer-wins)).
 
 **Retry.** `processSyncRetryTick` replays, per peer and unit in `(event_ts, id)` order, the kept events whose unit head is due: an applied, `taken` or `refused` answer removes the row and the next row of the unit goes at once; a `retry` answer reschedules the head (1 min, 5 min, 30 min, 2 h, 6 h, then 24 h) and stops the unit. A row kept for more than 7 days is dropped with a warning. Rows of a peer that is not `active` wait. Replay is local: it needs no network and does not depend on the 90-day log retention.
 
@@ -1841,13 +1844,36 @@ The pull re-delivers events the live relay already delivered, often after local 
 | `delete` of a held message | deletes it, records a tombstone | n/a |
 | `delete` of a message not held | accepted as a no-op on both paths, live and pull. When the message is homed on the signing peer, records the tombstone `dm_delete:<messageId>` for that peer in `federation_applied_events`, so a create of it arriving later is answered `duplicate`. A delete naming a message homed elsewhere records nothing: no peer can block another's messages | n/a |
 | `reaction_add` / `reaction_remove` | set semantics, broadcast only on change | the sync endpoint serves a reaction row only when the reaction's current state agrees with it. Known limit: a stale add can undo a removal made on the receiver through client federation, when a pull runs between the removal and its relay to the reaction's home |
-| `member_add` / `member_remove` / `ownership_transfer` | accepted no-op (system-message marker on `(source_instance, source_message_id)`) | pull order within the conversation is kept (above); the live outbox's order is its own |
+| `member_add` / `member_remove` | accepted no-op (system-message marker on `(source_instance, source_message_id)`) | older than the member's clock: accepted, changes nothing ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins)) |
+| `ownership_transfer` | accepted no-op (system-message marker) | only the current owner's instance may transfer, so a transfer from an earlier owner's instance is refused `unauthorized_source` |
 | `group_metadata_update` / `read_state_update` / `profile_update` | last-writer-wins on `metadataUpdatedAt` / `timestamp` / `profileUpdatedAt` | same |
 | `dm_close` / `dm_reopen` | no change, no broadcast | last-writer-wins on `dm_members.closed_changed_at` |
 | `file_rejected` | no broadcast unless a new affected user is added | n/a |
-| `friend_request_create` / `_update` / `_cancel`, `friend_add`, `friend_remove` | `duplicate` through the applied-event ledger (`social.md` "Applied-event ledger"), recorded on accept, on both paths | the ledger only stops a second delivery; pull order within the pair is kept |
+| `friend_request_create` / `_update` / `_cancel`, `friend_add`, `friend_remove` | `duplicate` through the applied-event ledger (`social.md` "Applied-event ledger"), recorded on accept, on both paths | older than the pair's clock: accepted, changes nothing ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins)) |
 
 `federation_applied_events` rows live 100 days (janitor), longer than the 90-day mutation log a pull reads.
+
+### Subject clocks: member and friend events are last-writer-wins
+
+This is the one place the rule is written; other specs point here.
+
+A member or friend event moves its subject between two states, and the same subject can be moved by events from different instances (an add from the adder's instance, a kick from the owner's, a leave from the member's home) on two paths (the live relay and the pull). One event lost on one path and delivered later on the other would otherwise land after a newer one and undo it: an add delivered by a pull after the kick that followed it, or a request delivered after its cancel. So each subject has a clock, `federation_subject_clocks`, read and written only through `utils/federationSubjectClock.ts`:
+
+| Subject | Key | Events |
+|---|---|---|
+| Group member | the group's `federatedId` + the member's identity (`homeUserId` + home domain) | `member_add`, `member_remove` |
+| Friend pair | both identities, in either order | `friend_request_create`, `friend_request_update`, `friend_request_cancel`, `friend_add`, `friend_remove` |
+
+Identities are compared the way `sameRelayActor` compares them: home user id and home domain, with this instance's own names (origin host, identity domain) as one.
+
+- **A relayed event older than the clock is stale.** Its timestamp (`event.timestamp`, which the live relay and the mutation log carry alike) is older than the subject's last recorded change: it is accepted and changes nothing, no system message, no broadcast. An event at the clock's own time is not stale: an acceptance's `friend_request_update` and `friend_add` share one timestamp, and each is idempotent.
+- **An applied event moves the clock to its timestamp**, never back. So does an event accepted as a no-op once its sender's authority over it was checked: a kick of someone who is not a member, a cancel of a request that is not here. That is what makes the add or request delivered after it stale. A kick of a group this instance does not hold moves no clock, because the owner's instance that authorizes it is named only by a copy of the group; a leave does, since its attribution is checked against the member's home.
+- **A change made here moves the clock** to the timestamp of the event that relays it: group creation (every member), `POST /api/dm/:id/members`, kicks and leaves (`removeDmMember`), and the friend routes (request, accept or decline, cancel, remove) for a pair with a federated side.
+- **A subject with no row has no known change.** Its first event applies and starts the clock. Migration 0022 created the table empty: a membership or friendship from before the upgrade gets its clock from its first event after it.
+
+Both paths reach the processors through `processRelayEvents`, as does the replay of a kept pulled event, and each processor claims the clock (`claimSubjectChange`, check and write in one step) at the point where it writes, after its authority checks and with no `await` in between, so no path and no concurrent delivery can apply an older event over a newer one. `member_add` also checks the clock before a bootstrap, so a stale add never creates a copy of the group; the bootstrap roster is the sender's view at the time of the add, so a roster member whose clock is newer is left out, and the roster moves no clock (that view may itself lag behind a change made elsewhere). Only the added member's clock moves.
+
+Timestamps come from different instances' clocks. The rule only has to order events that a lost delivery set apart by minutes to days, not milliseconds. A clock row is swept 400 days after its last write (`sweepSubjectClocks`), longer than an event can still arrive: the outbox TTL is at most 365 days and the mutation log keeps 90.
 
 ### `startupBootstrapSync()` (`federationPeerActivation.ts`)
 
@@ -2107,6 +2133,7 @@ The 1-on-1 key sweep that used to run here (`reconcileDriftedDmFederatedIds`) is
 | `federation_outbox` | `expiresAt < now`; in a DM message's queue the rows behind an expired row go with it (see [Outbox Delivery Worker](#outbox-delivery-worker-federationworkertsprocessoutboxtick), **Expiry**) | Configurable via `federationRelayTtlDays` (default 30) |
 | `federation_mutation_log` | `mutatedAt < (now - 90 days)` | 90 days |
 | `federation_applied_events` | `appliedAt < (now - 100 days)` | 100 days (`sweepAppliedEvents`), longer than the mutation log a pull reads |
+| `federation_subject_clocks` | `recordedAt < (now - 400 days)` | 400 days (`sweepSubjectClocks`), longer than the longest outbox TTL ([Subject clocks](#subject-clocks-member-and-friend-events-are-last-writer-wins)) |
 | `federation_file_queue` (completed) | `createdAt < (now - 7 days)` | 7 days |
 | `federation_file_queue` (any) | `expiresAt < now` | 30 days (set at queue time) |
 | `dm_channels` (soft-deleted) | `deletedAt < (now - 24h)` | 24-hour grace period |

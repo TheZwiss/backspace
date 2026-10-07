@@ -745,6 +745,8 @@ What decides the path is whether this instance holds a channel with the event's 
   2. The channel must be a group (`ownerId` set). A 1-on-1 has a fixed pair: else `invalid_target` (terminal).
   3. The adder (`membership.addedBy`, required) must be a current member of this copy, matched by federated identity (`memberWithIdentity`: same home user id on the same home domain), and the signing peer one of `relayTargetOrigins(<the members before the add>)`, compared by domain (`mayRelayInto`, `federation/dmChannels.ts`, the same check "Relayed message creates" uses): else `unauthorized_source`. Nothing is added.
 
+**Order.** Adds and removes of one member are last-writer-wins on the member's clock, whichever instance sent them and whether they came live or by a pull: an add older than the member's last change here (a kick, a leave, or a change made through this instance's routes) is accepted and changes nothing, before either path, so it also creates no copy of a group not held here. The rule is in [federation.md "Subject clocks"](federation.md#subject-clocks-member-and-friend-events-are-last-writer-wins).
+
 `unauthorized_source` is retried by the sender. An add can legitimately arrive before the event that made its adder a member, when that member was added through a third instance; the retry applies it once that event has landed. The local route's friendship check is the adder's own instance's to make; the receiver cannot see that friendship.
 
 Known limit: a copy kept after all of this instance's members left keeps its roster from that time. An add by someone who joined later is refused until their own add reaches this instance, which it does not, since the group is no longer relayed here. Re-adding through the owner or any member still in that roster works.
@@ -759,12 +761,13 @@ When a group DM is created with multiple remote members, the origin instance que
 
 1. Find channel by `federatedId`. If not found, accept silently (idempotent). A kick (`reason` other than `leave`) on a channel without an owner, a 1-on-1, is refused `invalid_target` (terminal): a 1-on-1 has a fixed pair and no one who may kick.
 2. Authority check: for kicks, `sourceInstance` must match `ownerHomeInstance`. For self-leave (`reason === 'leave'`), any instance is accepted.
-3. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
-4. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
-5. Delete `dm_members` row
-6. Delete `read_states`
-7. Broadcast `dm_member_removed` to remaining local members
-8. If zero members remain: soft-delete channel
+3. Member's clock: a remove older than the member's last change here is accepted and changes nothing; otherwise the clock moves to it, also when there is no one to remove ("Relayed member adds", **Order**).
+4. Resolve user by `homeUserId` + `homeInstance` via `resolveRelayActor()` (they should already exist). If not found, accept silently.
+5. Insert `member_removed` system message (before deletion so broadcast includes leaving user)
+6. Delete `dm_members` row
+7. Delete `read_states`
+8. Broadcast `dm_member_removed` to remaining local members
+9. If zero members remain: soft-delete channel
 
 ### Ownership Transfer (Inbound)
 

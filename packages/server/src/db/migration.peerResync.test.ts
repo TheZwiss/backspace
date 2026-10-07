@@ -15,6 +15,10 @@ import { fileURLToPath } from 'node:url';
  *   `last_synced_at`, where the pull this release replaces would have
  *   continued, so the first pull does not replay the peer's whole log. A
  *   peer that never synced gets none (its cursors start at 0 when created).
+ *
+ * The member and friend clocks (`federation_subject_clocks`) start empty: a
+ * membership or friendship from before the upgrade has no known change, so
+ * its first relayed event applies and starts its clock.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,5 +81,10 @@ describe('migration 0022_peer_resync', () => {
     const row = db.prepare('SELECT ledger_started_at FROM instance_settings').get() as { ledger_started_at: number };
     expect(row.ledger_started_at).toBeGreaterThanOrEqual(before);
     expect(row.ledger_started_at).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('starts the member and friend clocks empty', () => {
+    for (const stmt of statementsOf(`${TAG}.sql`)) db.exec(stmt);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM federation_subject_clocks').get()).toEqual({ n: 0 });
   });
 });

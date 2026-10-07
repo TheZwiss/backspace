@@ -609,6 +609,16 @@ PK: (sourceOrigin, eventKey)
 | appliedAt | integer NOT NULL | | Local time |
 Index: `idx_applied_events_applied_at`. Retention: 100 days (janitor `sweepAppliedEvents`)
 
+### federation_subject_clocks
+The last applied change per federated subject: a group member or a friend pair. Relayed member and friend events apply last-writer-wins against it on the live relay and the pull; local changes record it too (federation.md "Subject clocks"). Read and written only through `utils/federationSubjectClock.ts`. Migration 0022 creates it empty.
+PK: subjectKey
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| subjectKey | text NOT NULL | | JSON array: `["member", <federatedId>, <homeUserId>, <home domain>]` or `["friend", <homeUserId>, <home domain>, <homeUserId>, <home domain>]` (the two sides sorted) |
+| changedAt | integer NOT NULL | | Timestamp of the last change: the relayed event's `timestamp`, or local time for a change made here. Never moves back |
+| recordedAt | integer NOT NULL | | Local time of the last write, for the sweep |
+Index: `idx_subject_clocks_recorded_at`. Retention: 400 days after the last write (janitor `sweepSubjectClocks`)
+
 ### user_federation_registry
 Persistent registry of all instances a user has federated with. Tracks full lifecycle.
 

@@ -6,6 +6,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
 import { exchangeFriendPresence } from '../ws/presence.js';
 import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
+import { recordLocalFriendPairChange } from '../utils/federationSubjectClock.js';
 import { getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { ensurePeered } from '../utils/federationPeering.js';
 import { lookupRemoteUser, lookupRemoteUserByHomeId, type LookupResult } from '../utils/federationLookup.js';
@@ -184,6 +185,8 @@ async function handleLocalFriendRequest(
     };
 
     const payloadStr = JSON.stringify(payload);
+    // The pair's clock (federation.md "Subject clocks") moves to this change.
+    recordLocalFriendPairChange(fromIdentity, toIdentity, now, db);
     appendMutationLog(entityId, contextId, 'friend_request_create', payloadStr, 'friend');
     queueOutboxEvent(entityId, contextId, 'friend_request_create', payloadStr, targets, 'friend');
   }
@@ -396,6 +399,8 @@ async function handleFederatedFriendRequest(
 
   const rawDb = getRawDb();
   rawDb.transaction(() => {
+    // The pair's clock (federation.md "Subject clocks") moves to this change.
+    recordLocalFriendPairChange(fromIdentity, toIdentity, now, db);
     db.insert(schema.friendRequests).values({
       id: requestId,
       fromId: sender.id,
@@ -707,6 +712,9 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       if (targets.length > 0) {
         const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
         const now2 = Date.now();
+        // The pair's clock (federation.md "Subject clocks") moves to this
+        // answer; its friend_request_update and friend_add share the timestamp.
+        recordLocalFriendPairChange(fromIdentity, toIdentity, now2, db);
 
         // Relay request status update
         const updateEntityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now2}`;
@@ -822,6 +830,8 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
           },
         };
         const payloadStr = JSON.stringify(payload);
+        // The pair's clock (federation.md "Subject clocks") moves to this change.
+        recordLocalFriendPairChange(fromIdentity, toIdentity, now, db);
         appendMutationLog(entityId, contextId, 'friend_request_cancel', payloadStr, 'friend');
         queueOutboxEvent(entityId, contextId, 'friend_request_cancel', payloadStr, targets, 'friend');
       }
@@ -892,6 +902,8 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
           },
         };
         const payloadStr = JSON.stringify(payload);
+        // The pair's clock (federation.md "Subject clocks") moves to this change.
+        recordLocalFriendPairChange(callerIdentity, otherIdentity, now, db);
         appendMutationLog(entityId, contextId, 'friend_remove', payloadStr, 'friend');
         queueOutboxEvent(entityId, contextId, 'friend_remove', payloadStr, targets, 'friend');
       }
