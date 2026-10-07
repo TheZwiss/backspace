@@ -39,6 +39,14 @@ export function hostOf(origin: string): string {
  * Bare, lowercased hostname of an origin or `homeInstance` value (no scheme, no
  * port). The comparison used to decide whether two values name the same home
  * instance.
+ *
+ * The port is dropped because the server drops it: a replicated row's stored
+ * `homeInstance` is the bare hostname (`extractDomain`; registration refuses a
+ * `homeInstance` with a port), and the server compares identity hosts without
+ * it (`identityHost`, `getOurIdentityDomain`). Keeping it here would split a
+ * user whose home runs on a non-default port into two people. So instances
+ * that share a hostname share one identity host, on the server and here
+ * (client-federation.md section 5, "One hostname, one identity host").
  */
 export function homeHostOf(value: string): string {
   const stripped = value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
@@ -109,7 +117,8 @@ export interface HomeIdentity {
  * So Bob's native row on orbit, orbit's row for him as nova's replicated row
  * shows it, and any third instance's row for him all have the identity
  * `(orbit, <his id on orbit>)`, and a user native to nova and one native to
- * orbit never share an identity, whatever their ids (#353).
+ * orbit never share an identity, whatever their ids (#353), as long as the
+ * two instances have different hostnames (see {@link homeHostOf}).
  */
 export function homeIdentityOf(row: IdentityFields, origin: string): HomeIdentity | null {
   if (row.homeInstance) {

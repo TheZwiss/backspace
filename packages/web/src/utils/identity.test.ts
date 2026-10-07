@@ -73,6 +73,18 @@ describe('homeIdentityOf and userKey', () => {
       .toBe(userKey({ id: 'x' }, 'https://orbit.ddns.net'));
   });
 
+  it("keys a home on a non-default port alike with the copy the server stores of its user", () => {
+    // The server stores a replicated row's homeInstance as the bare hostname
+    // (extractDomain), so the copy of a user of nova:8443 names no port.
+    const own = userKey({ id: 'bob' }, 'https://nova.ddns.net:8443');
+    const copyOnOrbit = userKey({ id: 'orbit-row', homeUserId: 'bob', homeInstance: 'nova.ddns.net' }, 'https://orbit.ddns.net');
+    expect(own).toBe(copyOnOrbit);
+  });
+
+  it('gives two instances on one hostname one identity host, as the server does', () => {
+    expect(userKey({ id: '42' }, 'http://localhost:3005')).toBe(userKey({ id: '42' }, 'http://localhost:3006'));
+  });
+
   it('gives a legacy stub without homeUserId a key no other row shares', () => {
     const stub = { id: '42', homeUserId: null, homeInstance: 'orbit.ddns.net' };
     expect(homeIdentityOf(stub, '')).toBeNull();
