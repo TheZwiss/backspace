@@ -406,9 +406,6 @@
     }
   },
   "packages/web/src/components/modals/spaceSettingsPanels/OverviewPanel.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
