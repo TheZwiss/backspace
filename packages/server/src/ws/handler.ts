@@ -25,7 +25,9 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { batchInArray } from '../utils/sqlBatch.js';
 import { loadOpenDmChannels } from '../utils/dmChannelWire.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
-import { statusOnConnect } from '../utils/presenceStatus.js';
+import { statusOnConnect, type StatusSourceRow } from '../utils/presenceStatus.js';
+import { ownsChosenStatus, type ChosenUserStatus } from '@backspace/shared';
+import { attachReplicaSessionHost, showReplicaStatusOnConnect, showReplicaStatusOnDisconnect, type ReplicaSessionHost } from './replicaPresence.js';
 import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { utcDay } from '../telemetry/day.js';
@@ -64,7 +66,7 @@ export interface FederatedCallEntry {
   callerHomeUserId: string;
   federatedCallHost: string;      // peer origin of the host instance
   livekitUrl: string;
-  tokens: Map<string, string>;    // homeUserId → LiveKit token
+  tokens: Map<string, string>;    // local userId → LiveKit token minted for them (`callTokensByLocalUser`)
   ringedUserIds: string[];        // local userIds that received dm_call_incoming
   state: 'ringing' | 'active';
   startedAt: number;
@@ -85,7 +87,7 @@ export function getVoiceRoomElapsedSeconds(room: VoiceRoom, now = Date.now()): n
 
 // ─── ConnectionManager ─────────────────────────────────────────────────────
 
-class ConnectionManager {
+class ConnectionManager implements ReplicaSessionHost {
   // userId → Set of WebSocket connections (multiple tabs)
   private connections: Map<string, Set<WebSocket>> = new Map();
   // userId → Set of space IDs the user belongs to
@@ -264,19 +266,48 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Publish the status of a connection for `row` that just authenticated and
+   * return it. A row that owns its status shows its chosen one
+   * (`statusOnConnect`); a replicated row's status is written by
+   * `showReplicaStatusOnConnect` (ws/replicaPresence.ts).
+   */
+  publishConnectStatus(row: StatusSourceRow & { id: string }): ChosenUserStatus {
+    if (!ownsChosenStatus(row)) return showReplicaStatusOnConnect(row);
+    const status = statusOnConnect(row);
+    getDb().update(schema.users).set({ status }).where(eq(schema.users.id, row.id)).run();
+    return status;
+  }
+
+  /** A session of the user is open here, or its disconnect grace period runs. */
+  hasSessionHere(userId: string): boolean {
+    return this.isUserOnline(userId) || this.pendingOfflineTimeouts.has(userId);
+  }
+
   private finalizeDisconnect(userId: string) {
     // Double check they are still offline
     if (this.isUserOnline(userId)) return;
 
     console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
-    const db = getDb();
-    db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
+
+    // A replicated row returns to its home's projection, or to 'offline' when
+    // none is known (ws/replicaPresence.ts). The home owns its status, so
+    // nothing is relayed, and relayed activities stay unless it is offline.
+    const replica = showReplicaStatusOnDisconnect(userId);
+    if (replica) {
+      if (replica.status === 'offline') this.clearUserActivities(userId);
+      if (replica.changed) {
+        const payload = presenceUpdateFor(userId, replica.status, replica.status === 'offline' ? [] : undefined);
+        for (const uid of collectProfileBroadcastTargetIds(userId)) this.sendToUser(uid, payload);
+      }
+      this.forgetSessionState(userId);
+      return;
+    }
+
+    getDb().update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
 
     // Clear activity state
     this.clearUserActivities(userId);
-    this.userShowActivity.delete(userId);
-    this.userStatuses.delete(userId);
-    this.lastActivityUpdate.delete(userId);
 
     // Broadcast offline to friends + DM co-members + space co-members.
     // Mirrors collectProfileBroadcastTargetIds (the recipient set used by
@@ -286,16 +317,22 @@ class ConnectionManager {
     const offlineTargets = collectProfileBroadcastTargetIds(userId);
     for (const uid of offlineTargets) this.sendToUser(uid, offlinePayload);
 
-    // S2S: project offline to all active peers (mirrors profile_update fanout).
+    // S2S: project offline to peers, as the profile_update broadcast (see queueOutboxEvent).
     // Imported lazily to avoid circular import (federationPresence → db → ws/handler).
     void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
       try { queuePresenceRelay(userId, 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(offline) failed', e); }
     });
 
-    // Clean up userSpaces (re-populated on next connect via setUserSpaces)
-    this.userSpaces.delete(userId);
+    this.forgetSessionState(userId);
+  }
 
-    // Clean up per-user rate limiter
+  /** The per-session state a user's last disconnect drops. */
+  private forgetSessionState(userId: string): void {
+    this.userShowActivity.delete(userId);
+    this.userStatuses.delete(userId);
+    this.lastActivityUpdate.delete(userId);
+    // userSpaces is re-populated on the next connect via setUserSpaces.
+    this.userSpaces.delete(userId);
     this.userRateLimiters.delete(userId);
   }
 
@@ -373,14 +410,23 @@ class ConnectionManager {
     // current voice presence. The `ready` payload only carries voice state at
     // connect time (see buildReadyPayload), so without this push, members already
     // sitting in a voice channel stay invisible in the new member's channel
-    // sidebar until a full page reload. We deliver a scoped snapshot over the same
-    // ordered WebSocket as the `voice_state_update` deltas, so there is no
-    // snapshot-vs-stream race (a join/leave that happens after this snapshot is
-    // emitted strictly afterwards on the same socket). `addUserSpace` is the single
-    // chokepoint every join path funnels through (invite, public join, join-request
-    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so this
-    // fires exactly once per genuine join. Space creation hits this too but produces
-    // an empty snapshot and is skipped below.
+    // sidebar until a full page reload. `addUserSpace` is the single chokepoint
+    // every join path funnels through (invite, public join, join-request
+    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so
+    // this fires exactly once per genuine join. Space creation hits this too but
+    // produces an empty snapshot, which is not sent.
+    this.pushSpaceVoiceState(userId, spaceId);
+  }
+
+  /**
+   * Send `userId` the voice presence of `spaceId` they can see now, as one
+   * `space_voice_state` (`buildSpaceVoiceState`, VIEW_CHANNEL-filtered). It
+   * rides the same ordered socket as the `voice_state_update` deltas, so a
+   * join or leave after it arrives after it. Nothing is sent when the user has
+   * no connection or the snapshot is empty (no one in voice, no restriction).
+   */
+  pushSpaceVoiceState(userId: string, spaceId: string): void {
+    if (this.getUserConnections(userId).size === 0) return;
     const snapshot = this.buildSpaceVoiceState(spaceId, userId);
     if (Object.keys(snapshot.voiceStates).length === 0
         && Object.keys(snapshot.spaceVoiceStates).length === 0) {
@@ -394,6 +440,22 @@ class ConnectionManager {
       voiceUserStates: snapshot.voiceUserStates,
       spaceVoiceStates: snapshot.spaceVoiceStates,
     });
+  }
+
+  /**
+   * After a change to the space's roles or to a member's roles
+   * (websocket.md, `space_access_changed`): every connected member of the
+   * space is told, and refetches the space's detail. The detail has no voice
+   * presence, so each member in `affectedUserIds` (whose own permissions may
+   * have changed) is then sent the voice state they can see now
+   * (`pushSpaceVoiceState`); a voice channel they just gained shows who is in
+   * it at once.
+   */
+  announceSpaceAccessChange(spaceId: string, affectedUserIds: Iterable<string>): void {
+    this.sendToSpace(spaceId, { type: 'space_access_changed', spaceId });
+    for (const userId of new Set(affectedUserIds)) {
+      if (this.getUserSpaces(userId).has(spaceId)) this.pushSpaceVoiceState(userId, spaceId);
+    }
   }
 
   getUserSpaces(userId: string): Set<string> {
@@ -1053,23 +1115,10 @@ class ConnectionManager {
       }
     }
   }
-
-  /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
-  pushReadyPayload(userId: string): void {
-    const connections = this.getUserConnections(userId);
-    if (connections.size === 0) return;
-
-    const readyData = buildReadyPayload(userId);
-    const message = JSON.stringify({ type: 'ready', ...readyData });
-    for (const ws of connections) {
-      if (ws.readyState === 1) {
-        ws.send(message);
-      }
-    }
-  }
 }
 
 export const connectionManager = new ConnectionManager();
+attachReplicaSessionHost(connectionManager);
 
 // The pong path runs every 30 seconds per socket, so a database that keeps
 // refusing this write would flood the log at one line per socket per pong. One
@@ -1171,7 +1220,8 @@ class WsRateLimiter {
   }
 }
 
-function buildReadyPayload(userId: string): {
+/** The `ready` payload for `userId`: everything a client needs to start, sent once per connection. */
+export function buildReadyPayload(userId: string): {
   user: User;
   spaces: SpaceWithChannelsAndMembers[];
   dmChannels: DmChannel[];
@@ -1513,13 +1563,6 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Resolve this user's homeUserId for token lookup
-  const readyUser = db.select({ homeUserId: schema.users.homeUserId })
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .get();
-  const myHomeUserId = readyUser?.homeUserId || userId;
-
   // Also include federated calls (this instance is NOT the host)
   for (const [_fedId, fedCall] of connectionManager.getAllFederatedCalls()) {
     const isParticipant = fedCall.ringedUserIds.includes(userId);
@@ -1534,7 +1577,7 @@ function buildReadyPayload(userId: string): {
         state: fedCall.state,
         federatedCallHost: fedCall.federatedCallHost,
         livekitUrl: fedCall.livekitUrl,
-        livekitToken: fedCall.tokens.get(myHomeUserId),
+        livekitToken: fedCall.tokens.get(userId),
       });
     }
   }
@@ -1725,12 +1768,10 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           isFederated = !!userRow.homeInstance;
           clearTimeout(authTimeout);
 
-          // Publish the user's chosen status as their live presence. For a
-          // native row that is chosen_status (idle and dnd survive reconnects
-          // and restarts); for a replicated row it is the home instance's last
-          // projection. See utils/presenceStatus.ts.
-          const connectStatus = statusOnConnect(userRow);
-          db.update(schema.users).set({ status: connectStatus }).where(eq(schema.users.id, userId)).run();
+          // Publish the user's live presence: for a native row its
+          // chosen_status (idle and dnd survive reconnects and restarts), for a
+          // replicated row what ws/replicaPresence.ts shows.
+          const connectStatus = connectionManager.publishConnectStatus(userRow);
 
           // Add connection
           connectionManager.addConnection(userId, ws);
@@ -1761,7 +1802,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           const connectTargets = collectProfileBroadcastTargetIds(userId);
           for (const uid of connectTargets) connectionManager.sendToUser(uid, connectPayload);
 
-          // S2S: project it to all active peers (mirrors profile_update fanout).
+          // S2S: project it to peers, as the profile_update broadcast (see queueOutboxEvent).
           // No-op for a replicated row: its home instance owns the projection.
           // The relay is a full snapshot, so it carries the activities another
           // session of this user already reported (none on a first connection).

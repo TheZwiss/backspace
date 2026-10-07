@@ -5,13 +5,13 @@ import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSelfIdentity } from '../../stores/authStore';
+import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api, HttpError } from '../../api/client';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
-import type { Friend, MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
+import type { MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
 
 type SendStatus =
   | { kind: 'pending' }
@@ -54,11 +54,11 @@ function InviteResultFriendRow({
   friend,
   status,
 }: {
-  friend: Friend;
+  friend: TaggedFriend;
   status: SendStatus | undefined;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
-  const canonical = useCanonicalUserView(friend as unknown as User);
+  const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   const { baseName } = parseFederatedUsername(canonical.username);
   const dn = canonical.displayName ?? baseName;
   return (
@@ -94,14 +94,14 @@ function InviteSelectFriendRow({
   sending,
   onToggle,
 }: {
-  friend: Friend;
+  friend: TaggedFriend;
   isSelected: boolean;
   alreadyMember: boolean;
   sending: boolean;
-  onToggle: (id: string, friend: Friend) => void;
+  onToggle: (id: string, friend: TaggedFriend) => void;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
-  const canonical = useCanonicalUserView(friend as unknown as User);
+  const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   const { baseName } = parseFederatedUsername(canonical.username);
   const dn = canonical.displayName ?? baseName;
   return (
@@ -156,7 +156,7 @@ export function InviteModal() {
   const spaces = useSpaceStore((s) => s.spaces);
   const spaceMembers = useSpaceStore((s) => s.members);
   const friends = useSocialStore((s) => s.friends);
-  const myUser = useAuthStore((s) => s.user);
+  const self = useSelfIdentity();
 
   const isOpen = activeModal === 'invite';
   const currentSpace = spaces.find((s) => s.id === currentSpaceId);
@@ -214,29 +214,26 @@ export function InviteModal() {
   // member list lives on the store as `members: MemberWithUser[]`. Read the
   // federated identity tuple (user.homeUserId / user.homeInstance) on each side,
   // falling back to the local id for non-federated users.
-  const isFriendAlreadyMember = (friend: Friend): boolean => {
+  const isFriendAlreadyMember = (friend: TaggedFriend): boolean => {
     if (!currentSpace || spaceMembers.length === 0) return false;
-    const fId = friend.homeUserId ?? friend.id;
-    const fHome = friend.homeInstance ?? '';
-    return spaceMembers.some((m: MemberWithUser) => {
-      const mId = m.user.homeUserId ?? m.userId;
-      const mHome = m.user.homeInstance ?? '';
-      return mId === fId && mHome === fHome;
-    });
+    // The same person (`userKey`), whichever instance's row each list holds.
+    const key = userKey(friend, friend._instanceOrigin);
+    const spaceOrigin = currentSpace._instanceOrigin ?? '';
+    return spaceMembers.some((m: MemberWithUser) => userKey(m.user, spaceOrigin) === key);
   };
 
   const filteredFriends = useMemo(() => {
     const q = query.trim().toLowerCase();
     return friends.filter((f) => {
-      if (isSelf(f, myUser)) return false;
+      if (isMine(f, f._instanceOrigin, self)) return false;
       if (!q) return true;
       const dn = (f.displayName ?? '').toLowerCase();
       const un = f.username.toLowerCase();
       return dn.includes(q) || un.includes(q);
     });
-  }, [friends, query, myUser]);
+  }, [friends, query, self]);
 
-  const toggleFriend = (friendId: string, friend: Friend) => {
+  const toggleFriend = (friendId: string, friend: TaggedFriend) => {
     if (isFriendAlreadyMember(friend)) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -259,7 +256,7 @@ export function InviteModal() {
     [friends, selected],
   );
 
-  const sendInvitesTo = async (targets: Friend[]) => {
+  const sendInvitesTo = async (targets: TaggedFriend[]) => {
     if (!currentSpace || !inviteCode || targets.length === 0) return;
     setSending(true);
 

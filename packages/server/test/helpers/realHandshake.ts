@@ -41,7 +41,7 @@ export interface FederationPeerLike {
   origin: string;
   instanceName: string | null;
   status: string;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
+  statusReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
   [key: string]: unknown;
 }
 

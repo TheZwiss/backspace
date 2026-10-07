@@ -193,6 +193,10 @@ which reflects whatever `Origin` the request carried, including `null`.
 `credentials` is not set, so `Access-Control-Allow-Credentials` is never sent.
 `allowedHeaders` and `exposedHeaders` carry the `Tus-*` and `Upload-*` headers
 that federated resumable uploads need on a cross-origin preflight.
+`exposedHeaders` also carries `X-Backspace-Paging`, the header a client on
+another instance reads to tell whether a message history request honoured
+`after` (api.md, "Message history paging"); unexposed, every remote forward
+page would read as an older server's newest page.
 
 **Why the origin has to stay reflected.** Client federation has a browser on
 instance A talk directly to instance B before any server-to-server peering

@@ -18,7 +18,7 @@ vi.mock('../../audio/AudioManager', () => ({
 // Mutable selector-state holders so individual tests can flip caller / channel
 // shape without rebuilding the whole module mock graph.
 type ChatStateShape = { currentChannelId: string | null };
-type SpaceStateShape = { dmChannels: DmChannel[]; currentSpaceId: string | null; userViews: Map<string, unknown> };
+type SpaceStateShape = { dmChannels: DmChannel[]; currentSpaceId: string | null; userViews: Map<string, unknown>; channelOriginMap: Map<string, string> };
 type UIStateShape = {
   memberListOpen: boolean;
   showDms: boolean;
@@ -27,13 +27,14 @@ type UIStateShape = {
   addToast: ReturnType<typeof vi.fn>;
 };
 type AuthStateShape = { user: User | null };
-type SocialStateShape = { friends: { id: string }[]; removeFriend: ReturnType<typeof vi.fn> };
+type SocialStateShape = { friends: { id: string; _instanceOrigin: string }[]; removeFriend: ReturnType<typeof vi.fn> };
 
 const chatState: ChatStateShape = { currentChannelId: 'dm-1' };
 const spaceState: SpaceStateShape = {
   dmChannels: [],
   currentSpaceId: null,
   userViews: new Map(),
+  channelOriginMap: new Map(),
 };
 const uiState: UIStateShape = {
   memberListOpen: true,
@@ -78,16 +79,8 @@ vi.mock('../../stores/uiStore', () => ({
   ),
 }));
 
-vi.mock('../../stores/authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: AuthStateShape) => unknown) => selector(authState),
-    {
-      getState: () => authState,
-      setState: vi.fn(),
-      subscribe: vi.fn(),
-    },
-  ),
-}));
+vi.mock('../../stores/authStore', async () =>
+  (await import('../../test/authStoreMock')).authStoreMock(() => authState));
 
 vi.mock('../../stores/socialStore', () => ({
   useSocialStore: Object.assign(
@@ -100,24 +93,13 @@ vi.mock('../../stores/socialStore', () => ({
   ),
 }));
 
-// API client — both owner-only methods are stubbed; calls return success by default.
+// Owner-only actions, stubbed; calls return success by default. Which
+// instance they go to is covered by `groupDmOwnerActions.test.ts`.
 const apiKickMember = vi.fn().mockResolvedValue({ success: true });
 const apiTransferOwnership = vi.fn().mockResolvedValue({});
-vi.mock('../../api/client', () => ({
-  api: {
-    dm: {
-      kickMember: (
-        channelId: string,
-        userId: string,
-        federated?: { homeUserId: string; homeInstance: string },
-      ) => apiKickMember(channelId, userId, federated),
-      transferOwnership: (
-        channelId: string,
-        userId: string,
-        federated?: { homeUserId: string; homeInstance: string },
-      ) => apiTransferOwnership(channelId, userId, federated),
-    },
-  },
+vi.mock('../../utils/groupDmOwnerActions', () => ({
+  kickFromGroupDm: (channelId: string, member: User) => apiKickMember(channelId, member),
+  transferGroupDmOwnership: (channelId: string, member: User) => apiTransferOwnership(channelId, member),
 }));
 
 // useCanonicalUserView falls back to the input on cache miss; that's exactly
@@ -176,7 +158,7 @@ function setScenario(opts: {
   memberListOpen?: boolean;
   showDms?: boolean;
   currentSpaceId?: string | null;
-  friends?: { id: string }[];
+  friends?: { id: string; _instanceOrigin: string }[];
   channelId?: string | null;
 }) {
   authState.user = opts.caller;
@@ -325,7 +307,7 @@ describe('DmRosterPanel — section grouping', () => {
 });
 
 describe('DmRosterPanel — action wiring', () => {
-  it('kick action: opens confirm dialog, then calls api.dm.kickMember on confirm', async () => {
+  it('kick action: opens confirm dialog, then removes the member on confirm', async () => {
     const u = userEvent.setup();
     const owner = makeUser({ id: 'me', username: 'me', displayName: 'Me' });
     const target = makeUser({ id: 'tgt', username: 'tgt', displayName: 'Tgt' });
@@ -350,11 +332,10 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiKickMember).toHaveBeenCalledTimes(1);
     });
-    // Local target → federated arg is undefined.
-    expect(apiKickMember).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
+    expect(apiKickMember).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
-  it('transfer action: opens confirm dialog, then calls api.dm.transferOwnership on confirm', async () => {
+  it('transfer action: opens confirm dialog, then transfers ownership on confirm', async () => {
     const u = userEvent.setup();
     const owner = makeUser({ id: 'me', username: 'me', displayName: 'Me' });
     const target = makeUser({ id: 'tgt', username: 'tgt', displayName: 'Tgt' });
@@ -375,8 +356,7 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiTransferOwnership).toHaveBeenCalledTimes(1);
     });
-    // Local target → federated arg is undefined.
-    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
+    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
   it('remove-friend action: calls socialStore.removeFriend with the row user id', async () => {
@@ -387,7 +367,7 @@ describe('DmRosterPanel — action wiring', () => {
       caller: me,
       members: [me, friend],
       ownerId: 'someone-else', // caller is not owner
-      friends: [{ id: 'friend-1' }],
+      friends: [{ id: 'friend-1', _instanceOrigin: '' }],
     });
     const { container } = renderPanel();
 

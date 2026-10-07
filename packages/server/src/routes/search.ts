@@ -1,13 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, desc, lt, gt, like, inArray, sql, asc } from 'drizzle-orm';
+import { eq, and, desc, lt, gt, like, sql, asc } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { sendError } from '../utils/httpErrors.js';
 import { hasPermission, getChannelSpaceId, PermissionBits, isDmMember } from '../utils/permissions.js';
-import { fetchReactionsForMessages, fetchReplyToMessages, buildMessageWithUser } from './messages.js';
-import { fetchDmReactionsForMessages, fetchDmReplyToMessages, buildDmMessageWithUser } from './dm.js';
-import type { MessageWithUser, DmMessageWithUser } from '@backspace/shared';
-import { fetchEmbedsForMessages, fetchDmEmbedsForMessages } from '../utils/embedResolver.js';
+import { hydrateChannelMessages } from './messages.js';
+import { hydrateDmMessages } from './dm.js';
 
 interface SearchQuery {
   q?: string;
@@ -122,42 +120,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         .all();
     }
 
-    if (messageRows.length === 0) {
-      return reply.code(200).send({ results: [], totalCount });
-    }
-
-    // Hydrate results
-    const userIds = [...new Set(messageRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    const messageIds = messageRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.messageId, messageIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.messageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    const reactionsMap = fetchReactionsForMessages(messageIds);
-    const embedMap = fetchEmbedsForMessages(messageIds);
-    // Reply targets are confined to this channel
-    const replyToMap = fetchReplyToMessages(id, messageRows);
-
-    const results: MessageWithUser[] = messageRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is MessageWithUser => m !== null);
-
+    const results = hydrateChannelMessages(id, messageRows);
     return reply.code(200).send({ results, totalCount });
   });
 
@@ -250,43 +213,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         .all();
     }
 
-    if (messageRows.length === 0) {
-      return reply.code(200).send({ results: [], totalCount });
-    }
-
-    // Hydrate
-    const userIds = [...new Set(messageRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    const messageIds = messageRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.dmMessageId, messageIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.dmMessageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    const reactionsMap = fetchDmReactionsForMessages(messageIds);
-    const embedMap = fetchDmEmbedsForMessages(messageIds);
-
-    // Fetch reply-to messages for DMs, confined to this DM channel
-    const replyToMap = fetchDmReplyToMessages(id, messageRows);
-
-    const results: DmMessageWithUser[] = messageRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is DmMessageWithUser => m !== null);
-
+    const results = hydrateDmMessages(id, messageRows);
     return reply.code(200).send({ results, totalCount });
   });
 
@@ -356,43 +283,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
       return true;
     });
 
-    if (uniqueRows.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    // Hydrate
-    const userIds = [...new Set(uniqueRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    const msgIds = uniqueRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.messageId, msgIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.messageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    const reactionsMap = fetchReactionsForMessages(msgIds);
-    const embedMap = fetchEmbedsForMessages(msgIds);
-    // Reply targets are confined to this channel
-    const replyToMap = fetchReplyToMessages(id, uniqueRows);
-
-    const messages: MessageWithUser[] = uniqueRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is MessageWithUser => m !== null);
-
-    return reply.code(200).send(messages);
+    return reply.code(200).send(hydrateChannelMessages(id, uniqueRows));
   });
 
   // GET /api/dm/:id/messages/around — Load DM messages around a target message
@@ -451,43 +342,6 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
       return true;
     });
 
-    if (uniqueRows.length === 0) {
-      return reply.code(200).send([]);
-    }
-
-    // Hydrate
-    const userIds = [...new Set(uniqueRows.map(m => m.userId))];
-    const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
-    const userMap = new Map(users.map(u => [u.id, u]));
-
-    const msgIds = uniqueRows.map(m => m.id);
-    const allAttachments = db.select()
-      .from(schema.attachments)
-      .where(inArray(schema.attachments.dmMessageId, msgIds))
-      .all();
-    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
-    for (const att of allAttachments) {
-      const mid = att.dmMessageId ?? '';
-      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
-      attachmentMap.get(mid)!.push(att);
-    }
-
-    const reactionsMap = fetchDmReactionsForMessages(msgIds);
-    const embedMap = fetchDmEmbedsForMessages(msgIds);
-
-    // Reply targets are confined to this DM channel
-    const replyToMap = fetchDmReplyToMessages(id, uniqueRows);
-
-    const messages: DmMessageWithUser[] = uniqueRows
-      .map(m => {
-        const user = userMap.get(m.userId);
-        if (!user) return null;
-        const reactions = reactionsMap.get(m.id) ?? [];
-        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
-      })
-      .filter((m): m is DmMessageWithUser => m !== null);
-
-    return reply.code(200).send(messages);
+    return reply.code(200).send(hydrateDmMessages(id, uniqueRows));
   });
 }

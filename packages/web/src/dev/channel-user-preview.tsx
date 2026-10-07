@@ -57,8 +57,6 @@ import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
 import { useUIStore } from '../stores/uiStore';
-import { setMyUserIdForOrigin } from '../utils/crossStoreResolvers';
-import { registerSelfId } from '../utils/identity';
 import { initI18n, setLanguage } from '../i18n';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import { ALL_PERMISSIONS, permissionsToString } from '../utils/permissions';
@@ -274,11 +272,9 @@ function typersOf(state: PreviewState): User[] {
 function seedStores(state: PreviewState): void {
   const permissions = permissionsToString(ALL_PERMISSIONS);
   const typers = typersOf(state);
-  useAuthStore.setState({ user: ME });
-  useUIStore.setState({ isMobile: state === 'picker-long-mobile' });
   // What the remote origin's `ready` records for the signed-in user.
-  setMyUserIdForOrigin(ORBIT, ME_ON_ORBIT.id);
-  registerSelfId(ME_ON_ORBIT.id);
+  useAuthStore.setState({ user: ME, myRowIds: new Map([[ORBIT, ME_ON_ORBIT.id]]) });
+  useUIStore.setState({ isMobile: state === 'picker-long-mobile' });
 
   const staleRoster = state === 'dm-picker'
     ? [member(OTHER_SPACE, ZED), member(OTHER_SPACE, OSKAR), member(OTHER_SPACE, ME)]
@@ -302,6 +298,7 @@ function seedStores(state: PreviewState): void {
     channelOriginMap: new Map([
       [DM_ID, ''], [GROUP_ID, ''], [REMOTE_DM_ID, ORBIT], [CHANNEL, ''], [NAMES_DM_ID, ''], [NAMES_DISPLAY_DM_ID, ''], [PICKER_GROUP_ID, ''],
     ]),
+    spaceChannelIndex: new Map([[CHANNEL, { spaceId: SPACE, origin: '', type: 'text' as const }]]),
     channelToSpaceMap: new Map([[CHANNEL, SPACE]]),
     channelPermissions: new Map([[CHANNEL, permissions]]),
     spaces: state === 'space-picker'

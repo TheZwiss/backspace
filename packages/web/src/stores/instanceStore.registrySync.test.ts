@@ -40,12 +40,10 @@ const mockUser = {
   ],
 };
 
-vi.mock('./authStore', () => ({
-  useAuthStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ user: mockUser, token: 'tok' }),
-    { getState: () => ({ user: mockUser, token: 'tok' }), setState: vi.fn(), subscribe: vi.fn() }
-  ),
-}));
+vi.mock('./authStore', async () => {
+  const state = { get user() { return mockUser; }, token: 'tok' };
+  return (await import('../test/authStoreMock')).authStoreMock(() => state);
+});
 
 import { useInstanceStore } from './instanceStore';
 

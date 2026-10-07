@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { MemberWithUser, User } from '@backspace/shared';
 
@@ -63,7 +63,7 @@ beforeEach(() => {
     members: [member(owner), member(other)],
     spacePermissions: new Map([['space-1', '-1']]),
   });
-  useAuthStore.setState({ user: owner });
+  useAuthStore.setState({ user: owner, myRowIds: new Map() });
 });
 
 function renderPanel(): void {
@@ -107,5 +107,35 @@ describe('OverviewPanel when the space leaves the store', () => {
     }).not.toThrow();
 
     expect(screen.queryByDisplayValue('Aether Drift')).not.toBeInTheDocument();
+  });
+});
+
+describe('OverviewPanel ownership transfer candidates', () => {
+  function openTransfer(): void {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer Ownership' }));
+  }
+
+  it("leave out the user's row on a remote space's instance, not the row that has the session row's id", () => {
+    const ORBIT = 'https://orbit.example';
+    // orbit knows the user as o-7; orbit's Cleo has the id the session row has.
+    const meOnOrbit: User = { ...owner, id: 'o-7', username: 'owner@nova', displayName: 'Owner On Orbit', homeInstance: 'nova.example', homeUserId: 'user-1' };
+    const cleo: User = { ...owner, id: 'user-1', username: 'cleo', displayName: 'Cleo' };
+    useSpaceStore.setState({
+      spaces: [{ ...space, ownerId: 'o-7', _instanceOrigin: ORBIT }],
+      members: [member(meOnOrbit), member(cleo)],
+    });
+    useAuthStore.setState({ myRowIds: new Map([[ORBIT, 'o-7']]) });
+    openTransfer();
+
+    expect(screen.getByText('Cleo')).toBeInTheDocument();
+    expect(screen.queryByText('Owner On Orbit')).not.toBeInTheDocument();
+  });
+
+  it("leave out the session row on the page instance", () => {
+    openTransfer();
+
+    expect(screen.getByText('Member')).toBeInTheDocument();
+    expect(screen.queryByText('Owner')).not.toBeInTheDocument();
   });
 });

@@ -11,7 +11,7 @@ import { Avatar } from '../ui/Avatar';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { buildMessageMenuItems } from './messageMenuItems';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore, useSelfIdentity } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -21,9 +21,10 @@ import { EmbedRenderer } from './EmbedRenderer';
 import { FederationGlobeIcon } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { EmojiPicker } from './EmojiPicker';
+import { MobilePickerSheet } from './MobilePickerSheet';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
-import { isFederationGlobeApplicable, isSelf, resolveDisplayIdentity, userDisplayName } from '../../utils/identity';
+import { isFederationGlobeApplicable, isMine, userDisplayName } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useSelfIdInChannel } from '../../utils/channelUser';
 import { contentMentionsAny } from '../../utils/mentionTokens';
@@ -36,7 +37,7 @@ import {
 import { useTransferStore } from '../../stores/transferStore';
 import { useMessageJump } from './messageJumpContext';
 import { ReactionPill } from './ReactionPill';
-import { isOwnReaction } from './reactionSummary';
+import { memberNameColor } from '../../utils/memberGroups';
 
 interface MessageProps {
   message: MessageWithUser | PendingMessageView;
@@ -148,11 +149,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  // The reaction picker, and what opened it: the "+" of the hover bar, or the
+  // message menu ('row'). On desktop it hangs off that button or the message
+  // row; on mobile it is a bottom sheet whatever opened it.
+  const [reactionPicker, setReactionPicker] = useState<'button' | 'row' | null>(null);
+  const showReactionPicker = reactionPicker !== null;
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -160,6 +166,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const members = useSpaceStore((s) => s.members);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const isMobile = useUIStore((s) => s.isMobile);
   const jumpToMessage = useMessageJump();
 
   const pending = isPendingMessage(message) ? message.__pending : null;
@@ -200,7 +207,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const channelKey: string = isPendingMessage(message)
     ? message.channelId || message.dmChannelId || ''
     : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
-  const isAuthor = isSelf(message.user, currentUser);
+  // The instance that issued this message and its rows.
+  const messageOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelKey) ?? '');
+  const self = useSelfIdentity();
+  const isAuthor = isMine(message.user, messageOrigin, self);
   // The channel whose origin issued this message's ids; mentions resolve there.
   const mentionChannelId = channelKey || null;
   const selfIdHere = useSelfIdInChannel(mentionChannelId);
@@ -226,7 +236,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   // DISPLAY, but the add/toggle affordances are withdrawn since the server drops them.
   const isDeadDmThread = !!dmChannelId && (() => {
     const dm = dmChannels.find(d => d.id === dmChannelId);
-    return dm ? isDeletedPartnerDm(dm, currentUser) : false;
+    return dm ? isDeletedPartnerDm(dm, { self, origin: messageOrigin }) : false;
   })();
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canSendMessages = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.SEND_MESSAGES);
@@ -240,14 +250,19 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
   const _rawMsgUser = message.user ?? null;
-  const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER);
+  const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER, messageOrigin);
   const _rawReplyUser = (!isPendingMessage(message) && message.replyTo?.user) ? message.replyTo.user : null;
-  const _canonicalReplyUser = useCanonicalUserView(_rawReplyUser ?? _FALLBACK_USER);
+  const _canonicalReplyUser = useCanonicalUserView(_rawReplyUser ?? _FALLBACK_USER, messageOrigin);
 
   const toggleReaction = (emoji: string) => {
     // Read-only: a dead 1-on-1 DM accepts no reaction mutations (add OR remove).
     if (isDeadDmThread) return;
-    const hasReacted = message.reactions?.some(r => isOwnReaction(r, currentUser) && r.emoji === emoji);
+    // Read from the store at call time: the context menu keeps the handlers
+    // of the render that opened it, whose `message` is older than a reaction
+    // added since. Only stored reactions count, the ones the pills show: a
+    // tap during an add's round trip is an add, which addReaction does not
+    // send a second time.
+    const hasReacted = useChatStore.getState().hasOwnReaction(message.id, emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);
     } else if (canAddReactions) {
@@ -286,31 +301,34 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? (message.content?.trim() ?? null)
     : imageEmbedSourceUrl;
 
-  // Close reaction picker on outside click
+  const closeReactionPicker = useCallback(() => setReactionPicker(null), []);
+
+  // Close the desktop reaction picker on outside click. The mobile sheet
+  // closes on a tap on its own backdrop.
   useEffect(() => {
-    if (!showReactionPicker) return;
+    if (!showReactionPicker || isMobile) return;
     const handler = (e: MouseEvent) => {
       if (reactionPickerRef.current?.contains(e.target as Node)) return;
       if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
-      setShowReactionPicker(false);
+      setReactionPicker(null);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showReactionPicker]);
+  }, [showReactionPicker, isMobile]);
 
-  // Close reaction picker on Escape
+  // Close the desktop reaction picker on Escape (the mobile sheet has its own).
   useEffect(() => {
-    if (!showReactionPicker) return;
+    if (!showReactionPicker || isMobile) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowReactionPicker(false);
+      if (e.key === 'Escape') setReactionPicker(null);
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showReactionPicker]);
+  }, [showReactionPicker, isMobile]);
 
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
     addReaction(message.id, emoji.native);
-    setShowReactionPicker(false);
+    setReactionPicker(null);
   }, [addReaction, message.id]);
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -372,9 +390,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       onDelete: () => deleteMessage(message.id, channelKey),
       onReaction: (emoji: string) => toggleReaction(emoji),
       onOpenEmojiPicker: () => {
-        // Close the context menu, then show the reaction picker
+        // Close the context menu, then show the reaction picker at the row
         useContextMenuStore.getState().close();
-        setShowReactionPicker(true);
+        setReactionPicker('row');
       },
       onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
     });
@@ -396,13 +414,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     }
   };
 
-  // Resolve display identity: replicated-self messages show home user's avatar/name.
-  // For non-self messages, further route through canonical user view cache so stale
-  // federated stubs are replaced with the best-known profile data.
-  const _resolvedIdentity = resolveDisplayIdentity(message.user, currentUser);
-  const displayIdentity = (!isSelf(_resolvedIdentity, currentUser) && _rawMsgUser)
-    ? _canonicalMsgUser
-    : _resolvedIdentity;
+  // Display identity: the user's own messages, from any instance, show their
+  // session row; anyone else's go through the userViews cache so a stale copy
+  // shows the best-known profile. `displayOrigin` issued the row shown.
+  const displayIdentity = isAuthor && currentUser
+    ? currentUser
+    : (_rawMsgUser ? _canonicalMsgUser : message.user);
+  const displayOrigin = isAuthor && currentUser ? '' : messageOrigin;
   const displayName = userDisplayName(displayIdentity);
 
   const spaces = useSpaceStore((s) => s.spaces);
@@ -412,12 +430,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const getMemberDisplayColor = (userId: string) => {
     if (isDmMessage) return { color: '#d8d8de' };
     const member = members.find(m => m.userId === userId);
-    if (member?.roles && member.roles.length > 0) {
-      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
-      return { color: sorted[0]!.color };
-    }
-    if (ownerId && userId === ownerId) return { color: '#fda4af' };
-    return { color: '#d8d8de' };
+    return { color: memberNameColor(member ?? { userId, roles: [] }, ownerId) ?? '#d8d8de' };
   };
 
   const roleColor = getMemberDisplayColor(message.userId);
@@ -432,7 +445,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const handleUsernameClick = (e: React.MouseEvent) => {
     if (!message.user) return;
     e.stopPropagation();
-    openUserProfile(message.user, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
+    openUserProfile(message.user, messageOrigin, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
   };
 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
@@ -444,7 +457,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const content = (
     <div
+      ref={rowRef}
       id={`msg-${message.id}`}
+      role="article"
+      aria-label={t('chat:message.rowLabel', { author: displayName, time: formatMessageTimestamp(t, fmt, message.createdAt) })}
       className={`group relative flex gap-4 px-5 py-[3px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-primary/60 ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
@@ -473,6 +489,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               name={displayName}
               size={40}
               user={displayIdentity}
+              origin={displayOrigin}
               member={authorMember}
               className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
             />
@@ -488,10 +505,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       <div className="flex-1 min-w-0">
         {message.replyTo && (() => {
           const replyTo = message.replyTo;
-          const _rawReply = resolveDisplayIdentity(replyTo.user, currentUser);
-          const replyIdentity = (!isSelf(_rawReply, currentUser) && _rawReplyUser)
-            ? _canonicalReplyUser
-            : _rawReply;
+          const replyIdentity = isMine(replyTo.user, messageOrigin, self) && currentUser
+            ? currentUser
+            : (_rawReplyUser ? _canonicalReplyUser : replyTo.user);
           const replyDisplayName = userDisplayName(replyIdentity);
           const preview = (
             <>
@@ -696,6 +712,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     key={emoji}
                     emoji={emoji}
                     reactions={reactions}
+                    origin={messageOrigin}
                     onToggle={() => toggleReaction(emoji)}
                   />
                 ))}
@@ -705,12 +722,20 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         )}
       </div>
 
-      {/* Reaction emoji picker */}
-      {showInteractions && showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
+      {/* Reaction emoji picker: a bottom sheet on mobile */}
+      {showInteractions && reactionPicker && canAddReactions && isMobile && (
+        <MobilePickerSheet onClose={closeReactionPicker} label={t('common:actions.addReaction')}>
+          <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} mobile />
+        </MobilePickerSheet>
+      )}
+      {/* and on desktop a popover under the "+" or the message row */}
+      {showInteractions && reactionPicker && canAddReactions && !isMobile && (() => {
+        const anchor = reactionPicker === 'button' ? reactionPickerBtnRef.current : rowRef.current;
+        if (!anchor) return null;
         const PICKER_HEIGHT = 400;
         const PICKER_WIDTH = 360;
         const MARGIN = 8;
-        const btnRect = layoutRect(reactionPickerBtnRef.current!.getBoundingClientRect());
+        const btnRect = layoutRect(anchor.getBoundingClientRect());
         const spaceBelow = layoutPixels(window.innerHeight) - btnRect.bottom;
         const spaceAbove = btnRect.top;
         const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
@@ -736,7 +761,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       })()}
 
       {/* Action buttons on hover */}
-      {showInteractions && (isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
+      {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
@@ -751,7 +776,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               ))}
               <button
                 ref={reactionPickerBtnRef}
-                onClick={() => setShowReactionPicker((v) => !v)}
+                onClick={() => setReactionPicker((v) => (v ? null : 'button'))}
                 className={`p-1 hover:bg-interactive-hover rounded transition-colors text-[14px] leading-none ${
                   showReactionPicker ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}

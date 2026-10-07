@@ -168,7 +168,6 @@
       "active": "活跃",
       "pending": "待处理",
       "unreachable": "无法连接",
-      "rejected": "已拒绝（自动对等被拒）",
       "rejectedShort": "已拒绝",
       "revoked": "已撤销",
       "awaitingApproval": "等待审批",
@@ -215,7 +214,27 @@
       "rotateSecret": "轮换密钥",
       "rotationInProgress": "轮换已在进行中",
       "revoke": "撤销",
-      "editInterval": "编辑轮换周期"
+      "editInterval": "编辑轮换周期",
+      "reason": {
+        "auth_failures": "签名投递持续失败",
+        "peer_reset_detected": "已以新身份重新安装",
+        "repeer_incomplete": "重新对等未能验证",
+        "denied_by_local_admin": "已被您的管理员拒绝",
+        "denied_by_remote": "已被对方管理员拒绝",
+        "revoked_by_remote": "已被对方管理员撤销",
+        "expired_on_remote": "请求在对方已过期",
+        "stale_peering_on_remote": "对方仍保留旧的对等记录"
+      },
+      "reasonDetail": {
+        "auth_failures": "{{host}} 连续拒绝了五次签名投递，两个实例已不再共享同一密钥。请重置对等，然后重新对等。",
+        "peer_reset_detected": "{{host}} 已重新安装：它报告的实例身份与之前不同。请使用上方横幅中的“重新对等”连接到新实例，并清理旧实例的账户。",
+        "repeer_incomplete": "{{host}} 接受了握手，但使用新密钥的签名校验失败，因此该对等未被使用。请重置后重试。如果仍然失败，需要对方管理员重置其一侧。",
+        "denied_by_local_admin": "本实例的管理员拒绝了来自 {{host}} 的对等请求。在您重新发起对等或删除此条目之前，它的请求都会被拒绝。",
+        "denied_by_remote": "{{host}} 的管理员拒绝了与本实例的对等。对方同意后请重新发起。",
+        "revoked_by_remote": "{{host}} 的管理员撤销了与本实例的对等。对方重新发起后即可恢复。",
+        "expired_on_remote": "{{host}} 的管理员在 30 天内未回应对等请求。请重新发起以再次请求。",
+        "stale_peering_on_remote": "{{host}} 仍保留与本实例的旧对等记录，在其管理员重置之前会拒绝新的对等。本实例每 15 分钟检查一次，对方重置后会立即连接。"
+      }
     },
     "approvals": {
       "title": "待审批请求",
@@ -312,5 +331,16 @@
         }
       }
     }
+  },
+  "peerRejected": {
+    "auth_failures": "发往 {{name}} 的消息未能投递：连接的共享密钥已失效。需要管理员重置对等。",
+    "peer_reset_detected": "发往 {{name}} 的消息未能投递：该实例已重新安装。需要管理员重新对等。",
+    "repeer_incomplete": "发往 {{name}} 的消息未能投递：重新对等未能验证。需要管理员重置对等。",
+    "denied_by_local_admin": "无法向 {{name}} 投递消息：您的管理员拒绝了与其联邦互联。",
+    "denied_by_remote": "无法向 {{name}} 投递消息：其管理员拒绝了与本实例联邦互联。",
+    "revoked_by_remote": "无法向 {{name}} 投递消息：其管理员撤销了与本实例的联邦互联。",
+    "expired_on_remote": "无法向 {{name}} 投递消息：其管理员未及时回应联邦互联请求。",
+    "stale_peering_on_remote": "暂时无法向 {{name}} 投递消息：它仍保留与本实例的旧连接，需要其管理员重置。",
+    "fallback": "无法向 {{name}} 投递消息：{{reason}}"
   }
 }

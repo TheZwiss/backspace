@@ -1,15 +1,13 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq, and, lte, asc, inArray, sql } from 'drizzle-orm';
+import { eq, and, lte, asc, inArray, notExists, sql } from 'drizzle-orm';
 import { config } from '../config.js';
 import {
   isFederationRelayEnabled,
   queueOutboxEvent,
   appendMutationLog,
-  beginOutboxDelivery,
-  finishOutboxDelivery,
-  requeueAfterUndeliveredSend,
 } from './federationOutbox.js';
+import { isOutboxQueueHead, markOutboxOffered, refusalEndsOutboxQueue } from './federationOutboxQueue.js';
 import { runFederationJanitor } from './storageJanitor.js';
 import { buildFederationHeaders, getOurOrigin, generateHmacSecret, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
 import { evaluateAuthFailure, AUTH_FAILURE_THRESHOLD } from './federationAuthFailure.js';
@@ -20,11 +18,14 @@ import { generateThumbnail } from './thumbnail.js';
 import { safeFetch } from './ssrf.js';
 import { federationFetch } from './federationFetch.js';
 import type { FederationRelayCapability, FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
-import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { ensurePeered, isHandshakeInFlight } from './federationPeering.js';
+import { startupBootstrapSync } from './federationPeerActivation.js';
+import { ensurePeered, isHandshakeInFlight, resolveStaleParkedPeers } from './federationPeering.js';
+import { recordPeerAttempt, transitionPeer } from './federationPeerState.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
+import { classifyRejection, isTerminalRejection } from './federationRejections.js';
+import { startPeerSyncWorkers, stopPeerSyncWorkers } from './federationSync.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,7 +43,8 @@ const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
 const HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const RECOVERY_TICK_INTERVAL_MS = 5_000;   // 5 seconds — demand-driven recovery scan
 /**
- * Per-peer attempt backoff (ms), indexed by probe_attempts (0-based). Paces both
+ * Per-peer attempt backoff (ms): the wait after the nth failed attempt is entry
+ * n - 1 (clamped). Paces both
  * the recovery probe of an `unreachable` peer and the handshake retry of a
  * `pending` peer; see isPeerAttemptDue.
  */
@@ -70,36 +72,18 @@ const MAX_FILE_ATTEMPTS = 10;
 const PEER_UNREACHABLE_THRESHOLD = 10;
 
 /**
- * Outbox rejection reasons that the receiver has acknowledged as permanently
- * undeliverable. These cause the outbox entry to be deleted (no retry) and
- * trigger the registered permanent-failure callback for the eventType.
+ * A peer's rejection of an event this worker sent is classified by
+ * `classifyRejection` (utils/federationRejections.ts), the one list both the
+ * outbox and the pull use: `taken` and `refused` end delivery and delete the
+ * row (`refused` also runs the event type's rollback, see
+ * utils/federationRollback.ts); `retry` keeps the row on the backoff schedule
+ * until the janitor drops it at its TTL. 5xx responses, network errors and
+ * timeouts are not rejections and are retried on the same schedule.
  *
- * 'duplicate' is treated as terminal-but-no-rollback (the receiver already has
- * the event; nothing to roll back locally).
- *
- * Every other rejection is retryable: the entry stays and waits out the next
- * step of BACKOFF_SCHEDULE_MS, until the janitor drops it at its TTL. That
- * includes `attribution_unproven` (the receiver does not hold the proof that
- * our user has an account here yet; it arrives from the user's client) and
- * reasons such as `channel_not_found` that resolve once an earlier event lands.
- *
- * 5xx responses, network errors, and timeouts are NOT in this set — they are
- * transient and retried via the existing backoff schedule.
- */
-const TERMINAL_REJECTION_REASONS = new Set<string>([
-  'duplicate',            // peer already has it (existing behavior)
-  'recipient_not_found',  // receiver doesn't know the target user
-  'attribution_mismatch', // the source can never speak for this actor (third-instance, malformed, or no such user)
-  'unknown_event_type',   // peer doesn't understand this eventType — never will
-  'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
-  'not_message_author',   // relayed edit/delete names a message the actor did not write
-  'invalid_target',       // edit/delete/reaction target malformed or from a non-peer; 1-on-1 create or reaction by a non-member; group op on a 1-on-1; unacceptable bootstrap; friend_add answering no pending request
-]);
-
-/**
- * What this sender tells receivers it handles (`FederationRelayRequest.capabilities`).
- * `attribution_unproven` is listed because the reason is not in
- * TERMINAL_REJECTION_REASONS, so it is retried on the backoff schedule.
+ * `RELAY_CAPABILITIES` is what this sender tells receivers it handles
+ * (`FederationRelayRequest.capabilities`). `attribution_unproven` is listed
+ * because `classifyRejection` counts it as `retry`, so it is retried on the
+ * backoff schedule.
  */
 const RELAY_CAPABILITIES: FederationRelayCapability[] = ['attribution_unproven'];
 
@@ -147,8 +131,9 @@ function retryWait(ms: number): number {
  * Whether a peer's next attempt is due on the per-peer pacing shared by
  * unreachable-peer recovery and pending-peer handshakes. `last_probe_at` is when
  * the last attempt started and `probe_attempts` counts the failed attempts since
- * the pacing was last reset. A peer with queued outbox mail is paced on
- * RECOVERY_BACKOFF_MS; a silent one falls back to the health-check interval.
+ * the pacing was last reset (recordPeerAttempt). After n failed attempts the
+ * wait is RECOVERY_BACKOFF_MS[n - 1], so the first retry waits 30 s. A peer
+ * with no queued outbox mail falls back to the health-check interval.
  */
 function isPeerAttemptDue(
   peer: { probeAttempts: number; lastProbeAt: number | null },
@@ -156,9 +141,8 @@ function isPeerAttemptDue(
   now: number,
 ): boolean {
   if (peer.lastProbeAt === null) return true;
-  const interval = hasQueuedMail
-    ? retryWait(RECOVERY_BACKOFF_MS[Math.min(peer.probeAttempts, RECOVERY_BACKOFF_MS.length - 1)]!)
-    : HEALTH_CHECK_INTERVAL_MS;
+  const step = Math.min(Math.max(peer.probeAttempts - 1, 0), RECOVERY_BACKOFF_MS.length - 1);
+  const interval = hasQueuedMail ? retryWait(RECOVERY_BACKOFF_MS[step]!) : HEALTH_CHECK_INTERVAL_MS;
   return now - peer.lastProbeAt >= interval;
 }
 
@@ -187,6 +171,7 @@ const OUTBOX_ENTRY_COLUMNS = {
   peerId: schema.federationOutbox.peerId,
   contextId: schema.federationOutbox.contextId,
   entityId: schema.federationOutbox.entityId,
+  queueKey: schema.federationOutbox.queueKey,
   contextType: schema.federationOutbox.contextType,
   eventType: schema.federationOutbox.eventType,
   payload: schema.federationOutbox.payload,
@@ -210,6 +195,155 @@ function scheduleOutboxTick(): void {
   }, OUTBOX_INTERVAL_MS);
 }
 
+/** One row as `select(OUTBOX_ENTRY_COLUMNS)` returns it: nullable columns may be null. */
+type OutboxEntry = {
+  [K in keyof typeof OUTBOX_ENTRY_COLUMNS]: (typeof OUTBOX_ENTRY_COLUMNS)[K]['_']['data'] | ((typeof OUTBOX_ENTRY_COLUMNS)[K]['_']['notNull'] extends true ? never : null);
+};
+
+/**
+ * What the worker learned from one relay POST:
+ * - `answered`: the peer's per-event verdicts;
+ * - `auth_refused`: 401/403, the peer did not accept our signature or peering;
+ * - `failed`: no usable answer (network error, timeout, an HTTP error, an
+ *   answer that cannot be read). The peer may have applied the batch;
+ * - `aborted`: the worker is stopping.
+ * In every case but `answered` the rows are possibly delivered: they stay
+ * offered, and anything queued behind them waits for them.
+ */
+type DeliveryOutcome =
+  | { kind: 'answered'; result: FederationRelayResponse }
+  | { kind: 'auth_refused'; status: number }
+  | { kind: 'failed'; reason: string }
+  | { kind: 'aborted' };
+
+/** A relay answer's shape, or null when it is not one. */
+function parseRelayResponse(body: unknown): FederationRelayResponse | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const { accepted, rejected, maxUploadSize } = body as Record<string, unknown>;
+  if (!Array.isArray(accepted) || !accepted.every((id): id is string => typeof id === 'string')) return null;
+  if (!Array.isArray(rejected)) return null;
+  const rejections: FederationRelayResponse['rejected'] = [];
+  for (const entry of rejected) {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const { messageId, reason } = entry as Record<string, unknown>;
+    if (typeof messageId !== 'string' || typeof reason !== 'string') return null;
+    rejections.push({ messageId, reason });
+  }
+  return {
+    accepted,
+    rejected: rejections,
+    maxUploadSize: typeof maxUploadSize === 'number' ? maxUploadSize : Number.NaN,
+  };
+}
+
+/** POST one batch and report what came of it. Never throws. */
+async function sendOutboxBatch(
+  peerOrigin: string,
+  body: string,
+  headers: Record<string, string>,
+): Promise<DeliveryOutcome> {
+  outboxAbortController = new AbortController();
+  try {
+    const response = await federationFetch(peerOrigin, '/api/federation/relay', {
+      method: 'POST',
+      headers,
+      body,
+      signal: AbortSignal.any([
+        outboxAbortController.signal,
+        AbortSignal.timeout(OUTBOX_FETCH_TIMEOUT_MS),
+      ]),
+    }, 'approved');
+
+    if (response.status === 401 || response.status === 403) {
+      return { kind: 'auth_refused', status: response.status };
+    }
+    if (!response.ok) {
+      return { kind: 'failed', reason: `HTTP ${response.status}` };
+    }
+    let parsed: unknown;
+    try {
+      parsed = await response.json();
+    } catch {
+      return { kind: 'failed', reason: 'unreadable answer' };
+    }
+    const result = parseRelayResponse(parsed);
+    return result ? { kind: 'answered', result } : { kind: 'failed', reason: 'unreadable answer' };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { kind: 'aborted' };
+    }
+    return { kind: 'failed', reason: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Read the rows chosen for a peer again, keep one per wire id (the peer's
+ * answer names events by it), and mark them offered: from here on the peer
+ * may hold them. Runs synchronously, so what is marked is exactly what is sent.
+ * A row replaced since the tick chose it is gone and not sent.
+ */
+function takeOutboxBatch(db: ReturnType<typeof getDb>, outboxIds: string[], now: number): OutboxEntry[] {
+  return db.transaction((tx) => {
+    const current = tx
+      .select(OUTBOX_ENTRY_COLUMNS)
+      .from(schema.federationOutbox)
+      .innerJoin(
+        schema.federationPeers,
+        eq(schema.federationOutbox.peerId, schema.federationPeers.id),
+      )
+      .where(inArray(schema.federationOutbox.id, outboxIds))
+      .orderBy(asc(schema.federationOutbox.createdAt), asc(schema.federationOutbox.id))
+      .all();
+    const wireIds = new Set<string>();
+    const batch = current.filter((entry) => {
+      if (wireIds.has(entry.entityId)) return false;
+      wireIds.add(entry.entityId);
+      return true;
+    });
+    markOutboxOffered(tx, batch.map((entry) => entry.outboxId), now);
+    return batch;
+  });
+}
+
+/** Build the relay events for a batch. */
+function buildRelayEvents(entries: OutboxEntry[]): FederationRelayEvent[] {
+  return entries.map((entry) => {
+    const parsed = JSON.parse(entry.payload) as Partial<FederationRelayEvent>;
+    const isDm = entry.contextType === 'dm' || !entry.contextType;
+    const evt: FederationRelayEvent = {
+      eventType: entry.eventType as FederationRelayEvent['eventType'],
+      contextType: (entry.contextType ?? 'dm') as 'dm' | 'friend' | 'profile',
+      messageId: entry.entityId ?? '',
+      encryptionVersion: (entry.encryptionVersion ?? 0) as 0,
+      timestamp: entry.createdAt,
+    };
+    if (isDm && entry.contextId) evt.dmChannelId = entry.contextId;
+    if (parsed.federatedId) evt.federatedId = parsed.federatedId;
+    if (parsed.participants) evt.participants = parsed.participants;
+    if (parsed.message) evt.message = parsed.message;
+    if (parsed.reactions) evt.reactions = parsed.reactions;
+    if (parsed.reaction) evt.reaction = parsed.reaction;
+    if (parsed.target) evt.target = parsed.target;
+    if (parsed.membership) evt.membership = parsed.membership;
+    if (parsed.ownership) evt.ownership = parsed.ownership;
+    if (parsed.group) evt.group = parsed.group;
+    if (parsed.friendship) evt.friendship = parsed.friendship;
+    // file_rejected event fields
+    if (parsed.attachmentId) evt.attachmentId = parsed.attachmentId;
+    if (parsed.sourceFilename) evt.sourceFilename = parsed.sourceFilename;
+    if (parsed.rejectionReason) evt.rejectionReason = parsed.rejectionReason;
+    if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
+    if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
+    if (parsed.affectedUsers) evt.affectedUsers = parsed.affectedUsers;
+    if (parsed.metadata) evt.metadata = parsed.metadata;
+    if (parsed.profileUpdate) evt.profileUpdate = parsed.profileUpdate;
+    if (parsed.presenceUpdate) evt.presenceUpdate = parsed.presenceUpdate;
+    if (parsed.readState) evt.readState = parsed.readState;
+    if (parsed.dmCloseReopen) evt.dmCloseReopen = parsed.dmCloseReopen;
+    return evt;
+  });
+}
+
 export async function processOutboxTick(): Promise<void> {
   if (!isFederationRelayEnabled()) {
     return;
@@ -222,7 +356,8 @@ export async function processOutboxTick(): Promise<void> {
   // they overlap this tick's delivery instead of delaying it.
   resolvePendingPeers(now);
 
-  // Fetch outbox entries ready for delivery, joined with active peers
+  // Due rows for active peers that head their queue: a row waits while an
+  // older row of its entity is still queued, backing off or not.
   const entries = db
     .select(OUTBOX_ENTRY_COLUMNS)
     .from(schema.federationOutbox)
@@ -234,9 +369,10 @@ export async function processOutboxTick(): Promise<void> {
       and(
         lte(schema.federationOutbox.nextRetryAt, now),
         eq(schema.federationPeers.status, 'active'),
+        isOutboxQueueHead(),
       ),
     )
-    .orderBy(asc(schema.federationOutbox.createdAt))
+    .orderBy(asc(schema.federationOutbox.createdAt), asc(schema.federationOutbox.id))
     .limit(OUTBOX_BATCH_LIMIT)
     .all();
 
@@ -244,79 +380,27 @@ export async function processOutboxTick(): Promise<void> {
     return;
   }
 
-  // Group by peer
-  const byPeer = new Map<string, typeof entries>();
+  const byPeer = new Map<string, string[]>();
   for (const entry of entries) {
-    const group = byPeer.get(entry.peerId);
-    if (group) {
-      group.push(entry);
-    } else {
-      byPeer.set(entry.peerId, [entry]);
-    }
+    const ids = byPeer.get(entry.peerId);
+    if (ids) ids.push(entry.outboxId);
+    else byPeer.set(entry.peerId, [entry.outboxId]);
   }
 
   const ourOrigin = getOurOrigin();
 
-  for (const [peerId, selected] of byPeer) {
-    // Read this peer's rows again right before sending them: an earlier
-    // peer's delivery in this tick may have taken a while, and a row merged
-    // into or removed meanwhile goes out as it is now. The read, building the
-    // batch and beginOutboxDelivery below run without yielding, so what is
-    // marked as on the wire is exactly what is sent.
-    const peerEntries = db
-      .select(OUTBOX_ENTRY_COLUMNS)
-      .from(schema.federationOutbox)
-      .innerJoin(
-        schema.federationPeers,
-        eq(schema.federationOutbox.peerId, schema.federationPeers.id),
-      )
-      .where(inArray(schema.federationOutbox.id, selected.map(e => e.outboxId)))
-      .orderBy(asc(schema.federationOutbox.createdAt))
-      .all();
-    const firstEntry = peerEntries[0];
-    if (!firstEntry) continue; // Every row went while an earlier peer was served
-    const sentIds = peerEntries.map(e => e.outboxId);
+  for (const [peerId, selectedIds] of byPeer) {
+    // Read again right before sending: an earlier peer's delivery in this
+    // tick may have taken a while, and a row replaced meanwhile goes out as
+    // its replacement on a later tick.
+    const batch = takeOutboxBatch(db, selectedIds, Date.now());
+    const firstEntry = batch[0];
+    if (!firstEntry) continue;
 
     const peerOrigin = firstEntry.peerOrigin;
     const peerHmacSecret = (firstEntry.peerPendingHmacSecret && firstEntry.peerSecretRotationAt)
       ? firstEntry.peerPendingHmacSecret
       : firstEntry.peerHmacSecret;
-
-    // Build relay events from outbox entries
-    const events: FederationRelayEvent[] = peerEntries.map((entry) => {
-      const parsed = JSON.parse(entry.payload) as Partial<FederationRelayEvent>;
-      const isDm = entry.contextType === 'dm' || !entry.contextType;
-      const evt: FederationRelayEvent = {
-        eventType: entry.eventType as FederationRelayEvent['eventType'],
-        contextType: (entry.contextType ?? 'dm') as 'dm' | 'friend' | 'profile',
-        messageId: entry.entityId ?? '',
-        encryptionVersion: (entry.encryptionVersion ?? 0) as 0,
-        timestamp: entry.createdAt,
-      };
-      if (isDm && entry.contextId) evt.dmChannelId = entry.contextId;
-      if (parsed.federatedId) evt.federatedId = parsed.federatedId;
-      if (parsed.participants) evt.participants = parsed.participants;
-      if (parsed.message) evt.message = parsed.message;
-      if (parsed.reactions) evt.reactions = parsed.reactions;
-      if (parsed.reaction) evt.reaction = parsed.reaction;
-      if (parsed.target) evt.target = parsed.target;
-      if (parsed.membership) evt.membership = parsed.membership;
-      if (parsed.ownership) evt.ownership = parsed.ownership;
-      if (parsed.group) evt.group = parsed.group;
-      if (parsed.friendship) evt.friendship = parsed.friendship;
-      // file_rejected event fields
-      if (parsed.attachmentId) evt.attachmentId = parsed.attachmentId;
-      if (parsed.sourceFilename) evt.sourceFilename = parsed.sourceFilename;
-      if (parsed.rejectionReason) evt.rejectionReason = parsed.rejectionReason;
-      if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
-      if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
-      if (parsed.metadata) evt.metadata = parsed.metadata;
-      if (parsed.profileUpdate) evt.profileUpdate = parsed.profileUpdate;
-      if (parsed.presenceUpdate) evt.presenceUpdate = parsed.presenceUpdate;
-      if (parsed.readState) evt.readState = parsed.readState;
-      if (parsed.dmCloseReopen) evt.dmCloseReopen = parsed.dmCloseReopen;
-      return evt;
-    });
 
     const request: FederationRelayRequest = {
       version: 1,
@@ -327,261 +411,200 @@ export async function processOutboxTick(): Promise<void> {
       // valid relay, so this never carries a *new* epoch post-reset.
       sourceInstanceId: getInstanceId(),
       capabilities: RELAY_CAPABILITIES,
-      events,
+      events: buildRelayEvents(batch),
     };
-
     const bodyString = JSON.stringify(request);
     const headers = buildFederationHeaders(bodyString, peerHmacSecret, ourOrigin);
 
-    // Create an abort controller for this specific request
-    outboxAbortController = new AbortController();
+    const outcome = await sendOutboxBatch(peerOrigin, bodyString, headers);
+    const settledAt = Date.now();
 
-    beginOutboxDelivery(sentIds);
-    try {
-      const response = await federationFetch(peerOrigin, '/api/federation/relay', {
-        method: 'POST',
-        headers,
-        body: bodyString,
-        signal: AbortSignal.any([
-          outboxAbortController.signal,
-          AbortSignal.timeout(OUTBOX_FETCH_TIMEOUT_MS),
-        ]),
-      }, 'approved');
-
-      if (response.ok) {
-        const result = await response.json() as FederationRelayResponse;
-        const superseded = finishOutboxDelivery(sentIds);
-
-        // Terminal rejection reasons: receiver acknowledged the event is permanently
-        // undeliverable. Retrying will fail forever — remove from outbox.
-        // Non-`duplicate` terminals additionally invoke any registered permanent-
-        // failure callback for the eventType so the originator can roll back local
-        // state (e.g., friend_request_create deletes the local friend_requests row).
-        const terminalEntityIds = new Set<string>(result.accepted);
-        // What the peer took: accepted, or already had (`duplicate`). Any other
-        // terminal reason is a refusal, which matters for a superseded row.
-        const takenEntityIds = new Set<string>(result.accepted);
-        const terminalForRollback: Array<{ messageId: string; reason: string; eventType: string | null }> = [];
-
-        for (const rejection of result.rejected) {
-          if (TERMINAL_REJECTION_REASONS.has(rejection.reason)) {
-            terminalEntityIds.add(rejection.messageId);
-            if (rejection.reason === 'duplicate') takenEntityIds.add(rejection.messageId);
-            if (rejection.reason !== 'duplicate') {
-              const entry = peerEntries.find(e => e.entityId === rejection.messageId);
-              terminalForRollback.push({
-                messageId: rejection.messageId,
-                reason: rejection.reason,
-                eventType: entry?.eventType ?? null,
-              });
-            }
-          }
-        }
-
-        // A superseded row whose sent event the peer refused for good is merged
-        // with it now, as if that event had never been sent (a create refused
-        // with an edit queued behind it is still a create, and is refused
-        // again; with a delete behind it, both go).
-        setAsideSuperseded(
-          peerEntries.filter((e) => terminalEntityIds.has(e.entityId) && !takenEntityIds.has(e.entityId)),
-          superseded,
-        );
-
-        if (terminalEntityIds.size > 0) {
-          // A superseded row now holds the newer event: if the peer took the
-          // sent one, that is next to send; if not, it was merged just above.
-          const terminalOutboxIds = peerEntries
-            .filter((e) => terminalEntityIds.has(e.entityId) && !superseded.has(e.outboxId))
-            .map((e) => e.outboxId);
-
-          if (terminalOutboxIds.length > 0) {
-            db.delete(schema.federationOutbox)
-              .where(inArray(schema.federationOutbox.id, terminalOutboxIds))
-              .run();
-          }
-        }
-
-        // Everything else in the batch was not delivered and may be retried:
-        // non-terminal rejections, and any entry the receiver did not mention.
-        // It moves to the next step of the backoff schedule. Leaving it due
-        // would resend it on every tick, and a run of such rows at the head of
-        // the createdAt-ordered batch would crowd newer events out of it.
-        const retryable = setAsideSuperseded(
-          peerEntries.filter((e) => !terminalEntityIds.has(e.entityId)),
-          superseded,
-        );
-        if (retryable.length > 0) {
-          applyOutboxEntryBackoff(db, retryable, now);
-        }
-
-        // Invoke registered rollback callbacks AFTER deleting the outbox row,
-        // so the rollback runs in a clean state. The registry catches and logs
-        // callback errors — they cannot prevent outbox cleanup.
-        for (const { messageId, reason, eventType } of terminalForRollback) {
-          if (eventType) {
-            invokePermanentFailureCallback(eventType, messageId, reason);
-          }
-        }
-
-        // Log rejected entries. Terminal reasons (incl. 'duplicate') are logged
-        // at info level — outbox entry already removed. Non-terminals stay in
-        // outbox for retry and log at warn level.
-        for (const rejection of result.rejected) {
-          if (TERMINAL_REJECTION_REASONS.has(rejection.reason)) {
-            console.log(
-              `[federation-worker] Peer ${peerOrigin} terminal rejection ${rejection.messageId}: ${rejection.reason} — outbox entry removed`,
-            );
-          } else {
-            console.warn(
-              `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId}: ${rejection.reason}`,
-            );
-          }
-        }
-
-        // Store the peer's max upload size for informational display
-        if (typeof result.maxUploadSize === 'number') {
-          db.update(schema.federationPeers)
-            .set({ remoteMaxUploadSize: result.maxUploadSize })
-            .where(eq(schema.federationPeers.origin, peerOrigin))
-            .run();
-        }
-
-        // Update peer health
-        db.update(schema.federationPeers)
-          .set({
-            lastSeenAt: now,
-            consecutiveFailures: 0,
-            consecutiveAuthFailures: 0,
-          })
-          .where(eq(schema.federationPeers.id, peerId))
-          .run();
-      } else if (response.status === 401 || response.status === 403) {
-        // HMAC rejected or remote's peer row non-active. Do NOT re-handshake
-        // via the unauthenticated /peer/accept path — the remote's
-        // idempotent-200-no-update safeguard would loop forever and, more
-        // importantly, re-handshaking in response to a 401 is not how trust
-        // gets healed. Persistent auth failures transition to
-        // needs_attention; bounded retry (AUTH_FAILURE_THRESHOLD) rides out
-        // transient clock skew and rotation-grace edge races.
-        const unsent = setAsideSuperseded(peerEntries, finishOutboxDelivery(sentIds));
-        const currentRow = db
-          .select({
-            consecutiveAuthFailures: schema.federationPeers.consecutiveAuthFailures,
-            peerInstanceId: schema.federationPeers.peerInstanceId,
-          })
-          .from(schema.federationPeers)
-          .where(eq(schema.federationPeers.id, peerId))
-          .get();
-        const decision = evaluateAuthFailure(currentRow?.consecutiveAuthFailures ?? 0);
-
-        if (decision.kind === 'transition_to_needs_attention') {
-          db.update(schema.federationPeers)
-            .set({
-              status: 'needs_attention',
-              consecutiveAuthFailures: decision.newAuthFailures,
-              lastFailureAt: now,
-            })
-            .where(eq(schema.federationPeers.id, peerId))
-            .run();
-          onPeerDeactivated(peerId, 'auth_threshold').catch(err =>
-            console.error('[federation-worker] onPeerDeactivated from auth threshold failed:', err)
-          );
-          console.warn(
-            `[federation-worker] Peer ${peerOrigin} transitioned to needs_attention after ${decision.newAuthFailures} consecutive ${response.status} responses`,
-          );
-
-          // Event-driven reset detection: a genuinely reset peer reaches
-          // needs_attention via THIS auth-failure path (HMAC desynced by the new
-          // incarnation) without ever passing through `unreachable`, so the
-          // 5-second unreachable-only recovery probe never sees it. Probe its
-          // epoch NOW — the instant the connection is declared broken — instead of
-          // waiting up to a full 15-minute health-check cycle for the backstop
-          // sweep. Detection-only (markPeerReset); never flips back to active.
-          // Fire-and-forget: a probe failure is a benign no-op the 15-min tick
-          // retries, and it must not stall the outbox loop.
-          detectResetForPeer({
-            id: peerId,
-            origin: peerOrigin,
-            peerInstanceId: currentRow?.peerInstanceId ?? null,
-          }).catch(err =>
-            console.error('[federation-worker] reset probe on auth-threshold transition failed:', err)
-          );
-
-          const contextMap = buildContextMapForPeer(db, peerId);
-          if (contextMap.size > 0) {
-            pushPeerRejectedEvent(
-              peerOrigin,
-              contextMap,
-              'Federation trust broken — admin must reset peering',
-            );
-          }
-          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-        } else {
-          // Below threshold — preserve state, apply backoff to outbox entries.
-          // Do NOT call handleOutboxDeliveryFailure here: per spec, auth failures
-          // must NOT increment consecutive_failures (that counter drives the
-          // 'unreachable' transition, which is a network-layer signal, not an
-          // auth-layer one).
-          console.warn(
-            `[federation-worker] Peer ${peerOrigin} returned ${response.status} (auth failure ${decision.newAuthFailures}/${AUTH_FAILURE_THRESHOLD})`,
-          );
-          db.update(schema.federationPeers)
-            .set({
-              consecutiveAuthFailures: decision.newAuthFailures,
-              lastFailureAt: now,
-            })
-            .where(eq(schema.federationPeers.id, peerId))
-            .run();
-          applyOutboxEntryBackoff(db, unsent, now);
-        }
-      } else {
-        console.warn(
-          `[federation-worker] Peer ${peerOrigin} returned HTTP ${response.status}`,
-        );
-        const unsent = setAsideSuperseded(peerEntries, finishOutboxDelivery(sentIds));
-        handleOutboxDeliveryFailure(db, peerId, unsent, now);
-      }
-    } catch (err) {
-      const unsent = setAsideSuperseded(peerEntries, finishOutboxDelivery(sentIds));
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        // Worker is stopping: no backoff and no failure count for the peer.
+    switch (outcome.kind) {
+      case 'aborted':
+        // Worker is stopping: the rows stay offered and due, no failure count.
         return;
-      }
-      console.error(
-        `[federation-worker] Failed to deliver to peer ${peerOrigin}:`,
-        err instanceof Error ? err.message : err,
-      );
-      handleOutboxDeliveryFailure(db, peerId, unsent, now);
-    } finally {
-      // Every path above settles its rows as soon as the outcome is known; this
-      // only keeps a throw from leaving them marked as on the wire for good.
-      setAsideSuperseded(peerEntries, finishOutboxDelivery(sentIds));
+      case 'answered':
+        settleAnsweredBatch(db, peerId, peerOrigin, batch, outcome.result, settledAt);
+        break;
+      case 'auth_refused':
+        applyOutboxEntryBackoff(db, batch, settledAt);
+        handleRelayAuthRefusal(db, peerId, peerOrigin, outcome.status, settledAt);
+        break;
+      case 'failed':
+        console.error(`[federation-worker] Failed to deliver to peer ${peerOrigin}: ${outcome.reason}`);
+        handleOutboxDeliveryFailure(db, peerId, batch, settledAt);
+        break;
     }
   }
 }
 
 /**
- * Of `entries` the peer did not take, requeue those a newer event was merged
- * into while they were on the wire (`requeueAfterUndeliveredSend`: the two are
- * merged as if the send never happened) and return the rest, which are
- * exactly as they were sent.
+ * Apply a peer's answer to the batch it answered, in one transaction: a row
+ * the peer took or refused for good is deleted (with the rest of its queue
+ * when a refusal ends the entity), any other row moves to its next backoff
+ * step. What follows the transaction (rollback callbacks, logging, peer
+ * bookkeeping) cannot change the rows, and a failure there is logged without
+ * touching them.
  */
-function setAsideSuperseded<T extends { outboxId: string; eventType: string }>(
-  entries: T[],
-  superseded: ReadonlyMap<string, number>,
-): T[] {
-  if (superseded.size === 0) return entries;
-  const unchanged: T[] = [];
-  for (const entry of entries) {
-    const sentCreatedAt = superseded.get(entry.outboxId);
-    if (sentCreatedAt !== undefined) requeueAfterUndeliveredSend(entry.outboxId, entry.eventType, sentCreatedAt);
-    else unchanged.push(entry);
+function settleAnsweredBatch(
+  db: ReturnType<typeof getDb>,
+  peerId: string,
+  peerOrigin: string,
+  batch: OutboxEntry[],
+  result: FederationRelayResponse,
+  now: number,
+): void {
+  const accepted = new Set(result.accepted);
+  const rejections = new Map(result.rejected.map((rejection) => [rejection.messageId, rejection.reason]));
+  const refusals: Array<{ messageId: string; reason: string; eventType: string }> = [];
+
+  db.transaction((tx) => {
+    const retry: OutboxEntry[] = [];
+    for (const entry of batch) {
+      const reason = rejections.get(entry.entityId);
+      const verdict = accepted.has(entry.entityId) ? 'taken' : reason === undefined ? 'retry' : classifyRejection(entry.eventType, reason);
+      if (verdict === 'retry') {
+        retry.push(entry);
+        continue;
+      }
+      tx.delete(schema.federationOutbox).where(eq(schema.federationOutbox.id, entry.outboxId)).run();
+      if (verdict === 'refused' && reason !== undefined) {
+        refusals.push({ messageId: entry.entityId, reason, eventType: entry.eventType });
+        if (refusalEndsOutboxQueue(entry.eventType) && entry.queueKey !== null) {
+          tx.delete(schema.federationOutbox)
+            .where(and(
+              eq(schema.federationOutbox.peerId, peerId),
+              eq(schema.federationOutbox.queueKey, entry.queueKey),
+            ))
+            .run();
+        }
+      }
+    }
+    // Retried rows (non-terminal rejections, and any row the answer does not
+    // mention) move to the next step of the backoff schedule. Leaving them due
+    // would resend them on every tick.
+    applyOutboxEntryBackoff(tx, retry, now);
+  });
+
+  try {
+    // Rollback callbacks run after the rows are gone, so the originator can
+    // undo its local state (e.g. friend_request_create deletes the local
+    // friend_requests row). The registry catches and logs callback errors.
+    for (const { messageId, reason, eventType } of refusals) {
+      invokePermanentFailureCallback(eventType, messageId, reason);
+    }
+
+    for (const rejection of result.rejected) {
+      const eventType = batch.find((entry) => entry.entityId === rejection.messageId)?.eventType ?? null;
+      if (!isTerminalRejection(eventType, rejection.reason)) {
+        console.warn(
+          `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId}: ${rejection.reason}`,
+        );
+      } else {
+        console.log(
+          `[federation-worker] Peer ${peerOrigin} terminal rejection ${rejection.messageId}: ${rejection.reason} — outbox entry removed`,
+        );
+      }
+    }
+
+    // The peer's max upload size, for informational display, and its health.
+    db.update(schema.federationPeers)
+      .set({
+        lastSeenAt: now,
+        consecutiveFailures: 0,
+        consecutiveAuthFailures: 0,
+        ...(Number.isFinite(result.maxUploadSize) ? { remoteMaxUploadSize: result.maxUploadSize } : {}),
+      })
+      .where(eq(schema.federationPeers.id, peerId))
+      .run();
+  } catch (err) {
+    console.error(
+      '[federation-worker] Bookkeeping after delivery to %s failed; the batch stays settled:',
+      peerOrigin,
+      err,
+    );
   }
-  return unchanged;
+}
+
+/**
+ * HMAC rejected or remote's peer row non-active. Do NOT re-handshake via the
+ * unauthenticated /peer/accept path — the remote's idempotent-200-no-update
+ * safeguard would loop forever and, more importantly, re-handshaking in
+ * response to a 401 is not how trust gets healed. Persistent auth failures
+ * transition to needs_attention; bounded retry (AUTH_FAILURE_THRESHOLD) rides
+ * out transient clock skew and rotation-grace edge races. Auth failures do not
+ * count toward consecutive_failures, which drives the network-layer
+ * `unreachable` transition.
+ */
+function handleRelayAuthRefusal(
+  db: ReturnType<typeof getDb>,
+  peerId: string,
+  peerOrigin: string,
+  status: number,
+  now: number,
+): void {
+  const currentRow = db
+    .select({
+      consecutiveAuthFailures: schema.federationPeers.consecutiveAuthFailures,
+      peerInstanceId: schema.federationPeers.peerInstanceId,
+    })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.id, peerId))
+    .get();
+  const decision = evaluateAuthFailure(currentRow?.consecutiveAuthFailures ?? 0);
+
+  if (decision.kind === 'transition_to_needs_attention') {
+    // Only an active row moves: an admin may have revoked or reset the peer
+    // while this delivery was in flight. The transition notifies the users
+    // with queued mail and runs the deactivation hook.
+    const moved = transitionPeer(peerId, {
+      from: ['active'],
+      to: 'needs_attention',
+      reason: 'auth_failures',
+      cause: 'auth_threshold',
+      fields: { consecutiveAuthFailures: decision.newAuthFailures, lastFailureAt: now },
+    });
+    if (moved.applied) {
+      console.warn(
+        '[federation-worker] Peer %s transitioned to needs_attention after %s consecutive %s responses',
+        peerOrigin,
+        decision.newAuthFailures,
+        status,
+      );
+
+      // Event-driven reset detection: a genuinely reset peer reaches
+      // needs_attention via THIS auth-failure path (HMAC desynced by the new
+      // incarnation) without ever passing through `unreachable`, so the
+      // 5-second unreachable-only recovery probe never sees it. Probe its
+      // epoch NOW, the instant the connection is declared broken, instead of
+      // waiting up to a full 15-minute health-check cycle for the backstop
+      // sweep. Detection-only (markPeerReset); never flips back to active.
+      // Fire-and-forget: a probe failure is a benign no-op the 15-min tick
+      // retries, and it must not stall the outbox loop.
+      detectResetForPeer({
+        id: peerId,
+        origin: peerOrigin,
+        peerInstanceId: currentRow?.peerInstanceId ?? null,
+      }).catch(err =>
+        console.error('[federation-worker] reset probe on auth-threshold transition failed:', err)
+      );
+    }
+  } else {
+    console.warn(
+      `[federation-worker] Peer ${peerOrigin} returned ${status} (auth failure ${decision.newAuthFailures}/${AUTH_FAILURE_THRESHOLD})`,
+    );
+    db.update(schema.federationPeers)
+      .set({
+        consecutiveAuthFailures: decision.newAuthFailures,
+        lastFailureAt: now,
+      })
+      .where(eq(schema.federationPeers.id, peerId))
+      .run();
+  }
 }
 
 function applyOutboxEntryBackoff(
-  db: ReturnType<typeof getDb>,
+  db: Pick<ReturnType<typeof getDb>, 'update'>,
   entries: Array<{ outboxId: string; attempts: number | null }>,
   now: number,
 ): void {
@@ -599,6 +622,11 @@ function applyOutboxEntryBackoff(
   }
 }
 
+/**
+ * A batch got no usable answer: back its rows off and count a network-layer
+ * failure against the peer (auth failures use consecutive_auth_failures
+ * instead). The threshold's status change is `markPeerUnreachable`.
+ */
 function handleOutboxDeliveryFailure(
   db: ReturnType<typeof getDb>,
   peerId: string,
@@ -607,8 +635,6 @@ function handleOutboxDeliveryFailure(
 ): void {
   applyOutboxEntryBackoff(db, entries, now);
 
-  // Update peer failure tracking (network/generic-error path only — auth failures
-  // use consecutive_auth_failures instead).
   const peer = db
     .select({ consecutiveFailures: schema.federationPeers.consecutiveFailures })
     .from(schema.federationPeers)
@@ -616,26 +642,33 @@ function handleOutboxDeliveryFailure(
     .get();
 
   const newFailures = (peer?.consecutiveFailures ?? 0) + 1;
-  const isNowUnreachable = newFailures >= PEER_UNREACHABLE_THRESHOLD;
 
   db.update(schema.federationPeers)
     .set({
       lastFailureAt: now,
       consecutiveFailures: newFailures,
-      // On entry into unreachable, reset recovery pacing so processRecoveryTick
-      // fires an immediate first probe (lastProbeAt=null) with a fresh backoff.
-      ...(isNowUnreachable ? { status: 'unreachable' as const, probeAttempts: 0, lastProbeAt: null } : {}),
     })
     .where(eq(schema.federationPeers.id, peerId))
     .run();
 
-  if (isNowUnreachable) {
-    console.warn(
-      `[federation-worker] Peer ${peerId} marked unreachable after ${newFailures} consecutive failures`,
-    );
-    onPeerDeactivated(peerId, 'network_threshold').catch(err =>
-      console.error('[federation-worker] onPeerDeactivated from unreachable threshold failed:', err)
-    );
+  if (newFailures >= PEER_UNREACHABLE_THRESHOLD) {
+    markPeerUnreachable(peerId, newFailures);
+  }
+}
+
+/**
+ * The outbox's one peer-status change: a peer that failed
+ * PEER_UNREACHABLE_THRESHOLD deliveries in a row becomes `unreachable`, through
+ * the peer state machine (utils/federationPeerState.ts). Only an active row
+ * moves: an admin may have revoked or reset the peer while the delivery was in
+ * flight. Entering `unreachable` starts the recovery pacing afresh, so
+ * processRecoveryTick fires an immediate first probe, and the transition runs
+ * the deactivation hook.
+ */
+function markPeerUnreachable(peerId: string, failures: number): void {
+  const moved = transitionPeer(peerId, { from: ['active'], to: 'unreachable', cause: 'network_threshold' });
+  if (moved.applied) {
+    console.warn('[federation-worker] Peer %s marked unreachable after %s consecutive failures', peerId, failures);
   }
 }
 
@@ -667,16 +700,28 @@ function resolvePendingPeers(now: number): void {
       schema.federationOutbox,
       eq(schema.federationOutbox.peerId, schema.federationPeers.id),
     )
-    .where(eq(schema.federationPeers.status, 'pending'))
+    .where(and(
+      eq(schema.federationPeers.status, 'pending'),
+      // An inbound request from the origin is waiting for our admin, whose
+      // decision settles the row; ensurePeered sends nothing until then.
+      notExists(
+        db.select({ id: schema.peerApprovalRequests.id })
+          .from(schema.peerApprovalRequests)
+          .where(and(
+            eq(schema.peerApprovalRequests.origin, schema.federationPeers.origin),
+            eq(schema.peerApprovalRequests.direction, 'inbound'),
+          )),
+      ),
+    ))
     .all();
 
   for (const peer of pendingWithEntries) {
     if (pendingPeerHandshakes.has(peer.peerOrigin)) continue;
     if (!isPeerAttemptDue(peer, true, now)) continue;
 
-    const attempt = resolvePendingPeer(peer.peerId, peer.peerOrigin, now)
+    const attempt = resolvePendingPeer(peer.peerOrigin)
       .catch((err) => {
-        console.error(`[federation-worker] Auto-peer attempt with ${peer.peerOrigin} failed:`, err);
+        console.error('[federation-worker] Auto-peer attempt with %s failed:', peer.peerOrigin, err);
       })
       .finally(() => {
         pendingPeerHandshakes.delete(peer.peerOrigin);
@@ -686,13 +731,12 @@ function resolvePendingPeers(now: number): void {
 }
 
 /**
- * One handshake attempt for a pending peer, via ensurePeered(). A transient
- * failure advances the peer's pacing; `startedAt` is recorded as the attempt's
- * time, as the recovery probe records its tick time.
+ * One handshake attempt for a pending peer, via ensurePeered(). The handshake
+ * settles the row itself: its transitions purge and notify on a refusal, and a
+ * failed attempt is counted on the row's pacing by the handshake, whoever
+ * started it.
  */
-async function resolvePendingPeer(peerId: string, peerOrigin: string, startedAt: number): Promise<void> {
-  const db = getDb();
-
+async function resolvePendingPeer(peerOrigin: string): Promise<void> {
   // Another caller (a DM send, a friend add, an admin's /peer/initiate) is
   // already handshaking with this origin. Its outcome settles the row; starting
   // a second exchange would only race it. Not an attempt, so pacing is untouched.
@@ -704,166 +748,19 @@ async function resolvePendingPeer(peerId: string, peerOrigin: string, startedAt:
 
   switch (result.status) {
     case 'active':
-      console.log(`[federation-worker] Auto-peered with ${peerOrigin} — entries will deliver next tick`);
-      // Notify admins of peer state change
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      console.log(`[federation-worker] Auto-peered with ${peerOrigin}; entries will deliver next tick`);
       break;
-
-    case 'rejected': {
-      console.warn(`[federation-worker] Auto-peering rejected by ${peerOrigin}: ${result.error}`);
-
-      const contextMap = buildContextMapForPeer(db, peerId);
-
-      // Purge outbox entries (NOT mutation log)
-      db.delete(schema.federationOutbox)
-        .where(eq(schema.federationOutbox.peerId, peerId))
-        .run();
-
-      onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
-        console.error('[federation-worker] onPeerDeactivated from resolvePendingPeers rejected failed:', err)
-      );
-
-      // Push federation_peer_rejected WS event to affected users
-      pushPeerRejectedEvent(peerOrigin, contextMap);
-      // Notify admins of peer state change
-      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+    case 'rejected':
+      console.warn(`[federation-worker] Auto-peering with ${peerOrigin} settled as refused: ${result.error}`);
       break;
-    }
-
     case 'failed':
       console.warn(`[federation-worker] Auto-peer with ${peerOrigin} failed (transient): ${result.error}`);
-      // Leave the entries and advance the pacing; the next attempt waits out
-      // the next step of RECOVERY_BACKOFF_MS.
-      db.update(schema.federationPeers)
-        .set({
-          probeAttempts: sql`${schema.federationPeers.probeAttempts} + 1`,
-          lastProbeAt: startedAt,
-        })
-        .where(and(
-          eq(schema.federationPeers.id, peerId),
-          eq(schema.federationPeers.status, 'pending'),
-        ))
-        .run();
       break;
-
     case 'pending':
     case 'admin_required':
       // The row left `pending` (now awaiting_approval) or the outbound gate
       // removed it; either way this worker has nothing further to retry.
       break;
-  }
-}
-
-/**
- * Build a map of contextId → contextType for all outbox entries targeting
- * a specific peer. Used for surfacing "delivery impossible" via
- * pushPeerRejectedEvent when a peer is rejected or transitioned to
- * needs_attention.
- */
-function buildContextMapForPeer(
-  db: ReturnType<typeof getDb>,
-  peerId: string,
-): Map<string, string> {
-  const entries = db
-    .select({
-      contextId: schema.federationOutbox.contextId,
-      contextType: schema.federationOutbox.contextType,
-    })
-    .from(schema.federationOutbox)
-    .where(eq(schema.federationOutbox.peerId, peerId))
-    .all();
-
-  const contextMap = new Map<string, string>();
-  for (const e of entries) {
-    if (!contextMap.has(e.contextId)) {
-      contextMap.set(e.contextId, e.contextType);
-    }
-  }
-  return contextMap;
-}
-
-/**
- * Push a federation_peer_rejected WS event to all local users affected by
- * the rejection. Resolves contextLabel from the database for each context.
- */
-export function pushPeerRejectedEvent(
-  peerOrigin: string,
-  contextMap: Map<string, string>,
-  reasonOverride?: string,
-): void {
-  const db = getDb();
-
-  // Build affected contexts with human-readable labels
-  const affectedContexts: Array<{
-    contextType: 'dm' | 'friend';
-    contextId: string;
-    contextLabel: string;
-  }> = [];
-
-  const affectedUserIds = new Set<string>();
-
-  for (const [contextId, contextType] of contextMap) {
-    if (contextType === 'dm') {
-      // Resolve DM member names for the label
-      const members = db
-        .select({
-          userId: schema.dmMembers.userId,
-          username: schema.users.username,
-          displayName: schema.users.displayName,
-          homeInstance: schema.users.homeInstance,
-        })
-        .from(schema.dmMembers)
-        .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
-        .where(eq(schema.dmMembers.dmChannelId, contextId))
-        .all();
-
-      const names = members
-        .map(m => m.displayName || m.username || 'Unknown')
-        .slice(0, 4)
-        .join(', ');
-
-      affectedContexts.push({
-        contextType: 'dm',
-        contextId,
-        contextLabel: names,
-      });
-
-      // Track local users to notify (non-federated members)
-      for (const m of members) {
-        if (!m.homeInstance) {
-          affectedUserIds.add(m.userId);
-        }
-      }
-    } else if (contextType === 'friend') {
-      affectedContexts.push({
-        contextType: 'friend',
-        contextId,
-        contextLabel: contextId, // friend context IDs include usernames
-      });
-    }
-  }
-
-  // Try to get the instance name for a better label
-  let peerLabel: string | undefined;
-  const peerRow = db
-    .select({ instanceName: schema.federationPeers.instanceName })
-    .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.origin, peerOrigin))
-    .get();
-  if (peerRow?.instanceName) {
-    peerLabel = peerRow.instanceName;
-  }
-
-  const event = {
-    type: 'federation_peer_rejected' as const,
-    peerOrigin,
-    peerLabel,
-    reason: reasonOverride || 'Remote instance requires manual peering approval',
-    affectedContexts,
-  };
-
-  for (const userId of affectedUserIds) {
-    connectionManager.sendToUser(userId, event);
   }
 }
 
@@ -964,6 +861,7 @@ function handleSizeRejection(
     .where(eq(schema.dmMembers.dmChannelId, localMsg.dmChannelId))
     .all();
   const affectedUserIds: string[] = [];
+  const affectedUsers: Array<{ homeUserId: string; homeInstance: string }> = [];
   for (const member of dmMembers) {
     const user = db.select()
       .from(schema.users)
@@ -972,6 +870,7 @@ function handleSizeRejection(
     const userHome = user?.homeInstance?.startsWith('http') ? user.homeInstance : user?.homeInstance ? `https://${user.homeInstance}` : null;
     if (user && (!user.homeInstance || userHome === ourOrigin)) {
       affectedUserIds.push(user.homeUserId || user.id);
+      affectedUsers.push({ homeUserId: user.homeUserId || user.id, homeInstance: ourOrigin });
     }
   }
 
@@ -989,6 +888,7 @@ function handleSizeRejection(
     rejectionReason: 'size_limit_exceeded',
     rejectionLimit: maxUploadSize,
     affectedUserIds,
+    affectedUsers,
   };
 
   appendMutationLog(
@@ -1001,6 +901,7 @@ function handleSizeRejection(
       rejectionReason: 'size_limit_exceeded',
       rejectionLimit: maxUploadSize,
       affectedUserIds,
+      affectedUsers,
     }),
   );
   queueOutboxEvent(
@@ -1193,7 +1094,9 @@ async function processFileQueueEntry(
     }
 
     console.error(
-      `[federation-worker] Failed to download file ${entry.originalName} from ${entry.peerOrigin}:`,
+      '[federation-worker] Failed to download file %s from %s:',
+      entry.originalName,
+      entry.peerOrigin,
       err instanceof Error ? err.message : err,
     );
 
@@ -1265,15 +1168,12 @@ export async function processRecoveryTick(): Promise<void> {
     if (probe.reachable) {
       const outcome = await recoverOrDetectReset(peer, probe);
       if (outcome === 'reset_detected') {
-        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch) — routed to needs_attention`);
-      } else {
-        console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch); routed to needs_attention`);
+      } else if (outcome === 'recovered') {
+        console.log(`[federation-worker] Peer ${peer.origin} recovered; marked active`);
       }
     } else {
-      db.update(schema.federationPeers)
-        .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: now })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
+      recordPeerAttempt(peer.id, { from: ['unreachable'], startedAt: now });
     }
   }
 }
@@ -1394,6 +1294,14 @@ async function processHealthCheckTick(): Promise<void> {
   // is a benign no-op retried next tick and must not disturb the rest of the tick.
   // No shared abort signal — probePeerReachable carries its own 10s timeout.
   await detectResetOnNeedsAttentionPeers().catch(() => {});
+
+  // ── Rows parked on the remote's older peering (#309) ────────────────────────
+  // A signed /epoch round-trip per parked row, no handshake: it tells whether
+  // the remote now holds our secret, holds no row for us (a handshake can land),
+  // or still holds its older row. See docs/systems/federation.md, "Peer state".
+  await resolveStaleParkedPeers().catch((err: unknown) => {
+    console.error('[federation-worker] parked-peer check failed:', err);
+  });
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────
@@ -1462,6 +1370,7 @@ export function startFederationWorkers(): void {
   scheduleHealthCheckTick();
   scheduleRecoveryTick();
   scheduleJanitorTick();
+  startPeerSyncWorkers();
   federatedCallSentinelTimer = setInterval(() => {
     runFederatedCallSentinelTick().catch(err =>
       console.error('[federation-worker] federatedCallSentinel tick failed:', err)
@@ -1530,6 +1439,8 @@ export function stopFederationWorkers(): void {
     clearInterval(federatedCallSentinelTimer);
     federatedCallSentinelTimer = null;
   }
+
+  stopPeerSyncWorkers();
 
   outboxAbortController?.abort();
   outboxAbortController = null;

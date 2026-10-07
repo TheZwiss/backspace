@@ -1,4 +1,4 @@
-import { Room, Track, BackupCodecPolicy, AudioPresets } from 'livekit-client';
+import { Room, Track, BackupCodecPolicy, AudioPresets, ConnectionState } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig, ScreenShareAudioState } from '../stores/voiceStore';
 import { getStreamHostLimits } from './streamHostLimits';
@@ -410,9 +410,18 @@ export function getRequestedPublishedScreenShareCodec(): 'vp9' | 'h264' | null {
 /** True while republishScreenShare() swaps publications; unpublish handlers must not treat it as a stop. */
 let _republishing = false;
 
-/** True while republishScreenShare() swaps publications. See handleScreenShareUnpublished. */
-export function isScreenShareRepublishing(): boolean {
-  return _republishing;
+/**
+ * The room whose full reconnect withdrew the live share's publication. A
+ * full reconnect republishes every local track while the room is
+ * Reconnecting (the SDK's order is in docs/systems/voice.md, "A share, not a
+ * publication"), so an unpublish then is not a stop; whether the share came
+ * back is settled at Connected or Disconnected by
+ * `settleScreenShareAfterReconnect`.
+ */
+let _reconnectingRoom: Room | null = null;
+
+function isReconnecting(room: Room): boolean {
+  return room.state === ConnectionState.Reconnecting;
 }
 
 /**
@@ -477,6 +486,8 @@ export async function publishScreenShare(
     _requestedPublishedScreenShareCodec = opts.publish.videoCodec;
     _publishedScreenShareCodec = null;
     _liveSource = source;
+    // A published share is settled: nothing is left to wait for.
+    _reconnectingRoom = null;
     if (capturedAudio && !audioToPublish) setAsideScreenShareAudio(capturedAudio);
     useVoiceStore.setState({
       isScreenSharing: true,
@@ -831,10 +842,15 @@ export async function syncScreenShareAudio(room: Room): Promise<void> {
  * such as livekit-client unpublishing an audio track whose source ended, so
  * the switch never reads on while nothing is sent.
  */
-export function handleScreenShareAudioUnpublished(): void {
+export function handleScreenShareAudioUnpublished(room: Room): void {
   if (_republishing || _stopping) return;
   const { isScreenSharing, screenShareAudio } = useVoiceStore.getState();
   if (!isScreenSharing || screenShareAudio !== 'published') return;
+  if (isReconnecting(room)) {
+    // Part of a full reconnect's republish: settled once the room is back.
+    _reconnectingRoom = room;
+    return;
+  }
   setScreenShareAudioState(idleScreenShareAudioState());
 }
 
@@ -1076,14 +1092,52 @@ export async function changeScreenShare(room: Room): Promise<void> {
  * unplugged), after which livekit-client unpublishes the ended track. Takes the
  * room so the screen-share audio ends with it: audio added mid-stream comes
  * from a second capture that does not end with the video.
+ *
+ * Returns whether the share is over. False for a republish of the same share,
+ * our codec swap or a full reconnect's; the caller keeps its per-share state.
  */
-export function handleScreenShareUnpublished(room: Room): void {
-  if (_republishing) return;
+export function handleScreenShareUnpublished(room: Room): boolean {
+  // A codec swap: the same share, published again by republishScreenShare.
+  if (_republishing) return false;
   // The explicit stop path unpublishes synchronously, so this handler runs from
   // inside stopScreenShare(), which clears the same state and broadcasts once
   // its publications are gone. Returning here keeps a single stop to a single
   // `voice_status` fan-out instead of two.
-  if (_stopping) return;
+  if (_stopping) return true;
+  // A full reconnect republishing every track (see _reconnectingRoom).
+  if (isReconnecting(room) && useVoiceStore.getState().isScreenSharing) {
+    _reconnectingRoom = room;
+    return false;
+  }
+  endLocalShare(room);
+  return true;
+}
+
+/**
+ * The room came back from a full reconnect (Connected) or gave up
+ * (Disconnected). A share whose publication was withdrawn by the reconnect
+ * goes on only if the reconnect published it again; otherwise it ends here,
+ * with the broadcast every other end of a share makes. Audio that did not
+ * come back turns the switch off. A no-op for any other room or when no
+ * reconnect touched the share.
+ */
+export function settleScreenShareAfterReconnect(room: Room): void {
+  if (_reconnectingRoom !== room) return;
+  _reconnectingRoom = null;
+  if (!useVoiceStore.getState().isScreenSharing) return;
+  if (!room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track) {
+    endLocalShare(room);
+    return;
+  }
+  const audioBack = !!room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)?.track;
+  if (useVoiceStore.getState().screenShareAudio === 'published' && !audioBack) {
+    setScreenShareAudioState(idleScreenShareAudioState());
+  }
+}
+
+/** The share is over without stopScreenShare: the OS stop bar, a source that ended, a reconnect that lost it. */
+function endLocalShare(room: Room): void {
+  _reconnectingRoom = null;
   deactivateHwOverdrive();
   endScreenShareAudio(room);
   _publishedScreenShareCodec = null;

@@ -1,10 +1,57 @@
 import { usePendingMessageStore, type PendingBubble } from './pendingMessageStore';
 import { useTransferStore } from './transferStore';
 import { useUIStore } from './uiStore';
-import { getApiForOrigin, getChannelOrigin, isDmChannel } from './spaceStore';
+import { getApiForOrigin, getChannelOrigin, getChannelKind, useSpaceStore } from './spaceStore';
 import { HttpError, RateLimitError } from '../api/client';
 
 let started = false;
+
+/**
+ * Whether every instance that could hold a bubble's channel has delivered its
+ * ready: home, and every remote the auto-connect started, unless it is down.
+ * From then on a channel no listing named is gone (deleted, hidden, or its
+ * instance removed), so its bubble fails and the user can retry or discard it.
+ */
+let channelsSettled = false;
+const readyOrigins = new Set<string>();
+let remotes: { autoConnectDone: boolean; instances: ReadonlyArray<{ origin: string; status: string }> } | null = null;
+
+/** The ready of `origin` has been applied to the stores (called by the WS ready handler). */
+export function notePendingOriginReady(origin: string): void {
+  readyOrigins.add(origin);
+  recheckSettled();
+}
+
+function recheckSettled(): void {
+  if (
+    !channelsSettled
+    && readyOrigins.has('')
+    && remotes?.autoConnectDone === true
+    && remotes.instances.every((i) => readyOrigins.has(i.origin) || i.status === 'disconnected' || i.status === 'error')
+  ) {
+    channelsSettled = true;
+  }
+  if (started) dispatchReady();
+}
+
+/**
+ * Dispatch every bubble that is ready and not dispatched yet. A bubble whose
+ * channel the client does not know yet (no ready has listed it) waits: the
+ * endpoint and the instance depend on what the channel is. It is dispatched
+ * by the spaceStore subscription below once a listing or event names it, and
+ * fails once every instance has delivered its ready without naming it.
+ */
+function dispatchReady(): void {
+  for (const b of usePendingMessageStore.getState().listReadyForDeferredSend()) {
+    if (sentClientIds.has(b.clientId)) continue;
+    if (getChannelKind(b.channelId) === 'unknown') {
+      if (channelsSettled) usePendingMessageStore.getState().markFailed(b.clientId);
+      continue;
+    }
+    sentClientIds.add(b.clientId);
+    void deferredSend(b);
+  }
+}
 
 /** Call once at app start. Idempotent against StrictMode/HMR remounts. */
 export function startPendingMessageOrchestrator(): void {
@@ -22,13 +69,7 @@ export function startPendingMessageOrchestrator(): void {
 
   // 2. All-transfers-already-complete branch (handles bubbles whose uploads
   //    finished while the tab was closed)
-  const ready = usePendingMessageStore.getState().listReadyForDeferredSend();
-  for (const b of ready) {
-    if (!sentClientIds.has(b.clientId)) {
-      sentClientIds.add(b.clientId);
-      void deferredSend(b);
-    }
-  }
+  dispatchReady();
 
   // 3. Subscribe: any time relevant transfer state changes, re-check ready
   //    bubbles. Dedup by a (id|state|attachmentId) signature so we don't
@@ -60,13 +101,7 @@ export function startPendingMessageOrchestrator(): void {
       }
     }
 
-    const fresh = usePendingMessageStore.getState().listReadyForDeferredSend();
-    for (const b of fresh) {
-      if (!sentClientIds.has(b.clientId)) {
-        sentClientIds.add(b.clientId);
-        void deferredSend(b);
-      }
-    }
+    dispatchReady();
   });
 
   // 3b. Also re-check when pendingMessageStore mutates (e.g., new bubble appended
@@ -83,13 +118,30 @@ export function startPendingMessageOrchestrator(): void {
     if (sig === lastBubblesSig) return;
     lastBubblesSig = sig;
 
-    const fresh = usePendingMessageStore.getState().listReadyForDeferredSend();
-    for (const b of fresh) {
-      if (!sentClientIds.has(b.clientId)) {
-        sentClientIds.add(b.clientId);
-        void deferredSend(b);
-      }
-    }
+    dispatchReady();
+  });
+
+  // 3c. Re-check when the client learns channels: a bubble restored at boot
+  //     waits for the ready that lists its channel. The index and the DM list
+  //     are replaced on every change, so a reference check is enough.
+  let lastChannelIndex = useSpaceStore.getState().spaceChannelIndex;
+  let lastDmChannels = useSpaceStore.getState().dmChannels;
+  useSpaceStore.subscribe((s) => {
+    if (s.spaceChannelIndex === lastChannelIndex && s.dmChannels === lastDmChannels) return;
+    lastChannelIndex = s.spaceChannelIndex;
+    lastDmChannels = s.dmChannels;
+    dispatchReady();
+  });
+
+  // 3d. The remote instances, for `channelsSettled`. Imported lazily:
+  //     instanceStore imports the WS layer, which reports readies here.
+  void import('./instanceStore').then(({ useInstanceStore }) => {
+    const read = (state: { _autoConnectDone: boolean; instances: ReadonlyArray<{ origin: string; status: string }> }): void => {
+      remotes = { autoConnectDone: state._autoConnectDone, instances: state.instances };
+      recheckSettled();
+    };
+    read(useInstanceStore.getState());
+    useInstanceStore.subscribe(read);
   });
 
   // 4. Auto-retry on `online`: bump+resend bubbles that failed once with no
@@ -123,7 +175,7 @@ async function deferredSend(b: PendingBubble, attempt = 0): Promise<void> {
   try {
     const origin = getChannelOrigin(b.channelId);
     client = getApiForOrigin(origin);
-    isDm = isDmChannel(b.channelId);
+    isDm = getChannelKind(b.channelId) === 'dm';
   } catch (err) {
     console.warn('[pendingMessageRehydrate] origin resolution failed for', b.clientId, err);
     usePendingMessageStore.getState().markFailed(b.clientId);

@@ -131,6 +131,14 @@
     "electronWindowsAudioNote": "当不支持 restrictOwnAudio 时，Windows 环回可能会捕获通话音频",
     "electronMacAudioNote": "macOS 13+ 需要“屏幕与系统音频录制”权限",
     "electronLinuxAudioNote": "Linux 需要 PulseAudio 兼容性；Backspace 音频也可能会被捕获",
+    "systemAudioNote": {
+      "excluded": "观看者能听到你电脑的声音，但听不到语音聊天和其他 Backspace 音频。",
+      "excludedMac": "观看者能听到你 Mac 的声音，但听不到语音聊天和其他 Backspace 音频。macOS 会请求“屏幕与系统音频录制”权限。",
+      "includedWindows": "此 Windows 版本会共享全部声音，包括语音聊天：观看者会听到自己的声音。在 Windows 11 上，Backspace 自身的音频会被排除。",
+      "includedMac": "此 macOS 版本会共享全部声音，包括语音聊天：观看者会听到自己的声音。在 macOS 14.2 及更高版本上，Backspace 自身的音频会被排除。macOS 会请求“屏幕与系统音频录制”权限。",
+      "includedLinux": "Linux 会共享全部声音，包括语音聊天：观看者会听到自己的声音。需要 PulseAudio，或带 pipewire-pulse 的 PipeWire。",
+      "unavailableMac": "系统音频需要 macOS 13 或更高版本。"
+    },
     "systemAudioStartFailed": "无法携带系统音频启动推流。如果此平台不支持，请关闭共享系统音频。",
     "systemAudioAddFailed": "无法将系统音频添加到直播中。",
     "systemAudioAdding": "正在添加系统音频…",
@@ -250,5 +258,6 @@
     "shareScreen": "共享屏幕",
     "stopSharingScreen": "停止共享屏幕",
     "disconnect": "断开通话"
-  }
+  },
+  "connectLocked": "您没有连接到此频道的权限"
 }

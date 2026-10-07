@@ -16,9 +16,11 @@ export function deleteUploadFile(filename: string): void {
   const filePath = path.join(config.uploadDir, safeName);
   try {
     fs.unlinkSync(filePath);
-  } catch (err: any) {
-    if (err.code !== 'ENOENT') {
-      console.error(`Failed to delete upload file ${safeName}:`, err.message);
+  } catch (err: unknown) {
+    const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code !== 'ENOENT') {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Failed to delete upload file %s: %s', safeName, message);
     }
   }
 

@@ -139,13 +139,14 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
   'user-profile': (params) => {
     // Open the user profile modal with the userId from params
     if (params?.userId) {
-      // Set modalData so UserProfileModal can read it. A profile opened for a
-      // space member carries that member, so the modal can show their roles
-      // and read their user from the space rather than the home instance.
+      // Set modalData so UserProfileModal can read it. `origin` is the
+      // instance whose id `userId` is. A profile opened for a space member
+      // carries that member, so the modal can show their roles and read their
+      // user from the space rather than the home instance.
       const member = params.spaceId && params.memberUserId
         ? { spaceId: params.spaceId, userId: params.memberUserId }
         : null;
-      useUIStore.getState().openModal('userProfile', { userId: params.userId, member });
+      useUIStore.getState().openModal('userProfile', { userId: params.userId, origin: params.origin ?? '', member });
     }
     return <UserProfileModal />;
   },

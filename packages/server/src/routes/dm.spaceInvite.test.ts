@@ -200,6 +200,33 @@ describe('POST /api/dm/space-invite', () => {
     expect(messageCount).toBe(0);
   });
 
+  it('rejects 400 invite_invalid when the snapshot would not make a well-formed invite', async () => {
+    // The receiving instances validate the same shape (parseDmSystemEvent),
+    // so an invite they would refuse is never sent.
+    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      spaceId: 'S1',
+      spaceName: '',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 3,
+      instanceName: 'Remote',
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/space-invite',
+      payload: {
+        target: { userId: 'bob' },
+        spaceId: 'S1',
+        spaceInstanceOrigin: 'https://remote.test',
+        inviteCode: 'abc',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('invite_invalid');
+    expect(testDb.select().from(schema.dmMessages).all()).toHaveLength(0);
+  });
+
   it('rejects a space invite for a local request-only space (approval required)', async () => {
     // Real local space with request visibility; the snapshot is mocked to match.
     testDb.insert(schema.spaces).values({

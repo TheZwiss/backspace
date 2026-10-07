@@ -119,6 +119,51 @@ export async function handleScreenShareAction(): Promise<void> {
 }
 
 /**
+ * The DM call slots a new call would collide with. A client holds at most one
+ * DM call at a time, ringing in either direction or connected; the server
+ * keys the ringing room by DM, so starting while any slot is taken would
+ * open a second room.
+ */
+export type DmCallSlots = Pick<ReturnType<typeof useVoiceStore.getState>, 'outgoingCall' | 'incomingCall' | 'activeDmCall'>;
+
+/**
+ * Whether a new DM call may be started. The one rule every call button reads,
+ * so the desktop and mobile headers cannot drift. Usable directly as a store
+ * selector: `useVoiceStore(canStartDmCall)`.
+ */
+export function canStartDmCall(state: DmCallSlots): boolean {
+  return state.outgoingCall === null && state.incomingCall === null && state.activeDmCall === null;
+}
+
+/**
+ * Ring the other members of `dmChannelId`. Routed to the instance that serves
+ * the DM channel (`getChannelOrigin`). Returns false, sending nothing, when
+ * `canStartDmCall` refuses.
+ */
+export function startDmCall(dmChannelId: string): boolean {
+  const voice = useVoiceStore.getState();
+  if (!canStartDmCall(voice)) return false;
+  voice.setOutgoingCall({ dmChannelId });
+  wsSend({ type: 'dm_call_start', dmChannelId }, getChannelOrigin(dmChannelId));
+  return true;
+}
+
+/**
+ * Stop ringing `dmChannelId` before anyone answered. A federated call is
+ * ended where it was created (`callOrigin`, with its `federatedCallId`), a
+ * local one on the DM channel's origin. Returns false, sending nothing, when
+ * the outgoing call belongs to another DM or there is none.
+ */
+export function cancelOutgoingDmCall(dmChannelId: string): boolean {
+  const voice = useVoiceStore.getState();
+  if (voice.outgoingCall?.dmChannelId !== dmChannelId) return false;
+  const { federatedCallId, callOrigin } = voice;
+  voice.setOutgoingCall(null);
+  wsSend({ type: 'dm_call_end', dmChannelId, federatedCallId }, callOrigin || getChannelOrigin(dmChannelId));
+  return true;
+}
+
+/**
  * Disconnect from voice. Handles DM call teardown and fullscreen exit.
  */
 export function handleDisconnectAction(): void {

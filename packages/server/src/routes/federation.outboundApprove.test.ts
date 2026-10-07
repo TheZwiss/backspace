@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 import { setWorkerId } from '../utils/snowflake.js';
 
 setWorkerId(1);
@@ -186,11 +187,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound direct
       ],
     });
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote Backspace' }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote Backspace' }) }),
     );
 
     const response = await app.inject({
@@ -364,11 +362,8 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound direct
       ],
     });
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ accepted: true, instanceName: 'R' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'R' }) }),
     );
 
     await app.inject({
@@ -381,6 +376,65 @@ describe('POST /api/federation/approval-requests/:id/approve — outbound direct
     expect(body.approvalToken).toBeUndefined();
     expect(body.sourceOrigin).toBe('https://local.example');
     expect(body.hmacSecret).toBe('mock-generated-secret');
+  });
+});
+
+describe('POST /api/federation/approval-requests/:id/approve: one handshake per origin (#323)', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings();
+    seedUser('alice', 'alice');
+    app = await buildApp();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  it('answers 409 without sending while another handshake with the origin is in flight', async () => {
+    seedOutboundRequest({
+      id: 'req-busy',
+      origin: 'https://remote.example',
+      subscribers: [{ userId: 'alice', reason: 'friend_add', target: 'x@remote.example' }],
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const { claimAdminHandshake, releaseAdminHandshake } = await import('../utils/federationPeering.js');
+    expect(claimAdminHandshake('https://remote.example')).toBe(true);
+    try {
+      const response = await app.inject({ method: 'POST', url: '/api/federation/approval-requests/req-busy/approve' });
+      expect(response.statusCode).toBe(409);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(testDb.select().from(schema.federationPeers).all()).toHaveLength(0);
+    } finally {
+      releaseAdminHandshake('https://remote.example');
+    }
+  });
+
+  it('replaces a peer row the origin already has instead of failing on the unique origin', async () => {
+    seedOutboundRequest({
+      id: 'req-existing',
+      origin: 'https://remote.example',
+      subscribers: [{ userId: 'alice', reason: 'friend_add', target: 'x@remote.example' }],
+    });
+    testDb.insert(schema.federationPeers).values({
+      id: 'old-row', origin: 'https://remote.example', hmacSecret: 'old', status: 'rejected',
+      statusReason: 'denied_by_remote', createdAt: Date.now(),
+    }).run();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'R' }) }),
+    );
+
+    const response = await app.inject({ method: 'POST', url: '/api/federation/approval-requests/req-existing/approve' });
+
+    expect(response.statusCode).toBe(200);
+    const rows = testDb.select().from(schema.federationPeers).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('active');
   });
 });
 

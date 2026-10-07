@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
+import { insertDmMember } from '../../../utils/dmMemberClosed.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { claimSubjectChange, isSubjectChangeStale, memberClockSubject, recordSubjectChange } from '../../../utils/federationSubjectClock.js';
 import { deleteUploadFile } from '../../../utils/fileCleanup.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
@@ -12,6 +14,7 @@ import type { DmMessageWithUser, FederationRelayEvent } from '@backspace/shared'
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal } from '../identity.js';
 import { downloadProfileAsset, processProfileUpdateEvent } from '../profile.js';
 import { dmChannelMembers, mayRelayInto, memberWithIdentity } from '../dmChannels.js';
+import { dmSystemContent, dmSystemName } from '../../../utils/dmSystemMessages.js';
 
 export async function processMemberAddEvent(
   event: FederationRelayEvent,
@@ -39,6 +42,28 @@ export async function processMemberAddEvent(
     ))
     .get();
   if (existingSysMsg) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Attribution: adder must belong to source instance (FED-010). Checked
+  // before a bootstrap, so a refused add leaves nothing behind.
+  if (event.membership.addedBy) {
+    const refusal = attributionRefusal(event.membership.addedBy, sourceInstance, db);
+    if (refusal) {
+      console.warn(`[federation] Attribution refused (${refusal}) in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      rejected.push({ messageId: event.messageId, reason: refusal });
+      return;
+    }
+  }
+
+  // Ordering: an add older than the last change of this member here is stale
+  // and changes nothing (federation.md "Subject clocks"). Checked before a
+  // bootstrap, so a stale add never creates a copy of the group; claimed
+  // below, where the member is written.
+  const clockSubject = memberClockSubject(event.federatedId, event.membership.user);
+  if (clockSubject && isSubjectChangeStale(clockSubject, event.timestamp, db)) {
+    console.log('[federation] Ignored member_add %s: the member changed later here', event.messageId);
     accepted.push(event.messageId);
     return;
   }
@@ -75,9 +100,13 @@ export async function processMemberAddEvent(
     // before. Tombstoned identities are skipped: they can't be added to a DM.
     const ownerLocal = resolveOrCreateReplicatedUser(owner.homeUserId, owner.homeInstance, db, { username: owner.profile?.username, status: owner.profile?.status, deleted: owner.profile?.deleted });
     const roster: Array<typeof schema.users.$inferSelect> = [];
+    const rosterSubjects = new Map<string, string | null>();
     for (const member of event.group.members) {
       const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status, deleted: member.profile?.deleted });
-      if (rosterUser && !roster.some(r => r.id === rosterUser.id)) roster.push(rosterUser);
+      if (rosterUser && !roster.some(r => r.id === rosterUser.id)) {
+        roster.push(rosterUser);
+        rosterSubjects.set(rosterUser.id, memberClockSubject(event.federatedId, member));
+      }
     }
     if (!ownerLocal || !mayRelayInto(roster, ownerLocal.id, sourceInstance)) {
       console.warn(`[federation] Refused member_add bootstrap of ${event.federatedId}: the owner is not in the roster, or ${extractDomain(sourceInstance)} is not one of its instances`);
@@ -118,12 +147,14 @@ export async function processMemberAddEvent(
       })
       .run();
 
+    // The roster is the sender's view of the group when the add was made. A
+    // member this instance knows a later change of is left as it is here; the
+    // roster records no clock, since that view may itself lag behind a change
+    // made elsewhere. Only the added member's clock moves (below).
     for (const rosterUser of roster) {
-      db.insert(schema.dmMembers).values({
-        dmChannelId: channelId,
-        userId: rosterUser.id,
-        closed: 0,
-      }).run();
+      const subject = rosterSubjects.get(rosterUser.id) ?? null;
+      if (subject && isSubjectChangeStale(subject, event.timestamp, db)) continue;
+      insertDmMember(db.$client, channelId, rosterUser.id);
     }
 
     channel = db.select().from(schema.dmChannels)
@@ -141,17 +172,7 @@ export async function processMemberAddEvent(
 
   // Authority note: any HMAC-verified peer can relay member_add events.
   // The HMAC signature proves the event came from a trusted peer.
-  // The attribution check below still validates that addedBy belongs to the source instance.
-
-  // Attribution: adder must belong to source instance (FED-010)
-  if (event.membership.addedBy) {
-    const refusal = attributionRefusal(event.membership.addedBy, sourceInstance, db);
-    if (refusal) {
-      console.warn(`[federation] Attribution refused (${refusal}) in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
-      rejected.push({ messageId: event.messageId, reason: refusal });
-      return;
-    }
-  }
+  // The attribution check above validates that addedBy belongs to the source instance.
 
   // Incremental add: this instance already holds the group, so the add is
   // judged against its copy ("Relayed member adds" in dm-system.md). A 1-on-1
@@ -205,6 +226,14 @@ export async function processMemberAddEvent(
     return;
   }
 
+  // The member's clock moves to this add. Nothing awaits between the claim and
+  // the writes below, so no other change of the member lands in between.
+  if (clockSubject && !claimSubjectChange(clockSubject, event.timestamp, db)) {
+    console.log('[federation] Ignored member_add %s: the member changed later here', event.messageId);
+    accepted.push(event.messageId);
+    return;
+  }
+
   // Add member (idempotent)
   const existingMember = db.select().from(schema.dmMembers)
     .where(and(
@@ -213,11 +242,7 @@ export async function processMemberAddEvent(
     )).get();
 
   if (!existingMember) {
-    db.insert(schema.dmMembers).values({
-      dmChannelId: channel.id,
-      userId: localUser.id,
-      closed: 0,
-    }).run();
+    insertDmMember(db.$client, channel.id, localUser.id);
   }
 
   // Insert system message for member addition — tagged with (sourceInstance, sourceMessageId)
@@ -229,13 +254,12 @@ export async function processMemberAddEvent(
     ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status, deleted: event.membership.addedBy.profile?.deleted })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
-  const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
   const addSysMsgId = generateSnowflake();
   const addSysCreatedAt = Date.now();
-  const addSysContent = JSON.stringify({
+  const addSysContent = dmSystemContent({
     event: 'member_added',
     targetUserId: localUser.id,
-    targetDisplayName: localUser.displayName ?? addBaseName,
+    targetDisplayName: dmSystemName(localUser),
   });
 
   db.insert(schema.dmMessages).values({
@@ -346,7 +370,19 @@ export function processMemberRemoveEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
 
+  // Ordering: a remove older than the last change of this member here is
+  // stale and changes nothing (federation.md "Subject clocks").
+  const clockSubject = memberClockSubject(event.federatedId, event.membership.user);
+
   if (!channel) {
+    // Nothing to remove. A leave is attributed to the member's home above, so
+    // it still orders the member's later events here (an add made before it
+    // and delivered after it is stale). A kick's authority is the group
+    // owner's instance, which only a copy of the group names, so a kick of a
+    // group not held here moves no clock.
+    if (event.membership.reason === 'leave' && clockSubject) {
+      recordSubjectChange(clockSubject, event.timestamp, db);
+    }
     accepted.push(event.messageId);
     return;
   }
@@ -386,6 +422,13 @@ export function processMemberRemoveEvent(
     rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
+  // The member's clock moves to this remove, also when there is no one to
+  // remove: an add made before it and delivered after it is then stale.
+  if (clockSubject && !claimSubjectChange(clockSubject, event.timestamp, db)) {
+    console.log('[federation] Ignored member_remove %s: the member changed later here', event.messageId);
+    accepted.push(event.messageId);
+    return;
+  }
   if (removed.kind !== 'found') {
     accepted.push(event.messageId);
     return;
@@ -394,14 +437,13 @@ export function processMemberRemoveEvent(
 
   // Insert system message for member leaving (before deletion so the broadcast
   // still reaches the departing user's connections). Tagged with source for dedup.
-  const leaveBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
   const leaveSysMsgId = generateSnowflake();
   const leaveSysCreatedAt = Date.now();
-  const leaveSysContent = JSON.stringify({
+  const leaveSysContent = dmSystemContent({
     event: 'member_removed',
     targetUserId: localUser.id,
-    targetDisplayName: localUser.displayName ?? leaveBaseName,
-    reason: event.membership?.reason ?? 'leave',
+    targetDisplayName: dmSystemName(localUser),
+    reason: event.membership?.reason === 'kick' ? 'kick' : 'leave',
   });
   db.insert(schema.dmMessages).values({
     id: leaveSysMsgId,
@@ -596,12 +638,11 @@ export function processOwnershipTransferEvent(
 
   const ownerSysMsgId = generateSnowflake();
   const ownerSysCreatedAt = Date.now();
-  const newOwnerBaseName = newOwnerLocal?.username?.includes('@') ? newOwnerLocal.username.split('@')[0] : (newOwnerLocal?.username ?? 'Unknown');
   const prevOwnerId = prevOwnerLocal?.id ?? channel.ownerId ?? 'system';
-  const ownerSysContent = JSON.stringify({
+  const ownerSysContent = dmSystemContent({
     event: 'owner_changed',
     newOwnerId: newOwnerLocal.id,
-    newOwnerDisplayName: newOwnerLocal.displayName ?? newOwnerBaseName,
+    newOwnerDisplayName: dmSystemName(newOwnerLocal),
   });
 
   db.insert(schema.dmMessages).values({
@@ -818,7 +859,7 @@ export async function processGroupMetadataUpdateEvent(
 
     if (nameChanged && !existingNameRow) {
       const sysId = generateSnowflake();
-      const content = JSON.stringify({ event: 'name_changed', oldName, newName: metadata.name });
+      const content = dmSystemContent({ event: 'name_changed', oldName, newName: metadata.name });
       tx.insert(schema.dmMessages).values({
         id: sysId,
         dmChannelId: channel.id,
@@ -839,7 +880,7 @@ export async function processGroupMetadataUpdateEvent(
 
     if (iconChanged && !existingIconRow) {
       const sysId = generateSnowflake();
-      const content = JSON.stringify({ event: 'icon_changed' });
+      const content = dmSystemContent({ event: 'icon_changed' });
       tx.insert(schema.dmMessages).values({
         id: sysId,
         dmChannelId: channel.id,

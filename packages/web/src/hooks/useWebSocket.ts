@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -10,14 +10,15 @@ import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '..
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessageRouting';
-import { registerSelfId } from '../utils/identity';
 import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
+import { describeErrorCode } from '../i18n/errors';
 import { useActivityStore } from '../stores/activityStore';
 import { presenceSubjectOf, readyActivityEntries, readyRowIndex } from '../utils/presenceSubject';
 import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
+import { notePendingOriginReady } from '../stores/pendingMessageRehydrate';
 import { detectClientKind } from '../platform/clientKind';
 import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
@@ -130,6 +131,7 @@ function buildWsUrl(origin: string): string {
 // ─── Call relay helpers ───────────────────────────────────────────────────────
 
 import { buildCallUndeliverableToast } from '../utils/callUndeliverableToast';
+import { peerRejectedToast } from '../utils/peerRejectedToast';
 
 export { buildCallUndeliverableToast };
 
@@ -178,7 +180,12 @@ function isLoadedRosterSpace(spaceId: string, origin: string): boolean {
   return (spaces.find(s => s.id === spaceId)?._instanceOrigin ?? '') === origin;
 }
 
-function handleEvent(origin: string, event: ServerEvent): void {
+/**
+ * `readyAlreadyDelivered`: this socket has delivered a `ready` before. A later
+ * one on the same socket is a state refresh (instances up to 1.7.0 send one
+ * as a permission refresh), not a new session: no event was missed.
+ */
+function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered = false): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, removeDmChannel, upsertUserView } = useSpaceStore.getState();
@@ -187,8 +194,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
   switch (event.type) {
     case 'ready':
-      // Register this user's ID for cross-instance self-identification
-      registerSelfId(event.user.id);
+      // This instance names the signed-in user's row there (the home's is the
+      // session row itself, set below). The one record of "my ids".
+      if (!isHome) useAuthStore.getState().recordMyRow(origin, event.user.id);
 
       if (isHome) {
         setUser(event.user);
@@ -222,11 +230,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // The DM part goes through the merge module, whose pin rule moves a
       // conversation first listed from a sibling to its home copy.
       populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout, event.layoutUpdatedAt);
-
-      // Cache authoritative identity for this origin (federation-safe)
-      if (!isHome) {
-        setMyUserIdForOrigin(origin, event.user.id);
-      }
+      // Pending messages restored at boot wait for the ready that lists their channel.
+      notePendingOriginReady(origin);
 
       // The user's own chosen status (utils/selfStatus.ts): take it from this
       // socket when it is the owner's report (the true home, for a session on
@@ -237,7 +242,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         const report = ownStatusReport(authUser, { origin, isHome }, { userId: event.user.id, status: event.user.status });
         if (report) useAuthStore.getState().applyOwnStatus(report);
         if (!isHome) {
-          const status = statusToAssertOnRemote(authUser, event.user, window.location.host);
+          const status = statusToAssertOnRemote(authUser, event.user);
           if (status) wsSend({ type: 'presence_update', status }, origin);
         }
       }
@@ -254,22 +259,24 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
 
       // For remote instances: if user was viewing one of these servers, load its details
-      // (fixes race condition on page reload — route params effect fires before remote WS connects)
+      // (fixes race condition on page reload — route params effect fires before remote WS connects).
+      // Its open channel's messages are loaded by the session rule below.
       if (!isHome) {
         const { currentSpaceId: curSpaceId, loadSpaceDetail: loadDetail } = useSpaceStore.getState();
         if (curSpaceId && event.spaces.some((s: any) => s.id === curSpaceId)) {
           loadDetail(curSpaceId);
-          const { currentChannelId, loadMessages } = useChatStore.getState();
-          if (currentChannelId) {
-            loadMessages(currentChannelId, true);
-          }
         }
       }
 
-      // Clear stale message cache for all channels on this origin so the next
-      // visit does a fresh fetch (and scroll-to-bottom fires correctly).
-      // Force-reload the currently open channel immediately.
-      {
+      // A new session, home or remote, may have missed messages while
+      // disconnected: clear the message cache for all channels on this origin
+      // so the next visit does a fresh fetch, and force-reload the open
+      // channel now (its view keeps its anchor, docs/systems/message-list.md).
+      // On a page reload this is also the first load of a remote channel
+      // opened before its origin's socket was ready. A refresh ready on a
+      // live socket missed nothing, so the cache and the open view stay as
+      // they are.
+      if (!readyAlreadyDelivered) {
         const chatState = useChatStore.getState();
         const { channelOriginMap } = useSpaceStore.getState();
         const newMessages = new Map(chatState.messages);
@@ -631,9 +638,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'user_updated': {
       if (!isHome) normalizeUserAssets(event.user, origin);
       upsertUserView(event.user, origin);
-      useSpaceStore.getState().updateUserEverywhere(event.user);
-      useSocialStore.getState().updateFriendProfile(event.user);
-      useChatStore.getState().updateUserInMessages(event.user);
+      useSpaceStore.getState().updateUserEverywhere(event.user, origin);
+      useSocialStore.getState().updateFriendProfile(event.user, origin);
+      useChatStore.getState().updateUserInMessages(event.user, origin);
       // If this is the current user (other tab changed profile), update authStore
       const myId = isHome
         ? useAuthStore.getState().user?.id
@@ -654,11 +661,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Deleted user cleanup: remove from caches the existing pipeline doesn't cover
       if (event.user.isDeleted) {
-        useSocialStore.getState().removeFriendLocally(event.user.id, origin);
-        useSocialStore.getState().removeRequestsForUser(event.user.id);
+        // Each removal goes through userUpdateReach, as the updates above do.
+        useSocialStore.getState().removeDeletedUser(event.user, origin);
         useActivityStore.getState().clearUserActivities(event.user, origin);
-        useDiscoverStore.getState().removeUser(event.user.id);
-        useChatStore.getState().clearTypingForUser(event.user.id);
+        useDiscoverStore.getState().removeDeletedUser(event.user, origin);
+        useChatStore.getState().clearTypingForDeletedUser(event.user, origin);
       }
       break;
     }
@@ -828,12 +835,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       rejectedPeerOrigins.add(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       activePeerOrigins.delete(event.peerOrigin);
-      const label = event.peerLabel || event.peerOrigin;
-      addToast(
-        `Cannot relay messages to ${label} — ${event.reason}`,
-        'warning',
-        10000,
-      );
+      addToast(peerRejectedToast(event), 'warning', 10000);
       notifyFederationChangeListeners();
       break;
     }
@@ -1197,49 +1199,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'channel_updated': {
-      const { currentSpaceId: curSpaceId2, channels: curChannels2, setChannels: setChannels2, channelPermissions: chPermsMap2 } = useSpaceStore.getState();
-      if (event.spaceId === curSpaceId2) {
-        const exists = curChannels2.some(c => c.id === event.channel.id);
-        if (exists) {
-          setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
-        } else {
-          setChannels2([...curChannels2, event.channel].sort((a, b) => a.position - b.position));
-          const { channelToSpaceMap: ctsMmap, channelOriginMap: coMap } = useSpaceStore.getState();
-          ctsMmap.set(event.channel.id, event.spaceId);
-          coMap.set(event.channel.id, origin);
-        }
-      }
-      if (event.channel.myPermissions) {
-        chPermsMap2.set(event.channel.id, event.channel.myPermissions);
-      }
+      // Also how a channel comes back into view after an override change,
+      // in whichever space: the index entry is written wherever the space is.
+      useSpaceStore.getState().upsertChannel(event.channel, event.spaceId, origin);
       break;
     }
 
     case 'channel_deleted': {
-      const { currentSpaceId: curSpaceId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToSpaceMap: ctsMap3, channelOriginMap: coMap3 } = useSpaceStore.getState();
-      if (event.spaceId === curSpaceId3) {
-        setChannels3(curChannels3.filter(c => c.id !== event.channelId));
-      }
-      // If the user is currently viewing the deleted channel, clear it
-      const { currentChannelId: deletedViewChannelId } = useChatStore.getState();
-      if (deletedViewChannelId === event.channelId) {
+      // Deleted, or hidden from this user by an override change.
+      useSpaceStore.getState().removeChannel(event.channelId);
+      if (useChatStore.getState().currentChannelId === event.channelId) {
         useChatStore.getState().setCurrentChannel(null);
-      }
-      chPermsMap3.delete(event.channelId);
-      ctsMap3.delete(event.channelId);
-      coMap3.delete(event.channelId);
-      // Clean up unread and read state for the deleted channel
-      {
-        const { channelLastMessageIds: clmIds } = useSpaceStore.getState();
-        clmIds.delete(event.channelId);
-        const cs = useChatStore.getState();
-        if (cs.unreadChannels.has(event.channelId) || cs.readStates.has(event.channelId)) {
-          const newUnread = new Set(cs.unreadChannels);
-          newUnread.delete(event.channelId);
-          const newRS = new Map(cs.readStates);
-          newRS.delete(event.channelId);
-          useChatStore.setState({ unreadChannels: newUnread, readStates: newRS });
-        }
       }
       // Clean up voice users for the deleted channel
       {
@@ -1269,50 +1239,19 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     // ─── Category events (all origins) ────────────────────────────────────
 
-    case 'category_created': {
-      const { currentSpaceId: catSpaceId, categories: curCategories, setCategories: setCats, categoryOriginMap: catOriginMap } = useSpaceStore.getState();
-      catOriginMap.set(event.category.id, origin);
-      if (event.spaceId === catSpaceId) {
-        if (!curCategories.some(c => c.id === event.category.id)) {
-          setCats([...curCategories, event.category].sort((a, b) => a.position - b.position));
-        }
-      }
-      break;
-    }
-
+    case 'category_created':
     case 'category_updated': {
-      const { currentSpaceId: catSpaceId2, categories: curCategories2, setCategories: setCats2 } = useSpaceStore.getState();
-      if (event.spaceId === catSpaceId2) {
-        setCats2(curCategories2.map(c => c.id === event.category.id ? event.category : c).sort((a, b) => a.position - b.position));
-      }
+      useSpaceStore.getState().upsertCategory(event.category, origin);
       break;
     }
 
     case 'category_deleted': {
-      const { currentSpaceId: catSpaceId3, categories: curCategories3, setCategories: setCats3, channels: curChsForCat, setChannels: setChsForCat, categoryOriginMap: catOriginMap3 } = useSpaceStore.getState();
-      catOriginMap3.delete(event.categoryId);
-      if (event.spaceId === catSpaceId3) {
-        setCats3(curCategories3.filter(c => c.id !== event.categoryId));
-        // Null out categoryId on affected channels (server already did this, but sync local state)
-        setChsForCat(curChsForCat.map(ch => ch.categoryId === event.categoryId ? { ...ch, categoryId: null } : ch));
-      }
+      useSpaceStore.getState().removeCategory(event.categoryId, event.spaceId, origin);
       break;
     }
 
     case 'channel_layout_updated': {
-      const { currentSpaceId: layoutSpaceId, setChannels: setLayoutChannels, setCategories: setLayoutCategories, channelPermissions: layoutChPerms, channelToSpaceMap: layoutCtsMap, channelOriginMap: layoutCoMap } = useSpaceStore.getState();
-      if (event.spaceId === layoutSpaceId) {
-        setLayoutChannels(event.channels.sort((a, b) => a.position - b.position));
-        setLayoutCategories(event.categories.sort((a, b) => a.position - b.position));
-        // Update permission maps from the new layout
-        for (const ch of event.channels) {
-          layoutCtsMap.set(ch.id, event.spaceId);
-          layoutCoMap.set(ch.id, origin);
-          if (ch.myPermissions) {
-            layoutChPerms.set(ch.id, ch.myPermissions);
-          }
-        }
-      }
+      useSpaceStore.getState().applyChannelLayout(event.spaceId, origin, event.channels, event.categories);
       break;
     }
 
@@ -1353,9 +1292,45 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'pong':
       break;
 
+    case 'space_access_changed':
+      void refreshSpaceAccess(origin, event.spaceId);
+      break;
+
     case 'error':
       console.error(`WebSocket error (${origin || 'home'}):`, event.message);
+      // A coded error is the refusal of something the user just did (a voice
+      // moderation action the role hierarchy refuses, for one); say so. Older
+      // servers send no code, and those errors stay in the log.
+      if (event.code) {
+        useUIStore.getState().addToast(describeErrorCode(event.code, event.message), 'warning');
+      }
       break;
+  }
+}
+
+/**
+ * `space_access_changed` (websocket.md): the space's roles or a member's roles
+ * changed, so what the viewer may see or do there may have changed too. The
+ * space's detail is fetched again without the loading state, so nothing
+ * flashes and no message cache is touched. Every channel it lists goes
+ * through `upsertChannel`, so one the viewer can now see is known wherever
+ * channels are looked up; one it no longer lists is gone for this viewer and
+ * goes through the same path as a deleted channel.
+ */
+async function refreshSpaceAccess(origin: string, spaceId: string): Promise<void> {
+  const { spaces, loadSpaceDetail } = useSpaceStore.getState();
+  if (!spaces.some(s => s.id === spaceId && (s._instanceOrigin ?? '') === origin)) return;
+  const { channelToSpaceMap, channelOriginMap } = useSpaceStore.getState();
+  const known = [...channelToSpaceMap]
+    .filter(([channelId, sId]) => sId === spaceId && (channelOriginMap.get(channelId) ?? '') === origin)
+    .map(([channelId]) => channelId);
+  const visible = await loadSpaceDetail(spaceId, { quiet: true });
+  if (!visible) return;
+  const { upsertChannel } = useSpaceStore.getState();
+  for (const channel of visible) upsertChannel(channel, spaceId, origin);
+  const visibleIds = new Set(visible.map(c => c.id));
+  for (const channelId of known) {
+    if (!visibleIds.has(channelId)) handleEvent(origin, { type: 'channel_deleted', channelId, spaceId });
   }
 }
 
@@ -1395,6 +1370,8 @@ function connectToOrigin(origin: string, token: string): void {
     startHeartbeat(conn);
   };
 
+  // Whether this socket has delivered its session's `ready` yet.
+  let readyDelivered = false;
   ws.onmessage = (e) => {
     let event: ServerEvent;
     try {
@@ -1403,8 +1380,10 @@ function connectToOrigin(origin: string, token: string): void {
       console.error(`Failed to parse WebSocket message (${origin || 'home'})`);
       return;
     }
+    const readyAlreadyDelivered = readyDelivered;
+    if (event.type === 'ready') readyDelivered = true;
     try {
-      handleEvent(origin, event);
+      handleEvent(origin, event, readyAlreadyDelivered);
     } catch (err) {
       console.error('Error handling WS event "%s" (%s):', event.type, origin || 'home', err);
     }
@@ -1478,12 +1457,19 @@ export function getHomeWsConnected(): boolean {
   return !!conn?.ws && conn.ws.readyState === WebSocket.OPEN;
 }
 
-/** Send an event over the WebSocket. Can be used outside of React components. */
-export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): void {
+/**
+ * Send an event over the origin's WebSocket. Can be used outside of React
+ * components. Returns whether the event was handed to an open socket; when
+ * the origin has none (not connected, or reconnecting) the event is dropped
+ * and the result is false.
+ */
+export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): boolean {
   const conn = connections.get(origin);
   if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
     conn.ws.send(JSON.stringify(event));
+    return true;
   }
+  return false;
 }
 
 /** Send an event to ALL connected WebSocket instances (home + remotes). */

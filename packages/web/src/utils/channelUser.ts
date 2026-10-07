@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { DmChannel, MemberWithUser, User } from '@backspace/shared';
-import { useAuthStore } from '../stores/authStore';
-import { getMyUserIdForOrigin, useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
+import { useAuthStore, useSelfIdentity } from '../stores/authStore';
+import { useSpaceStore, type TaggedSpace } from '../stores/spaceStore';
+import { isMine, selfIdentityOf, type SelfIdentity } from './identity';
 import { locateDmChannel } from './dmChannelLookup';
 import { getCanonicalUserView, useCanonicalUserView } from './userViewLookup';
 
@@ -34,6 +35,8 @@ export interface ChannelUser {
    * `useCanonicalUserView` itself.
    */
   user: User;
+  /** The instance that issued `userId` and `user` ('' is the page's own). */
+  origin: string;
   /** The membership row in the channel's space; null in a DM. */
   member: MemberWithUser | null;
   /** Space channels only: the highest role's colour, or the owner rose. Null otherwise. */
@@ -46,7 +49,7 @@ export interface ChannelUser {
  */
 interface ChannelUserSources {
   dmChannels: DmChannel[];
-  dmAlternatives: Map<string, Map<string, string>>;
+  dmAlternatives: ReadonlyMap<string, ReadonlyMap<string, string>>;
   members: MemberWithUser[];
   spaces: TaggedSpace[];
 }
@@ -55,11 +58,9 @@ interface ChannelUserSources {
  * What the lookup maps say about one channel: its space and the origin that
  * issued its id ('' is home).
  *
- * `channelToSpaceMap` and `channelOriginMap` are updated in place
- * (`upsertChannel`, several WS channel handlers), so their identity says
- * nothing about their content and cannot be a memo input. The hooks read the
- * channel's two entries as values instead: a selector returning a string is
- * re-run on every store update, so a write in place is seen with the next one.
+ * The hooks read the channel's two entries as values rather than selecting
+ * the maps (which are replaced on every change, see `stores/spaceChannels.ts`),
+ * so a change to another channel does not re-render them.
  */
 interface ChannelFacts {
   spaceId: string | undefined;
@@ -102,12 +103,12 @@ function spaceNameColor(member: MemberWithUser, ownerId: string | null): string 
   return null;
 }
 
-function fromDmUser(user: User): ChannelUser {
-  return { userId: user.id, user, member: null, nameColor: null };
+function fromDmUser(user: User, origin: string): ChannelUser {
+  return { userId: user.id, user, origin, member: null, nameColor: null };
 }
 
-function fromSpaceMember(member: MemberWithUser, ownerId: string | null): ChannelUser {
-  return { userId: member.userId, user: member.user, member, nameColor: spaceNameColor(member, ownerId) };
+function fromSpaceMember(member: MemberWithUser, ownerId: string | null, origin: string): ChannelUser {
+  return { userId: member.userId, user: member.user, origin, member, nameColor: spaceNameColor(member, ownerId) };
 }
 
 function findChannelUser(
@@ -119,33 +120,27 @@ function findChannelUser(
   const roster = rosterOf(sources, facts, channelId);
   if (roster.kind === 'dm') {
     const user = roster.people.find((u) => u.id === userId);
-    return user ? fromDmUser(user) : null;
+    return user ? fromDmUser(user, roster.origin) : null;
   }
   if (roster.kind === 'space') {
     const member = roster.members.find((m) => m.userId === userId);
-    return member ? fromSpaceMember(member, roster.ownerId) : null;
+    return member ? fromSpaceMember(member, roster.ownerId, roster.origin) : null;
   }
   return null;
-}
-
-/** The signed-in user's id on `origin` ('' is home). */
-function selfIdOnOrigin(origin: string, homeUserId: string | undefined): string | undefined {
-  return origin === '' ? homeUserId : getMyUserIdForOrigin(origin);
 }
 
 function channelCandidates(
   sources: ChannelUserSources,
   facts: ChannelFacts,
   channelId: string,
-  homeUserId: string | undefined,
+  self: SelfIdentity | null,
 ): ChannelUser[] {
   const roster = rosterOf(sources, facts, channelId);
   if (roster.kind === 'dm') {
-    const selfId = selfIdOnOrigin(roster.origin, homeUserId);
-    return roster.people.filter((u) => u.id !== selfId).map(fromDmUser);
+    return roster.people.filter((u) => !isMine(u, roster.origin, self)).map((u) => fromDmUser(u, roster.origin));
   }
   if (roster.kind === 'space') {
-    return roster.members.map((m) => fromSpaceMember(m, roster.ownerId));
+    return roster.members.map((m) => fromSpaceMember(m, roster.ownerId, roster.origin));
   }
   return [];
 }
@@ -154,9 +149,14 @@ function channelSelfId(
   sources: ChannelUserSources,
   facts: ChannelFacts,
   channelId: string,
-  homeUserId: string | undefined,
+  self: SelfIdentity | null,
 ): string | undefined {
-  return selfIdOnOrigin(rosterOf(sources, facts, channelId).origin, homeUserId);
+  return self?.rowIds.get(rosterOf(sources, facts, channelId).origin);
+}
+
+function currentSelf(): SelfIdentity | null {
+  const { user, myRowIds } = useAuthStore.getState();
+  return selfIdentityOf(user, myRowIds);
 }
 
 function currentSources(): ChannelUserSources {
@@ -197,7 +197,7 @@ function useFacts(channelId: string | null): ChannelFacts {
  */
 export function resolveChannelUser(channelId: string, userId: string): ChannelUser | null {
   const found = findChannelUser(currentSources(), currentFacts(channelId), channelId, userId);
-  return found ? { ...found, user: getCanonicalUserView(found.user) } : null;
+  return found ? { ...found, user: getCanonicalUserView(found.user, found.origin) } : null;
 }
 
 /**
@@ -206,12 +206,12 @@ export function resolveChannelUser(channelId: string, userId: string): ChannelUs
  * what a mention token in this channel must carry.
  */
 export function getChannelMentionCandidates(channelId: string): ChannelUser[] {
-  return channelCandidates(currentSources(), currentFacts(channelId), channelId, useAuthStore.getState().user?.id);
+  return channelCandidates(currentSources(), currentFacts(channelId), channelId, currentSelf());
 }
 
 /** The signed-in user's id on the origin that issued `channelId`'s ids. */
 export function getSelfIdInChannel(channelId: string): string | undefined {
-  return channelSelfId(currentSources(), currentFacts(channelId), channelId, useAuthStore.getState().user?.id);
+  return channelSelfId(currentSources(), currentFacts(channelId), channelId, currentSelf());
 }
 
 /** Whether `userId`, as written in channel `channelId`, is the signed-in user. */
@@ -235,7 +235,7 @@ export function filterMentionCandidates(
   const matches = (user: User): boolean =>
     (user.displayName ?? '').toLowerCase().includes(q) || user.username.toLowerCase().includes(q);
   return candidates
-    .filter((c) => matches(c.user) || matches(getCanonicalUserView(c.user)))
+    .filter((c) => matches(c.user) || matches(getCanonicalUserView(c.user, c.origin)))
     .slice(0, limit);
 }
 
@@ -270,7 +270,7 @@ export function useChannelUser(channelId: string | null, userId: string | null):
     () => (channelId && userId ? findChannelUser(sources, facts, channelId, userId) : null),
     [sources, facts, channelId, userId],
   );
-  const canonical = useCanonicalUserView(found?.user ?? NO_USER);
+  const canonical = useCanonicalUserView(found?.user ?? NO_USER, found?.origin ?? '');
   return useMemo(() => (found ? { ...found, user: canonical } : null), [found, canonical]);
 }
 
@@ -278,10 +278,10 @@ export function useChannelUser(channelId: string | null, userId: string | null):
 export function useChannelMentionCandidates(channelId: string): ChannelUser[] {
   const sources = useSources();
   const facts = useFacts(channelId);
-  const homeUserId = useAuthStore((s) => s.user?.id);
+  const self = useSelfIdentity();
   return useMemo(
-    () => channelCandidates(sources, facts, channelId, homeUserId),
-    [sources, facts, channelId, homeUserId],
+    () => channelCandidates(sources, facts, channelId, self),
+    [sources, facts, channelId, self],
   );
 }
 
@@ -289,9 +289,9 @@ export function useChannelMentionCandidates(channelId: string): ChannelUser[] {
 export function useSelfIdInChannel(channelId: string | null): string | undefined {
   const sources = useSources();
   const facts = useFacts(channelId);
-  const homeUserId = useAuthStore((s) => s.user?.id);
+  const self = useSelfIdentity();
   return useMemo(
-    () => (channelId ? channelSelfId(sources, facts, channelId, homeUserId) : undefined),
-    [sources, facts, channelId, homeUserId],
+    () => (channelId ? channelSelfId(sources, facts, channelId, self) : undefined),
+    [sources, facts, channelId, self],
   );
 }

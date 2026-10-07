@@ -68,7 +68,7 @@ For DM search, the subquery joins on `attachments.dm_message_id = dm_messages.id
 
 ## Result Hydration
 
-Both search endpoints follow the same hydration pipeline after fetching raw message rows:
+Every read path that returns a page of messages (search, messages-around and message history) hydrates through one function per table: `hydrateChannelMessages(channelId, rows)` in `routes/messages.ts` and `hydrateDmMessages(dmChannelId, rows)` in `routes/dm.ts`. Both keep the order of the rows they are given:
 
 ```
 1. Fetch message rows (filtered, paginated)
@@ -257,6 +257,7 @@ Search results and reply previews share one jump path in `MessageList.tsx`. [mes
 - Adds the channel to `detachedChannels` when 25 or more messages after the target came back (the window stops short of the newest message), and removes it otherwise
 - Updates `channelAccessTimes`
 - Returns `'loaded'`, `'not_found'` (any 404; older peers send it without a code) or `'failed'`
+- Also used by the message list to open a channel at its first unread message and to bring back an anchored row dropped from the cache (docs/systems/message-list.md, "Anchoring model")
 
 ### message-jump-highlight CSS
 

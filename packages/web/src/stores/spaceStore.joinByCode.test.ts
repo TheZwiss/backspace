@@ -46,10 +46,6 @@ vi.mock('../api/client', () => ({
 vi.mock('../utils/crossStoreResolvers', () => ({
   getApiForOrigin: vi.fn(),
   resolveOriginFromHostname: vi.fn(),
-  resolveUserIdFromInstances: vi.fn(),
-  getCachedUserIdForOrigin: vi.fn(),
-  clearMyUserIdCache: vi.fn(),
-  setOwnerInstanceForDmResolver: vi.fn(),
 }));
 
 // Import after mocks so we get the mocked versions

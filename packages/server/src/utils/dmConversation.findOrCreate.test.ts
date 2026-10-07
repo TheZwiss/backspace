@@ -79,7 +79,7 @@ describe('findOrCreateOneOnOne', () => {
   it('returns the row holding the key and adds the pair member it lacks', () => {
     seedChannel('relayed', oneOnOneKey(alice, bob), ['bob-stub']);
     const r = findOrCreateOneOnOne(db, alice, bob, { open: 'both' });
-    expect(r).toEqual({ channelId: 'relayed', created: false });
+    expect(r).toEqual({ channelId: 'relayed', created: false, reconciled: [] });
     expect(membersOf('relayed')).toEqual([{ userId: 'alice', closed: 0 }, { userId: 'bob-stub', closed: 0 }]);
   });
 
@@ -94,7 +94,7 @@ describe('findOrCreateOneOnOne', () => {
     seedChannel('relayed', oneOnOneKey(alice, bob), ['alice', 'bob-old']);
     sqlite.prepare(`UPDATE dm_members SET closed = 1 WHERE dm_channel_id = 'relayed' AND user_id = 'bob-old'`).run();
     const r = findOrCreateOneOnOne(db, alice, bob, { open: 'both' });
-    expect(r).toEqual({ channelId: 'relayed', created: false });
+    expect(r).toEqual({ channelId: 'relayed', created: false, reconciled: [] });
     expect(membersOf('relayed')).toEqual([{ userId: 'alice', closed: 0 }, { userId: 'bob-stub', closed: 1 }]);
     expect(channelCount()).toBe(1);
   });
@@ -106,7 +106,7 @@ describe('findOrCreateOneOnOne', () => {
     seedChannel('relayed', oneOnOneKey(alice, bob), ['alice', 'bob-stub', 'bob-old']);
     sqlite.prepare(`UPDATE dm_members SET closed = 1 WHERE dm_channel_id = 'relayed' AND user_id = 'bob-stub'`).run();
     const r = findOrCreateOneOnOne(db, alice, bob, { open: 'both' });
-    expect(r).toEqual({ channelId: 'relayed', created: false });
+    expect(r).toEqual({ channelId: 'relayed', created: false, reconciled: [] });
     expect(membersOf('relayed')).toEqual([{ userId: 'alice', closed: 0 }, { userId: 'bob-stub', closed: 0 }]);
     expect(channelCount()).toBe(1);
   });
@@ -114,7 +114,12 @@ describe('findOrCreateOneOnOne', () => {
   it('keys and returns an unkeyed row whose members are exactly the pair', () => {
     seedChannel('legacy', null, ['alice', 'bob-stub']);
     const r = findOrCreateOneOnOne(db, alice, bob, { open: 'first' });
-    expect(r).toEqual({ channelId: 'legacy', created: false });
+    expect(r).toEqual({
+      channelId: 'legacy',
+      created: false,
+      // Keyed on the way: its members' clients learn the key.
+      reconciled: [{ action: 'rekeyed', channelId: 'legacy', targetChannelId: 'legacy', affectedUserIds: ['alice', 'bob-stub'] }],
+    });
     expect(keyOf('legacy')).toBe(oneOnOneKey(alice, bob));
     expect(channelCount()).toBe(1);
   });
@@ -145,5 +150,22 @@ describe('findOrCreateOneOnOne', () => {
     expect(keyOf(r.channelId)).toBe(oneOnOneKey(alice, bob));
     expect(keyOf('drifted')).toBe(oneOnOneKey(alice, carol));
     expect(membersOf('drifted').map(m => m.userId)).toEqual(['alice', 'carol']);
+  });
+
+  it('reports the rows it re-keyed or merged on the way, so their members can be told', () => {
+    const carol = seedUser('carol');
+    // Drift: 'drifted' carries the alice-bob key under alice and carol, and
+    // 'aliceCarol' already holds the alice-carol key, so 'drifted' is merged into it.
+    seedChannel('drifted', oneOnOneKey(alice, bob), ['alice', 'carol']);
+    seedChannel('aliceCarol', oneOnOneKey(alice, carol), ['alice', 'carol']);
+    const r = findOrCreateOneOnOne(db, alice, bob, { open: 'both' });
+    expect(r.reconciled).toEqual([
+      { action: 'merged', channelId: 'drifted', targetChannelId: 'aliceCarol', affectedUserIds: ['alice', 'carol'] },
+    ]);
+  });
+
+  it('reports nothing when no other row changed', () => {
+    const r = findOrCreateOneOnOne(db, alice, bob, { open: 'both' });
+    expect(r.reconciled).toEqual([]);
   });
 });

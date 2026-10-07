@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from './snowflake.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 
 setWorkerId(1);
 
@@ -98,12 +99,7 @@ describe('performHandshake — persist remote instanceName', () => {
   });
 
   it('writes remote.instanceName from response body when handshake succeeds', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote Backspace' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote Backspace' }) }));
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
@@ -117,12 +113,7 @@ describe('performHandshake — persist remote instanceName', () => {
   });
 
   it('writes null instanceName when remote response omits the field (old peer)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+    vi.stubGlobal('fetch', remotePeerStub({ accept: () => jsonResponse({ accepted: true }) }));
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
@@ -136,12 +127,9 @@ describe('performHandshake — persist remote instanceName', () => {
   });
 
   it('does not crash when remote returns non-JSON body on 200', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response('not json', {
-        status: 200,
-        headers: { 'content-type': 'text/plain' },
-      }),
-    ));
+    vi.stubGlobal('fetch', remotePeerStub({
+      accept: () => new Response('not json', { status: 200, headers: { 'content-type': 'text/plain' } }),
+    }));
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();

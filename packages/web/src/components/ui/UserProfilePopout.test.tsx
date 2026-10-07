@@ -14,8 +14,23 @@ vi.mock('../../stores/spaceStore', () => ({
     { getState: () => ({ upsertDmCopy: vi.fn(), findExistingDmForUser: vi.fn() }) },
   ),
   getApiForOrigin: () => ({ uploads: { url: (k: string) => `/uploads/${k}` } }),
-  resolveUserOrigin: () => 'local',
 }));
+// authStore imports voiceStore, which imports AudioManager and with it an
+// AudioWorklet module jsdom cannot evaluate.
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) },
+}));
+// `api/client` and `crossStoreResolvers` import each other, so the resolver
+// module can hold the unmocked client; route the page's own origin to the
+// mocked one, as `getApiForOrigin('')` does in the app.
+const pageApi = vi.hoisted(() => ({ client: null as unknown }));
+vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/crossStoreResolvers')>();
+  return {
+    ...actual,
+    getApiForOrigin: (origin: string) => (origin ? actual.getApiForOrigin(origin) : pageApi.client),
+  };
+});
 // Keep the real HttpError class: describeError narrows on it when a request fails.
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -26,11 +41,13 @@ vi.mock('../../utils/mutuals', () => ({
 }));
 vi.mock('../../utils/userViewLookup', () => ({ useCanonicalUserView: (u: User) => u }));
 // Which status the dot shows for the signed-in user has its own tests (useShownStatus).
-vi.mock('../../hooks/useShownStatus', () => ({ useShownStatus: (_u: User, status: User['status']) => status }));
+vi.mock('../../hooks/useShownStatus', () => ({ useShownStatus: (_u: User, _origin: string, status: User['status']) => status }));
 
 import { UserProfilePopout } from './UserProfilePopout';
 import { useUIStore } from '../../stores/uiStore';
+import { useAuthStore } from '../../stores/authStore';
 import { api, HttpError } from '../../api/client';
+pageApi.client = api;
 
 const CARD_W = 340;
 const CARD_H = 420;
@@ -56,7 +73,7 @@ function setViewport(width: number, height: number) {
 function renderCard(anchor: ReturnType<typeof anchorAt>, placement?: 'left' | 'right') {
   return render(
     <MemoryRouter>
-      <UserProfilePopout user={makeUser()} onClose={() => {}} anchor={anchor} placement={placement} />
+      <UserProfilePopout user={makeUser()} origin="" onClose={() => {}} anchor={anchor} placement={placement} />
     </MemoryRouter>,
   );
 }
@@ -95,7 +112,7 @@ describe('UserProfilePopout', () => {
     let closed = false;
     const { container } = render(
       <MemoryRouter>
-        <UserProfilePopout user={makeUser()} onClose={() => { closed = true; }} anchor={anchorAt(300, 200)} />
+        <UserProfilePopout user={makeUser()} origin="" onClose={() => { closed = true; }} anchor={anchorAt(300, 200)} />
       </MemoryRouter>,
     );
 
@@ -110,7 +127,7 @@ describe('UserProfilePopout', () => {
     const user: User = { ...makeUser(), displayName: 'ada@work', username: 'ada' };
     const { container } = render(
       <MemoryRouter>
-        <UserProfilePopout user={user} onClose={() => {}} anchor={anchorAt(300, 200)} />
+        <UserProfilePopout user={user} origin="" onClose={() => {}} anchor={anchorAt(300, 200)} />
       </MemoryRouter>,
     );
     expect(container.textContent).toContain('ada@work');
@@ -124,7 +141,7 @@ describe('UserProfilePopout', () => {
     const onClose = vi.fn();
     render(
       <MemoryRouter>
-        <UserProfilePopout user={makeUser()} onClose={onClose} anchor={anchorAt(300, 200)} />
+        <UserProfilePopout user={makeUser()} origin="" onClose={onClose} anchor={anchorAt(300, 200)} />
       </MemoryRouter>,
     );
 
@@ -132,6 +149,34 @@ describe('UserProfilePopout', () => {
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not open the conversation: No user with that name was found.', 'warning'));
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("offers no Send Message on the user's own card (#325)", () => {
+    useAuthStore.setState({ user: makeUser(), myRowIds: new Map() });
+    try {
+      render(
+        <MemoryRouter>
+          <UserProfilePopout user={makeUser()} origin="" onClose={() => {}} anchor={anchorAt(300, 200)} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByText('Send Message')).toBeNull();
+    } finally {
+      useAuthStore.setState({ user: null });
+    }
+  });
+
+  it("offers Send Message on the card of another instance's user whose id equals the user's", () => {
+    useAuthStore.setState({ user: makeUser(), myRowIds: new Map() });
+    try {
+      render(
+        <MemoryRouter>
+          <UserProfilePopout user={makeUser()} origin="https://orbit.example" onClose={() => {}} anchor={anchorAt(300, 200)} />
+        </MemoryRouter>,
+      );
+      expect(screen.getByText('Send Message')).toBeInTheDocument();
+    } finally {
+      useAuthStore.setState({ user: null });
+    }
   });
 
   it('sits beside its anchor', () => {
@@ -170,7 +215,7 @@ describe('UserProfilePopout', () => {
     };
     const { getByText } = render(
       <MemoryRouter>
-        <UserProfilePopout user={user} onClose={() => {}} anchor={anchorAt(300, 200)} />
+        <UserProfilePopout user={user} origin="" onClose={() => {}} anchor={anchorAt(300, 200)} />
       </MemoryRouter>,
     );
 

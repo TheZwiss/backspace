@@ -84,15 +84,21 @@ async function seedStaleUserAndPeer(baselineEpoch: string | null, hmacSecret: st
   }).run();
 }
 
-// home-login POST → {ok:true}; /api/federation/epoch → signed {instanceId} (or
-// 404 when `epochToEcho` is null, exercising the fail-closed "cannot determine"
-// branch). The epoch response is HMAC-signed exactly as a real peer would sign
-// it, so it round-trips through fetchPeerEpoch's real signature verification.
-function makeFetchStub(hmacSecret: string, epochToEcho: string | null): typeof globalThis.fetch {
+// home-login POST → 200 with the home account `homeAccount` (by default the
+// seeded row's home identity, `hid`); /api/federation/epoch → signed
+// {instanceId} (or 404 when `epochToEcho` is null, exercising the fail-closed
+// "cannot determine" branch). The epoch response is HMAC-signed exactly as a
+// real peer would sign it, so it round-trips through fetchPeerEpoch's real
+// signature verification.
+function makeFetchStub(
+  hmacSecret: string,
+  epochToEcho: string | null,
+  homeAccount: Record<string, unknown> = { id: 'hid', homeUserId: null, username: 'carol' },
+): typeof globalThis.fetch {
   return (async (url: string | URL | Request): Promise<Response> => {
     const u = String(url);
     if (u.endsWith('/api/auth/login')) {
-      return new Response(JSON.stringify({ token: 't', user: {} }), { status: 200 });
+      return new Response(JSON.stringify({ token: 't', user: homeAccount }), { status: 200 });
     }
     if (u.endsWith('/api/federation/epoch')) {
       if (epochToEcho === null) return new Response('nope', { status: 404 });
@@ -264,6 +270,108 @@ describe('login: self-heal epoch guard', () => {
     await seedStaleUserAndPeer(null, secret); // no baseline on record
 
     globalThis.fetch = makeFetchStub(secret, 'EPOCH-A');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+    });
+
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('login: self-heal only rehashes when the home confirms the same account', () => {
+  // The home is asked with the local part of the row's name and the typed
+  // password. Whatever the row is named, a 200 from the home only says that
+  // SOME account there has that name and password; the rehash is for this row
+  // only when that account is the row's home identity (`homeUserId`).
+  let savedFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    savedFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = savedFetch;
+  });
+
+  async function storedHash(): Promise<string> {
+    return testDb.select().from(schema.users).all().find(u => u.id === 'user-c')!.passwordHash;
+  }
+
+  it('refuses when the home accepts the password for a different account', async () => {
+    const secret = 'shared-secret-abc';
+    await seedStaleUserAndPeer('EPOCH-A', secret);
+    // The row carries a suffixed name from an older re-attach (`carol_1`); the
+    // home's `carol_1` is someone else.
+    testDb.update(schema.users).set({ username: 'carol_1@orbit.ddns.net' }).run();
+    const before = await storedHash();
+    globalThis.fetch = makeFetchStub(secret, 'EPOCH-A', { id: 'someone-else', homeUserId: null, username: 'carol_1' });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'carol_1@orbit.ddns.net', password: 'carol-1-own-password' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(await storedHash()).toBe(before);
+  });
+
+  it('refuses when the home answer names no account', async () => {
+    const secret = 'shared-secret-abc';
+    await seedStaleUserAndPeer('EPOCH-A', secret);
+    const before = await storedHash();
+    globalThis.fetch = makeFetchStub(secret, 'EPOCH-A', {});
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(await storedHash()).toBe(before);
+  });
+
+  it('refuses for a row without a home identity to compare', async () => {
+    const secret = 'shared-secret-abc';
+    await seedStaleUserAndPeer('EPOCH-A', secret);
+    testDb.update(schema.users).set({ homeUserId: null }).run();
+    const before = await storedHash();
+    globalThis.fetch = makeFetchStub(secret, 'EPOCH-A');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(await storedHash()).toBe(before);
+  });
+
+  it('rehashes when the home account is the row\'s home identity', async () => {
+    const secret = 'shared-secret-abc';
+    await seedStaleUserAndPeer('EPOCH-A', secret);
+    const before = await storedHash();
+    globalThis.fetch = makeFetchStub(secret, 'EPOCH-A');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(await storedHash()).not.toBe(before);
+  });
+
+  it('rehashes when the home account presents the identity through its homeUserId', async () => {
+    const secret = 'shared-secret-abc';
+    await seedStaleUserAndPeer('EPOCH-A', secret);
+    globalThis.fetch = makeFetchStub(secret, 'EPOCH-A', { id: 'native-row-id', homeUserId: 'hid', username: 'carol' });
 
     const res = await app.inject({
       method: 'POST',

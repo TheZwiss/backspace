@@ -671,6 +671,8 @@ export function SpaceSettingsModal() {
               name={space.name}
               size={36}
               userId={space.id}
+              avatarColor={space.avatarColor}
+              palette="space"
             />
             <div className="min-w-0">
               <div className="text-sm font-medium text-txt-primary truncate">{space.name}</div>
@@ -707,6 +709,8 @@ export function SpaceSettingsModal() {
                 name={space.name}
                 size={36}
                 userId={space.id}
+                avatarColor={space.avatarColor}
+                palette="space"
               />
               <div className="min-w-0">
                 <div className="text-sm font-medium text-txt-primary truncate">{space.name}</div>

@@ -99,7 +99,9 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
           src={payload.snapshot.icon}
           name={payload.snapshot.spaceName}
           size={48}
-          avatarColor={payload.snapshot.avatarColor ?? undefined}
+          userId={payload.spaceId}
+          avatarColor={payload.snapshot.avatarColor}
+          palette="space"
         />
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-semibold text-txt-primary truncate">

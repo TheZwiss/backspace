@@ -33,7 +33,6 @@ vi.mock('../ws/handler.js', () => ({
     addUserSpace: vi.fn(),
     sendToSpace: vi.fn(),
     sendToUser: vi.fn(),
-    pushReadyPayload: vi.fn(),
   },
 }));
 

@@ -17,7 +17,7 @@ Source files:
 - `packages/web/src/components/layout/MobileVoiceMiniBar.tsx` — Persistent mini-bar overlay during voice calls
 - `packages/web/src/components/layout/MobileFolderSheet.tsx` — Bottom sheet for space folder contents, rename, color, ungroup
 - `packages/web/src/hooks/useSwipeGesture.ts` — Edge swipe-back touch gesture hook
-- `packages/web/src/hooks/useDragToClose.ts` — Bottom-sheet drag-down-to-dismiss gesture hook (shared by `InputPopover.MobileSheet`, `MobileVoiceJoinSheet`, `MobileFolderSheet`)
+- `packages/web/src/hooks/useDragToClose.ts`: bottom-sheet drag-down-to-dismiss gesture hook (shared by `MobilePickerSheet`, `MobileVoiceJoinSheet`, `MobileFolderSheet`)
 - `packages/web/src/hooks/useVisualViewportInset.ts` — Returns the bottom inset that floating overlays must use to sit above the iOS soft keyboard (when open) or above the home-indicator safe area (when closed). Used by `MessageInput` for the floating composer-bubble's `bottom` value.
 - `packages/web/src/stores/uiStore.ts` — Mobile navigation state (mobileScreen, mobileStack, push/pop actions)
 
@@ -425,7 +425,17 @@ Params: `{ channelId, spaceId }`
 
 - Loads messages and sets current channel on mount via `useChatStore`
 - Resolves channel name: DM names from member list (group: comma-separated), space channels by `#name`
-- Custom header with back button + channel name + members/group-info button
+- Custom header with back button + channel name + DM call button (DMs only) + members/group-info button
+- DM call button shows for 1-on-1 and group DMs, and is hidden for space channels and deleted-partner DMs (they are read-only). It is a 44px tap target that draws a 32px round chip, so it keeps the header's icon rhythm. Its states, first match wins:
+
+  | State | When | Looks | Tap |
+  |-------|------|-------|-----|
+  | In call | `activeDmCall` is this DM | `bg-accent-mint/20 text-accent-mint` chip, upright phone | pushes `voice-full` (as the voice mini bar does) |
+  | Ringing | `outgoingCall` is this DM | `bg-accent-rose/20 text-accent-rose` chip (the mini bar's hang-up), phone turned 135° | `cancelOutgoingDmCall` |
+  | Idle | `canStartDmCall` allows | bare `text-txt-secondary` phone, no chip | `startDmCall` |
+  | Busy | otherwise (a call rings in either direction or runs in another DM) | bare `text-txt-tertiary/60` phone, disabled | none |
+
+  `canStartDmCall`, `startDmCall` and `cancelOutgoingDmCall` live in `utils/voiceActions.ts` and are the same functions the desktop DM header calls, so the two headers cannot disagree about when a call may start or where the start and cancel are sent.
 - Members button shows for space channels AND group DMs; hidden for 1-on-1 DMs (no roster). Space channels push the `members` screen; group DMs push the `group-dm-info` screen so the user lands on the full info + management surface (`MobileGroupDmInfo`).
 - Renders `MessageList`, `TypingIndicator`, `MessageInput`
 
@@ -703,6 +713,14 @@ Where `bottom-offset` is the gap between the wrapper's bottom edge and the compo
 
 `MessageList` reads `var(--composer-clearance, 80px)` as `paddingBottom`. The `80px` fallback covers the brief mount window before the first measurement, plus any future surface that mounts a `MessageList` without a sibling `MessageInput`.
 
+**How the composer keeps it.** `MessageInput.syncClearance` measures the bubble and its parent and writes the variable only when the value changed. Three layout effects call it:
+
+- One keyed on the composer element (`composerEl`) measures once, then observes the composer and its parent with a `ResizeObserver` and listens to `visualViewport` `resize` and `scroll`. When the composer moves to another region it removes the variable from the old one; the permission-denied bubble and the full composer swapping in the same region do not remove it.
+- One keyed on what moves or fills the composer without necessarily resizing it or its parent (`isMobile`, `keyboardOpen`, `textInputFocused`, the reply target, the staged-file count) re-measures and leaves the observers alone.
+- One removes the variable when the composer unmounts.
+
+The variable is never removed and set again while the composer is mounted. The message list holds its view against it, and a removal, even one undone in the same task, lets the browser lay the list out at the 80 px fallback and clamp its scroll offset, which leaves the newest messages under the composer (issue #361; message-list.md "Bottom clearance").
+
 **Why dynamic?** The previous static `pb-20` (80 px) was sized for the desktop case (composer ≈ 50 px tall + 12 px bottom = 62 px, leaving 18 px of gap). On iPhone with the keyboard closed, the composer's bottom-offset is `var(--safe-bottom) + 6` ≈ 40 px, so `composer-height + bottom-offset` ≈ `44 + 40` = `84 px` — already exceeding the 80 px `pb-20`, with **negative** breathing room. The composer also grows when the user replies to a message (banner adds 36 px) or stages attachments (tile row adds 184 px), so any static value is wrong for some configurations. The ResizeObserver-driven CSS variable is the only correct model.
 
 The variable is scoped to the chat region's wrapper rather than `:root` so future multi-pane layouts (e.g. side-by-side DM list + chat, voice chat side-panel) don't cross-talk; a wrapper-scoped variable inherits naturally to its `MessageList` descendant.
@@ -720,7 +738,7 @@ keyboardOcclusion = window.innerHeight - (visualViewport.offsetTop + visualViewp
 It returns `{ value, keyboardOpen, height, offsetTop }`:
 - `value` — `'<n>px'` when the keyboard is open (the occlusion), or the literal `'var(--safe-bottom)'` string when it is not. Provided for legacy / fallback use.
 - `keyboardOpen` — `true` when `keyboardOcclusion > 1`.
-- `textInputFocused` — `true` while a text-entry element holds focus. Required for iOS PWA standalone where iOS itself shrinks the layout viewport for the keyboard, so `vv.height === innerHeight` and `keyboardOpen` stays `false` even though the keyboard IS up. Consumers OR `keyboardOpen || textInputFocused` to detect "keyboard probably open". The state-equality check inside the hook MUST include this field — historically it was missing, so on iOS PWA the hook silently dropped focus changes; the composer's `bottom` style stayed pinned to `var(--safe-bottom) + 6px` while the keyboard was open, the `--composer-clearance` ResizeObserver effect's deps fired stale values, and on close the last message overlapped the composer's top edge by ~4 px.
+- `textInputFocused` — `true` while a text-entry element holds focus. Required for iOS PWA standalone where iOS itself shrinks the layout viewport for the keyboard, so `vv.height === innerHeight` and `keyboardOpen` stays `false` even though the keyboard IS up. Consumers OR `keyboardOpen || textInputFocused` to detect "keyboard probably open". The state-equality check inside the hook MUST include this field — historically it was missing, so on iOS PWA the hook silently dropped focus changes; the composer's `bottom` style stayed pinned to `var(--safe-bottom) + 6px` while the keyboard was open, the clearance re-measure that follows `keyboardOpen` and `textInputFocused` (see "How the composer keeps it") did not run, and on close the last message overlapped the composer's top edge by ~4 px.
 - `height` — live `visualViewport.height` in pixels (or `null` if `visualViewport` is unavailable).
 - `offsetTop` — live `visualViewport.offsetTop` in pixels.
 
@@ -747,7 +765,7 @@ The component declares one `composerClass` shared by both modes. Differences:
 
 #### Composer-element ref shape
 
-`MessageInput` tracks the live composer DOM element via a callback ref that fans out to (a) the existing imperative `popoverAnchorRef` (consumed by `InputPopover` and the mention popover for anchor positioning) AND (b) a state-backed `composerEl` slot that drives the `--composer-clearance` ResizeObserver effect. The state-backed slot is required because the component renders different JSX when `canSendMessages` is false (the no-permission early-return path) vs. true (the full composer): a plain `useEffect` keyed only on stable deps would not re-fire when the ref attaches as the JSX flips, leaving the CSS variable unset until the next dep change. Channel permissions arrive asynchronously, so the initial mount renders the no-permission JSX first and re-renders the full composer once permissions resolve — the callback ref's `setComposerEl` call re-fires the effect at that moment.
+`MessageInput` tracks the live composer DOM element via a callback ref that fans out to (a) the existing imperative `popoverAnchorRef` (consumed by `InputPopover` and the mention popover for anchor positioning) AND (b) a state-backed `composerEl` slot that the clearance effects are keyed on (see "How the composer keeps it"). The state-backed slot is required because the component renders different JSX when `canSendMessages` is false (the no-permission early-return path) vs. true (the full composer): an effect keyed only on stable deps would not re-run when the ref attaches as the JSX flips, so the observers would stay on the old element. Channel permissions arrive asynchronously, so the initial mount renders the no-permission JSX first and re-renders the full composer once permissions resolve; the callback ref's `setComposerEl` call re-runs the observer effect at that moment, on the same region, without removing the variable.
 
 ---
 
@@ -759,7 +777,7 @@ Three hand-rolled bottom sheets share this gesture hook so each surface gets ide
 
 | Sheet | File | Drag-handle area |
 |---|---|---|
-| Emoji / GIF picker | `packages/web/src/components/chat/InputPopover.tsx` (`MobileSheet`) | Visible pill + tab bar |
+| Picker sheet: the composer's emoji / GIF picker (`InputPopover.tsx`) and the reaction picker the message menu's "+" opens (`Message.tsx`) | `packages/web/src/components/chat/MobilePickerSheet.tsx` | Visible pill + the caller's header (the composer's tab bar; none for reactions) |
 | Voice-channel join sheet | `packages/web/src/components/voice/MobileVoiceJoinSheet.tsx` | Visible pill + title row |
 | Space-folder sheet | `packages/web/src/components/layout/MobileFolderSheet.tsx` | Visible pill + folder header row |
 
@@ -798,7 +816,7 @@ const { sheetStyle, handleProps, isDragging, isClosing, hasInteracted } = useDra
 - **Tap-on-handle** is treated as a no-op (touch starts and ends inside the dead-zone → no offset → no commit). `hasInteracted` does flip true, but with `dragOffset === 0` the inline transform stays at `translateY(0)` and the visible state matches the open state.
 - **iOS pull-to-refresh** is blocked because `touchmove` is non-passive and calls `preventDefault()` once we cross the dead-zone.
 - **Internal scrolling** (e.g. emoji grid, GIF results, folder space list) is **untouched** — `handleProps.onTouchStart` is bound to the header element only, so scroll containers below it never enter drag mode.
-- **Open animation** (`animate-slide-up-sheet` for `MobileFolderSheet` / `InputPopover.MobileSheet`, the `translate-y-full → translate-y-0` flip for `MobileVoiceJoinSheet`) is gated by `!hasInteracted`. After the first touch, the open class never re-applies for the rest of the sheet's lifetime — the inline `transform` + transition becomes the sole animator for both snap-back and close-out.
+- **Open animation** (`animate-slide-up-sheet` for `MobileFolderSheet` / `MobilePickerSheet`, the `translate-y-full → translate-y-0` flip for `MobileVoiceJoinSheet`) is gated by `!hasInteracted`. After the first touch, the open class never re-applies for the rest of the sheet's lifetime; the inline `transform` + transition becomes the sole animator for both snap-back and close-out.
 
 ---
 

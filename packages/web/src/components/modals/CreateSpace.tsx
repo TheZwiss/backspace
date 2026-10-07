@@ -137,7 +137,7 @@ export function CreateSpaceModal() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingIcon}
-            className="relative w-20 h-20 rounded-full border-2 border-dashed border-border-subtle hover:border-accent-primary transition-colors flex items-center justify-center overflow-hidden group"
+            className="relative w-20 h-20 rounded-full border-2 border-dashed border-border-soft hover:border-accent-primary transition-colors flex items-center justify-center overflow-hidden group"
             style={!iconPreview ? { background: getSpaceGradient(undefined, name || 'S', avatarColor).gradient } : undefined}
           >
             {iconPreview ? (

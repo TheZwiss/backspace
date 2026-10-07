@@ -1,9 +1,12 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { normalizeOriginForCompare } from '../../../utils/federationAuth.js';
+import { dmDeleteKey, hasAppliedEvent, recordAppliedEvent } from '../../../utils/federationAppliedEvents.js';
+import { reopenClosedDmMembers } from '../../../utils/dmMemberClosed.js';
 import { getGroupDmTargetOrigins } from '../../../utils/federationOutbox.js';
 import { findOrCreateOneOnOne, oneOnOneKey } from '../../../utils/dmConversation.js';
 import { loadDmChannelWire } from '../../../utils/dmChannelWire.js';
+import { announceDmReconcile } from '../../../utils/dmConversationEvents.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
 import { rewriteRelayedMentions } from '../../../utils/federationMentions.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
@@ -12,6 +15,8 @@ import { connectionManager } from '../../../ws/handler.js';
 import { getDmMessageWithUser } from '../../dm.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FederationMessageTarget, FederationRelayEvent } from '@backspace/shared';
+import { parseDmSystemEvent, RELAYABLE_DM_SYSTEM_EVENTS } from '@backspace/shared/src/dmSystemEvents.js';
+import type { RelayDelivery } from './dispatch.js';
 import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
 import { hydrateReplicatedUserProfile } from '../profile.js';
@@ -23,6 +28,7 @@ export async function processCreateEvent(
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
+  delivery: RelayDelivery,
 ): Promise<void> {
   if (!event.message) {
     rejected.push({ messageId: event.messageId, reason: 'missing_message_payload' });
@@ -42,6 +48,13 @@ export async function processCreateEvent(
     return;
   }
 
+  // A delete for this message reached us before the message did: it is gone
+  // on its home, and this create is as good as already applied.
+  if (hasAppliedEvent(sourceInstance, dmDeleteKey(event.messageId), db)) {
+    rejected.push({ messageId: event.messageId, reason: 'duplicate' });
+    return;
+  }
+
   // Dedup: check for existing message with same source
   const existingMsg = db
     .select()
@@ -57,6 +70,21 @@ export async function processCreateEvent(
   if (existingMsg) {
     rejected.push({ messageId: event.messageId, reason: 'duplicate' });
     return;
+  }
+
+  // Relayed system content is validated before anything is written: only an
+  // event a peer relays as a message (a space invite) is stored, in its
+  // canonical form (dm-system.md, "System messages").
+  const isSystem = event.message.type === 'system';
+  let systemContent: string | null = null;
+  if (isSystem) {
+    const systemEvent = parseDmSystemEvent(event.message.content);
+    if (!systemEvent || !RELAYABLE_DM_SYSTEM_EVENTS.has(systemEvent.event)) {
+      console.warn(`[federation] Refused relayed system message ${event.messageId} from ${extractDomain(sourceInstance)}: not a well-formed relayable system event`);
+      rejected.push({ messageId: event.messageId, reason: 'invalid_system_message' });
+      return;
+    }
+    systemContent = JSON.stringify(systemEvent);
   }
 
   // Resolve ALL participants to local users, auto-creating replicated stubs
@@ -100,6 +128,8 @@ export async function processCreateEvent(
   // must already exist (bootstrapped by a prior member_add event); 1-on-1 DMs
   // are computed from the pair of home user IDs and created on demand.
   let localDmChannelId: string;
+  // Whether this event created this instance's copy of a 1-on-1.
+  let createdCopy = false;
 
   if (event.federatedId) {
     // Group DM: look up by federated_id (channel must already exist from member_add bootstrap)
@@ -135,7 +165,10 @@ export async function processCreateEvent(
     }
     // Both members open: the message that creates a copy here is delivered
     // with it.
-    localDmChannelId = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' }).channelId;
+    const opened = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' });
+    announceDmReconcile(opened.reconciled);
+    localDmChannelId = opened.channelId;
+    createdCopy = opened.created;
     // A call that rang here before this copy existed is bound to it now.
     connectionManager.lateBindFederatedCall(oneOnOneKey(pair[0]!, pair[1]!), localDmChannelId);
   }
@@ -145,11 +178,8 @@ export async function processCreateEvent(
   const replyToId = resolveRelayedReplyTarget(event.message.replyTo, sourceInstance, localDmChannelId, db);
 
   // Mention tokens carry the sender's ids; store them as this instance's.
-  // System content is not text with tokens and is stored as sent.
-  const isSystem = event.message.type === 'system';
-  const content = isSystem
-    ? event.message.content
-    : rewriteRelayedMentions(event.message.content, event.message.mentions, db);
+  // System content was validated and canonicalized above.
+  const content = systemContent ?? rewriteRelayedMentions(event.message.content, event.message.mentions, db);
 
   // Insert the message
   const localMessageId = generateSnowflake();
@@ -226,37 +256,53 @@ export async function processCreateEvent(
     }
   }
 
-  // Broadcast to local WebSocket clients, but skip members whose home instance
-  // is the source instance — they already have the original message via their
-  // home instance's WebSocket connection.
+  // A live message reopens the conversation for every member who closed it,
+  // and dm_channel_created resurfaces it in their list before the message
+  // arrives. A pulled message reopens it only for a member who closed it
+  // before the message was written: a pull can deliver an old message long
+  // after it was sent, and a close made after it stands. The live rule does
+  // not compare the two: `createdAt` is the sender's clock and the close
+  // time this instance's, and a sender clock running behind would otherwise
+  // keep a fresh reply from reopening.
+  const reopened = reopenClosedDmMembers(
+    db.$client,
+    localDmChannelId,
+    delivery === 'live' ? {} : { closedBefore: event.message.createdAt },
+  );
   const fullMessage = getDmMessageWithUser(localMessageId);
-  if (fullMessage) {
-    const dmMembers = db.select()
+  if (createdCopy && delivery === 'catch_up') {
+    // A pulled message that created this copy of a 1-on-1 raises nothing
+    // live (no dm_message_created below), so the members' lists learn of the
+    // conversation here, as a listing would show it. dm_channel_created makes
+    // no sound: catch-up is not news.
+    const payload = loadDmChannelWire(db, localDmChannelId);
+    if (payload) {
+      for (const member of payload.members) {
+        connectionManager.sendToUser(member.id, { type: 'dm_channel_created', dmChannel: payload });
+      }
+    }
+  } else if (reopened.length > 0) {
+    const payload = loadDmChannelWire(db, localDmChannelId, delivery === 'live' ? fullMessage ?? undefined : undefined);
+    if (payload) {
+      for (const userId of reopened) {
+        connectionManager.sendToUser(userId, { type: 'dm_channel_created', dmChannel: payload });
+      }
+    }
+  }
+
+  // Live delivery goes to every local member, members homed on the source
+  // instance included. Federated DMs are mirrored: a client connected here and
+  // to the source holds both copies of the conversation, and its DM merge
+  // module (web `stores/dmConversations.ts`) decides which copy it shows, so
+  // each copy gets its own messages. A pulled message is catch-up
+  // (`RelayDelivery`): it is stored, and shows when a client next loads the
+  // conversation, without raising a sound or notification now.
+  if (fullMessage && delivery === 'live') {
+    const dmMembers = db.select({ userId: schema.dmMembers.userId })
       .from(schema.dmMembers)
       .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
       .all();
-
     for (const member of dmMembers) {
-      // If the member closed this DM, reopen it and send dm_channel_created
-      // so the sidebar resurfaces before the message arrives.
-      if (member.closed === 1) {
-        db.update(schema.dmMembers)
-          .set({ closed: 0 })
-          .where(and(
-            eq(schema.dmMembers.dmChannelId, localDmChannelId),
-            eq(schema.dmMembers.userId, member.userId),
-          ))
-          .run();
-
-        const payload = loadDmChannelWire(db, localDmChannelId, fullMessage);
-        if (payload) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_channel_created',
-            dmChannel: payload,
-          });
-        }
-      }
-
       connectionManager.sendToUser(member.userId, {
         type: 'dm_message_created',
         message: fullMessage,
@@ -449,11 +495,29 @@ export function processUpdateEvent(
   }
   const localMsg = resolved.localMsg;
 
+  // System messages cannot be edited (dm-system.md, "System messages").
+  if (localMsg.type === 'system') {
+    console.warn(`[federation] Refused relayed update of system message ${localMsg.id} from ${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'system_message_immutable' });
+    return;
+  }
+
   // Mention tokens carry the sender's ids; store them as this instance's.
-  const content = localMsg.type === 'system'
-    ? event.message?.content ?? null
-    : rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
-  const editedAt = event.message?.editedAt ?? Date.now();
+  const content = rewriteRelayedMentions(event.message?.content ?? null, event.message?.mentions, db);
+
+  // Last-writer-wins on the author's `editedAt`: an edit this copy already
+  // holds, or an older one arriving after it (a pull replays the log), changes
+  // nothing and tells nobody. An older sender without `editedAt` is applied
+  // only when the content differs.
+  const incomingEditedAt = event.message?.editedAt ?? null;
+  const alreadyHeld = incomingEditedAt !== null
+    ? localMsg.editedAt !== null && incomingEditedAt <= localMsg.editedAt
+    : content === localMsg.content;
+  if (alreadyHeld) {
+    accepted.push(event.messageId);
+    return;
+  }
+  const editedAt = incomingEditedAt ?? Date.now();
 
   db.update(schema.dmMessages)
     .set({ content, editedAt })
@@ -527,6 +591,37 @@ export function processUpdateEvent(
 }
 
 
+/**
+ * The message a relayed delete names, in its home's coordinates: the target's
+ * shared coordinates, or for an older sender without a target, the sender's
+ * own id on the sender. Null for a target too malformed to name one.
+ */
+function relayedDeleteCoordinates(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+): { messageId: string; homeInstance: string } | null {
+  if (event.target === undefined) return { messageId: event.messageId, homeInstance: sourceInstance };
+  const target: unknown = event.target;
+  if (!isMessageTarget(target)) return null;
+  return { messageId: target.message.messageId, homeInstance: target.message.messageHomeInstance };
+}
+
+/**
+ * Record that the message at `coordinates` is deleted, so a create of it that
+ * arrives later is answered `duplicate` (`processCreateEvent`). Only a message
+ * homed on the signing peer: that peer is the only one whose creates carry
+ * those coordinates, so no peer can block another's messages this way.
+ */
+function recordDeleteTombstone(
+  coordinates: { messageId: string; homeInstance: string },
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): void {
+  if (normalizeOriginForCompare(coordinates.homeInstance) !== normalizeOriginForCompare(sourceInstance)) return;
+  recordAppliedEvent(sourceInstance, dmDeleteKey(coordinates.messageId), db);
+}
+
+
 export function processDeleteEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -536,10 +631,29 @@ export function processDeleteEvent(
 ): void {
   const resolved = resolveRelayedMutationTarget(event, sourceInstance, db);
   if (!resolved.ok) {
+    const coordinates = relayedDeleteCoordinates(event, sourceInstance);
+    if (resolved.reason === 'unknown_message' && coordinates
+      && !resolveLocalDmMessage(coordinates.messageId, coordinates.homeInstance, sourceInstance, db)) {
+      // Not held here: nothing to delete, and the create may still be on its
+      // way. Accept, and leave the tombstone that answers that create.
+      recordDeleteTombstone(coordinates, sourceInstance, db);
+      accepted.push(event.messageId);
+      return;
+    }
     rejected.push({ messageId: event.messageId, reason: resolved.reason });
     return;
   }
   const localMsg = resolved.localMsg;
+
+  // A create of this message delivered again later (an outbox retry whose
+  // first send did land) must not bring it back.
+  if (localMsg.sourceInstance && localMsg.sourceMessageId) {
+    recordDeleteTombstone(
+      { messageId: localMsg.sourceMessageId, homeInstance: localMsg.sourceInstance },
+      sourceInstance,
+      db,
+    );
+  }
 
   // Collect attachment filenames before deletion for disk cleanup
   const attachmentRows = db
@@ -631,29 +745,14 @@ export function processReactionAddEvent(
   }
   const reactingUser = reactor.user;
 
-  // Dedup: check if this user already reacted with this emoji
-  const existingReaction = db
-    .select()
-    .from(schema.dmReactions)
-    .where(
-      and(
-        eq(schema.dmReactions.dmMessageId, localMsg.id),
-        eq(schema.dmReactions.userId, reactingUser.id),
-        eq(schema.dmReactions.emoji, event.reaction.emoji),
-      ),
-    )
-    .get();
-
-  if (existingReaction) {
-    // Already exists — treat as accepted (idempotent)
-    accepted.push(event.messageId);
-    return;
-  }
-
   const reactionId = generateSnowflake();
   const now = event.reaction.createdAt || Date.now();
 
-  db.insert(schema.dmReactions)
+  // The unique index on (dm_message_id, user_id, emoji) keeps one reaction
+  // per user and emoji. A reaction this instance already holds (a redelivery,
+  // or the same event pulled again by the catch-up sync) inserts nothing and
+  // is accepted, so the sender stops retrying it.
+  const inserted = db.insert(schema.dmReactions)
     .values({
       id: reactionId,
       dmMessageId: localMsg.id,
@@ -661,7 +760,13 @@ export function processReactionAddEvent(
       emoji: event.reaction.emoji,
       createdAt: now,
     })
+    .onConflictDoNothing()
     .run();
+
+  if (inserted.changes === 0) {
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Broadcast to local clients
   connectionManager.sendToDmMembers(localMsg.dmChannelId, {

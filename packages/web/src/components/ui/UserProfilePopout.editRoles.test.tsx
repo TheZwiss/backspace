@@ -15,7 +15,7 @@ vi.mock('../../utils/mutuals', () => ({
 }));
 
 import { UserProfilePopout } from './UserProfilePopout';
-import { useSpaceStore, setMyUserIdForOrigin, type TaggedSpace } from '../../stores/spaceStore';
+import { useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ALL_PERMISSIONS, PermissionBits, permissionsToString } from '../../utils/permissions';
@@ -169,7 +169,7 @@ describe('UserProfilePopout: Edit Roles', () => {
       space: { ...SPACE, _instanceOrigin: ORBIT },
       members: [member('owner', []), member('lead-local', [LEADS]), member('helper', [HELPERS])],
     });
-    setMyUserIdForOrigin(ORBIT, 'lead-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
 
     renderCard('lead-local');
     expect(editRoles()).toBeNull();
@@ -180,7 +180,7 @@ describe('UserProfilePopout: Edit Roles', () => {
       space: { ...SPACE, _instanceOrigin: ORBIT },
       members: [member('owner', []), member('lead-local', [LEADS]), member('helper', [HELPERS])],
     });
-    setMyUserIdForOrigin(ORBIT, 'lead-local');
+    useAuthStore.getState().recordMyRow(ORBIT, 'lead-local');
 
     renderCard('helper');
     expect(editRoles()).not.toBeNull();

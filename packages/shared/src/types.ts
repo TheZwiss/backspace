@@ -571,7 +571,7 @@ export type ServerEvent =
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
   | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
-  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
+  | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; reasonCode?: FederationPeerStatusReason; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
   | { type: 'federation_peer_active'; peerOrigin: string }
   | { type: 'federation_peers_changed' }
   | { type: 'federation_peer_reset_detected'; origin: string }
@@ -595,7 +595,11 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  | { type: 'error'; message: string; code?: ErrorCode };
+  | { type: 'error'; message: string; code?: ErrorCode }
+  // The space's roles or a member's roles changed: what the receiver may see
+  // or do there, and how its roles and members look, may be different now.
+  // The client refetches that space's detail (docs/systems/websocket.md).
+  | { type: 'space_access_changed'; spaceId: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
 
@@ -778,8 +782,18 @@ export interface SpaceInviteSystemPayload {
 
 export interface PaginatedQuery {
   before?: string;
+  after?: string;
   limit?: number;
 }
+
+/**
+ * Set by the message history endpoints on a response that honoured `after`.
+ * A server that predates forward paging ignores `after` and answers with the
+ * newest page, without this header. Contract: docs/systems/api.md, "Message
+ * history paging".
+ */
+export const MESSAGE_PAGING_HEADER = 'X-Backspace-Paging';
+export const MESSAGE_PAGING_AFTER = 'after';
 
 export interface ApiError {
   error: string;
@@ -1205,6 +1219,13 @@ export interface FederationRelayEvent {
   rejectionReason?: string;
   rejectionLimit?: number;
   affectedUserIds?: string[];
+  /**
+   * `file_rejected`: the same users as `affectedUserIds`, each with the
+   * instance that homes them, so the receiver matches the whole identity.
+   * Optional: absent from older senders, whose bare ids are matched only when
+   * exactly one local user carries that home user id.
+   */
+  affectedUsers?: Array<{ homeUserId: string; homeInstance: string }>;
   call?: FederationCallPayload;
   typing?: {
     homeUserId: string;
@@ -1227,6 +1248,13 @@ export interface FederationRelayEvent {
 export interface FederationCallPayload {
   livekitUrl?: string;
   tokens?: Record<string, string>;  // homeUserId → LiveKit token
+  /**
+   * The same tokens with each holder's federated identity. Optional: older
+   * senders omit it, and every key of `tokens` is then a user homed on the
+   * receiving instance. A receiver gives a token only to the local user its
+   * identity resolves to; a home user id alone is unique only where issued.
+   */
+  memberTokens?: Array<{ homeUserId: string; homeInstance: string; token: string }>;
   caller?: { homeUserId: string; homeInstance: string; displayName: string };
   acceptor?: { homeUserId: string; homeInstance: string };
   rejector?: { homeUserId: string; homeInstance: string };
@@ -1450,9 +1478,16 @@ export interface FederationRelayResponse {
 
 export interface FederationSyncRequest {
   sinceTimestamp: number;
+  /**
+   * Keyset tiebreak: with it, the server returns the log rows after the row
+   * `(sinceTimestamp, afterId)` in `(mutated_at, id)` order, so rows sharing a
+   * millisecond across a page boundary are all served. Older servers ignore it
+   * and return rows with `mutated_at > sinceTimestamp`.
+   */
+  afterId?: string;
   dmChannelId?: string;
   federatedId?: string;
-  contextType?: 'dm' | 'friend';
+  contextType?: 'dm' | 'friend' | 'profile';
   limit: number;
 }
 
@@ -1460,6 +1495,12 @@ export interface FederationSyncResponse {
   events: FederationRelayEvent[];
   hasMore: boolean;
   checkpoint: number;
+  /**
+   * The id of the last log row the page covered (before any filtering), to be
+   * sent back as `afterId` with `sinceTimestamp: checkpoint`. Absent from older
+   * servers, whose next page has to start at `checkpoint - 1`.
+   */
+  checkpointId?: string;
 }
 
 // Detached-account re-attach (re-attach spec §3.1–3.2).
@@ -1493,6 +1534,12 @@ export interface FederationUserLookupProfile {
   // Carried so the requester can seed the stub's status at creation time.
   // Optional for backwards compat with peers that pre-date the field.
   status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
+  // `/users/by-home-id` only, from homes that send it: the profile's version
+  // (the value `profile_update` carries; a never-edited profile is at its
+  // account's creation time) and the accent colour, so the answer can be
+  // applied like a `profile_update`. Absent from older homes.
+  profileUpdatedAt?: number | null;
+  accentColor?: string | null;
 }
 
 export type FederationUserLookupResponse =
@@ -1513,7 +1560,7 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
+  statusReason: FederationPeerStatusReason | null;
 }
 
 // ─── Reset-cleanup admin surface (instance-epoch self-healing §6.4) ──────────
@@ -1776,3 +1823,35 @@ export interface TelemetryStatus {
    */
   askDue: boolean;
 }
+
+export type { DmSystemEvent } from './dmSystemEvents.js';
+
+// ─── Federation peer state (docs/systems/federation.md, "Peer state") ────────
+
+/** Every value `federation_peers.status` takes. */
+export type FederationPeerStatus =
+  | 'pending'
+  | 'awaiting_approval'
+  | 'active'
+  | 'unreachable'
+  | 'needs_attention'
+  | 'rejected'
+  | 'revoked';
+
+/** Why a peer is in `needs_attention`. */
+export type FederationNeedsAttentionReason = 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete';
+
+/**
+ * Why a peer is `rejected`. `denied_by_local_admin` is our own refusal; every
+ * other value is the remote refusing us, or holding an older peering with us
+ * that its admin has to reset (`stale_peering_on_remote`).
+ */
+export type FederationRejectedReason =
+  | 'denied_by_local_admin'
+  | 'denied_by_remote'
+  | 'revoked_by_remote'
+  | 'expired_on_remote'
+  | 'stale_peering_on_remote';
+
+/** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
+export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;

@@ -148,6 +148,34 @@
       "when": 1790621580065,
       "tag": "0020_users_home_user_id_index",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1790696637343,
+      "tag": "0021_outbox_queue_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791335942928,
+      "tag": "0022_peer_resync",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791372547519,
+      "tag": "0023_peer_status_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791393454331,
+      "tag": "0024_reaction_unique",
+      "breakpoints": true
     }
   ]
 }

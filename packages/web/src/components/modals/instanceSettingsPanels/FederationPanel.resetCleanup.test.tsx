@@ -50,7 +50,7 @@ const resetPeerFixture = {
   origin: 'https://peer.example',
   instanceName: 'Peer',
   status: 'needs_attention' as const,
-  needsAttentionReason: 'peer_reset_detected' as const,
+  statusReason: 'peer_reset_detected' as const,
   lastSeenAt: Date.now(),
   lastFailureAt: null,
   consecutiveFailures: 0,

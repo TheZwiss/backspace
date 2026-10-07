@@ -32,14 +32,14 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | notes |
 |------|--------|-------|
 | `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel |
-| `dm_message_edit` | messageId, content | author only |
+| `dm_message_edit` | messageId, content | author only; a system message cannot be edited (`error` with `code: 'system_message_immutable'`) |
 | `dm_message_delete` | messageId | author only |
 | `dm_typing_start` | dmChannelId | 5s auto-expire |
 
 ### Reactions (space + DM, auto-detected)
 | type | fields | notes |
 |------|--------|-------|
-| `reaction_add` | messageId, emoji | ADD_REACTIONS perm (space) |
+| `reaction_add` | messageId, emoji | ADD_REACTIONS perm (space). One reaction per user and emoji: a repeat stores nothing, sends no `reaction_added` and queues no relay. The client does not send one either (`chatStore.addReaction` skips a reaction the user holds or has an add in flight for) |
 | `reaction_remove` | messageId, emoji | own reactions only |
 
 ### Read State
@@ -149,7 +149,38 @@ handler alike, so both paths reach the same audience. (`reaction_added` and
 | `category_updated` | category, spaceId | space |
 | `category_deleted` | categoryId, spaceId | space |
 | `channel_layout_updated` | spaceId, channels[], categories[] | space |
+| `space_access_changed` | spaceId | space |
 | `space_layout_updated` | layout[], folders[], updatedAt? | user |
+
+`space_access_changed` follows any change to the space's roles or to a
+member's roles: `POST`, `PATCH`, `DELETE /spaces/:id/roles[/:rid]`,
+`PATCH /spaces/:id/members/:uid`, `POST`/`DELETE /spaces/:id/members/:uid/roles`.
+What the receiver may see or do there, and how the roles and members look,
+may be different now. The client refetches the space's detail from its own
+instance with `loadSpaceDetail(spaceId, { quiet: true })`: no loading state
+(no skeleton) and no message cache touched. One action can send several of
+these events (a member role edit, quick role moves), and their refetches can
+answer out of order; which load lands, and what lands for a space that is
+not open, is in spaces.md ("Client Load State"). Every channel the detail lists
+goes through `upsertChannel`, and a channel of that space it no longer lists
+goes through the `channel_deleted` path, which also closes it when it is
+open (`refreshSpaceAccess` in `hooks/useWebSocket.ts`). The detail carries no
+voice presence, so the members whose own permissions the change may reach
+(the member whose roles changed; the holders of a changed or deleted role;
+everyone for @everyone; nobody for a new role) are each sent a
+`space_voice_state` right after the event, built by `pushSpaceVoiceState`
+exactly as for a mid-session join (below): a voice channel a member just
+gained shows who is in it at once (`ConnectionManager.announceSpaceAccessChange`).
+These routes used to
+push a whole `ready` instead, which every client handles as a reconnect.
+Mixed versions: an old client connected to a new server ignores the event
+and misses live role changes in that space until it reconnects; a new client
+connected to an old server still gets the old `ready` push.
+
+An `error` that carries a `code` is the refusal of something the user just
+did (so far `role_hierarchy` from the voice moderation events); the client
+shows it as a warning toast in the user's language (`describeErrorCode`).
+An `error` without a code is only logged.
 
 ### DM Channel Management
 | type | fields | scope |
@@ -165,7 +196,7 @@ handler alike, so both paths reach the same audience. (`reaction_added` and
 |------|--------|-------|
 | `voice_state_update` | channelId, userId, action: join/leave, channelElapsedSeconds? | space |
 | `voice_status_update` | userId, channelId, isMuted, isDeafened, isCameraOn, isScreenSharing | room |
-| `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session (see below). |
+| `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user, or a member whose access changed. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session, and after `space_access_changed` (see below). |
 | `voice_space_muted` | userId, channelId, spaceId, muted | space |
 | `voice_space_deafened` | userId, channelId, spaceId, deafened | space |
 | `voice_permission_muted` | userId, spaceId, muted | space |
@@ -244,6 +275,8 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 
 ### Mid-session space join — `space_voice_state` push
 
+**Client: one session per socket.** The web client treats the first `ready` of a socket as a new session (it may follow a gap, so the message cache of that origin is refetched) and any later `ready` on the same socket as a state refresh that leaves the message cache alone. See docs/systems/message-list.md, "Reconnects and refresh readies".
+
 The `ready` payload is the **only** carrier of voice presence at connect time. When a user joins a space *mid-session* (invite, public join, or join-request approval) without reloading, they would otherwise see empty voice channels until a refresh, because `member_joined` carries no voice state and `GET /api/spaces/:id` (the channel-sidebar hydrator) has none either.
 
-To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the joining user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.
+To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — calls `pushSpaceVoiceState(userId, spaceId)`, which builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the user has no connection, or the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.

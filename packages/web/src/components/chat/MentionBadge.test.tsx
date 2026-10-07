@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { DmChannel, MemberWithUser, Role, User } from '@backspace/shared';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -55,7 +56,7 @@ describe('MentionBadge', () => {
     render(<MentionBadge userId={MIRA.id} channelId="chan-1" />);
     fireEvent.click(screen.getByText('@mira'));
     expect(openUserProfile).toHaveBeenCalledTimes(1);
-    expect(openUserProfile.mock.calls[0]![3]).toEqual({ spaceId: 'space-1', userId: MIRA.id });
+    expect(openUserProfile.mock.calls[0]![4]).toEqual({ spaceId: 'space-1', userId: MIRA.id });
   });
 });
 
@@ -85,7 +86,7 @@ describe('MentionBadge in a DM (#338)', () => {
     render(<MentionBadge userId={KAI.id} channelId={DM.id} />);
     fireEvent.click(screen.getByText('@Kai'));
     expect(openUserProfile).toHaveBeenCalledTimes(1);
-    expect(openUserProfile.mock.calls[0]![3]).toBeUndefined();
+    expect(openUserProfile.mock.calls[0]![4]).toBeUndefined();
   });
 });
 
@@ -114,5 +115,41 @@ describe('MentionBadge in a space channel', () => {
     useSpaceStore.setState({ dmChannels: [DM] });
     render(<MentionBadge userId={ZED_STUB.id} channelId={DM.id} />);
     expect(screen.getByText('@zed')).toBeInTheDocument();
+  });
+});
+
+describe('MentionBadge from the keyboard (#329)', () => {
+  function seedMira(): void {
+    useSpaceStore.setState({
+      members: [member('space-1', MIRA)],
+      channelToSpaceMap: new Map([['chan-1', 'space-1']]),
+      currentSpaceId: 'space-1',
+    });
+  }
+
+  it('is a button a keyboard user can reach and activate', async () => {
+    seedMira();
+    const openUserProfile = vi.spyOn(useUIStore.getState(), 'openUserProfile').mockImplementation(() => {});
+    render(<MentionBadge userId={MIRA.id} channelId="chan-1" />);
+    const badge = screen.getByRole('button', { name: '@mira' });
+
+    await userEvent.tab();
+    expect(badge).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(openUserProfile).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard(' ');
+    expect(openUserProfile).toHaveBeenCalledTimes(2);
+  });
+
+  it('is plain text when there is no profile to open', () => {
+    render(<MentionBadge userId="u-gone" channelId="chan-1" />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByText('@Unknown User').className).not.toContain('cursor-pointer');
+  });
+
+  it('is plain text inside another control', () => {
+    seedMira();
+    render(<MentionBadge userId={MIRA.id} channelId="chan-1" interactive={false} />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

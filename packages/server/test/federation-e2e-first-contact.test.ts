@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import crypto from 'node:crypto';
+import type { FederationRelayEvent } from '@backspace/shared';
 import {
   bootTransportPeered,
+  outboxRowCount,
+  peerSecretOn,
+  postSignedRelay,
   readDb,
   waitUntil,
   withWritableDb,
@@ -118,5 +123,52 @@ describe('first contact through the home lookup', () => {
       && (e.user as { username?: string }).username === `${carol.username}@${bIdentity}`,
     ), 5_000);
     expect(announced).toBe(true);
+  });
+});
+
+describe('a row created from a relayed snapshot takes its profile from the home (#366)', () => {
+  it('the stale snapshot a row was created from is replaced by the home profile and its version', async () => {
+    const eve = await registerLocal(B, 'eve');
+    const patched = await fetch(`${B.origin}/api/users/@me`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${eve.token}` },
+      body: JSON.stringify({ avatarColor: 'mint', displayName: 'Eve Home' }),
+    });
+    expect(patched.status).toBe(200);
+    // B relays the edit to A as a profile_update. A holds no row for eve yet,
+    // so it drops it; wait until it has been delivered.
+    expect(await waitUntil(() => outboxRowCount(B, A.origin) === 0, 10_000)).toBe(true);
+    expect(rowOnA(eve.id)).toBeUndefined();
+
+    // A first meets eve through a snapshot with a colour and name she no
+    // longer has, as a third instance's stale replica sends it.
+    const now = Date.now();
+    const event: FederationRelayEvent = {
+      eventType: 'friend_request_create',
+      contextType: 'friend',
+      messageId: `e2e-stale-${crypto.randomBytes(4).toString('hex')}`,
+      encryptionVersion: 0,
+      timestamp: now,
+      friendship: {
+        from: { homeUserId: eve.id, homeInstance: bIdentity },
+        to: { homeUserId: alice.id, homeInstance: new URL(A.origin).hostname },
+        fromProfile: { username: eve.username, displayName: 'Eve Old', avatarColor: 'rose' },
+        status: 'pending',
+        createdAt: now,
+      },
+    };
+    // TRANSPORT profile: B signs with its PUBLIC_ORIGIN.
+    const signer = B.origin;
+    const res = await postSignedRelay(A, signer, peerSecretOn(A, signer), [event]);
+    expect(res.body?.accepted).toContain(event.messageId);
+
+    const pulled = await waitUntil(() => rowOnA(eve.id)?.displayName === 'Eve Home', 10_000);
+    expect(pulled).toBe(true);
+    const stored = readDb(A, db => db.prepare(
+      'SELECT username, avatar_color AS avatarColor, profile_updated_at AS version FROM users WHERE home_user_id = ?',
+    ).get(eve.id) as { username: string; avatarColor: string | null; version: number | null });
+    expect(stored.avatarColor).toBe('mint');
+    expect(stored.version).not.toBeNull();
+    expect(stored.username).toBe(`${eve.username}@${bIdentity}`);
   });
 });

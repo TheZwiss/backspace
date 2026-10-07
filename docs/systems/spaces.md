@@ -542,7 +542,7 @@ Position: `max(existing positions) + 1`.
 
 **Broadcast:** `channel_created` sent per-user (only to users with VIEW_CHANNEL on the new channel). Each user's event includes their computed `myPermissions`.
 
-**Client reconciliation:** both the create response and the `channel_created` event are applied through the `upsertChannel` store action, which replaces `channels` and `channelPermissions` with fresh references. This is required because the sidebar's `visibleChannels` filter is keyed on `channelPermissions`; mutating that Map in place would set the value without triggering a re-render, leaving a freshly created channel hidden until the space was reopened.
+**Client reconciliation:** both the create response and the `channel_created` event are applied through the `upsertChannel` store action (see client-federation.md, "Channel index and lookup maps").
 
 ### Update Channel
 
@@ -745,7 +745,7 @@ The space layout and folder data are delivered in the WS `ready` event (`handler
 
 `populateFromReady` merges incoming data by origin:
 - Replaces all spaces from the incoming origin, keeps spaces from other origins
-- Populates `channelToSpaceMap`, `channelOriginMap`, `channelPermissions`, `voiceChannelIds`, `categoryOriginMap`
+- Replaces this origin's entries in the space-channel index and `channelPermissions` (client-federation.md, "Channel index and lookup maps"), and adds this origin's categories to `categoryOriginMap` (entries of categories it no longer lists stay)
 - DM channels: removes existing DMs from this origin, appends incoming, deduplicates 1-on-1 DMs by canonical member pair (prefers home-origin copy)
 - Applies LWW layout merge as described above
 
@@ -785,11 +785,7 @@ All store actions resolve the correct API client via `getApiForOrigin(origin)` b
 
 ### User ID Resolution
 
-`getMyUserIdForOrigin(origin)` returns the user's ID on a specific instance:
-- Home (`''`): returns `authStore.user.id`
-- Remote: checks `_myUserIdByOrigin` cache (populated from WS ready events), falls back to `instanceStore` resolver
-
-Used for self-leave (`leaveSpace` calls `removeMember` with the correct user ID for the instance).
+`getMyUserIdForOrigin(origin)`, the user's row id on the instance at `origin`, is defined in client-federation.md section 5. Used for self-leave (`leaveSpace` calls `removeMember` with the correct user ID for the instance).
 
 ### Remote Invite Join Flow
 
@@ -816,11 +812,13 @@ Remote space icons, banners, and member avatars are resolved via `resolveAssetUr
 
 Two distinct flags track per-space load progress:
 
-- `loadingSpaceId: string | null` — non-null while a `loadSpaceDetail` call is in flight. Drives the channel-list and member-list skeletons (gated through `useDelayedLoading`).
+- `loadingSpaceId: string | null` — set when a plain `loadSpaceDetail` starts (a `quiet` one never sets it) and cleared when the newest load of that space lands or fails. Drives the channel-list and member-list skeletons (gated through `useDelayedLoading`).
+
+Only the newest `loadSpaceDetail` of a space applies its response; an older one landing later changes nothing and resolves to what the newest resolves to. A detail lands in `channels`/`categories`/`members`/`roles` only when its space is still the open one (`currentSpaceId`; every caller opens the space before loading it); otherwise only that space's channel index entries and permission entries are updated. websocket.md (`space_access_changed`) says why loads of one space overlap.
 - `loadedSpaceIds: Set<string>` — populated only on successful `loadSpaceDetail` completion. Used to differentiate "load not yet attempted" from "loaded with empty result." Required by mobile UI to gate the empty-state mascot — without it, the mascot flashes during the pre-skeleton load window because `state.channels` is overwritten on each `loadSpaceDetail` and a fresh space switch leaves `spaceChannels` momentarily filtered to `[]`.
 
 `loadedSpaceIds` lifecycle:
-- Added on `loadSpaceDetail` success (the same `set()` that replaces `channels`/`categories`/`members`).
+- Added when a `loadSpaceDetail` response lands in the open space (the same `set()` that replaces `channels`/`categories`/`members`).
 - Pruned per-space on `deleteSpace`, `leaveSpace`, `removeSpace`, `removeInstanceSpaces`.
 - Wiped entirely on `reset` (logout).
 - Ephemeral — not persisted.

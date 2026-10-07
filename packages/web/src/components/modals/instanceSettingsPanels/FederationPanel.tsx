@@ -9,7 +9,7 @@ import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { api, HttpError } from '../../../api/client';
 import { onFederationPeersChanged, onFederationPeerResetDetected } from '../../../hooks/useWebSocket';
-import type { ApprovalRequestSubscriberSummary, InstanceAdminSettings } from '@backspace/shared';
+import type { ApprovalRequestSubscriberSummary, FederationPeerStatusReason, InstanceAdminSettings } from '@backspace/shared';
 import type { FederationPeer, ApprovalRequest, FederationResetEvent, FederationOrphanedAccount } from '../../../api/client';
 
 type FederationT = TFunction<['federation', 'common']>;
@@ -225,7 +225,7 @@ function peerStatusLabel(t: FederationT, status: string): string {
     case 'active': return t('federation:admin.status.active');
     case 'pending': return t('federation:admin.status.pending');
     case 'unreachable': return t('federation:admin.status.unreachable');
-    case 'rejected': return t('federation:admin.status.rejected');
+    case 'rejected': return t('federation:admin.status.rejectedShort');
     case 'revoked': return t('federation:admin.status.revoked');
     case 'awaiting_approval': return t('federation:admin.status.awaitingApproval');
     case 'needs_attention': return t('federation:admin.status.needsAttention');
@@ -237,9 +237,36 @@ type PeerView = 'active' | 'revoked';
 type SortBy = 'domain' | 'lastSeen' | 'dateAdded' | 'failures';
 type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected' | 'awaiting_approval' | 'needs_attention';
 
-/** The short form for the filter menu; the badge label spells out why a peer is rejected. */
 function filterStatusLabel(t: FederationT, status: StatusFilter): string {
-  return status === 'rejected' ? t('federation:admin.status.rejectedShort') : peerStatusLabel(t, status);
+  return peerStatusLabel(t, status);
+}
+
+/** Why a peer is rejected or needs attention, in a few words for the peer row. */
+function peerReasonLabel(t: FederationT, reason: FederationPeerStatusReason): string {
+  switch (reason) {
+    case 'auth_failures': return t('federation:admin.peer.reason.auth_failures');
+    case 'peer_reset_detected': return t('federation:admin.peer.reason.peer_reset_detected');
+    case 'repeer_incomplete': return t('federation:admin.peer.reason.repeer_incomplete');
+    case 'denied_by_local_admin': return t('federation:admin.peer.reason.denied_by_local_admin');
+    case 'denied_by_remote': return t('federation:admin.peer.reason.denied_by_remote');
+    case 'revoked_by_remote': return t('federation:admin.peer.reason.revoked_by_remote');
+    case 'expired_on_remote': return t('federation:admin.peer.reason.expired_on_remote');
+    case 'stale_peering_on_remote': return t('federation:admin.peer.reason.stale_peering_on_remote');
+  }
+}
+
+/** What the reason means and what the admin can do, for the expanded peer row. */
+function peerReasonDetail(t: FederationT, reason: FederationPeerStatusReason, host: string): string {
+  switch (reason) {
+    case 'auth_failures': return t('federation:admin.peer.reasonDetail.auth_failures', { host });
+    case 'peer_reset_detected': return t('federation:admin.peer.reasonDetail.peer_reset_detected', { host });
+    case 'repeer_incomplete': return t('federation:admin.peer.reasonDetail.repeer_incomplete', { host });
+    case 'denied_by_local_admin': return t('federation:admin.peer.reasonDetail.denied_by_local_admin', { host });
+    case 'denied_by_remote': return t('federation:admin.peer.reasonDetail.denied_by_remote', { host });
+    case 'revoked_by_remote': return t('federation:admin.peer.reasonDetail.revoked_by_remote', { host });
+    case 'expired_on_remote': return t('federation:admin.peer.reasonDetail.expired_on_remote', { host });
+    case 'stale_peering_on_remote': return t('federation:admin.peer.reasonDetail.stale_peering_on_remote', { host });
+  }
 }
 
 // ─── Filter Dropdown ─────────────────────────────────────────────────────────
@@ -435,7 +462,11 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
   const addToast = useUIStore((s) => s.addToast);
 
   const host = originHost(peer.origin);
+  // Revoked and rejected rows both offer Re-initiate and Delete instead of the
+  // live-peer actions. Only a revoked row reads as gone (struck through,
+  // dimmed): a rejected one says why and can still come back.
   const isRevoked = view === 'revoked' || peer.status === 'rejected';
+  const isGone = view === 'revoked';
   const isDefault = peer.autoRotateIntervalDays === defaultAutoRotateIntervalDays;
 
   const handleSaveInterval = async () => {
@@ -462,7 +493,12 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
   };
 
   const failuresText = t('federation:admin.peer.failures', { count: peer.consecutiveFailures ?? 0 });
-  const metaText = isRevoked
+  // A peer that is rejected or needs attention says why, in place of its
+  // last-seen line; the expanded row explains it.
+  const reason = peer.status === 'rejected' || peer.status === 'needs_attention' ? peer.statusReason : null;
+  const metaText = reason
+    ? peerReasonLabel(t, reason)
+    : isGone
     ? t('federation:admin.peer.revokedMeta', {
         revoked: formatters.formatMediumDate(peer.lastSeenAt ?? peer.createdAt),
         peered: formatters.formatMediumDate(peer.createdAt),
@@ -478,19 +514,19 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
         });
 
   return (
-    <div className={`bg-white/[0.02] rounded-md transition-colors ${isRevoked ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
+    <div className={`bg-white/[0.02] rounded-md transition-colors ${isGone ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
       {/* Compact row */}
       <div
         className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
         onClick={onToggleExpand}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={`w-2 h-2 rounded-full shrink-0 ${isRevoked ? 'bg-txt-tertiary' : peerStatusDotColor(peer.status)}`} />
+          <div className={`w-2 h-2 rounded-full shrink-0 ${isGone ? 'bg-txt-tertiary' : peerStatusDotColor(peer.status)}`} />
           <div className="min-w-0">
-            <div className={`text-sm font-medium truncate ${isRevoked ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`}>
+            <div className={`text-sm font-medium truncate ${isGone ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`}>
               {host}
             </div>
-            <div className="text-[11px] text-txt-tertiary truncate">
+            <div className={`text-[11px] truncate ${reason ? 'text-accent-rose' : 'text-txt-tertiary'}`}>
               {metaText}
             </div>
           </div>
@@ -512,6 +548,11 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                 <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.instanceName')}</div>
                 <div className="text-xs text-txt-secondary truncate">{peer.instanceName}</div>
               </div>
+            )}
+            {reason && (
+              <p className="mb-3 text-xs leading-relaxed text-txt-secondary">
+                {peerReasonDetail(t, reason, host)}
+              </p>
             )}
             {isRevoked ? (
               /* Revoked peer actions */
@@ -861,7 +902,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 // Admin attention surface for the instance-epoch self-healing flow (§6.4) and
 // the orphaned-account detach flow (detach spec §4.6). Two stacked surfaces:
 //   1. A persistent accent-rose banner per peer detected as reset
-//      (status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'),
+//      (status === 'needs_attention' && statusReason === 'peer_reset_detected'),
 //      with a one-click Re-peer (resetPeer → initiatePeering) that triggers the
 //      server-side heal on activation. This one is genuinely actionable, so it
 //      keeps the rose/danger styling.
@@ -896,7 +937,7 @@ function ResetCleanup() {
       ]);
       setResetPeers(
         peersResult.peers.filter(
-          (p) => p.status === 'needs_attention' && p.needsAttentionReason === 'peer_reset_detected',
+          (p) => p.status === 'needs_attention' && p.statusReason === 'peer_reset_detected',
         ),
       );
       setEvents(eventsResult.events);

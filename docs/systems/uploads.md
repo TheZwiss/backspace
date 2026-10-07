@@ -513,7 +513,7 @@ Three stores with strict separation of concerns:
 1. User attaches a file -> `transferStore.startUpload` (eager, fires before Send) -> the new transferId joins `composerStore[channelId].stagedTransferIds`.
 2. User clicks Send -> `pendingMessageStore.append({ ... transferIds })` -> `composerStore.clear`. The bubble renders in `MessageList` at its `createdAtLocal` position.
 3. The orchestrator (`packages/web/src/stores/pendingMessageRehydrate.ts`) polls `listReadyForDeferredSend()`; once every transfer in the bubble is `completed` with an `attachmentId`, it fires `POST /messages` with the collected `attachmentIds` and removes the bubble on success.
-4. WS echo dedup: when a real `message_create` arrives with `userId === currentUser.id` whose content + sorted attachmentIds match a pending bubble, the bubble is removed (FIFO tiebreaker).
+4. WS echo dedup: when a real message arrives in the channel (`chatStore.addMessage` or `addRealtimeMessage`) whose content + sorted attachmentIds match a pending bubble (`pendingMessageStore.matchAndRemove`), the oldest matching bubble is removed (FIFO tiebreaker). The author is not compared: the attachment ids were issued to this client's uploads, so a match is the echo. Until then the bubble renders as the user's row on the channel's instance (`myRowForOrigin`, client-federation.md §5); no bubble renders while that instance has not named the row.
 5. Failure: bubble flips to `state: 'failed'`. Retry re-runs failed transfers only; discard aborts everything and clears the bubble.
 
 ### Reload Survival

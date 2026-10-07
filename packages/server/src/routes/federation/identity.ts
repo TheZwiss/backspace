@@ -5,6 +5,8 @@ import { getOurOrigin, normalizeOriginForCompare } from '../../utils/federationA
 import { generateSnowflake } from '../../utils/snowflake.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { firstFreeUsername, handleFromHint, renamePlaceholderNamedStub } from './stubName.js';
+import { scheduleHomeRecordPull } from '../../utils/federationStubBackfill.js';
+import { projectReplicaStatus } from '../../ws/replicaPresence.js';
 
 /**
  * Extract bare domain from a homeInstance value.
@@ -487,7 +489,13 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
-  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null; deleted?: boolean | null },
+  hints?: {
+    username?: string | null;
+    status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
+    deleted?: boolean | null;
+    /** The caller has just asked the identity's home (answered or not): a new row is not pulled again. */
+    homeAsked?: boolean;
+  },
 ): typeof schema.users.$inferSelect | null {
   const existing = lookupFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing.kind === 'found') {
@@ -555,23 +563,24 @@ export function resolveOrCreateReplicatedUser(
   const userId = generateSnowflake();
   const now = Date.now();
 
-  // Seed status from the wire snapshot when available — without this, a
-  // freshly-created stub for an already-online remote sticks at 'offline'
-  // until the home next emits a presence transition (presence_update only
-  // fires on changes, not on stub creation). Falls back to 'offline'.
-  const initialStatus = hints?.status ?? 'offline';
-
   db.insert(schema.users).values({
     id: userId,
     username,
     displayName: null,
     passwordHash: '!federation-replicated',  // Cannot be used to log in (bcrypt never produces this)
-    status: initialStatus,
+    status: 'offline',
     isAdmin: 0,
     homeInstance: domain,  // Normalized to bare domain
     homeUserId,
     createdAt: now,
   }).run();
+
+  // Seed status from the wire snapshot when available: without this, a
+  // freshly-created stub for an already-online remote sticks at 'offline'
+  // until the home next emits a presence transition (presence_update only
+  // fires on changes, not on stub creation). The snapshot is the home's
+  // projection, so it goes through the projection owner.
+  if (hints?.status) projectReplicaStatus(userId, hints.status);
 
   const created = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
   if (!created) {
@@ -579,5 +588,9 @@ export function resolveOrCreateReplicatedUser(
   }
 
   console.log(`[federation] Auto-created replicated user ${userId} (${username}) for homeUserId=${homeUserId} from ${domain}`);
+  // Whatever named and fills this row (a relayed snapshot, possibly a third
+  // instance's stale one, or nothing) is not the home's word; ask the home in
+  // the background when it is an active peer, unless the caller just did.
+  if (!hints?.homeAsked) scheduleHomeRecordPull(created);
   return created;
 }

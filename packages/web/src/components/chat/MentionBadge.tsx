@@ -35,20 +35,21 @@ export const MentionBadge = React.memo(function MentionBadge({ userId, channelId
   // Role colour and owner rose exist only in space channels (nameColor is null in a DM).
   const color = resolved ? resolved.nameColor ?? ACCENT_COLOR : UNRESOLVED_COLOR;
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (!resolved) return;
     e.stopPropagation();
     const memberContext = resolved.member
       ? { spaceId: resolved.member.spaceId, userId: resolved.member.userId }
       : undefined;
-    openUserProfile(resolved.user, e.currentTarget.getBoundingClientRect(), undefined, memberContext);
+    openUserProfile(resolved.user, resolved.origin, e.currentTarget.getBoundingClientRect(), undefined, memberContext);
   };
 
   // Build inline styles: role-colored text with tinted background
   const bgColor = color + '1a'; // ~10% opacity hex
   const baseClass = 'inline-flex items-center rounded-[3px] px-[2px] font-medium';
 
-  if (!interactive) {
+  // Plain text inside another control, and when there is no profile to open.
+  if (!interactive || !resolved) {
     return (
       <span className={baseClass} style={{ color, backgroundColor: bgColor }}>
         @{displayName}
@@ -56,13 +57,16 @@ export const MentionBadge = React.memo(function MentionBadge({ userId, channelId
     );
   }
 
+  // A real button, so it is in the tab order and Enter and Space open the
+  // profile, like the click does.
   return (
-    <span
+    <button
+      type="button"
       onClick={handleClick}
-      className={`${baseClass} cursor-pointer transition-colors hover:brightness-125`}
+      className={`${baseClass} cursor-pointer transition-colors hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60`}
       style={{ color, backgroundColor: bgColor }}
     >
       @{displayName}
-    </span>
+    </button>
   );
 });

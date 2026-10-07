@@ -14,7 +14,7 @@
  */
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { connectionManager } from '../ws/handler.js';
 
 type PermanentFailureCallback = (messageId: string, reason: string) => void;
@@ -30,12 +30,32 @@ export function invokePermanentFailureCallback(eventType: string, messageId: str
   if (!cb) return;
   try {
     cb(messageId, reason);
+    withdrawFromMutationLog(eventType, messageId);
   } catch (err) {
     console.error(
-      `[federation-rollback] callback for ${eventType} (msg=${messageId}, reason=${reason}) threw:`,
+      '[federation-rollback] callback for %s (msg=%s, reason=%s) threw:',
+      eventType,
+      messageId,
+      reason,
       err,
     );
   }
+}
+
+/**
+ * An event whose local effect was just rolled back is withdrawn from the
+ * mutation log too: `/api/federation/sync` must not keep serving an event
+ * this instance took back, or a peer's later pull would apply what the
+ * sender withdrew (a friend request the sender no longer has).
+ */
+function withdrawFromMutationLog(eventType: string, messageId: string): void {
+  getDb()
+    .delete(schema.federationMutationLog)
+    .where(and(
+      eq(schema.federationMutationLog.entityId, messageId),
+      eq(schema.federationMutationLog.mutationType, eventType),
+    ))
+    .run();
 }
 
 /** Test-only: clear the registry between tests. */

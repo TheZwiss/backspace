@@ -75,10 +75,10 @@ describe('MemberSidebar: roles of offline members (#302)', () => {
   it('carries the member into the mobile profile screen', () => {
     useUIStore.setState({ isMobile: true, mobileStack: [] });
     const mira = useSpaceStore.getState().members[1]!;
-    useUIStore.getState().openUserProfile(mira.user, { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }, 'left', { spaceId: SPACE_ID, userId: mira.userId });
+    useUIStore.getState().openUserProfile(mira.user, '', { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }, 'left', { spaceId: SPACE_ID, userId: mira.userId });
     expect(useUIStore.getState().mobileStack.at(-1)).toEqual({
       screen: 'user-profile',
-      params: { userId: 'u-mira', spaceId: SPACE_ID, memberUserId: 'u-mira' },
+      params: { userId: 'u-mira', origin: '', spaceId: SPACE_ID, memberUserId: 'u-mira' },
     });
   });
 });

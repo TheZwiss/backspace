@@ -6,7 +6,7 @@ import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 
 export function MobileVoiceMiniBar() {
-  const { t } = useTranslation(['voice']);
+  const { t } = useTranslation(['voice', 'spaces']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const mobileStack = useUIStore((s) => s.mobileStack);
 
@@ -80,7 +80,7 @@ export function MobileVoiceMiniBar() {
           ) : isDropped ? (
             <p className="text-[10px] text-txt-tertiary">{t('voice:status.disconnected')}</p>
           ) : participantCount > 0 ? (
-            <p className="text-[10px] text-txt-tertiary">{participantCount} connected</p>
+            <p className="text-[10px] text-txt-tertiary">{t('spaces:main.voice.participants', { count: participantCount })}</p>
           ) : null}
         </div>
       </button>

@@ -19,6 +19,11 @@ vi.mock('../ws/handler.js', () => ({
   connectionManager: { sendToAdmins, getAllOnlineUserIds: () => [], sendToUser: vi.fn() },
 }));
 
+vi.mock('./federationPeerActivation.js', () => ({
+  onPeerActivated: vi.fn(async () => undefined),
+  onPeerDeactivated: vi.fn(async () => undefined),
+}));
+
 const STUB = '!federation-replicated';
 const ORIGIN = 'https://peer.example';
 const DOMAIN = 'peer.example';
@@ -78,7 +83,7 @@ describe('markPeerReset — detection-only reset routing', () => {
     const peer = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-1')).get()!;
     expect(peer.status).toBe('needs_attention');
-    expect(peer.needsAttentionReason).toBe('peer_reset_detected');
+    expect(peer.statusReason).toBe('peer_reset_detected');
     expect(peer.observedPeerInstanceId).toBe('E1');
     // Trusted baseline + secret are NEVER touched by detection.
     expect(peer.peerInstanceId).toBe('E0');
@@ -99,8 +104,8 @@ describe('markPeerReset — detection-only reset routing', () => {
     expect(journal.stubCount).toBe(1);            // stub-1 only (deleted stub excluded)
     expect(journal.orphanedAccountCount).toBe(1); // real-1
 
-    // Admin broadcast fired.
-    expect(sendToAdmins).toHaveBeenCalledWith({ type: 'federation_peers_changed' });
+    // Admin broadcast fired (the peer-change notice runs after the commit).
+    await vi.waitFor(() => expect(sendToAdmins).toHaveBeenCalledWith({ type: 'federation_peers_changed' }));
     expect(sendToAdmins).toHaveBeenCalledWith({ type: 'federation_peer_reset_detected', origin: ORIGIN });
   });
 
@@ -169,6 +174,37 @@ describe('markPeerReset — detection-only reset routing', () => {
     markPeerReset('peer-1', ORIGIN, 'E0', 'E2');
     expect(testDb.select().from(schema.federationResetEvents)
       .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!.acknowledgedAt).toBeNull();
+  });
+
+  it('seeing the same new incarnation again keeps the dismissal and sends no new detection event (#309)', async () => {
+    seedPeer();
+    seedUser('stub-1', { passwordHash: STUB });
+
+    const { markPeerReset } = await import('./federationReset.js');
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E1');
+    testDb.update(schema.federationResetEvents)
+      .set({ acknowledgedAt: 1234 })
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).run();
+    sendToAdmins.mockClear();
+
+    // The reset instance handshakes again: same observed epoch E1.
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E1');
+
+    expect(testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!.acknowledgedAt).toBe(1234);
+    expect(sendToAdmins).not.toHaveBeenCalledWith({ type: 'federation_peer_reset_detected', origin: ORIGIN });
+  });
+
+  it('does not move a revoked peer to needs_attention', async () => {
+    seedPeer();
+    testDb.update(schema.federationPeers).set({ status: 'revoked' })
+      .where(eq(schema.federationPeers.id, 'peer-1')).run();
+
+    const { markPeerReset } = await import('./federationReset.js');
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E1');
+
+    expect(testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-1')).get()!.status).toBe('revoked');
   });
 
   it('a resolved+acknowledged prior reset is re-armed (acknowledgedAt cleared) on a new reset', async () => {

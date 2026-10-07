@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
+import { remotePeerStub, jsonResponse } from '../testing/remotePeerStub.js';
 import { setWorkerId } from './snowflake.js';
 
 setWorkerId(1);
@@ -185,15 +186,13 @@ describe('performHandshake — a transient failure keeps a row that local traffi
   });
 
   it('control: the worker retries the surviving row and the queued message stays for delivery', async () => {
-    const fetchMock = vi.fn(async () => {
+    const remote = remotePeerStub({ accept: () => jsonResponse({ accepted: true, instanceName: 'Remote' }) });
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       if (fetchMock.mock.calls.length === 1) {
         queueAgainstPendingRow('msg-3');
         throw new TypeError('fetch failed');
       }
-      return new Response(JSON.stringify({ accepted: true, instanceName: 'Remote' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+      return remote(url, init);
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -253,8 +252,7 @@ describe('performHandshake — the remote activates our row while our handshake 
     expect(row?.hmacSecret).toBe('secret-from-remote-accept');
   });
 
-  it('with entries queued, the kept-row log reports the row as active, not pending', async () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  it('with entries queued, reports the peering as active, not failed (#323)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       queueAgainstPendingRow('msg-4');
       promotePendingRowAsRemoteAcceptWould();
@@ -262,13 +260,11 @@ describe('performHandshake — the remote activates our row while our handshake 
     }));
 
     const { ensurePeered } = await import('./federationPeering.js');
-    await ensurePeered(REMOTE, { kind: 'system' });
+    const result = await ensurePeered(REMOTE, { kind: 'system' });
 
     expect(peerRow()?.status).toBe('active');
+    expect(result).toEqual({ status: 'active', peerId: peerRow()?.id });
     expect(outboxEntityIds()).toEqual(['msg-4']);
-    const lines = log.mock.calls.map(args => String(args[0]));
-    expect(lines.some(l => l.includes('pending row'))).toBe(false);
-    expect(lines.some(l => l.includes(REMOTE) && l.includes('active'))).toBe(true);
   });
 });
 
@@ -307,10 +303,14 @@ describe('performHandshake — a remote that has revoked us is a settled answer'
     const { onPeerDeactivated } = await import('./federationPeerActivation.js');
     const result = await ensurePeered(REMOTE, { kind: 'system' });
 
-    expect(result).toEqual({ status: 'rejected', error: 'Peering with this instance has been revoked' });
+    expect(result.status).toBe('rejected');
     const row = peerRow();
     expect(row?.status).toBe('rejected');
-    expect(onPeerDeactivated).toHaveBeenCalledWith(row?.id, 'remote_rejected');
+    expect(row?.statusReason).toBe('revoked_by_remote');
+    // The row was never active, so there is nothing to deactivate; its queue
+    // is purged on entering rejected.
+    expect(onPeerDeactivated).not.toHaveBeenCalled();
+    expect(outboxEntityIds()).toEqual([]);
   });
 
   it('is not retried: the next ensurePeered answers from the row without a request', async () => {
@@ -373,8 +373,9 @@ describe('performHandshake — only the two known Backspace refusals are settled
     const { ensurePeered } = await import('./federationPeering.js');
     const result = await ensurePeered(REMOTE, { kind: 'system' });
 
-    expect(result).toEqual({ status: 'rejected', error: 'This instance requires manual peering approval' });
+    expect(result.status).toBe('rejected');
     expect(peerRow()?.status).toBe('rejected');
+    expect(peerRow()?.statusReason).toBe('denied_by_remote');
   });
 
   it('an HTML 403 from something in front of the remote stays transient', async () => {

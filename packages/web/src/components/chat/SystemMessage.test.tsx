@@ -80,9 +80,15 @@ describe('SystemMessage — name_changed', () => {
     expect(screen.getByText(/Heidi cleared the group name/)).toBeDefined();
   });
 
-  it('unresolvable actor (member missing from roster) → "✎ Unknown renamed …"', () => {
+  it('actor missing from the roster → the author the message carries', () => {
     const msg = buildMessage({ event: 'name_changed', oldName: null, newName: 'X' }, 'GHOST');
     renderSM(msg, dm); // dm.members has only U1, not GHOST
+    expect(screen.getByText(/Heidi renamed the group to "X"/)).toBeDefined();
+  });
+
+  it('actor neither in the roster nor on the message → "Unknown renamed …"', () => {
+    const msg = { ...buildMessage({ event: 'name_changed', oldName: null, newName: 'X' }, 'GHOST'), user: undefined } as unknown as MessageWithUser;
+    renderSM(msg, dm);
     expect(screen.getByText(/Unknown renamed the group to "X"/)).toBeDefined();
   });
 });
@@ -94,5 +100,48 @@ describe('SystemMessage — icon_changed', () => {
     // The 🖼 character is U+1F5BC (FRAME WITH PICTURE), not 🖼️ (with VS-16).
     expect(screen.getByText('\u{1F5BC}')).toBeDefined();
     expect(screen.getByText(/Heidi updated the group icon/)).toBeDefined();
+  });
+});
+
+describe('SystemMessage: membership events', () => {
+  it('member_added → "Heidi added Bob to the group"', () => {
+    renderSM(buildMessage({ event: 'member_added', targetUserId: 'U2', targetDisplayName: 'Bob' }), dm);
+    expect(screen.getByText(/Heidi added Bob to the group/)).toBeDefined();
+  });
+
+  it('member_removed by leave → "Bob left the group"', () => {
+    renderSM(buildMessage({ event: 'member_removed', targetUserId: 'U2', targetDisplayName: 'Bob', reason: 'leave' }), dm);
+    expect(screen.getByText(/Bob left the group/)).toBeDefined();
+  });
+
+  it('member_removed by kick → "Heidi removed Bob from the group"', () => {
+    renderSM(buildMessage({ event: 'member_removed', targetUserId: 'U2', targetDisplayName: 'Bob', reason: 'kick' }), dm);
+    expect(screen.getByText(/Heidi removed Bob from the group/)).toBeDefined();
+  });
+
+  it('owner_changed → "Mira is now the group owner"', () => {
+    renderSM(buildMessage({ event: 'owner_changed', newOwnerId: 'U3', newOwnerDisplayName: 'Mira' }), dm);
+    expect(screen.getByText(/Mira is now the group owner/)).toBeDefined();
+  });
+});
+
+describe('SystemMessage: content it does not know', () => {
+  it('an unknown event renders the generic label, never the content', () => {
+    const { container } = renderSM(buildMessage({ event: 'call_started', note: 'visible text' }), dm);
+    expect(screen.getByText('System message')).toBeDefined();
+    expect(container.textContent).not.toContain('visible text');
+  });
+
+  it('an event with missing fields renders the generic label', () => {
+    const { container } = renderSM(buildMessage({ event: 'owner_changed', newOwnerId: 'U3' }), dm);
+    expect(screen.getByText('System message')).toBeDefined();
+    expect(container.textContent).not.toContain('owner');
+  });
+
+  it('content that is not JSON renders the generic label, never the text', () => {
+    const msg = { ...buildMessage({}), content: 'Heidi is now the group owner' } as MessageWithUser;
+    const { container } = renderSM(msg, dm);
+    expect(screen.getByText('System message')).toBeDefined();
+    expect(container.textContent).not.toContain('Heidi is now the group owner');
   });
 });

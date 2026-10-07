@@ -409,4 +409,33 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ ok: true, id });
     },
   );
+
+  // Test-only: run one pull from a peer now, then the retry tick, and return
+  // what the pull did. Gated exactly like seed-peer above. The two-instance
+  // e2e suites use it so a pull happens when the test says, not on the
+  // periodic timer.
+  app.post<{ Body: { peerOrigin: string; contexts?: string[]; retryAt?: number } }>(
+    '/api/admin/test/federation/resync',
+    async (request, reply) => {
+      if (process.env.NODE_ENV !== 'test' || process.env.ENABLE_TEST_ROUTES !== '1') {
+        return reply.code(404).send({ error: 'Not Found', statusCode: 404 });
+      }
+      const { peerOrigin, contexts, retryAt } = request.body ?? {};
+      if (typeof peerOrigin !== 'string') {
+        return reply.code(400).send({ error: 'peerOrigin is required', statusCode: 400 });
+      }
+      const { ALL_SYNC_CONTEXTS, processSyncRetryTick, syncPeerMutationLog } = await import('../utils/federationSync.js');
+      const wanted = Array.isArray(contexts)
+        ? ALL_SYNC_CONTEXTS.filter(context => contexts.includes(context))
+        : ALL_SYNC_CONTEXTS;
+      const peer = getDb().select({ id: schema.federationPeers.id })
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, peerOrigin))
+        .get();
+      if (!peer) return reply.code(404).send({ error: 'No such peer', statusCode: 404 });
+      const result = await syncPeerMutationLog(peer.id, 'manual', wanted);
+      const retried = await processSyncRetryTick(typeof retryAt === 'number' ? retryAt : Date.now());
+      return reply.code(200).send({ result, retried });
+    },
+  );
 }

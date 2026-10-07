@@ -12,7 +12,8 @@
  * If anyone re-introduces the avatar-only mobile grid, this test fails.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import type { DmChannel } from '@backspace/shared';
 import { MemoryRouter } from 'react-router-dom';
 
 // jsdom doesn't ship ResizeObserver; useGridLayout needs it.
@@ -127,6 +128,7 @@ beforeEach(() => {
   } as any);
   useAuthStore.setState({
     user: { id: '1', username: 'alice', displayName: 'Alice' },
+    myRowIds: new Map(),
   } as any);
 });
 
@@ -320,5 +322,39 @@ describe('MobileVoiceFullScreen', () => {
     expect(btn).toBeTruthy();
     btn?.click();
     expect(handleScreenShareAction).toHaveBeenCalled();
+  });
+});
+
+describe('MobileVoiceFullScreen DM call title', () => {
+  const ORBIT = 'https://orbit.example';
+
+  function inDmCall(members: { id: string; username: string; displayName: string; homeInstance?: string; homeUserId?: string }[], origin: string) {
+    useVoiceStore.setState({ currentVoiceChannelId: 'dm-dm-1' });
+    useSpaceStore.setState({
+      dmChannels: [{ id: 'dm-1', ownerId: null, members } as unknown as DmChannel],
+      channelOriginMap: new Map([['dm-1', origin]]),
+    });
+  }
+
+  it('names the other members of a DM pinned to another instance, not the user', () => {
+    // orbit knows the user as o-7; orbit's own Bob has the id the session row has.
+    useAuthStore.setState({ myRowIds: new Map([[ORBIT, 'o-7']]) });
+    inDmCall([
+      { id: 'o-7', username: 'alice@nova.example', displayName: 'Alice', homeInstance: 'nova.example', homeUserId: '1' },
+      { id: '1', username: 'bob', displayName: 'Bob' },
+    ], ORBIT);
+    renderScreen();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  });
+
+  it('names the other member of a DM on the page instance', () => {
+    inDmCall([
+      { id: '1', username: 'alice', displayName: 'Alice' },
+      { id: '2', username: 'bob', displayName: 'Bob' },
+    ], '');
+    renderScreen();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
   });
 });

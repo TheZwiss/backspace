@@ -6,12 +6,14 @@ import { getFriendEventTargets, isFederationRelayEnabled, queueOutboxEvent } fro
 import { presenceUpdateEvent } from '../ws/presenceEvent.js';
 import { collectProfileBroadcastTargetIds } from './userDeletion.js';
 import { extractDomain } from '../routes/federation.js';
+import { projectReplicaStatus } from '../ws/replicaPresence.js';
 
 export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
 /**
- * Queue a presence_update event for the given native user. Broadcast to all
- * active peers (mirrors profile_update). Outbox-only — presence is ephemeral;
+ * Queue a presence_update event for the given native user. Broadcast like
+ * profile_update: to active and unreachable peers, not pending ones (see
+ * `queueOutboxEvent`). Outbox-only — presence is ephemeral;
  * stale replays from a mutation log are wrong, so we never call
  * appendMutationLog. The peer-activation hook re-emits a fresh snapshot for
  * peer-related online natives, so a peer recovering from unreachable converges
@@ -31,7 +33,7 @@ export function queuePresenceRelay(
   if (!user) return;
   if (user.homeInstance) return; // replicated — not our authority
 
-  // targetPeerOrigins = undefined → broadcast to all active peers.
+  // targetPeerOrigins = undefined → broadcast (see `queueOutboxEvent`).
   queuePresenceEvent(user.id, status, activities, undefined, '');
 }
 
@@ -41,7 +43,9 @@ export function queuePresenceRelay(
  * absent field as "unchanged", which is what a status-only relay from a peer
  * that predates this rule means.
  *
- * entityId = userId so the outbox coalesces rapid status flaps into the latest.
+ * entityId = userId. The outbox queue is `presence:<userId>`, apart from the
+ * user's profile queue; a newer status replaces a queued one
+ * (federationOutboxQueue.ts).
  * contextId = userId, contextType = 'profile' (reuses existing routing).
  * NO appendMutationLog — presence must not be replayed from history.
  */
@@ -207,10 +211,12 @@ export async function snapshotPresenceForPeer(peerOrigin: string): Promise<void>
 }
 
 /**
- * On peer deactivation (status flipping out of 'active'), flip all replicated
- * stubs whose home is that peer to status='offline' and broadcast a local
- * presence_update so connected friends/DM-mates/space-co-members see them go
- * offline immediately.
+ * On peer deactivation (status flipping out of 'active'), project 'offline' for
+ * every replicated stub whose home is that peer (`projectReplicaStatus`: the
+ * row shows 'offline', or 'online' while the user has a session here, and
+ * returns to 'offline' when that session ends) and broadcast a local
+ * presence_update so connected friends/DM-mates/space-co-members see the
+ * change immediately. Detached rows own their status and are left alone.
  *
  * Imported lazily by onPeerDeactivated to avoid an import cycle through
  * ws/handler.js (connectionManager).
@@ -236,16 +242,14 @@ export async function markPeerStubsOffline(peerOrigin: string): Promise<void> {
   const { connectionManager } = await import('../ws/handler.js');
 
   for (const stub of stubs) {
-    db.update(schema.users)
-      .set({ status: 'offline' })
-      .where(eq(schema.users.id, stub.id))
-      .run();
+    const shown = projectReplicaStatus(stub.id, 'offline');
+    if (shown === null) continue;
 
     // The activities relayed from the peer are stale once it is unreachable.
     connectionManager.clearUserActivities(stub.id);
 
     const targets = collectProfileBroadcastTargetIds(stub.id);
-    const payload = presenceUpdateEvent(stub, 'offline', []);
+    const payload = presenceUpdateEvent(stub, shown, []);
     for (const uid of targets) connectionManager.sendToUser(uid, payload);
   }
 }

@@ -191,6 +191,34 @@ describe('federation e2e — reactions in a conversation the sender is part of a
     expect((await relayToB([remove])).body?.accepted).toContain(remove.messageId);
     expect(reactionsOnB(bobMsgOnB)).toEqual([]);
   });
+
+  it('stores a reaction once however often it arrives, and A sends no second add for it (#393)', async () => {
+    const add = await aliceReactsOnA('reaction_add');
+    // Delivered again (a retry), and pulled again under another event id
+    // (the catch-up sync names events by their mutation log row).
+    for (const event of [add, add, reaimed(add, {})]) {
+      expect((await relayToB([event])).body?.accepted).toContain(event.messageId);
+    }
+    expect(reactionsOnB(bobMsgOnB)).toEqual([{ userId: rowFor(B, alice.id), emoji: EMOJI }]);
+
+    // alice adds it again on A: A stores nothing and queues nothing.
+    const queuedBefore = queuedOnce(A, groupOnA, 'reaction_add').length;
+    aliceWs.send({ type: 'reaction_add', messageId: bobMsgOnA, emoji: EMOJI });
+    expect(await waitUntil(() => queuedOnce(A, groupOnA, 'reaction_add').length > queuedBefore, 1_500)).toBe(false);
+    const onA = (): number => readDb(A, db =>
+      (db.prepare('SELECT COUNT(*) AS n FROM dm_reactions WHERE dm_message_id = ? AND emoji = ?').get(bobMsgOnA, EMOJI) as { n: number }).n,
+    );
+    expect(onA()).toBe(1);
+
+    // Back to no reaction on either side. A keys a removal by message, user
+    // and emoji, so its queued removal is the first test's; B gets that one
+    // again under a fresh event id.
+    aliceWs.send({ type: 'reaction_remove', messageId: bobMsgOnA, emoji: EMOJI });
+    expect(await waitUntil(() => onA() === 0, 8_000)).toBe(true);
+    const remove = reaimed(removeTemplate, {});
+    expect((await relayToB([remove])).body?.accepted).toContain(remove.messageId);
+    expect(reactionsOnB(bobMsgOnB)).toEqual([]);
+  });
 });
 
 describe('federation e2e — a reaction is refused unless the sender is part of the message\'s conversation', () => {

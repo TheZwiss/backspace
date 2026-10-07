@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Embed } from '@backspace/shared';
 
 interface RichEmbedProps {
@@ -19,6 +20,7 @@ function getIframeHeight(embed: Embed): number {
 }
 
 export function RichEmbed({ embed }: RichEmbedProps) {
+  const { t } = useTranslation('chat');
   const [isLoaded, setIsLoaded] = useState(false);
   const iframeHeight = getIframeHeight(embed);
 
@@ -33,7 +35,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
       {isLoaded ? (
         <iframe
           src={embed.embedUrl}
-          title={embed.title ?? providerLabel ?? 'Embed'}
+          title={embed.title ?? providerLabel ?? t('embed.frameTitle')}
           height={iframeHeight}
           className="w-full block"
           allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -46,7 +48,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
           type="button"
           onClick={() => setIsLoaded(true)}
           className="w-full text-left focus:outline-none group"
-          aria-label={`Load ${providerLabel ?? 'embed'}`}
+          aria-label={providerLabel ? t('embed.loadNamed', { name: providerLabel }) : t('embed.loadUnnamed')}
         >
           <div className="flex items-start gap-3 p-3">
             {embed.image && (
@@ -75,11 +77,11 @@ export function RichEmbed({ embed }: RichEmbedProps) {
                   {embed.description}
                 </div>
               )}
-              <div className="text-[12px] text-txt-tertiary mt-2 flex items-center gap-1.5">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5">
+              <div className="text-[12px] text-txt-secondary group-hover:text-txt-primary transition-colors mt-2 flex items-center gap-1.5">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                Click to load
+                {t('embed.loadAction')}
               </div>
             </div>
           </div>

@@ -2,14 +2,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import data from '@emoji-mart/data';
 import type { EmojiMartData } from '@emoji-mart/data';
 import {
-  loadDiscordEmojiAliases,
+  loadEmojiShortcodeNames,
   replaceEmojiShortcodes,
   replaceEmojiShortcodesInMarkdownSource,
 } from './emojiShortcodes';
 import { DISCORD_EMOJI_ALIASES } from './discordEmojiAliases';
 
 beforeAll(async () => {
-  await loadDiscordEmojiAliases();
+  await loadEmojiShortcodeNames();
 });
 
 describe('replaceEmojiShortcodes', () => {

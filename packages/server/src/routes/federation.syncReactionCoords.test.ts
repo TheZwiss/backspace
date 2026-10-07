@@ -97,8 +97,20 @@ function seedDm(db: TestDb, channelId: string, memberIds: string[]): void {
   }
 }
 
-/** The mutation-log row HOME's reaction handler writes (ws/events.ts). */
+/**
+ * alice's reaction on HOME, as HOME's reaction handler records it
+ * (ws/events.ts): the reaction row itself, and the mutation-log row.
+ */
 function logReaction(db: TestDb, mutationType: 'reaction_add' | 'reaction_remove', mutatedAt: number): void {
+  if (mutationType === 'reaction_add') {
+    db.insert(schema.dmReactions).values({
+      id: `r-${mutatedAt}`, dmMessageId: 'copy-on-home', userId: 'alice', emoji: '🎉', createdAt: mutatedAt,
+    }).run();
+  } else {
+    db.delete(schema.dmReactions)
+      .where(and(eq(schema.dmReactions.dmMessageId, 'copy-on-home'), eq(schema.dmReactions.userId, 'alice')))
+      .run();
+  }
   db.insert(schema.federationMutationLog).values({
     id: `ml-${mutationType}-${mutatedAt}`,
     entityId: 'copy-on-home',
@@ -219,5 +231,106 @@ describe('POST /api/federation/sync — replayed reactions carry shared message 
     const result = await orbitReplays(removes);
     expect(result.rejected).toEqual([]);
     expect(orbitReactors()).toEqual([]);
+  });
+});
+
+/**
+ * #333: the other two places the reacted message can live. The reaction is
+ * always alice's on HOME, and ORBIT pulls it from HOME.
+ * - Native sender: the message is alice's own, native on HOME; ORBIT holds a
+ *   relayed copy of it, so the reaction must name HOME's id and HOME.
+ * - Third instance: the message is carol's, native on THIRD; HOME and ORBIT
+ *   each hold a relayed copy, so the reaction must name THIRD's id and THIRD,
+ *   which neither copy's local id is.
+ */
+describe('POST /api/federation/sync — replayed reactions on a native and a third-instance message (#333)', () => {
+  const THIRD_ORIGIN = 'https://third.test';
+
+  function reactOnHome(messageId: string, mutatedAt: number): void {
+    home.db.insert(schema.dmReactions).values({
+      id: `r-${messageId}`, dmMessageId: messageId, userId: 'alice', emoji: '🎉', createdAt: mutatedAt,
+    }).run();
+    home.db.insert(schema.federationMutationLog).values({
+      id: `ml-${messageId}`,
+      entityId: messageId,
+      contextId: 'ch-home',
+      contextType: 'dm',
+      mutationType: 'reaction_add',
+      mutatedAt,
+      payload: JSON.stringify({ userId: 'alice', homeUserId: 'alice', homeInstance: HOME_ORIGIN, emoji: '🎉', createdAt: mutatedAt }),
+    }).run();
+  }
+
+  function reactorsOnOrbit(messageId: string): string[] {
+    return orbit.db
+      .select({ userId: schema.dmReactions.userId })
+      .from(schema.dmReactions)
+      .where(eq(schema.dmReactions.dmMessageId, messageId))
+      .all()
+      .map(r => r.userId);
+  }
+
+  beforeEach(async () => {
+    home = makeInstance(HOME_ORIGIN, ORBIT_ORIGIN);
+    seedUser(home.db, { id: 'alice', username: 'alice', passwordHash: 'real-hash', homeInstance: null });
+    seedUser(home.db, { id: 'bob-on-home', username: 'bob@orbit.test', homeInstance: 'orbit.test', homeUserId: 'bob' });
+    seedUser(home.db, { id: 'carol-on-home', username: 'carol@third.test', homeInstance: 'third.test', homeUserId: 'carol' });
+
+    orbit = makeInstance(ORBIT_ORIGIN, HOME_ORIGIN);
+    seedUser(orbit.db, { id: 'bob', username: 'bob', passwordHash: 'real-hash', homeInstance: null });
+    seedUser(orbit.db, { id: 'alice-on-orbit', username: 'alice@home.test', homeInstance: 'home.test', homeUserId: 'alice' });
+    seedUser(orbit.db, { id: 'carol-on-orbit', username: 'carol@third.test', homeInstance: 'third.test', homeUserId: 'carol' });
+
+    current = home;
+    app = await buildApp();
+  });
+
+  it('a reaction on the sender\'s own message names it by the sender\'s id', async () => {
+    seedDm(home.db, 'ch-home', ['alice', 'bob-on-home']);
+    home.db.insert(schema.dmMessages).values({
+      id: 'msg-on-home', dmChannelId: 'ch-home', userId: 'alice', content: 'from alice', createdAt: 100,
+    }).run();
+    seedDm(orbit.db, 'ch-orbit', ['bob', 'alice-on-orbit']);
+    orbit.db.insert(schema.dmMessages).values({
+      id: 'copy-on-orbit', dmChannelId: 'ch-orbit', userId: 'alice-on-orbit', content: 'from alice',
+      createdAt: 100, sourceInstance: HOME_ORIGIN, sourceMessageId: 'msg-on-home',
+    }).run();
+
+    reactOnHome('msg-on-home', 200);
+    const events = (await orbitPullsFromHome(0)).filter(e => e.eventType === 'reaction_add');
+    expect(events).toHaveLength(1);
+    expect(events[0]!.reaction).toMatchObject({ messageId: 'msg-on-home', messageHomeInstance: HOME_ORIGIN });
+
+    const result = await orbitReplays(events);
+    expect(result.rejected).toEqual([]);
+    expect(reactorsOnOrbit('copy-on-orbit')).toEqual(['alice-on-orbit']);
+  });
+
+  it('a reaction on a third instance\'s message names it by the third instance\'s id', async () => {
+    home.db.insert(schema.dmChannels).values({ id: 'ch-home', federatedId: 'fed-group', ownerId: 'alice', createdAt: 1 }).run();
+    for (const userId of ['alice', 'bob-on-home', 'carol-on-home']) {
+      home.db.insert(schema.dmMembers).values({ dmChannelId: 'ch-home', userId, closed: 0 }).run();
+    }
+    home.db.insert(schema.dmMessages).values({
+      id: 'copy-on-home', dmChannelId: 'ch-home', userId: 'carol-on-home', content: 'from carol',
+      createdAt: 100, sourceInstance: THIRD_ORIGIN, sourceMessageId: 'msg-on-third',
+    }).run();
+    orbit.db.insert(schema.dmChannels).values({ id: 'ch-orbit', federatedId: 'fed-group', ownerId: 'alice-on-orbit', createdAt: 1 }).run();
+    for (const userId of ['bob', 'alice-on-orbit', 'carol-on-orbit']) {
+      orbit.db.insert(schema.dmMembers).values({ dmChannelId: 'ch-orbit', userId, closed: 0 }).run();
+    }
+    orbit.db.insert(schema.dmMessages).values({
+      id: 'copy-on-orbit', dmChannelId: 'ch-orbit', userId: 'carol-on-orbit', content: 'from carol',
+      createdAt: 100, sourceInstance: THIRD_ORIGIN, sourceMessageId: 'msg-on-third',
+    }).run();
+
+    reactOnHome('copy-on-home', 200);
+    const events = (await orbitPullsFromHome(0)).filter(e => e.eventType === 'reaction_add');
+    expect(events).toHaveLength(1);
+    expect(events[0]!.reaction).toMatchObject({ messageId: 'msg-on-third', messageHomeInstance: THIRD_ORIGIN });
+
+    const result = await orbitReplays(events);
+    expect(result.rejected).toEqual([]);
+    expect(reactorsOnOrbit('copy-on-orbit')).toEqual(['alice-on-orbit']);
   });
 });

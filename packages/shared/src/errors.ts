@@ -61,6 +61,8 @@ export const ERROR_CODES = [
   'peer_pending_local_admin',
   'peer_unreachable',
   'PEER_EXISTS_RESET_REQUIRED',
+  'PEER_REVOKED',
+  'PEER_HANDSHAKE_IN_PROGRESS',
 
   // Direct messages
   'recipient_deleted',
@@ -77,6 +79,7 @@ export const ERROR_CODES = [
   'account_deleted',
   'target_domain_required',
   'native_account_required',
+  'reattach_handle_taken',
   'username_confirmation_required',
   'username_confirmation_mismatch',
   'avatar_url_invalid',
@@ -235,8 +238,10 @@ export const ERROR_CODES = [
   'message_create_failed',
   'message_update_failed',
   'not_message_author',
+  'system_message_immutable',
   'message_edit_not_author',
   'message_delete_forbidden',
+  'paging_cursor_conflict',
   'internal_error',
   // misc
   'voice_disabled',

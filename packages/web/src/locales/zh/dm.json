@@ -16,17 +16,17 @@
   },
   "system": {
     "spaceInviteNamed": "📨 发送了 {{spaceName}} 的空间邀请",
-    "spaceInvite": "📨 发送了空间邀请",
     "memberAdded": "{{actor}} 添加了 {{target}}",
+    "memberAddedToGroup": "{{actor}} 将 {{target}} 添加到了群组",
     "memberLeft": "{{target}} 退出了群组",
     "memberRemoved": "{{actor}} 移除了 {{target}}",
+    "memberRemovedFromGroup": "{{actor}} 将 {{target}} 移出了群组",
     "ownerChanged": "{{newOwner}} 现已成为群主",
     "renamed": "{{actor}} 重命名了群组",
+    "renamedTo": "{{actor}} 将群组重命名为“{{name}}”",
     "nameCleared": "{{actor}} 清除了群组名称",
     "iconChanged": "{{actor}} 更新了群组头像",
-    "generic": "系统消息",
-    "someone": "有人",
-    "aMember": "一位成员"
+    "generic": "系统消息"
   },
   "deletedNotice": {
     "accountDeleted": "该用户的账号已被注销"
@@ -83,7 +83,8 @@
     "justNow": "刚刚",
     "minutesShort_other": "{{count}} 分钟",
     "hoursShort_other": "{{count}} 小时",
-    "daysShort_other": "{{count}} 天"
+    "daysShort_other": "{{count}} 天",
+    "close": "关闭私信"
   },
   "newDm": {
     "title": "新建私信",
@@ -131,5 +132,9 @@
     "cancelEdit": "取消编辑",
     "federated": "联邦群组",
     "memberCount_other": "{{count}} 名成员"
+  },
+  "ownerActions": {
+    "ownerNotConnected": "此群组由 {{host}} 管理。请连接到该实例后再进行更改。",
+    "ownerNotListed": "{{host}} 尚未为你列出此群组。请稍后再试。"
   }
 }

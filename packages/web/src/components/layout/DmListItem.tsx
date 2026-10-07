@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { Tooltip } from '../ui/Tooltip';
-import { isSelf, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { isMine, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
+import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmTimestamp, formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
@@ -31,7 +33,9 @@ interface DmListItemProps {
 }
 
 export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, onLeave, onContextMenu }: DmListItemProps) {
-  const otherMembers = dm.members.filter(m => !isSelf(m, user));
+  const { t } = useTranslation('dm');
+  const viewer = useDmViewer(dm.id);
+  const otherMembers = dm.members.filter(m => !isMine(m, viewer.origin, viewer.self));
   const isGroup = !!dm.ownerId;
   if (otherMembers.length === 0 && !isGroup) return null;
 
@@ -40,14 +44,14 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const rawFirstOther = isGroup ? null : (otherMembers[0] ?? null);
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const firstOtherCanonical = useCanonicalUserView(rawFirstOther ?? user);
+  const firstOtherCanonical = useCanonicalUserView(rawFirstOther ?? user, viewer.origin);
   const firstOther = rawFirstOther ? firstOtherCanonical : null;
 
   // Groups → `formatDmHeaderName` (honors `dm.name`, falls back to joined
   // names — same path used by the chat header, welcome hero, and mobile).
   // 1-on-1 keeps the canonical-view name so replicated aliases stay correct.
   const displayName = isGroup
-    ? formatDmHeaderName(dm, user)
+    ? formatDmHeaderName(dm, viewer)
     : firstOther ? userDisplayName(firstOther) : '';
 
   // Group globe: at least one member is federated → render once with comma-joined tooltip.
@@ -116,7 +120,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   // formatDmSidebarPreview handles user/system messages and applies the
   // sender prefix for group user-messages. We only need to provide the
   // empty-group fallback ourselves.
-  const preview = formatDmSidebarPreview(dm, user);
+  const preview = formatDmSidebarPreview(dm, viewer);
   const previewText = preview ?? (isGroup ? `${dm.members.length} Members` : null);
 
   const itemJsx = (
@@ -139,7 +143,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
 
       {/* Avatar */}
       {isGroup ? (
-        <AvatarStack members={otherMembers} size={32} border="channel" iconUrl={dm.icon} />
+        <AvatarStack members={otherMembers} origin={viewer.origin} size={32} border="channel" iconUrl={dm.icon} />
       ) : (
         <Avatar src={firstOther?.avatar} name={displayName} size={32} status={firstOther?.status as any} userId={firstOther?.homeUserId ?? firstOther?.id} user={firstOther ?? undefined} />
       )}
@@ -195,7 +199,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
       <button
         onClick={handleClose}
         className={closeClass}
-        title={isGroup ? 'Leave Group DM' : 'Close DM'}
+        title={isGroup ? t('list.leaveGroup') : t('list.close')}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />

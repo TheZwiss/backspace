@@ -41,10 +41,6 @@ vi.mock('../utils/federationOutbox.js', () => ({
   isFederationRelayEnabled: () => true,
   queueOutboxEvent: vi.fn(),
   appendMutationLog: vi.fn(),
-  // Nothing in these suites queues during a send, so no row is ever superseded.
-  beginOutboxDelivery: vi.fn(),
-  finishOutboxDelivery: () => new Map<string, number>(),
-  requeueAfterUndeliveredSend: vi.fn(),
 }));
 
 vi.mock('../utils/federationPeerActivation.js', () => ({
@@ -265,7 +261,13 @@ describe('outbox worker — pending peer retries follow the recovery schedule', 
     const t0 = Date.now();
     seedPeer('peer-silent', SILENT_ORIGIN, 'pending');
     seedOutboxEntry('e-silent', 'peer-silent', 'm-silent');
-    ensurePeeredMock.mockResolvedValue({ status: 'failed', error: 'Remote instance did not respond within 10 seconds' });
+    // The handshake counts its own failed attempt on the row (whoever started
+    // it), as performHandshake does through recordPeerAttempt.
+    const { recordPeerAttempt } = await import('./federationPeerState.js');
+    ensurePeeredMock.mockImplementation(async () => {
+      recordPeerAttempt('peer-silent', { from: ['pending'], startedAt: Date.now() });
+      return { status: 'failed', error: 'Remote instance did not respond within 10 seconds' };
+    });
     acceptEverything();
 
     const { processOutboxTick } = await import('./federationWorker.js');
@@ -283,22 +285,27 @@ describe('outbox worker — pending peer retries follow the recovery schedule', 
     expect(afterFirst.probeAttempts).toBe(1);
     expect(afterFirst.lastProbeAt).toBe(t0);
 
-    // One failed attempt → RECOVERY_BACKOFF_MS[1] = 1 minute.
+    // One failed attempt → RECOVERY_BACKOFF_MS[0] = 30 seconds (#322).
     expect(await tickAt(t0 + 1_000)).toBe(1);
-    expect(await tickAt(t0 + 59_999)).toBe(1);
-    const t1 = t0 + 60_000;
+    expect(await tickAt(t0 + 29_999)).toBe(1);
+    const t1 = t0 + 30_000;
     expect(await tickAt(t1)).toBe(2);
 
-    // Two failed attempts → 5 minutes.
-    expect(await tickAt(t1 + 299_999)).toBe(2);
-    const t2 = t1 + 300_000;
+    // Two failed attempts → 1 minute.
+    expect(await tickAt(t1 + 59_999)).toBe(2);
+    const t2 = t1 + 60_000;
     expect(await tickAt(t2)).toBe(3);
 
-    // Three failed attempts → 15 minutes, and the schedule stays clamped there.
-    expect(await tickAt(t2 + 899_999)).toBe(3);
-    const t3 = t2 + 900_000;
+    // Three failed attempts → 5 minutes.
+    expect(await tickAt(t2 + 299_999)).toBe(3);
+    const t3 = t2 + 300_000;
     expect(await tickAt(t3)).toBe(4);
+
+    // Four failed attempts → 15 minutes, and the schedule stays clamped there.
     expect(await tickAt(t3 + 899_999)).toBe(4);
-    expect(await tickAt(t3 + 900_000)).toBe(5);
+    const t4 = t3 + 900_000;
+    expect(await tickAt(t4)).toBe(5);
+    expect(await tickAt(t4 + 899_999)).toBe(5);
+    expect(await tickAt(t4 + 900_000)).toBe(6);
   });
 });

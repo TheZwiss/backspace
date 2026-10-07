@@ -4,7 +4,7 @@ import { canManageRoleAt, type HierarchyStanding } from '@backspace/shared/src/p
 // The order of a space's roles is its role hierarchy (docs/systems/permissions.md,
 // "Role hierarchy", "Setting the order"). These are the pure rules the Roles
 // list in Space Settings reorders by; the server applies the same comparison
-// (`canManageRoleAt`) to `PATCH /api/spaces/:id/roles/:roleId { position }` and
+// (`canManageRoleAt`) to `PATCH /api/spaces/:id/roles/:roleId` moves and
 // renumbers the roles the same way (`moveRoleToPosition`).
 //
 // "Rank order" is most senior first, @everyone left out: @everyone is always
@@ -54,7 +54,7 @@ export function canMoveRole(
 /**
  * `ranked` with the role at `fromIndex` moved to `toIndex` and every position
  * renumbered n..1 (most senior first), the order the server stores after the
- * move. The position to send for the move is `ranked[toIndex].position`.
+ * move. What to send for the move is `roleMoveRequest`.
  * Returns a new array of new role objects; `ranked` is left as it is.
  */
 export function moveRoleInRankOrder(ranked: readonly Role[], fromIndex: number, toIndex: number): Role[] {
@@ -63,4 +63,39 @@ export function moveRoleInRankOrder(ranked: readonly Role[], fromIndex: number, 
   if (!moving) return ranked.map((r) => ({ ...r }));
   next.splice(toIndex, 0, moving);
   return next.map((r, index) => ({ ...r, position: next.length - index }));
+}
+
+/** The body of `PATCH /roles/:rid` that moves a role: next to an anchor role, plus `position` for older servers. */
+export type RoleMoveRequest = { position: number; above: string } | { position: number; below: string };
+
+/**
+ * What to send to move the role at `fromIndex` of `ranked` (rank order) to
+ * `toIndex`: the role the user sees in that place now is the anchor, and the
+ * moved role goes directly above it when it moves up, directly below it when
+ * it moves down. The server places it next to the anchor in the order it
+ * holds, so the move does what the list showed even when the list is out of
+ * date (a refresh that answered before the last move, another member's
+ * move). `position` is the anchor's position, which is all a 1.7.x server
+ * reads; a server that reads the anchor ignores it. Null when there is no
+ * move.
+ */
+export function roleMoveRequest(ranked: readonly Role[], fromIndex: number, toIndex: number): RoleMoveRequest | null {
+  const slot = ranked[toIndex];
+  if (fromIndex === toIndex || !ranked[fromIndex] || !slot) return null;
+  return toIndex < fromIndex
+    ? { position: slot.position, above: slot.id }
+    : { position: slot.position, below: slot.id };
+}
+
+/**
+ * `roles` with the role a successful `PATCH /roles/:rid` answered put in
+ * place of its old copy, so an editor shows what was saved at once; the
+ * `space_access_changed` refresh that follows brings the rest of the space.
+ * Only the role's own fields change here: a move renumbers other roles too,
+ * which is `moveRoleInRankOrder`'s job, so `position` is kept.
+ */
+export function withSavedRole(roles: readonly Role[], saved: Role): Role[] {
+  return roles.map((r) => (r.id === saved.id
+    ? { ...r, name: saved.name, color: saved.color ?? r.color, permissions: saved.permissions ?? r.permissions }
+    : r));
 }

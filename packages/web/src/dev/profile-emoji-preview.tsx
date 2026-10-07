@@ -6,7 +6,9 @@
 //
 // `?view=<view>&profile=<profile>` picks what to render; `?lang=ru|zh` (the
 // development language preview) switches the UI language and with it the
-// `:lang()` font stack.
+// `:lang()` font stack. `?as=self` signs in as the profile's own user, so the
+// card and the full profile show what the user sees on their own profile (no
+// Send Message, no friend actions).
 //
 // Views:
 //   popout   the profile card (`UserProfilePopout`), anchored top left.
@@ -37,7 +39,7 @@ import { MarkdownRenderer } from '../components/chat/MarkdownRenderer';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import { initI18n } from '../i18n';
-import { loadDiscordEmojiAliases } from '../utils/emojiShortcodes';
+import { loadEmojiShortcodeNames } from '../utils/emojiShortcodes';
 import { initializeInterfaceScale } from '../platform/interfaceScale';
 import '../styles/globals.css';
 
@@ -109,7 +111,7 @@ function Rows({ user }: { user: User }) {
   const displayName = user.displayName ?? user.username;
   return (
     <div className="flex gap-6 p-4">
-      <div className="w-[240px] bg-surface-sidebar rounded-lg p-2">
+      <div className="w-[240px] bg-surface-channel rounded-lg p-2">
         <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px]">
           <Avatar src={null} name={displayName} size={32} status="online" user={user} />
           <div className="flex-1 min-w-0">
@@ -135,6 +137,7 @@ function Workbench({ view, user }: { view: View; user: User }) {
   return (
     <UserProfilePopout
       user={user}
+      origin=""
       onClose={() => undefined}
       anchor={{ top: 16, left: 8, right: 8, bottom: 16, width: 0, height: 0 }}
     />
@@ -146,11 +149,12 @@ async function main(): Promise<void> {
   if (!host) throw new Error('missing #root');
   initializeInterfaceScale();
   // As main.tsx does: Discord's shortcode names load before the first render.
-  await Promise.all([initI18n(), loadDiscordEmojiAliases()]);
+  await Promise.all([initI18n(), loadEmojiShortcodeNames()]);
 
   const view = readView(window.location.search);
   const user = PROFILES[readProfile(window.location.search)];
-  useAuthStore.setState({ user: VIEWER });
+  const asSelf = new URLSearchParams(window.location.search).get('as') === 'self';
+  useAuthStore.setState({ user: asSelf ? user : VIEWER });
   if (view === 'modal') {
     useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
   }

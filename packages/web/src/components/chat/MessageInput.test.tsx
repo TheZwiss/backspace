@@ -53,7 +53,9 @@ const ownMessage: MessageWithUser = {
 beforeEach(() => {
   window.history.replaceState({}, '', '/channels/@me/dm-1');
   useAuthStore.setState({ user: me });
-  useSpaceStore.setState({ dmChannels: [] });
+  // dm-1 is a DM because the listing says so; the URL decides nothing.
+  useSpaceStore.getState().reset();
+  useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me] }]);
   useComposerStore.setState({ states: new Map() });
   useChatStore.setState({
     messages: new Map([['dm-1', [ownMessage]]]),
@@ -67,6 +69,7 @@ afterEach(() => {
   useChatStore.getState().clearAllMessages();
   useComposerStore.setState({ states: new Map() });
   useAuthStore.setState({ user: null });
+  useSpaceStore.getState().reset();
   window.history.replaceState({}, '', '/');
 });
 

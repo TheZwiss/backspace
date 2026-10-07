@@ -5,7 +5,7 @@ import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import { replaceEmojiShortcodes } from '../../utils/emojiShortcodes';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import {
   useContextMenuStore,
   type ContextMenuItem,
@@ -16,6 +16,8 @@ export type DmMemberRowAction = 'profile' | 'transfer' | 'kick' | 'remove-friend
 
 export interface DmMemberRowProps {
   member: User;
+  /** The instance that issued `member` (the DM's pinned origin). */
+  origin: string;
   /** True when this row represents the channel owner. */
   isOwner: boolean;
   /** True when this row is the viewer themselves. */
@@ -79,6 +81,7 @@ function KebabIcon() {
 
 export function DmMemberRow({
   member,
+  origin,
   isOwner,
   isSelf,
   callerIsOwner,
@@ -87,8 +90,9 @@ export function DmMemberRow({
   alwaysShowKebab = false,
   onMenuAction,
 }: DmMemberRowProps) {
+  useEmojiShortcodeNames();
   const { t } = useTranslation(['dm', 'common']);
-  const canonical = useCanonicalUserView(member);
+  const canonical = useCanonicalUserView(member, origin);
   const openContextMenu = useContextMenuStore((s) => s.open);
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +114,7 @@ export function DmMemberRow({
         // is ignored by the store (full-screen push).
         const rect = rowRef.current?.getBoundingClientRect();
         if (rect) {
-          useUIStore.getState().openUserProfile(canonical, rect, 'left');
+          useUIStore.getState().openUserProfile(canonical, origin, rect, 'left');
         } else {
           // Fallback: defer to the consumer if we can't compute a rect
           // (shouldn't happen in practice, but keeps the contract intact).
@@ -188,6 +192,7 @@ export function DmMemberRow({
           size={32}
           status={isOffline ? null : canonical.status}
           user={canonical}
+          origin={origin}
           placement="left"
         />
       </div>

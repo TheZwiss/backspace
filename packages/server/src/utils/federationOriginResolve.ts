@@ -1,6 +1,7 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { getOurOrigin } from './federationAuth.js';
+import { eq } from 'drizzle-orm';
+import { canonicalizeHomeInstance, getOurOrigin } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
 
 /**
@@ -71,4 +72,30 @@ export function resolveOriginFromHostname(hostnameOrHostPort: string): string | 
 /** Whether a `host` or `host:port` string names a port (`[::1]:3000` included). */
 function hasPort(hostOrHostPort: string): boolean {
   return /:\d+$/.test(hostOrHostPort);
+}
+
+/**
+ * The origin of the active peer that is the home of `homeInstance` (an
+ * identity domain), or null when there is none: not peered, or the peering is
+ * not `active`. The one question every caller that asks a user's home about
+ * them (`/users/by-home-id`) answers first, since the lookup needs an active
+ * peering on both sides.
+ */
+export function activePeerOriginForHome(homeInstance: string, db: ReturnType<typeof getDb>): string | null {
+  const canon = canonicalizeHomeInstance(homeInstance);
+  if (!canon) return null;
+  let host: string;
+  try {
+    host = new URL(canon).host;
+  } catch {
+    return null;
+  }
+  const origin = resolveOriginFromHostname(host);
+  if (!origin) return null;
+  const peer = db
+    .select({ status: schema.federationPeers.status })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.origin, origin))
+    .get();
+  return peer?.status === 'active' ? origin : null;
 }

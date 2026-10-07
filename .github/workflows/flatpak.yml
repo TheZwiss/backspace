@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/flatpak.yml'
+      - '.github/workflows/flatpak-release-metadata.yml'
       - 'flatpak/**'
       - 'io.github.TheZwiss.backspace.yml'
       - 'packages/desktop/**'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/flatpak.yml'
+      - '.github/workflows/flatpak-release-metadata.yml'
       - 'flatpak/**'
       - 'io.github.TheZwiss.backspace.yml'
       - 'packages/desktop/**'
@@ -26,6 +28,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Rules that keep the published manifest buildable between releases. The
+  # build jobs below build the working tree against freshly generated sources,
+  # so they cannot see a wrong committed node-sources.json. The rules are in
+  # flatpak/README.md under "Release-paired offline sources".
+  pairing:
+    name: Check release pairing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      # A pull request checks out its merge commit, whose first parent is the
+      # base branch it merges into. Depth 2 fetches that parent and nothing
+      # older.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Check the Node SDK extension against the manifest
+        run: |
+          set -euo pipefail
+          if ! reason="$(node flatpak/node-sdk-version.mjs 2>&1)"; then
+            reason="${reason//'%'/%25}"
+            reason="${reason//$'\n'/%0A}"
+            echo "::error title=Node SDK extension out of step with the manifest::$reason"
+            exit 1
+          fi
+          echo "$reason"
+
+      - name: Check the offline sources stay paired with the pinned release
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify --quiet 'HEAD^2' > /dev/null; then
+            echo "::error::Expected the pull request's merge commit, so that its first parent is the base branch."
+            exit 1
+          fi
+          if ! reason="$(node flatpak/sources-pairing.mjs 'HEAD^1' HEAD 2>&1)"; then
+            reason="${reason//'%'/%25}"
+            reason="${reason//$'\n'/%0A}"
+            echo "::error file=flatpak/node-sources.json,title=Release-paired offline sources::$reason"
+            exit 1
+          fi
+          echo "$reason"
+
   build:
     name: Build Flatpak (${{ matrix.arch }})
     strategy:
@@ -54,7 +105,9 @@ jobs:
         run: |
           node --test flatpak/prepare-ci-manifest.test.mjs \
             flatpak/manifest-pin.test.mjs \
+            flatpak/node-sdk-version.test.mjs \
             flatpak/release-summary.test.mjs \
+            flatpak/sources-pairing.test.mjs \
             flatpak/update-release.test.mjs
 
       - name: Install the pinned Node SDK extension

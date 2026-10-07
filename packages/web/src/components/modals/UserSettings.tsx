@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
@@ -24,7 +24,41 @@ import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 import { HiButton } from '../telemetry/answers/HiButton';
 
-type SettingsTab = 'account' | 'appearance' | 'voice' | 'privacy' | 'connections' | 'keybinds' | 'desktop' | 'instance';
+/**
+ * Every tab of user settings, in nav order. The nav on both layouts, the
+ * deep-link check (`openModal('userSettings', { tab })`) and the panel switch
+ * are all read from this one table, so a tab cannot exist in one and be
+ * missing from another. `admin` tabs are shown and reachable only for admins.
+ */
+const USER_SETTINGS_TABS = [
+  { id: 'account', group: 'user', label: 'settings:nav.tabs.account' },
+  { id: 'appearance', group: 'user', label: 'settings:nav.tabs.appearance' },
+  { id: 'voice', group: 'user', label: 'settings:nav.tabs.voice' },
+  { id: 'privacy', group: 'user', label: 'settings:nav.tabs.privacy' },
+  { id: 'connections', group: 'app', label: 'settings:nav.tabs.connections' },
+  { id: 'keybinds', group: 'app', label: 'settings:nav.tabs.keybinds' },
+  { id: 'desktop', group: 'app', label: 'settings:nav.tabs.desktop' },
+  { id: 'instance', group: 'admin', label: 'settings:nav.tabs.instance' },
+] as const;
+
+export type UserSettingsTab = (typeof USER_SETTINGS_TABS)[number]['id'];
+type TabGroup = (typeof USER_SETTINGS_TABS)[number]['group'];
+
+const GROUP_HEADINGS = {
+  user: 'settings:nav.userSettings',
+  app: 'settings:nav.appSettings',
+  admin: 'settings:nav.administration',
+} as const satisfies Record<TabGroup, string>;
+
+const GROUP_ORDER: readonly TabGroup[] = ['user', 'app', 'admin'];
+
+function isUserSettingsTab(value: unknown): value is UserSettingsTab {
+  return typeof value === 'string' && USER_SETTINGS_TABS.some((tab) => tab.id === value);
+}
+
+function tabVisible(tab: UserSettingsTab, isAdmin: boolean): boolean {
+  return USER_SETTINGS_TABS.find((entry) => entry.id === tab)?.group !== 'admin' || isAdmin;
+}
 
 export function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
@@ -85,7 +119,7 @@ export function UserSettingsModal() {
   const logout = useAuthStore((s) => s.logout);
   const updateBadge = useInstanceUpdateBadge();
 
-  const [tab, setTab] = useState<SettingsTab>('account');
+  const [tab, setTab] = useState<UserSettingsTab>('account');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
   // AGPL § 13: home-instance source offer. Fetched from the public info endpoint
   // so the source link reflects the version this instance is actually running.
@@ -102,22 +136,15 @@ export function UserSettingsModal() {
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  // Deep-linking: read modalData.tab when opening
+  // Deep-linking: a caller may name the tab to open on. A tab that does not
+  // exist, or that this user cannot see, opens Account; on mobile a named tab
+  // opens straight on its content.
   useEffect(() => {
     if (isOpen) {
-      const requested = modalData.tab as SettingsTab | undefined;
-      if (requested && ['account', 'voice', 'privacy', 'connections', 'keybinds', 'instance'].includes(requested)) {
-        // Only allow instance tab for admins
-        if (requested === 'instance' && !isAdmin) {
-          setTab('account');
-        } else {
-          setTab(requested);
-        }
-      } else {
-        setTab('account');
-      }
-      // On mobile, if deep-linking to a tab, show content directly
-      setMobileView(requested ? 'content' : 'tabs');
+      const requested = modalData.tab;
+      const deepLinked = isUserSettingsTab(requested) && tabVisible(requested, isAdmin === true);
+      setTab(deepLinked ? requested : 'account');
+      setMobileView(deepLinked ? 'content' : 'tabs');
     }
   }, [isOpen, modalData.tab, isAdmin]);
 
@@ -126,14 +153,59 @@ export function UserSettingsModal() {
     closeModal();
   };
 
-  const tabClass = (target: SettingsTab) =>
+  const tabClass = (target: UserSettingsTab) =>
     `w-full min-w-0 truncate text-left px-3 py-2 rounded-md text-sm transition-colors ${
       tab === target ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
-  const handleTabClick = (target: SettingsTab) => {
+  const handleTabClick = (target: UserSettingsTab) => {
     setTab(target);
     if (isMobile) setMobileView('content');
+  };
+
+  const renderNav = (layout: 'desktop' | 'mobile'): ReactNode =>
+    GROUP_ORDER.filter((group) => group !== 'admin' || isAdmin).map((group, index) => (
+      <Fragment key={group}>
+        {index > 0 && <div className="border-t border-white/[0.04] my-2 mx-2" />}
+        <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
+        {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
+          entry.id === 'instance' && layout === 'desktop' ? (
+            <Fragment key={entry.id}>
+              <button
+                onClick={() => handleTabClick(entry.id)}
+                className={`${tabClass(entry.id)} flex items-center gap-1.5`}
+                aria-current={tab === entry.id ? 'page' : undefined}
+              >
+                <span className="flex-1 min-w-0 truncate">{t(entry.label)}</span>
+                {updateBadge && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />}
+              </button>
+              {tab === 'instance' && <SidebarSubLinks />}
+            </Fragment>
+          ) : (
+            <button
+              key={entry.id}
+              onClick={() => handleTabClick(entry.id)}
+              className={tabClass(entry.id)}
+              aria-current={tab === entry.id ? 'page' : undefined}
+            >
+              {t(entry.label)}
+            </button>
+          )
+        ))}
+      </Fragment>
+    ));
+
+  const panels: Record<UserSettingsTab, () => ReactNode> = {
+    account: () => <AccountPanel />,
+    appearance: () => <AppearancePanel />,
+    voice: () => <VoicePanel />,
+    privacy: () => <PrivacyPanel />,
+    connections: () => <ConnectionsPanel />,
+    keybinds: () => <KeybindsPanel />,
+    desktop: () => (isElectron()
+      ? <DesktopPanel />
+      : <DesktopDownloadPanel version={instanceInfo?.version ?? null} />),
+    instance: () => (isAdmin ? <InstancePanel /> : null),
   };
 
   return (
@@ -159,32 +231,7 @@ export function UserSettingsModal() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
-            <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
-            <button onClick={() => handleTabClick('appearance')} className={tabClass('appearance')}>{t('settings:nav.tabs.appearance')}</button>
-            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
-            <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
-
-            <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
-            <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
-            <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
-            <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>
-
-            {isAdmin && (
-              <>
-                <div className="border-t border-white/[0.04] my-2 mx-2" />
-                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
-                <button
-                  onClick={() => handleTabClick('instance')}
-                  className={`${tabClass('instance')} flex items-center gap-1.5`}
-                >
-                  <span className="flex-1 min-w-0 truncate">{t('settings:nav.tabs.instance')}</span>
-                  {updateBadge && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />}
-                </button>
-                {tab === 'instance' && <SidebarSubLinks />}
-              </>
-            )}
+            {renderNav('desktop')}
 
             <div className="flex-1" />
 
@@ -223,25 +270,7 @@ export function UserSettingsModal() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.userSettings')}</div>
-              <button onClick={() => handleTabClick('account')} className={tabClass('account')}>{t('settings:nav.tabs.account')}</button>
-              <button onClick={() => handleTabClick('appearance')} className={tabClass('appearance')}>{t('settings:nav.tabs.appearance')}</button>
-              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>{t('settings:nav.tabs.voice')}</button>
-              <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>{t('settings:nav.tabs.privacy')}</button>
-
-              <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.appSettings')}</div>
-              <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>{t('settings:nav.tabs.connections')}</button>
-              <button onClick={() => handleTabClick('keybinds')} className={tabClass('keybinds')}>{t('settings:nav.tabs.keybinds')}</button>
-              <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>{t('settings:nav.tabs.desktop')}</button>
-
-              {isAdmin && (
-                <>
-                  <div className="border-t border-white/[0.04] my-2 mx-2" />
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('settings:nav.administration')}</div>
-                  <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>{t('settings:nav.tabs.instance')}</button>
-                </>
-              )}
+              {renderNav('mobile')}
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
               <button
@@ -278,18 +307,7 @@ export function UserSettingsModal() {
                 </button>
               )}
               <SettingsPanelSuspense key={tab}>
-                {tab === 'account' && <AccountPanel />}
-                {tab === 'appearance' && <AppearancePanel />}
-                {tab === 'voice' && <VoicePanel />}
-                {tab === 'privacy' && <PrivacyPanel />}
-                {tab === 'connections' && <ConnectionsPanel />}
-                {tab === 'keybinds' && <KeybindsPanel />}
-                {tab === 'desktop' && (
-                  isElectron()
-                    ? <DesktopPanel />
-                    : <DesktopDownloadPanel version={instanceInfo?.version ?? null} />
-                )}
-                {tab === 'instance' && isAdmin && <InstancePanel />}
+                {panels[tab]()}
               </SettingsPanelSuspense>
             </div>
           </SettingsScrollContainer>
