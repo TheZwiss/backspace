@@ -128,6 +128,8 @@ export async function processCreateEvent(
   // must already exist (bootstrapped by a prior member_add event); 1-on-1 DMs
   // are computed from the pair of home user IDs and created on demand.
   let localDmChannelId: string;
+  // Whether this event created this instance's copy of a 1-on-1.
+  let createdCopy = false;
 
   if (event.federatedId) {
     // Group DM: look up by federated_id (channel must already exist from member_add bootstrap)
@@ -166,6 +168,7 @@ export async function processCreateEvent(
     const opened = findOrCreateOneOnOne(db, pair[0]!, pair[1]!, { open: 'both' });
     announceDmReconcile(opened.reconciled);
     localDmChannelId = opened.channelId;
+    createdCopy = opened.created;
     // A call that rang here before this copy existed is bound to it now.
     connectionManager.lateBindFederatedCall(oneOnOneKey(pair[0]!, pair[1]!), localDmChannelId);
   }
@@ -253,13 +256,32 @@ export async function processCreateEvent(
     }
   }
 
-  // A member who closed the conversation before this message was written gets
-  // it back, and dm_channel_created resurfaces it in their list before the
-  // message arrives. A close made after the message was written stands: a pull
-  // can deliver an old message long after it was sent.
-  const reopened = reopenClosedDmMembers(db.$client, localDmChannelId, { closedBefore: event.message.createdAt });
+  // A live message reopens the conversation for every member who closed it,
+  // and dm_channel_created resurfaces it in their list before the message
+  // arrives. A pulled message reopens it only for a member who closed it
+  // before the message was written: a pull can deliver an old message long
+  // after it was sent, and a close made after it stands. The live rule does
+  // not compare the two: `createdAt` is the sender's clock and the close
+  // time this instance's, and a sender clock running behind would otherwise
+  // keep a fresh reply from reopening.
+  const reopened = reopenClosedDmMembers(
+    db.$client,
+    localDmChannelId,
+    delivery === 'live' ? {} : { closedBefore: event.message.createdAt },
+  );
   const fullMessage = getDmMessageWithUser(localMessageId);
-  if (reopened.length > 0) {
+  if (createdCopy && delivery === 'catch_up') {
+    // A pulled message that created this copy of a 1-on-1 raises nothing
+    // live (no dm_message_created below), so the members' lists learn of the
+    // conversation here, as a listing would show it. dm_channel_created makes
+    // no sound: catch-up is not news.
+    const payload = loadDmChannelWire(db, localDmChannelId);
+    if (payload) {
+      for (const member of payload.members) {
+        connectionManager.sendToUser(member.id, { type: 'dm_channel_created', dmChannel: payload });
+      }
+    }
+  } else if (reopened.length > 0) {
     const payload = loadDmChannelWire(db, localDmChannelId, delivery === 'live' ? fullMessage ?? undefined : undefined);
     if (payload) {
       for (const userId of reopened) {

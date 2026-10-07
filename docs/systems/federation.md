@@ -1827,7 +1827,7 @@ An instance pulls each active peer's mutation log through the peer's `POST /api/
 
 **Retry.** `processSyncRetryTick` replays, per peer and unit in `(event_ts, id)` order, the kept events whose unit head is due: an applied, `taken` or `refused` answer removes the row and the next row of the unit goes at once; a `retry` answer reschedules the head (1 min, 5 min, 30 min, 2 h, 6 h, then 24 h) and stops the unit. A row kept for more than 7 days is dropped with a warning. Rows of a peer that is not `active` wait. Replay is local: it needs no network and does not depend on the 90-day log retention.
 
-**Catch-up is not news.** A pulled event raises no sound or notification on a client. `processCreateEvent` stores a pulled message and sends no `dm_message_created`; clients see it when they next load the conversation. Unread state follows the read pointer as always: the conversation's newest message decides it, so a healed old message below the reader's pointer counts as read. Edits, deletes and reactions still broadcast their updates, which correct what an open client shows.
+**Catch-up is not news.** A pulled event raises no sound or notification on a client. `processCreateEvent` stores a pulled message and sends no `dm_message_created`; clients see it when they next load the conversation. A pulled message that created this instance's copy of a 1-on-1 sends each member a `dm_channel_created` for the copy, which makes no sound, so the conversation is listed without a reconnect. Unread state follows the read pointer as always: the conversation's newest message decides it, so a healed old message below the reader's pointer counts as read. Edits, deletes and reactions still broadcast their updates, which correct what an open client shows.
 
 **401 / 403.** A refused `/sync` only skips that context for this pull. Peer state belongs to the outbox and recovery workers; the pull never writes `federation_peers.status` or the auth-failure counter. `/sync` requires the requester's row to be `active` on the serving side, so a peer that currently marks this instance `unreachable` answers 403 until its own recovery.
 
@@ -1839,7 +1839,7 @@ The pull re-delivers events the live relay already delivered, often after local 
 
 | Event | Applied again | Arriving after a newer state |
 |---|---|---|
-| `create` | `duplicate` (dedup on `(source_instance, source_message_id)`), no side effects | a `delete` for it arrived first: `duplicate`, the message never appears (tombstone below). Reopens only members who closed the conversation before the message was written |
+| `create` | `duplicate` (dedup on `(source_instance, source_message_id)`), no side effects | a `delete` for it arrived first: `duplicate`, the message never appears (tombstone below). Pulled, it reopens only members who closed the conversation before the message was written (`dm-system.md` "Closed state is last-writer-wins") |
 | `update` | no-op, no broadcast (the copy already holds that `editedAt`) | an older `editedAt` is ignored; an older sender without `editedAt` applies only when the content differs |
 | `delete` of a held message | deletes it, records a tombstone | n/a |
 | `delete` of a message not held | accepted as a no-op on both paths, live and pull. When the message is homed on the signing peer, records the tombstone `dm_delete:<messageId>` for that peer in `federation_applied_events`, so a create of it arriving later is answered `duplicate`. A delete naming a message homed elsewhere records nothing: no peer can block another's messages | n/a |

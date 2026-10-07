@@ -181,7 +181,7 @@ This is the one place the rule is written; other specs point here.
 - A new member row takes its insertion time: a close or reopen from before the membership began never applies to it.
 - A local change (the member closes it, reopens it, a new message or call reopens it) takes the local time of the change.
 - A relayed `dm_close` / `dm_reopen` applies only when its timestamp is newer than the row's, and then takes that timestamp. When it applies but the row already had that state, nothing is sent to the member.
-- A relayed message reopens a member only when the member's state is older than the message (`closedBefore: message.createdAt`); a close made after the message was written stands.
+- A relayed message delivered live reopens every member who closed the conversation, as a local message does: its `createdAt` is the sender's clock and the close time this instance's, so comparing them would let a sender clock that runs behind keep a fresh reply from reopening it. A message delivered by a pull reopens a member only when the member's state is older than the message (`closedBefore: message.createdAt`): a pull can deliver an old message long after it was sent, and a close made after it was written stands.
 
 A peer's pull replays its mutation log, so a relayed close or reopen can arrive again long after the member's state here moved on; this rule keeps it from undoing a newer state. Local times and a peer's timestamps come from different clocks, which the rule tolerates: it only orders a replayed event against a change made after it was first applied, minutes to days apart. The migration that added the column stamped every existing row with the migration time, so no close or reopen from before the upgrade applies.
 
@@ -632,7 +632,7 @@ The check reads no new wire field, so events from older senders are judged the s
 - Background file worker downloads the file and updates the filename to the local path
 - SSRF protection: `isUrlFromPeer()` validates attachment URL hostname matches peer origin
 
-**Broadcast:** every local member of the conversation gets `dm_message_created`, members homed on the source instance included; a member who closed it before the message was written is reopened first and gets `dm_channel_created` with the message (the same resurface sequence as `broadcastDmMessage`, "Closed state is last-writer-wins"). A message that arrived through a pull is stored without `dm_message_created` (federation.md "Pull sync").
+**Broadcast:** every local member of the conversation gets `dm_message_created`, members homed on the source instance included; a member who closed it is reopened first and gets `dm_channel_created` with the message (the same resurface sequence as `broadcastDmMessage`; which closes a relayed message reopens is in "Closed state is last-writer-wins"). A message that arrived through a pull is stored without `dm_message_created` (federation.md "Pull sync"); when it created this instance's copy of a 1-on-1, each member gets that copy in a `dm_channel_created`, which makes no sound, so the conversation is listed without a reconnect.
 
 **A delete that came first.** A create whose message a `delete` from the same peer already named is answered `duplicate` and stored nowhere (federation.md "Receiver guarantees").
 

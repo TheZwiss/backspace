@@ -233,12 +233,40 @@ describe('a relayed message reopens only a conversation closed before it was wri
   });
 });
 
+describe('a live message reopens a closed conversation whatever its createdAt', () => {
+  it('reopens for a member who closed it after the sender wrote it by the sender clock', async () => {
+    const { setDmMemberClosed } = await import('../utils/dmMemberClosed.js');
+    // The sender's clock runs behind this instance's: its reply carries a
+    // createdAt from before the close made here a moment earlier.
+    setDmMemberClosed(sqlite, CHANNEL, 'bob', true, 5_000);
+    await apply(createEvent('m-skewed', 4_000));
+    expect(memberRow('bob').closed).toBe(0);
+    expect(sentToUser.filter(s => s.type === 'dm_channel_created').map(s => s.userId)).toEqual(['bob']);
+  });
+});
+
 describe('a create that arrives through a pull raises nothing live', () => {
   it('stores the message and sends no dm_message_created', async () => {
     const result = await apply(createEvent('m-pulled', 4_000), 'catch_up');
     expect(result.accepted).toEqual(['m-pulled']);
     expect(messageBySource('m-pulled')).toBeDefined();
     expect(sentToUser.filter(s => s.type === 'dm_message_created')).toEqual([]);
+  });
+
+  it('announces a 1-on-1 copy it created, silently, to each member', async () => {
+    seedUser({ id: 'erin', username: 'erin', passwordHash: 'real-hash', homeInstance: null });
+    const erin: FederationRelayParticipant = { homeUserId: 'erin', homeInstance: ORBIT_ORIGIN, profile: { username: 'erin' } };
+    const event: FederationRelayEvent = { ...createEvent('m-new-pair', 4_000), participants: [alice, erin] };
+
+    expect((await apply(event, 'catch_up')).accepted).toEqual(['m-new-pair']);
+    expect(sentToUser.filter(s => s.type === 'dm_channel_created').map(s => s.userId).sort())
+      .toEqual(['alice-on-orbit', 'erin']);
+    expect(sentToUser.filter(s => s.type === 'dm_message_created')).toEqual([]);
+  });
+
+  it('announces nothing for a copy that already existed', async () => {
+    await apply(createEvent('m-pulled-2', 4_000), 'catch_up');
+    expect(sentToUser.filter(s => s.type === 'dm_channel_created')).toEqual([]);
   });
 
   it('a live create still does', async () => {
