@@ -24,7 +24,9 @@ import { useAuthStore } from './authStore';
 /**
  * #393: the client never sends a second `reaction_add` for a reaction the
  * user holds, whether it is stored or its add is still in flight, and a
- * `reaction_added` the store already holds is not counted twice.
+ * `reaction_added` the store already holds is not counted twice. Whether the
+ * user holds a reaction (`hasOwnReaction`, what the toggle reads) counts only
+ * stored reactions, the ones the pills show.
  *
  * The user is native to the page's instance (origin ''), where they are row
  * n-1; orbit knows them as row o-7.
@@ -122,11 +124,12 @@ describe('addReaction', () => {
 });
 
 describe('hasOwnReaction', () => {
-  it('counts an add in flight, then the stored reaction its answer brings', () => {
+  it('counts the stored reaction an add\'s answer brings, not the add in flight', () => {
     const store = useChatStore.getState();
     expect(store.hasOwnReaction(MESSAGE, '👍')).toBe(false);
     store.addReaction(MESSAGE, '👍');
-    expect(useChatStore.getState().hasOwnReaction(MESSAGE, '👍')).toBe(true);
+    // Nothing on screen shows the add yet, so the user does not hold it.
+    expect(useChatStore.getState().hasOwnReaction(MESSAGE, '👍')).toBe(false);
 
     useChatStore.getState().onReactionAdded(MESSAGE, reaction('r1', orbitMe, '👍'));
     expect(useChatStore.getState().reactionAddsInFlight.size).toBe(0);

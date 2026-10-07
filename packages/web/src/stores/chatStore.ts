@@ -274,12 +274,16 @@ interface ChatState {
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
   /**
-   * Whether the signed-in user holds `emoji` on the message: a stored
-   * reaction of theirs, or an add of theirs still in flight. Reads the
-   * store at call time.
+   * Whether the store holds the signed-in user's reaction with `emoji` on
+   * the message: what the reaction pills show. An add still in flight does
+   * not count, since nothing on screen shows it. Reads the store at call
+   * time.
    */
   hasOwnReaction: (messageId: string, emoji: string) => boolean;
-  /** Send a `reaction_add`, unless the user already holds the reaction (`hasOwnReaction`). */
+  /**
+   * Send a `reaction_add`, unless the user already holds the reaction
+   * (`hasOwnReaction`) or has an add for it in flight.
+   */
   addReaction: (messageId: string, emoji: string) => void;
   removeReaction: (messageId: string, emoji: string) => void;
   onReactionAdded: (messageId: string, reaction: Reaction) => void;
@@ -919,10 +923,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   hasOwnReaction: (messageId: string, emoji: string) => {
-    const state = get();
-    const sentAt = state.reactionAddsInFlight.get(reactionKey(messageId, emoji));
-    if (sentAt !== undefined && Date.now() - sentAt < REACTION_ADD_IN_FLIGHT_MS) return true;
-    const held = findHeldMessage(state, messageId);
+    const held = findHeldMessage(get(), messageId);
     if (!held) return false;
     return (held.message.reactions ?? []).some(r => r.emoji === emoji && isOwnReactionIn(held.channelId, r));
   },
@@ -930,6 +931,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   addReaction: (messageId: string, emoji: string) => {
     // A second add of a reaction the user holds, or has an add in flight
     // for, is never sent: the server keeps one per user and emoji.
+    const sentAt = get().reactionAddsInFlight.get(reactionKey(messageId, emoji));
+    if (sentAt !== undefined && Date.now() - sentAt < REACTION_ADD_IN_FLIGHT_MS) return;
     if (get().hasOwnReaction(messageId, emoji)) return;
     // Resolve the channel from our message cache so the UI doesn't need to pass it
     const channelId = findHeldMessage(get(), messageId)?.channelId;

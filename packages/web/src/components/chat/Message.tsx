@@ -257,7 +257,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     if (isDeadDmThread) return;
     // Read from the store at call time: the context menu keeps the handlers
     // of the render that opened it, whose `message` is older than a reaction
-    // added since. An add still in flight counts as held.
+    // added since. Only stored reactions count, the ones the pills show: a
+    // tap during an add's round trip is an add, which addReaction does not
+    // send a second time.
     const hasReacted = useChatStore.getState().hasOwnReaction(message.id, emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);

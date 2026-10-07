@@ -116,15 +116,16 @@ describe.each([
     expect(useContextMenuStore.getState().menu).toBeNull();
   });
 
-  it('removes, rather than adds again, a reaction whose add is still in flight', () => {
+  it('sends nothing for a second tap while the add is in flight, neither an add nor a remove', () => {
     renderMessage();
     openMenu();
     fireEvent.click(screen.getByRole('button', { name: '👍' }));
+    // No answer yet: no pill shows the reaction, so the second tap is an add.
     openMenu();
     fireEvent.click(screen.getByRole('button', { name: '👍' }));
 
     expect(sent('reaction_add')).toHaveLength(1);
-    expect(sent('reaction_remove')).toHaveLength(1);
+    expect(sent('reaction_remove')).toEqual([]);
   });
 
   it('reads the reactions the store holds when tapped, not the ones it held when the menu opened', () => {
@@ -176,6 +177,30 @@ describe.each([
     fireEvent.click(screen.getByTestId('emoji-picker'));
     expect(sent('reaction_add')).toEqual([]);
     expect(screen.queryByTestId('emoji-picker')).toBeNull();
+  });
+});
+
+describe('a quick reaction in the desktop hover bar', () => {
+  function quick(emoji: string): HTMLElement {
+    fireEvent.mouseEnter(document.getElementById(`msg-${message.id}`)!);
+    return screen.getByRole('button', { name: emoji });
+  }
+
+  it('sends one add for a double click, and no remove', () => {
+    renderMessage();
+    fireEvent.click(quick('👍'));
+    fireEvent.click(quick('👍'));
+    expect(sent('reaction_add')).toHaveLength(1);
+    expect(sent('reaction_remove')).toEqual([]);
+  });
+
+  it('removes the reaction once the answer has stored it', () => {
+    renderMessage();
+    fireEvent.click(quick('👍'));
+    act(() => useChatStore.getState().onReactionAdded(message.id, ownReaction()));
+    fireEvent.click(quick('👍'));
+    expect(sent('reaction_add')).toHaveLength(1);
+    expect(sent('reaction_remove')).toHaveLength(1);
   });
 });
 
