@@ -55,7 +55,6 @@ vi.mock('../ws/handler.js', () => ({
     sendToAdmins: vi.fn(),
     getAllOnlineUserIds: () => [],
     evictFederatedCallsForHost: vi.fn(),
-    dropRemoteCallParticipants: vi.fn().mockReturnValue(0),
     federatedCalls: new Map(),
     isUserOnline: vi.fn(),
     lateBindFederatedCall: vi.fn(),

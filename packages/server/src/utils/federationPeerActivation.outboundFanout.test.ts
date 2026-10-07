@@ -52,7 +52,6 @@ vi.mock('../ws/handler.js', () => ({
     getAllOnlineUserIds: () => [],
     sendToDmMembers: vi.fn(),
     evictFederatedCallsForHost: vi.fn().mockReturnValue(0),
-    dropRemoteCallParticipants: vi.fn().mockReturnValue(0),
   },
 }));
 

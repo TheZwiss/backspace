@@ -26,7 +26,6 @@ vi.mock('../ws/handler.js', () => ({
     sendToUser: vi.fn(),
     sendToDmMembers: vi.fn(),
     evictFederatedCallsForHost: vi.fn().mockReturnValue(0),
-    dropRemoteCallParticipants: vi.fn().mockReturnValue(0),
     getAllFederatedCalls: vi.fn(() => new Map()),
   },
 }));
