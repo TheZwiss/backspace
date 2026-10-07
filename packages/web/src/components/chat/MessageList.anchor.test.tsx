@@ -21,12 +21,14 @@ vi.mock('../../audio/AudioManager', () => ({
 
 const messagesAround = vi.fn();
 const latestMessages = vi.fn();
+const newerMessages = vi.fn();
 vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../utils/crossStoreResolvers')>()),
   getApiForOrigin: () => ({
     channels: {
       messagesAround: (...args: unknown[]) => messagesAround(...args),
       messages: (...args: unknown[]) => latestMessages(...args),
+      messagesAfter: (...args: unknown[]) => newerMessages(...args),
     },
   }),
 }));
@@ -40,6 +42,7 @@ import { ALL_PERMISSIONS, permissionsToString } from '../../utils/permissions';
 import { HttpError } from '../../api/client';
 import {
   CHANNEL,
+  ROW_HEIGHT,
   me,
   msg,
   installBoxResizeObserver,
@@ -87,6 +90,7 @@ beforeEach(() => {
   wsSend.mockReset();
   messagesAround.mockReset();
   latestMessages.mockReset();
+  newerMessages.mockReset();
   scrollIntoView.mockReset();
   Element.prototype.scrollIntoView = scrollIntoView;
   installBoxResizeObserver();
@@ -101,15 +105,17 @@ beforeEach(() => {
     messages: new Map([[CHANNEL, page(1, 60)]]),
     hasMore: new Map([[CHANNEL, false]]),
     scrollPositions: new Map(),
-    detachedChannels: new Set(),
+    detachedChannels: new Map(),
+    presentReturns: new Map(),
     readStates: new Map(),
+    realtimeMessageEvents: [],
   });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set(), scrollPositions: new Map() });
+  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Map(), scrollPositions: new Map() });
 });
 
 describe('composer clearance (issue #361)', () => {
@@ -427,5 +433,208 @@ describe('a channel that fails to load (issue #329)', () => {
     render(list());
     await waitFor(() => expect(document.getElementById('msg-60')).toBeInTheDocument());
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('a detached window pages forward', () => {
+  const UNREAD_ROW_OFFSET = 64;
+  // The pagination slot and the content's top padding sit above the first
+  // row; the composer clearance below the last.
+  const FIRST_ROW_Y = 216;
+  const CLEARANCE = 80;
+
+  function acks(): unknown[] {
+    return wsSend.mock.calls.filter(([event]) => (event as { type: string }).type === 'channel_ack').map(([event]) => event);
+  }
+
+  /**
+   * Rows stacked from the first rendered one, and a scroll height that grows
+   * with the rows actually rendered, as a browser's would when a page is
+   * appended below the view.
+   */
+  function growingLayout(rowY: Record<string, number>): ScrollLayout {
+    return {
+      get scrollHeight() {
+        return FIRST_ROW_Y + document.querySelectorAll('[id^="msg-"]').length * ROW_HEIGHT + CLEARANCE;
+      },
+      set scrollHeight(_value: number) { /* derived from the rendered rows */ },
+      clientHeight: 800,
+      scrollTop: 0,
+      rowY,
+    };
+  }
+
+  function scrollToEnd(layout: ScrollLayout, container: HTMLElement): void {
+    userScrollTo(layout, viewport(container), layout.scrollHeight - layout.clientHeight);
+  }
+
+  /** The newer pages the channel's origin serves, by cursor. */
+  function servePagesAfter(pages: Record<string, MessageWithUser[]>, forward = true): void {
+    newerMessages.mockImplementation((_channelId: string, after: string) =>
+      Promise.resolve({ messages: pages[after] ?? [], forward }));
+  }
+
+  /** The channel opens at its first unread message, 61, in the window around 60 (36-85). */
+  function unreadBeyondOnePage(): void {
+    useChatStore.setState({
+      messages: new Map([[CHANNEL, page(101, 150)]]),
+      hasMore: new Map([[CHANNEL, true]]),
+      readStates: new Map([[CHANNEL, '60']]),
+    });
+    messagesAround.mockResolvedValue(page(36, 85));
+  }
+
+  it('opens at the first unread message, pages forward to the newest message as the user reads, and marks the channel read there', async () => {
+    unreadBeyondOnePage();
+    servePagesAfter({ '85': page(86, 135), '135': page(136, 150) });
+    const layout = growingLayout(stackRows(ids(36, 150), FIRST_ROW_Y));
+    stubScrollLayout(layout);
+    const { container } = render(list());
+
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['61']! - UNREAD_ROW_OFFSET));
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(true);
+    expect(newerMessages).not.toHaveBeenCalled();
+
+    // The user reads to the end of the window: the next page loads and is
+    // appended below without moving the view.
+    scrollIntoView.mockClear();
+    scrollToEnd(layout, container);
+    const atWindowEnd = layout.scrollTop;
+    await waitFor(() => expect(document.getElementById('msg-135')).toBeInTheDocument());
+    expect(newerMessages).toHaveBeenCalledWith(CHANNEL, '85', 50);
+    expect(layout.scrollTop).toBe(atWindowEnd);
+    // Held to the row being read, not followed down the new rows.
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(acks()).toEqual([]);
+
+    // The next page is shorter than the limit: it reaches the newest message.
+    scrollToEnd(layout, container);
+    const atSecondEnd = layout.scrollTop;
+    await waitFor(() => expect(document.getElementById('msg-150')).toBeInTheDocument());
+    expect(newerMessages).toHaveBeenLastCalledWith(CHANNEL, '135', 50);
+    expect(layout.scrollTop).toBe(atSecondEnd);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
+    expect(useChatStore.getState().messages.get(CHANNEL)?.map((m) => m.id)).toEqual(ids(36, 150));
+    expect(acks()).toEqual([]);
+
+    // Reading on to the newest message marks the channel read.
+    scrollToEnd(layout, container);
+    await waitFor(() => expect(acks()).toEqual([{ type: 'channel_ack', channelId: CHANNEL, messageId: '150' }]));
+    expect(newerMessages).toHaveBeenCalledTimes(2);
+  });
+
+  it('pages forward from a window restored around the reading position', async () => {
+    const layout = growingLayout(stackRows(ids(1, 60), FIRST_ROW_Y));
+    stubScrollLayout(layout);
+    messagesAround.mockResolvedValue(page(1, 46));
+    servePagesAfter({ '46': page(47, 60) });
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.scrollHeight - layout.clientHeight));
+    userScrollTo(layout, viewport(container), layout.rowY['21']! + 10);
+    const reading = layout.scrollTop;
+
+    // A reconnect reloads the newest page, which no longer holds row 21: the
+    // window around it is loaded back, and it stops short of the newest message.
+    act(() => {
+      useChatStore.setState({ messages: new Map([[CHANNEL, page(100, 150)]]), hasMore: new Map([[CHANNEL, true]]) });
+    });
+    await waitFor(() => expect(messagesAround).toHaveBeenCalledWith(CHANNEL, '21', 50));
+    await waitFor(() => expect(layout.scrollTop).toBe(reading));
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(true);
+
+    scrollToEnd(layout, container);
+    const atWindowEnd = layout.scrollTop;
+    await waitFor(() => expect(document.getElementById('msg-60')).toBeInTheDocument());
+    expect(newerMessages).toHaveBeenCalledWith(CHANNEL, '46', 50);
+    expect(layout.scrollTop).toBe(atWindowEnd);
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
+  });
+
+  it('takes the newest page as a return to the present when the origin ignores the cursor', async () => {
+    unreadBeyondOnePage();
+    // A server that predates forward paging answers with its newest page and
+    // no paging header.
+    servePagesAfter({ '85': page(101, 150) }, false);
+    const layout = growingLayout({ ...stackRows(ids(36, 85), FIRST_ROW_Y), ...stackRows(ids(101, 150), FIRST_ROW_Y) });
+    stubScrollLayout(layout);
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['61']! - UNREAD_ROW_OFFSET));
+
+    scrollToEnd(layout, container);
+
+    await waitFor(() => expect(document.getElementById('msg-36')).not.toBeInTheDocument());
+    // Not spliced after the window: the window is replaced, and attached.
+    expect(useChatStore.getState().messages.get(CHANNEL)?.map((m) => m.id)).toEqual(ids(101, 150));
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
+    expect(layout.scrollTop).toBe(layout.scrollHeight - layout.clientHeight);
+    await waitFor(() => expect(acks()).toEqual([{ type: 'channel_ack', channelId: CHANNEL, messageId: '150' }]));
+    expect(newerMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds live messages back while detached and shows them once the window reaches the newest message', async () => {
+    unreadBeyondOnePage();
+    servePagesAfter({ '85': page(86, 100) });
+    const layout = growingLayout(stackRows([...ids(36, 100), '200'], FIRST_ROW_Y));
+    stubScrollLayout(layout);
+    const { container } = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['61']! - UNREAD_ROW_OFFSET));
+    const opened = layout.scrollTop;
+
+    act(() => {
+      useChatStore.getState().addRealtimeMessage(CHANNEL, msg('200', 'someone else speaks'));
+    });
+
+    // Not after the window, where it would hide the gap before it.
+    expect(document.getElementById('msg-200')).not.toBeInTheDocument();
+    expect(useChatStore.getState().realtimeMessageEvents.map((e) => e.message.id)).toEqual(['200']);
+    expect(layout.scrollTop).toBe(opened);
+    expect(screen.getByRole('button', { name: /jump to present/i })).toBeInTheDocument();
+
+    scrollToEnd(layout, container);
+
+    await waitFor(() => expect(document.getElementById('msg-200')).toBeInTheDocument());
+    expect(useChatStore.getState().messages.get(CHANNEL)?.slice(-2).map((m) => m.id)).toEqual(['100', '200']);
+    expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
+  });
+
+  it('leaves the next channel alone when the user switches away while a page loads', async () => {
+    const OTHER = 'chan-2';
+    unreadBeyondOnePage();
+    useChatStore.setState({ messages: new Map([...useChatStore.getState().messages, [OTHER, page(300, 310).map((m) => ({ ...m, channelId: OTHER }))]]) });
+    useSpaceStore.setState({
+      channelOriginMap: new Map([[CHANNEL, ''], [OTHER, '']]),
+      channelPermissions: new Map([[CHANNEL, permissionsToString(ALL_PERMISSIONS)], [OTHER, permissionsToString(ALL_PERMISSIONS)]]),
+    });
+    let resolvePage: (page: { messages: MessageWithUser[]; forward: boolean }) => void = () => {};
+    newerMessages.mockReturnValue(new Promise((resolve) => { resolvePage = resolve; }));
+    const layout = growingLayout({ ...stackRows(ids(36, 135), FIRST_ROW_Y), ...stackRows(ids(300, 310), FIRST_ROW_Y) });
+    stubScrollLayout(layout);
+    const view = render(list());
+    await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['61']! - UNREAD_ROW_OFFSET));
+    scrollToEnd(layout, view.container);
+    await waitFor(() => expect(newerMessages).toHaveBeenCalledWith(CHANNEL, '85', 50));
+
+    view.rerender(
+      <MemoryRouter>
+        <MessageList channelId={OTHER} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.getElementById('msg-310')).toBeInTheDocument());
+    const onOther = layout.scrollTop;
+
+    await act(async () => { resolvePage({ messages: page(86, 135), forward: true }); });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+
+    // The open channel keeps its rows and its position. The page still
+    // continues the window it was asked for, which the channel's saved
+    // reading position is in.
+    expect(document.getElementById('msg-135')).not.toBeInTheDocument();
+    expect(useChatStore.getState().messages.get(OTHER)?.map((m) => m.id)).toEqual(ids(300, 310));
+    expect(useChatStore.getState().messages.get(CHANNEL)?.at(-1)?.id).toBe('135');
+    expect(layout.scrollTop).toBe(onOther);
+    expect(newerMessages).toHaveBeenCalledTimes(1);
   });
 });

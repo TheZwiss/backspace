@@ -4,7 +4,7 @@ import { formatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Message } from './Message';
-import { useChatStore, type LoadAroundResult } from '../../stores/chatStore';
+import { useChatStore, type LoadAroundResult, type LoadNewerResult } from '../../stores/chatStore';
 import { useSpaceStore, useIsDmChannel } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
@@ -56,6 +56,11 @@ const JUMP_HIGHLIGHT_ANIMATION = 'message-jump-flash';
 // list follows new messages, within NEAR_BOTTOM Jump to Present stays hidden.
 const AT_BOTTOM_THRESHOLD_PX = 150;
 const NEAR_BOTTOM_THRESHOLD_PX = 5000;
+
+// A detached window pages forward once less than this is left below the
+// view: the mirror of the load-more trigger at the top, so the next page is
+// usually there before the user reaches the window's end.
+const NEWER_PAGE_TRIGGER_PX = PAGINATION_SLOT_HEIGHT_PX + 50;
 
 function isMessageLoaded(channelId: string, messageId: string): boolean {
   return (useChatStore.getState().messages.get(channelId) ?? []).some((m) => m.id === messageId);
@@ -187,6 +192,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const messages = useChatStore((s) => s.messages.get(channelId)) ?? EMPTY_MESSAGES;
   const loadMessages = useChatStore((s) => s.loadMessages);
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
+  const loadNewerMessages = useChatStore((s) => s.loadNewerMessages);
+  const presentReturn = useChatStore((s) => s.presentReturns.get(channelId) ?? 0);
   const loadMessagesAround = useChatStore((s) => s.loadMessagesAround);
   const isDetached = useChatStore((s) => s.detachedChannels.has(channelId));
   const addToast = useUIStore((s) => s.addToast);
@@ -223,6 +230,12 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   // The first unread message when the channel opened, shown with a divider
   // above it for the rest of the visit (a snapshot: acking does not move it).
   const [unreadMarker, setUnreadMarker] = useState<{ channelId: string; messageId: string } | null>(null);
+  // The store's count of returns to the present for this channel that the
+  // list has followed (`chatStore.presentReturns`).
+  const presentReturnRef = useRef(0);
+  // The channel whose detached window is paging forward, so one page is
+  // asked for at a time.
+  const loadingNewerRef = useRef<string | null>(null);
 
   // Smooth-scroll intent tracking. While a smooth scroll is animating toward the bottom,
   // intermediate `handleScroll` measurements would otherwise see a large distance from
@@ -289,11 +302,77 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     setIsAtBottom(anchor.kind === 'bottom');
   }, []);
 
+  /**
+   * The bottom anchor follows the newest message. The end of a detached
+   * window is not the newest message, so a view there holds a row instead:
+   * the next page appends below it without moving the view, and nothing is
+   * marked read.
+   */
+  const bottomIsPresent = useCallback(
+    () => !useChatStore.getState().detachedChannels.has(currentChannelIdRef.current),
+    [],
+  );
+
   const recordGeometry = useCallback((container: HTMLElement) => {
     appliedGeometryRef.current = { scrollHeight: container.scrollHeight, clientHeight: container.clientHeight };
     const near = container.scrollHeight - container.scrollTop - container.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
     setIsNearBottom(near);
   }, []);
+
+  /** The anchor the view is at now: the bottom, or the topmost visible row. */
+  const anchorFromLayout = useCallback((container: HTMLElement): ScrollAnchor => {
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()) return BOTTOM_ANCHOR;
+    const row = topmostVisibleRow(container);
+    if (!row) return BOTTOM_ANCHOR;
+    return { kind: 'message', messageId: row.id.slice(4), offsetPx: rowOffset(container, row) };
+  }, [bottomIsPresent]);
+
+  const deriveAnchorFromLayout = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    setAnchor(anchorFromLayout(container));
+    appliedScrollTopRef.current = null;
+    recordGeometry(container);
+  }, [anchorFromLayout, recordGeometry, setAnchor]);
+
+  /**
+   * Page a detached window forward (`chatStore.loadNewerMessages`). The rows
+   * append below the view and the anchor holds the row being read. A page
+   * that reaches the newest message attaches the window: a view already at
+   * its end then takes the bottom, so it follows new messages and the
+   * channel is marked read. An origin without forward paging answers with
+   * its newest page, which the store applies as a return to the present.
+   */
+  const pageForward = useCallback(async () => {
+    const requestChannelId = channelId;
+    if (loadingNewerRef.current === requestChannelId) return;
+    loadingNewerRef.current = requestChannelId;
+    const seq = jumpSeqRef.current;
+    let result: LoadNewerResult;
+    try {
+      result = await loadNewerMessages(requestChannelId);
+    } finally {
+      if (loadingNewerRef.current === requestChannelId) loadingNewerRef.current = null;
+    }
+    if (result !== 'attached') return;
+    await nextFrame();
+    if (jumpSeqRef.current !== seq || currentChannelIdRef.current !== requestChannelId) return;
+    if (anchorRef.current.kind === 'message') deriveAnchorFromLayout();
+  }, [channelId, loadNewerMessages, deriveAnchorFromLayout]);
+
+  /** Page forward when the view is close to the end of a detached window. */
+  const loadNewerIfAtEnd = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || openedChannelRef.current !== currentChannelIdRef.current) return;
+    if (bottomIsPresent() || anchorLoadInFlightRef.current) return;
+    // A bottom anchor on a detached window: Jump to Present is loading the
+    // newest page, which replaces the window.
+    if (anchorRef.current.kind === 'bottom') return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom >= NEWER_PAGE_TRIGGER_PX) return;
+    void pageForward();
+  }, [bottomIsPresent, pageForward]);
 
   /**
    * Hold the view to its anchor: the bottom, or the anchored row at its
@@ -316,24 +395,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     }
     appliedScrollTopRef.current = container.scrollTop;
     recordGeometry(container);
-  }, [recordGeometry]);
-
-  /** The anchor the view is at now: the bottom, or the topmost visible row. */
-  const anchorFromLayout = useCallback((container: HTMLElement): ScrollAnchor => {
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceFromBottom < AT_BOTTOM_THRESHOLD_PX) return BOTTOM_ANCHOR;
-    const row = topmostVisibleRow(container);
-    if (!row) return BOTTOM_ANCHOR;
-    return { kind: 'message', messageId: row.id.slice(4), offsetPx: rowOffset(container, row) };
-  }, []);
-
-  const deriveAnchorFromLayout = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    setAnchor(anchorFromLayout(container));
-    appliedScrollTopRef.current = null;
-    recordGeometry(container);
-  }, [anchorFromLayout, recordGeometry, setAnchor]);
+    loadNewerIfAtEnd();
+  }, [recordGeometry, loadNewerIfAtEnd]);
 
   // Final defensive pin after a bottom-bound smooth scroll completes.
   // Runs from either the native `scrollend` handler (preferred) or the timeout fallback
@@ -533,6 +596,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     const { scrollPositions, readStates } = useChatStore.getState();
     openTargetRef.current = resolveOpenTarget(scrollPositions.get(channelId), readStates.get(channelId));
     setUnreadMarker(null);
+    presentReturnRef.current = useChatStore.getState().presentReturns.get(channelId) ?? 0;
     // Nothing reads the anchor before the channel opens; the open sets it.
     anchorRef.current = BOTTOM_ANCHOR;
     const opensAtBottom = openTargetRef.current.kind === 'bottom';
@@ -580,11 +644,11 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     setUnreadMarker({ channelId, messageId });
     setAnchor({ kind: 'message', messageId, offsetPx: UNREAD_ROW_OFFSET_PX });
     applyAnchor();
-    if (container.scrollHeight - container.scrollTop - container.clientHeight < AT_BOTTOM_THRESHOLD_PX) {
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()) {
       setAnchor(BOTTOM_ANCHOR);
       applyAnchor();
     }
-  }, [channelId, setAnchor, applyAnchor]);
+  }, [channelId, setAnchor, applyAnchor, bottomIsPresent]);
 
   /**
    * The unread messages start before the loaded page: load the window around
@@ -679,6 +743,19 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       return;
     }
 
+    if (presentReturnRef.current !== presentReturn) {
+      // The store replaced a detached window with the newest page (a message
+      // sent from the window, an origin without forward paging): follow the
+      // newest message, and drop any jump or restore still loading.
+      presentReturnRef.current = presentReturn;
+      jumpSeqRef.current += 1;
+      anchorLoadInFlightRef.current = false;
+      cancelBottomPinning();
+      setAnchor(BOTTOM_ANCHOR);
+      applyAnchor();
+      return;
+    }
+
     const anchor = anchorRef.current;
     if (anchor.kind === 'message' && !findRow(container, anchor.messageId)) {
       if (anchorLoadInFlightRef.current) return;
@@ -701,7 +778,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       return;
     }
     applyAnchor();
-  }, [interleavedMessages, channelId, openChannel, restoreAnchor, deriveAnchorFromLayout, beginSmoothScrollIntent, applyAnchor]);
+  }, [interleavedMessages, channelId, presentReturn, openChannel, restoreAnchor, deriveAnchorFromLayout, beginSmoothScrollIntent, cancelBottomPinning, setAnchor, applyAnchor]);
 
   // Every size change re-applies the anchor: the content (rows laying out,
   // embeds loading, and the composer clearance, which is the content's
@@ -801,7 +878,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     cancelBottomPinning();
     const destination = centredScrollTop(container, el);
     const distanceFromBottom = container.scrollHeight - container.clientHeight - destination;
-    setAnchor(distanceFromBottom < AT_BOTTOM_THRESHOLD_PX
+    setAnchor(distanceFromBottom < AT_BOTTOM_THRESHOLD_PX && bottomIsPresent()
       ? BOTTOM_ANCHOR
       : { kind: 'message', messageId, offsetPx: rowOffset(container, el) - (destination - container.scrollTop) });
     setIsNearBottom(distanceFromBottom < NEAR_BOTTOM_THRESHOLD_PX);
@@ -809,7 +886,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     flashMessage(el);
     return el;
-  }, [cancelBottomPinning, setAnchor, beginSmoothScrollIntent]);
+  }, [cancelBottomPinning, setAnchor, beginSmoothScrollIntent, bottomIsPresent]);
 
   const jumpToMessage = useCallback(async (messageId: string): Promise<void> => {
     const seq = ++jumpSeqRef.current;
@@ -882,9 +959,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     requestJump(jumpToMessageId);
   }, [jumpToMessageId, onJumpHandled, requestJump]);
 
-  // Jump to Present. After a jump the cache can be a window that stops short
-  // of the newest message (`detachedChannels`); scrolling to its bottom would
-  // not be the present, so reload the newest page first and pin to it.
+  // Jump to Present. The cache can be a window that stops short of the newest
+  // message (`detachedChannels`); scrolling to its bottom would not be the
+  // present, so reload the newest page first and pin to it.
   const jumpToPresent = useCallback(async () => {
     const seq = ++jumpSeqRef.current;
     const requestChannelId = channelId;
@@ -949,6 +1026,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       && distanceFromBottom < SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
     if (!holdingBottom) setAnchor(anchorFromLayout(container));
     recordGeometry(container);
+    loadNewerIfAtEnd();
 
     // Load more when scrolled to top. The rows loaded above the view are held
     // in place by the anchor (the layout effect re-applies it before paint).
@@ -986,7 +1064,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
         setIsLoadingMore(false);
       }
     }
-  }, [channelId, hasMore, isLoadingMore, loadMoreMessages, applyAnchor, setAnchor, anchorFromLayout, recordGeometry]);
+  }, [channelId, hasMore, isLoadingMore, loadMoreMessages, applyAnchor, setAnchor, anchorFromLayout, recordGeometry, loadNewerIfAtEnd]);
 
   if (!canReadHistory) {
     return (

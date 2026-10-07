@@ -223,7 +223,7 @@ function seedStores(state: RowState): void {
     messages: new Map([[CHANNEL, isReactionState(state) ? reactionConversation() : conversation()]]),
     hasMore: new Map([[CHANNEL, false]]),
     // present-failed starts in a window loaded by an earlier jump.
-    detachedChannels: new Set(state === 'present-failed' ? [CHANNEL] : []),
+    detachedChannels: new Map(state === 'present-failed' ? [[CHANNEL, []]] : []),
   });
 }
 

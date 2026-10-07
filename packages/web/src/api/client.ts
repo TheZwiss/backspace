@@ -81,6 +81,7 @@ import type {
   TelemetryPayload,
   TelemetryStatus,
 } from '@backspace/shared';
+import { MESSAGE_PAGING_AFTER, MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
 export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
@@ -102,6 +103,16 @@ export interface CheckUsernameResponse {
   reason?: string;
   code?: ErrorCode;
   details?: ErrorDetails;
+}
+
+/**
+ * A history request with an `after` cursor. `forward` is false when the
+ * server ignored the cursor (it predates forward paging): `messages` is then
+ * the newest page, not the page after the cursor.
+ */
+export interface HistoryPageAfter<T> {
+  messages: T[];
+  forward: boolean;
 }
 
 /** The parts of an error body the client reads; see HttpError.fromBody for the vintages. */
@@ -218,6 +229,7 @@ export class BackspaceApiClient {
     delete: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<MessageWithUser[]>;
     messagesAround: (id: string, messageId: string, limit?: number) => Promise<MessageWithUser[]>;
+    messagesAfter: (id: string, after: string, limit?: number) => Promise<HistoryPageAfter<MessageWithUser>>;
     sendMessage: (channelId: string, data: CreateMessageRequest) => Promise<MessageWithUser>;
     getOverrides: (channelId: string) => Promise<{ channelId: string; targetType: string; targetId: string; allow: string; deny: string }[]>;
     putOverride: (channelId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<{ success: boolean }>;
@@ -250,6 +262,7 @@ export class BackspaceApiClient {
     close: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<DmMessageWithUser[]>;
     messagesAround: (id: string, messageId: string, limit?: number) => Promise<DmMessageWithUser[]>;
+    messagesAfter: (id: string, after: string, limit?: number) => Promise<HistoryPageAfter<DmMessageWithUser>>;
     sendMessage: (id: string, data: CreateDmMessageRequest) => Promise<DmMessageWithUser>;
     updateMessage: (id: string, data: UpdateMessageRequest) => Promise<DmMessageWithUser>;
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
@@ -378,12 +391,13 @@ export class BackspaceApiClient {
   };
 
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
-    async function request<T>(
+    /** Send a request and return the successful response; a failure throws. */
+    async function send(
       method: string,
       path: string,
       body?: unknown,
       requireAuth = true,
-    ): Promise<T> {
+    ): Promise<Response> {
       const headers: Record<string, string> = {};
 
       if (body) {
@@ -430,7 +444,33 @@ export class BackspaceApiClient {
         throw HttpError.fromBody(response.status, await response.json().catch(() => null));
       }
 
+      return response;
+    }
+
+    async function request<T>(
+      method: string,
+      path: string,
+      body?: unknown,
+      requireAuth = true,
+    ): Promise<T> {
+      const response = await send(method, path, body, requireAuth);
       return response.json() as Promise<T>;
+    }
+
+    /**
+     * The page after `after` in a channel's or DM's history. `forward` says
+     * whether the server honoured the cursor; a server that predates forward
+     * paging answers with the newest page instead (docs/systems/api.md,
+     * "Message history paging").
+     */
+    async function historyAfter<T>(path: string, after: string, limit: number): Promise<HistoryPageAfter<T>> {
+      const params = new URLSearchParams();
+      params.set('after', after);
+      params.set('limit', String(limit));
+      const response = await send('GET', `${path}?${params}`);
+      const forward = response.headers.get(MESSAGE_PAGING_HEADER) === MESSAGE_PAGING_AFTER;
+      const messages = await response.json() as T[];
+      return { messages, forward };
     }
 
     this.auth = {
@@ -525,6 +565,8 @@ export class BackspaceApiClient {
         params.set('limit', String(limit));
         return request<MessageWithUser[]>('GET', `/channels/${id}/messages?${params}`);
       },
+      messagesAfter: (id: string, after: string, limit = 50) =>
+        historyAfter<MessageWithUser>(`/channels/${id}/messages`, after, limit),
       messagesAround: (id: string, messageId: string, limit = 50) => {
         const params = new URLSearchParams();
         params.set('messageId', messageId);
@@ -582,6 +624,8 @@ export class BackspaceApiClient {
         params.set('limit', String(limit));
         return request<DmMessageWithUser[]>('GET', `/dm/${id}/messages?${params}`);
       },
+      messagesAfter: (id: string, after: string, limit = 50) =>
+        historyAfter<DmMessageWithUser>(`/dm/${id}/messages`, after, limit),
       messagesAround: (id: string, messageId: string, limit = 50) => {
         const params = new URLSearchParams();
         params.set('messageId', messageId);

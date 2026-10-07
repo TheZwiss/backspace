@@ -20,12 +20,16 @@ vi.mock('../../audio/AudioManager', () => ({
 
 const messagesAround = vi.fn();
 const latestMessages = vi.fn();
+// A detached window pages forward near its end; these tests are about the
+// jump, so that page never arrives.
+const newerMessages = vi.fn(() => new Promise<never>(() => {}));
 vi.mock('../../utils/crossStoreResolvers', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../utils/crossStoreResolvers')>()),
   getApiForOrigin: () => ({
     channels: {
       messagesAround: (...args: unknown[]) => messagesAround(...args),
       messages: (...args: unknown[]) => latestMessages(...args),
+      messagesAfter: () => newerMessages(),
     },
   }),
 }));
@@ -93,7 +97,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Set(), scrollPositions: new Map() });
+  useChatStore.setState({ messages: new Map(), hasMore: new Map(), detachedChannels: new Map(), scrollPositions: new Map() });
   useSpaceStore.setState({ members: [], currentSpaceId: null, channelToSpaceMap: new Map() });
 });
 
@@ -467,7 +471,7 @@ describe('reply preview jump', () => {
     // though the list is close to the window's end.
     await userEvent.click(screen.getByRole('button', { name: /jump to present/i }));
 
-    expect(latestMessages).toHaveBeenCalledWith(CHANNEL);
+    expect(latestMessages).toHaveBeenCalledWith(CHANNEL, undefined, 50);
     await waitFor(() => expect(document.getElementById('msg-500')).toBeInTheDocument());
     expect(useChatStore.getState().detachedChannels.has(CHANNEL)).toBe(false);
     expect(document.getElementById('msg-100')).not.toBeInTheDocument();

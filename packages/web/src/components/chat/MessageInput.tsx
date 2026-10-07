@@ -94,6 +94,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
 
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const returnToPresent = useChatStore((s) => s.returnToPresent);
   const chatReplyTo = useChatStore((s) => s.replyTo);
   const chatSetReplyTo = useChatStore((s) => s.setReplyTo);
   const editingMessageId = useChatStore((s) => s.editingMessageId);
@@ -362,6 +363,9 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       .filter((x): x is number => typeof x === 'number' && x > 0);
     const tusExpiresAt = expirations.length > 0 ? Math.min(...expirations) : fallbackExpires;
 
+    // As for a text send (chatStore.sendMessage): sending from a window of
+    // older history goes back to the present, where the message will appear.
+    void returnToPresent(channelId);
     appendBubble({
       clientId,
       channelId,

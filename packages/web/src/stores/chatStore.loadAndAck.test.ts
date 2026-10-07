@@ -61,7 +61,7 @@ beforeEach(() => {
     loadStates: new Map(),
     readStates: new Map(),
     unreadChannels: new Set(),
-    detachedChannels: new Set(),
+    detachedChannels: new Map(),
   });
 });
 
@@ -104,7 +104,7 @@ describe('read states only move forward', () => {
   it('does not ack a detached window', () => {
     useChatStore.setState({
       messages: new Map([[A, [msg('100'), msg('101')]]]),
-      detachedChannels: new Set([A]),
+      detachedChannels: new Map([[A, []]]),
       readStates: new Map([[A, '90']]),
       unreadChannels: new Set([A]),
     });
