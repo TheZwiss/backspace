@@ -345,11 +345,6 @@
       "count": 1
     }
   },
-  "packages/web/src/components/modals/ChannelSettingsModal.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "packages/web/src/components/modals/ConnectedInstances.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

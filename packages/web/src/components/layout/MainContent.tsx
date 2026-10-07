@@ -27,6 +27,7 @@ import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
+import { ChannelHeaderTopic } from './ChannelHeaderTopic';
 import { isDmChannel } from '../../stores/spaceStore';
 import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
@@ -525,10 +526,7 @@ export function MainContent() {
           <span className="text-[20px] font-medium text-txt-tertiary flex-shrink-0 leading-none">#</span>
           <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight">{channel.name}</span>
           {channel.topic && (
-            <>
-              <div className="w-[1px] h-5 bg-border-soft mx-2" />
-              <span className="text-[13px] text-txt-tertiary truncate leading-tight">{channel.topic}</span>
-            </>
+            <ChannelHeaderTopic key={channel.id} channelName={channel.name} topic={channel.topic} />
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">

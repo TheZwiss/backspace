@@ -189,6 +189,8 @@
   "category_not_found": "That category could not be found.",
   "channel_name_required": "Enter a channel name.",
   "channel_name_length": "Channel names must be {{min}} to {{max}} characters long.",
+  "channel_topic_invalid": "A channel topic must be text.",
+  "channel_topic_length": "Channel topics can be at most {{max}} characters long.",
   "channel_type_invalid": "A channel is either a text channel or a voice channel.",
   "category_not_in_space": "That category does not belong to this space.",
   "channel_not_in_space": "That channel does not belong to this space.",

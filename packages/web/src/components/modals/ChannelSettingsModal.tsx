@@ -12,6 +12,7 @@ import { describeError } from '../../i18n/errors';
 import { useEntityOverrides } from '../../hooks/useEntityOverrides';
 import { isHiddenFromEveryone } from '../../utils/overrideBits';
 import { PrivacySetting } from './PrivacySetting';
+import { ChannelTopicEditor } from './ChannelTopicEditor';
 import { LOCK_ICON } from '../ui/LockNote';
 import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants';
 
@@ -45,6 +46,7 @@ function OverviewTab({
   channelId,
   channelName,
   channelType,
+  channelTopic,
   isPrivate,
   isFetching,
   isLoading,
@@ -54,10 +56,12 @@ function OverviewTab({
   onTogglePrivate,
   onDeleteChannel,
   onRename,
+  onSaveTopic,
 }: {
   channelId: string;
   channelName: string;
   channelType: string;
+  channelTopic: string | null;
   isPrivate: boolean;
   isFetching: boolean;
   isLoading: boolean;
@@ -67,6 +71,7 @@ function OverviewTab({
   onTogglePrivate: () => void;
   onDeleteChannel: () => void;
   onRename: (name: string) => Promise<void>;
+  onSaveTopic: (topic: string | null) => Promise<void>;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
   return (
@@ -90,6 +95,12 @@ function OverviewTab({
           onSave={onRename}
         />
       </div>
+
+      {/* Only text channels show a topic (in the channel header), so only
+          they offer to edit one, the same as the create dialog. */}
+      {channelType === 'text' && (
+        <ChannelTopicEditor key={channelId} topic={channelTopic} canEdit={canManageChannels} onSave={onSaveTopic} />
+      )}
 
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
@@ -211,6 +222,16 @@ export function ChannelSettingsModal() {
     }
   };
 
+  const handleSaveTopic = async (topic: string | null): Promise<void> => {
+    setError('');
+    try {
+      await useSpaceStore.getState().updateChannel(channelId, { topic });
+    } catch (err) {
+      setError(describeError(err));
+      throw err;
+    }
+  };
+
   const showTabs = canManageRoles;
 
   const tabClass = (target: typeof tab) =>
@@ -242,6 +263,7 @@ export function ChannelSettingsModal() {
                   channelId={channelId}
                   channelName={channel.name}
                   channelType={channel.type}
+                  channelTopic={channel.topic}
                   isPrivate={isPrivate}
                   isFetching={isFetching}
                   isLoading={isLoading}
@@ -251,6 +273,7 @@ export function ChannelSettingsModal() {
                   onTogglePrivate={handleToggle}
                   onDeleteChannel={() => setShowDeleteConfirm(true)}
                   onRename={handleRenameChannel}
+                  onSaveTopic={handleSaveTopic}
                 />
               )}
               {tab === 'permissions' && (
@@ -273,6 +296,7 @@ export function ChannelSettingsModal() {
             channelId={channelId}
             channelName={channel.name}
             channelType={channel.type}
+            channelTopic={channel.topic}
             isPrivate={isPrivate}
             isFetching={isFetching}
             isLoading={isLoading}
@@ -282,6 +306,7 @@ export function ChannelSettingsModal() {
             onTogglePrivate={handleToggle}
             onDeleteChannel={() => setShowDeleteConfirm(true)}
             onRename={handleRenameChannel}
+            onSaveTopic={handleSaveTopic}
           />
         )}
       </Modal>

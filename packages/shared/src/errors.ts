@@ -217,6 +217,8 @@ export const ERROR_CODES = [
   'message_not_found',
   'channel_name_required',
   'channel_name_length',
+  'channel_topic_invalid',
+  'channel_topic_length',
   'channel_type_invalid',
   'category_not_in_space',
   'channel_not_in_space',
