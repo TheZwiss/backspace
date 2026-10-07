@@ -38,4 +38,18 @@ describe('peerRejectedToast', () => {
     expect(text).toContain('orbit.example');
     expect(text).toContain('Remote instance requires manual peering approval');
   });
+
+  it('falls back to the server text for a code this client does not know', async () => {
+    const { peerRejectedToast } = await import('./peerRejectedToast');
+    const text = peerRejectedToast({
+      peerOrigin: 'https://orbit.example',
+      peerLabel: 'Orbit',
+      reason: 'A reason a newer server added',
+      // The event arrives as JSON: nothing on the wire stops a code this union lacks.
+      reasonCode: 'some_future_reason' as FederationPeerStatusReason,
+    });
+    expect(text).toBe(deFederation.peerRejected.fallback
+      .replace('{{name}}', 'Orbit')
+      .replace('{{reason}}', 'A reason a newer server added'));
+  });
 });

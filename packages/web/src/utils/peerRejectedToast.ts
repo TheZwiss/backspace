@@ -4,8 +4,9 @@ import i18n from '../i18n';
 /**
  * The toast text for a `federation_peer_rejected` event: why messages to the
  * peer are not delivered, localized from the event's `reasonCode`. A server
- * that predates the code sends only English `reason` text, which the fallback
- * line carries.
+ * that predates the code sends only English `reason` text, and a newer one may
+ * send a code this client does not know; the fallback line carries the
+ * server's text for both.
  */
 export function peerRejectedToast(event: {
   peerOrigin: string;
@@ -23,6 +24,6 @@ export function peerRejectedToast(event: {
     case 'revoked_by_remote': return i18n.t('federation:peerRejected.revoked_by_remote', { name });
     case 'expired_on_remote': return i18n.t('federation:peerRejected.expired_on_remote', { name });
     case 'stale_peering_on_remote': return i18n.t('federation:peerRejected.stale_peering_on_remote', { name });
-    case undefined: return i18n.t('federation:peerRejected.fallback', { name, reason: event.reason });
+    default: return i18n.t('federation:peerRejected.fallback', { name, reason: event.reason });
   }
 }
