@@ -222,3 +222,76 @@ describe('an accept in a DM call', () => {
     expect(useVoiceStore.getState().activeDmCall).toBeNull();
   });
 });
+
+describe('what a ring leaves behind', () => {
+  it('does not let a ring someone else answered tear down a later call', () => {
+    const ws = homeSocket();
+    const disconnectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ disconnectFn, isLiveKitConnected: false });
+
+    // Rung for federated call F; another member answers it.
+    ws.deliver({ type: 'dm_call_incoming', dmChannelId: null, federatedCallId: 'fed-f', callerId: 'c', callerName: 'C' });
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: null, federatedCallId: 'fed-f' });
+    expect(useVoiceStore.getState().incomingCall).toBeNull();
+    expect(useVoiceStore.getState().federatedCallId).toBeNull();
+
+    // Later in a call in another DM, F ends.
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: OTHER } });
+    ws.deliver({ type: 'dm_call_ended', dmChannelId: null, federatedCallId: 'fed-f' });
+
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: OTHER });
+    expect(disconnectFn).not.toHaveBeenCalled();
+  });
+
+  it('matches nothing by a federated call id no slot holds', () => {
+    useVoiceStore.setState({ federatedCallId: 'fed-f' });
+    expect(dmCallEventIsOurs({ dmChannelId: null, federatedCallId: 'fed-f' })).toBe(false);
+  });
+});
+
+describe('an accept naming the held call by another id', () => {
+  it('keeps the id a joined client holds the call by', () => {
+    const ws = homeSocket();
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: GROUP }, isLiveKitConnected: true });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: 'copy-on-peer', federatedCallId: 'key-group' });
+
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+  });
+
+  it('connects the caller under the id it called', () => {
+    const ws = homeSocket();
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP }, connectFn });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: 'copy-on-peer', federatedCallId: 'key-group' });
+
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+    expect(connectFn).toHaveBeenCalledWith(GROUP, true);
+  });
+});
+
+describe('a refused dm_call_accept', () => {
+  it('takes the client out of the call it joined on its side', () => {
+    const ws = homeSocket();
+    const disconnectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: GROUP }, disconnectFn });
+
+    ws.deliver({ type: 'error', message: 'This call has already ended', code: 'dm_call_not_found', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().activeDmCall).toBeNull();
+    expect(disconnectFn).toHaveBeenCalledTimes(1);
+    expect(useUIStore.getState().toasts[0]!.message).toBe(i18n.t('errors:dm_call_not_found'));
+  });
+
+  it('leaves alone a call in another DM', () => {
+    const ws = homeSocket();
+    const disconnectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: OTHER }, disconnectFn });
+
+    ws.deliver({ type: 'error', message: 'This call has already ended', code: 'dm_call_not_found', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: OTHER });
+    expect(disconnectFn).not.toHaveBeenCalled();
+  });
+});

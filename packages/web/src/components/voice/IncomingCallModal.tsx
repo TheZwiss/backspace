@@ -8,6 +8,16 @@ import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
 import type { User } from '@backspace/shared';
 
+/**
+ * After a decline the ring's federated call data (`federatedCallId`,
+ * `callOrigin`) names no call this client holds. It is cleared, unless the
+ * client holds another call those fields belong to.
+ */
+function forgetDeclinedRing(): void {
+  const { outgoingCall, activeDmCall, clearFederatedCallData } = useVoiceStore.getState();
+  if (!outgoingCall && !activeDmCall) clearFederatedCallData();
+}
+
 export function IncomingCallModal() {
   const { t } = useTranslation(['voice', 'common']);
   const incomingCall = useVoiceStore((s) => s.incomingCall);
@@ -23,6 +33,7 @@ export function IncomingCallModal() {
         const origin = callOrigin || (incomingCall.dmChannelId ? getChannelOrigin(incomingCall.dmChannelId) : undefined);
         wsSend({ type: 'dm_call_reject', dmChannelId: incomingCall.dmChannelId, federatedCallId }, origin);
         setIncomingCall(null);
+        forgetDeclinedRing();
       }, 30000);
     }
     return () => {
@@ -76,6 +87,7 @@ export function IncomingCallModal() {
     const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
     wsSend({ type: 'dm_call_reject', dmChannelId, federatedCallId }, origin);
     setIncomingCall(null);
+    forgetDeclinedRing();
   };
 
   return (

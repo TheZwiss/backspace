@@ -179,12 +179,15 @@ export function teardownDmCall(): void {
  */
 export function dmCallEventIsOurs(event: { dmChannelId: string | null; federatedCallId?: string | null }): boolean {
   const { incomingCall, outgoingCall, activeDmCall, federatedCallId } = useVoiceStore.getState();
+  const slots = [incomingCall, outgoingCall, activeDmCall].filter(slot => slot !== null);
+  // `federatedCallId` names the call a slot holds. With every slot empty it
+  // is only what a ring that stopped without a join left behind.
+  if (slots.length === 0) return false;
   const held = new Set<string>();
-  for (const slot of [incomingCall, outgoingCall, activeDmCall]) {
-    if (slot?.dmChannelId) held.add(slot.dmChannelId);
+  for (const slot of slots) {
+    if (slot.dmChannelId) held.add(slot.dmChannelId);
   }
   if (federatedCallId) held.add(federatedCallId);
-  if (held.size === 0) return false;
 
   const { dmChannels } = useSpaceStore.getState();
   const keyOf = (dmChannelId: string): string | null => dmChannels.find(d => d.id === dmChannelId)?.federatedId ?? null;
@@ -1117,7 +1120,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // included. Only the call this client holds changes state: a member
       // calling another DM, or sitting in a voice channel, stays where it is.
       if (!dmCallEventIsOurs(event)) break;
-      const { setIncomingCall, setOutgoingCall, outgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, outgoingCall, activeDmCall, setActiveDmCall, connectFn, isLiveKitConnected, clearFederatedCallData } = useVoiceStore.getState();
       const wasOutgoingCall = !!outgoingCall;
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -1125,12 +1128,21 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Only enter active call state if:
       // - We're the caller (wasOutgoingCall) → will connect via connectFn below
       // - We already connected to LiveKit (clicked accept in handleAccept)
-      // Other instances of the same user must NOT enter call state — they'd show
+      // Other instances of the same user must NOT enter call state: they'd show
       // "Connecting..." forever with no actual LiveKit connection.
-      const callDmId = event.dmChannelId || event.federatedCallId || '';
-      if (wasOutgoingCall || isLiveKitConnected) {
+      // The id is the one this client holds the call by. The event may name
+      // it by another instance's DM id (a client that hears both the host and
+      // its home), and the hang-up must go out under the held id.
+      const callDmId = activeDmCall?.dmChannelId
+        ?? outgoingCall?.dmChannelId
+        ?? (event.dmChannelId || event.federatedCallId || '');
+      if (!activeDmCall && (wasOutgoingCall || isLiveKitConnected)) {
         setActiveDmCall({ dmChannelId: callDmId });
       }
+      // Someone else answered a call that rang here, and this client is not
+      // in it: what the ring left (`federatedCallId`, `callOrigin`) names no
+      // call this client holds, so it goes.
+      if (!useVoiceStore.getState().activeDmCall) clearFederatedCallData();
       // The caller connects to the DM room. `wasOutgoingCall` alone identifies
       // the caller session (other sessions/tabs never set outgoingCall), and
       // `connect()` de-dupes an already-connected same room — so we must NOT
@@ -1352,11 +1364,21 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
     case 'error': {
       console.error(`WebSocket error (${origin || 'home'}):`, event.message);
       // A refused dm_call_start names its DM: the call this client is placing
-      // there never started, so the calling state and its ring go.
-      const { outgoingCall, setOutgoingCall } = useVoiceStore.getState();
-      if (event.dmChannelId && outgoingCall?.dmChannelId === event.dmChannelId
-          && getChannelOrigin(event.dmChannelId) === origin) {
-        setOutgoingCall(null);
+      // there never started, so the calling state and its ring go. A refused
+      // dm_call_accept names the call the client joined on its side before
+      // the answer (the call had ended, or the user is not a member), so the
+      // client leaves it.
+      if (event.dmChannelId) {
+        const { outgoingCall, setOutgoingCall, activeDmCall, callOrigin } = useVoiceStore.getState();
+        if (outgoingCall?.dmChannelId === event.dmChannelId
+            && getChannelOrigin(event.dmChannelId) === origin) {
+          setOutgoingCall(null);
+        }
+        if ((event.code === 'dm_call_not_found' || event.code === 'not_dm_member')
+            && activeDmCall?.dmChannelId === event.dmChannelId
+            && (callOrigin || getChannelOrigin(activeDmCall.dmChannelId)) === origin) {
+          teardownDmCall();
+        }
       }
       // A coded error is the refusal of something the user just did (a voice
       // moderation action the role hierarchy refuses, for one); say so. Older

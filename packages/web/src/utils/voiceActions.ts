@@ -168,6 +168,10 @@ export function isDmCallRunning(state: Pick<ReturnType<typeof useVoiceStore.getS
 export function joinDmCall(dmChannelId: string): boolean {
   const voice = useVoiceStore.getState();
   if (!canStartDmCall(voice)) return false;
+  // This call is joined through the DM's own instance. Federated call data
+  // left by an earlier ring belongs to no call this client holds, and the
+  // hang-up must not follow its `callOrigin`.
+  voice.clearFederatedCallData();
   voice.setActiveDmCall({ dmChannelId });
   wsSend({ type: 'dm_call_accept', dmChannelId }, getChannelOrigin(dmChannelId));
   if (voice.connectFn) {

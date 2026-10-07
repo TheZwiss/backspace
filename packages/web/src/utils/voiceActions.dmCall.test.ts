@@ -139,4 +139,10 @@ describe('joinDmCall', () => {
     expect(joinDmCall(DM)).toBe(false);
     expect(wsSend).not.toHaveBeenCalled();
   });
+  it('drops federated call data an earlier ring left, so the hang-up goes to the DM origin', () => {
+    useVoiceStore.setState({ federatedCallId: 'fed-old', callOrigin: 'https://elsewhere.example' });
+    expect(joinDmCall(DM)).toBe(true);
+    expect(useVoiceStore.getState().federatedCallId).toBeNull();
+    expect(useVoiceStore.getState().callOrigin).toBeNull();
+  });
 });
