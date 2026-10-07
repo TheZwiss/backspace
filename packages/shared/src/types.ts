@@ -772,8 +772,9 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  // `dmChannelId` names the DM of a refused `dm_call_start`; a client calling
-  // that DM drops its calling state (voice.md, "DM Call State Machine").
+  // `dmChannelId` names the call of a refused `dm_call_start` or
+  // `dm_call_accept`; a client calling or in that call drops it (voice.md,
+  // "DM Call State Machine").
   | { type: 'error'; message: string; code?: ErrorCode; dmChannelId?: string }
   // The space's roles or a member's roles changed: what the receiver may see
   // or do there, and how its roles and members look, may be different now.
@@ -1444,11 +1445,13 @@ export interface FederationCallPayload {
    * Group call rules, per member (voice.md, "Group calls across instances").
    * On `dm_call_start` the host says it applies them: a member's end or
    * decline removes only that member, and the host relays `dm_call_end` to
-   * every peer once the call is over. On `dm_call_end` / `dm_call_reject`
-   * from an instance holding the call's entry: only this member left or
-   * declined, and the sender keeps the call for its other members. Senders
-   * up to 1.8.0 omit it; their ends and declines end the call for all of
-   * the sender's members.
+   * every peer once the call is over. On `dm_call_accept` from an instance
+   * holding the call's entry: it relays this member's leave, also when they
+   * just go away, so the host seats them. On `dm_call_end` /
+   * `dm_call_reject` from that instance: only this member left or declined,
+   * and the sender keeps the call for its other members. Senders up to 1.8.0
+   * omit it; their acceptors are not seated, and their ends and declines end
+   * the call for all of the sender's members.
    */
   perMember?: boolean;
 }

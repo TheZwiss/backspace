@@ -409,9 +409,10 @@ rejection (`ownedSpaces`). The only sites left without codes are the
 test-only peer seeding route and most of the WebSocket handler's error
 messages, which are a separate protocol. The WebSocket refusals that carry a
 code are `role_hierarchy` (voice moderation), `system_message_immutable` and
-`not_message_author` (`dm_message_edit`), and `dm_call_in_progress`,
-`not_dm_member` and `validation_failed` (`dm_call_start`, see
-[voice.md](voice.md#dm-call-state-machine)).
+`not_message_author` (`dm_message_edit`), `dm_call_in_progress`,
+`not_dm_member` and `validation_failed` (`dm_call_start`), and
+`dm_call_not_found`, `not_dm_member` and `validation_failed`
+(`dm_call_accept`; see [voice.md](voice.md#dm-call-state-machine)).
 
 The web client no longer matches on English error text. The places that
 used to (the join page, the space invite card, the invite modal, the roles

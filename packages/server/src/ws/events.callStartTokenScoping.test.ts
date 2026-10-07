@@ -329,7 +329,7 @@ describe('sendFederatedCallStart — the conversation key', () => {
   });
 });
 
-describe('sendFederatedCallStart — group call rules', () => {
+describe('sendFederatedCallStart: group call rules', () => {
   beforeEach(async () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });

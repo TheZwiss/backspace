@@ -74,8 +74,8 @@ All four also need the actor to outrank the target (permissions.md, "Role hierar
 ### DM Calls
 | type | fields | notes |
 |------|--------|-------|
-| `dm_call_start` | dmChannelId | 60s auto-timeout if not accepted. In a DM whose call is hosted here, a member not in it joins it (handled as `dm_call_accept`). A member already in it, or a DM whose call is hosted on another instance, gets `error` with `code: 'dm_call_in_progress'` and the `dmChannelId`, on the sending socket only; a non-member gets `code: 'not_dm_member'`, a missing `dmChannelId` `code: 'validation_failed'` |
-| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active; later accepts join the active call (late join) |
+| `dm_call_start` | dmChannelId | 60s auto-timeout if not accepted. In a DM whose call is hosted here, a member not in it joins it (handled as `dm_call_accept`). A member already in it, or any member while the DM's call hosted on another instance still rings or has a member here in it, gets `error` with `code: 'dm_call_in_progress'` and the `dmChannelId`, on the sending socket only (a record of such a call with nobody here in it is dropped and the start goes on); a non-member gets `code: 'not_dm_member'`, a missing `dmChannelId` `code: 'validation_failed'` |
+| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active; later accepts join the active call (late join). Refused on the sending socket only with `error` and a code: `dm_call_not_found` (no call any more), `not_dm_member`, `validation_failed`, with the id the client sent as `dmChannelId` |
 | `dm_call_reject` | dmChannelId?, federatedCallId? | 1-on-1: ends the call. Group: stops only the sender's ring; ends the call only when it still rings and every member but the caller has declined. Ignored from the caller or a participant |
 | `dm_call_end` | dmChannelId?, federatedCallId? | 1-on-1: ends the call. Group: takes only the sender out; the caller of a call nobody joined ends it; the call ends with its last participant. Ignored from a member who is not in the call |
 
@@ -94,7 +94,7 @@ All four also need the actor to outrank the target (permissions.md, "Role hierar
 |------|--------|-------|
 | `ready` | (see Ready Payload below) | user |
 | `pong` | — | user |
-| `error` | message, code?, dmChannelId? | user; a refused `dm_call_start` goes to the sending socket only and names its `dmChannelId` |
+| `error` | message, code?, dmChannelId? | user; a refused `dm_call_start` or `dm_call_accept` goes to the sending socket only and names its `dmChannelId` |
 
 ### Messages
 | type | fields | scope |
@@ -193,11 +193,14 @@ connected to an old server still gets the old `ready` push.
 
 An `error` that carries a `code` is the refusal of something the user just
 did (`role_hierarchy` from the voice moderation events, `dm_call_in_progress`,
-`not_dm_member` and `validation_failed` from `dm_call_start`); the client shows it as a warning
+`not_dm_member` and `validation_failed` from `dm_call_start`, `dm_call_not_found`,
+`not_dm_member` and `validation_failed` from `dm_call_accept`); the client shows it as a warning
 toast in the user's language (`describeErrorCode`). An `error` without a code
 is only logged. An `error` with a `dmChannelId` equal to the DM the client is
 calling, from the instance that serves that DM, also clears the calling state
-(`outgoingCall`), which stops the outgoing ring.
+(`outgoingCall`), which stops the outgoing ring. A `dm_call_not_found` or
+`not_dm_member` naming the call the client is in, from that call's instance,
+takes the client out of it (`teardownDmCall`).
 
 ### DM Channel Management
 | type | fields | scope |

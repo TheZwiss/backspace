@@ -2075,7 +2075,7 @@ Four relay event types are processed in `processRelayEvents()`:
 | Event Type | Direction | Key Payload Fields |
 |---|---|---|
 | `dm_call_start` | Host → each participant-homing peer | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`, **scoped to the recipient's own members**), `memberTokens?` (the same tokens as `{ homeUserId, homeInstance, token }`; see "Token Scoping"), `caller: { homeUserId, homeInstance, displayName }`, `participants` (full roster), `perMember?` (group call: the host applies the group rules) |
-| `dm_call_accept` | Participant → Host, then Host → All Peers | `federatedId`, `acceptor: { homeUserId, homeInstance }` |
+| `dm_call_accept` | Participant → Host, then Host → All Peers | `federatedId`, `acceptor: { homeUserId, homeInstance }`, `perMember?` (group call: the sender relays this member's leave, so the host seats them) |
 | `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }`, `perMember?` (group call: only this member declined) |
 | `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }`, `perMember?` (group call: only this member left) |
 
@@ -2110,11 +2110,11 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 
 **Start:** Host validates membership, broadcasts `dm_call_incoming` to local WS clients, then sends `dm_call_start` S2S to each instance that homes a remote DM member. The relay is built per recipient: the host mints tokens only for the members that recipient homes. A DM with no remote member is not relayed at all, and peers that home no DM member are not contacted. See "Token Scoping" below.
 
-**Accept:** Remote instance sends `dm_call_accept` S2S to host. Host transitions `ringing → active`, broadcasts `dm_call_accepted` locally, fans out `dm_call_accept` to all other remote instances.
+**Accept:** Remote instance sends `dm_call_accept` S2S to host. Host transitions `ringing → active`, broadcasts `dm_call_accepted` locally, fans out `dm_call_accept` to all other remote instances. In a group call whose accept carries `perMember` the host also seats the acceptor; the sending instance binds the member's voice session and relays `dm_call_end` with `perMember` when they hang up or go away (voice.md, "Group calls across instances").
 
 **Reject:** Remote sends `dm_call_reject` to host. In a 1-on-1 the host destroys the room and sends `dm_call_end` to the other peers. In a group the host records the decline and ends the call only when nobody is left to answer it.
 
-**End:** Initiating instance (host or not) routes through the host. In a 1-on-1 the host destroys the room and fans out `dm_call_end` to the other remote instances. In a group the member leaves, and the host ends the call and fans out `dm_call_end` to every remote instance, in the caller's name, only when its last participant is gone.
+**End:** Initiating instance (host or not) routes through the host. In a 1-on-1 the host destroys the room and fans out `dm_call_end` to the other remote instances. In a group the member leaves, and the host ends the call and fans out `dm_call_end` to every remote instance, in the name of a user homed on the host, only when its last participant is gone.
 
 **Timeout:** Both host and remote instances auto-clean stale ringing calls after 60 seconds.
 
