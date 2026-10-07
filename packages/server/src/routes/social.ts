@@ -290,7 +290,7 @@ async function handleFederatedFriendRequest(
   try {
     lookup = await target.lookup(peerOrigin);
   } catch (err) {
-    console.error(`[social] federated friend-add lookup failed for ${peerOrigin}:`, err);
+    console.error('[social] federated friend-add lookup failed for %s:', peerOrigin, err);
     return sendError(reply, 503, 'peer_unreachable', { domain: targetDomain });
   }
   if (!lookup.ok) {

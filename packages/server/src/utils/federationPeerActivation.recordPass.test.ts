@@ -99,7 +99,8 @@ describe('onPeerActivated and the record pass', () => {
     expect(presenceSnapshot).toHaveBeenCalledWith(ORIGIN);
     expect(connectionManager.sendToAdmins).toHaveBeenCalledWith({ type: 'federation_peers_changed' });
     await vi.waitFor(() => expect(warn).toHaveBeenCalledWith(
-      `[onPeerActivated] backfillStubUsernamesForPeer(${ORIGIN}) failed`,
+      '[onPeerActivated] backfillStubUsernamesForPeer(%s) failed',
+      ORIGIN,
       failure,
     ));
     warn.mockRestore();

@@ -87,7 +87,7 @@ export async function onPeerActivated(
         const origin = peerRow.origin;
         const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
         void backfillStubUsernamesForPeer(origin).catch((e: unknown) => {
-          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${origin}) failed`, e);
+          console.warn('[onPeerActivated] backfillStubUsernamesForPeer(%s) failed', origin, e);
         });
 
         // Re-emit a fresh presence snapshot to the activating peer so its stubs
@@ -96,14 +96,14 @@ export async function onPeerActivated(
         // markPeerStubsOffline ran on our side too.
         const { snapshotPresenceForPeer } = await import('./federationPresence.js');
         try { await snapshotPresenceForPeer(peerRow.origin); } catch (e) {
-          console.warn(`[onPeerActivated] snapshotPresenceForPeer(${peerRow.origin}) failed`, e);
+          console.warn('[onPeerActivated] snapshotPresenceForPeer(%s) failed', peerRow.origin, e);
         }
       }
 
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     } catch (err) {
-      console.error(`[federation] onPeerActivated(${peerId}, ${reason}) failed:`, err);
+      console.error('[federation] onPeerActivated(%s, %s) failed:', peerId, reason, err);
     }
   })();
 
@@ -219,7 +219,7 @@ export async function syncPeerMutationLog(
       console.log(`[federation] Sync-pull from ${activePeer.origin} replayed ${totalEvents} events${skipSuffix}`);
     }
   } catch (err) {
-    console.error(`[federation] Sync-pull from ${activePeer.origin} failed:`, err);
+    console.error('[federation] Sync-pull from %s failed:', activePeer.origin, err);
   }
 }
 
@@ -344,7 +344,7 @@ export async function startupBootstrapSync(): Promise<void> {
   const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
   for (const peer of allActivePeers) {
     backfillStubUsernamesForPeer(peer.origin).catch((err) => {
-      console.warn(`[startup] stub-backfill ${peer.origin} failed`, err);
+      console.warn('[startup] stub-backfill %s failed', peer.origin, err);
     });
   }
 }

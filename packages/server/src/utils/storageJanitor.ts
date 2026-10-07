@@ -771,7 +771,7 @@ export function cleanupSoftDeletedDmChannels(): number {
 
       purged++;
     } catch (err) {
-      console.error(`[storage-janitor] Failed to purge soft-deleted DM channel ${channel.id}:`, err);
+      console.error('[storage-janitor] Failed to purge soft-deleted DM channel %s:', channel.id, err);
     }
   }
 

@@ -32,7 +32,10 @@ export function invokePermanentFailureCallback(eventType: string, messageId: str
     cb(messageId, reason);
   } catch (err) {
     console.error(
-      `[federation-rollback] callback for ${eventType} (msg=${messageId}, reason=${reason}) threw:`,
+      '[federation-rollback] callback for %s (msg=%s, reason=%s) threw:',
+      eventType,
+      messageId,
+      reason,
       err,
     );
   }

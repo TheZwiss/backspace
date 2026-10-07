@@ -544,7 +544,11 @@ function settleAnsweredBatch(
       .where(eq(schema.federationPeers.id, peerId))
       .run();
   } catch (err) {
-    console.error(`[federation-worker] Bookkeeping after delivery to ${peerOrigin} failed; the batch stays settled:`, err);
+    console.error(
+      '[federation-worker] Bookkeeping after delivery to %s failed; the batch stays settled:',
+      peerOrigin,
+      err,
+    );
   }
 }
 
@@ -741,7 +745,7 @@ function resolvePendingPeers(now: number): void {
 
     const attempt = resolvePendingPeer(peer.peerId, peer.peerOrigin, now)
       .catch((err) => {
-        console.error(`[federation-worker] Auto-peer attempt with ${peer.peerOrigin} failed:`, err);
+        console.error('[federation-worker] Auto-peer attempt with %s failed:', peer.peerOrigin, err);
       })
       .finally(() => {
         pendingPeerHandshakes.delete(peer.peerOrigin);
@@ -1258,7 +1262,9 @@ async function processFileQueueEntry(
     }
 
     console.error(
-      `[federation-worker] Failed to download file ${entry.originalName} from ${entry.peerOrigin}:`,
+      '[federation-worker] Failed to download file %s from %s:',
+      entry.originalName,
+      entry.peerOrigin,
       err instanceof Error ? err.message : err,
     );
 

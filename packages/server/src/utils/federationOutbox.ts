@@ -1121,7 +1121,7 @@ export async function sendTypingRelay(
         }
       })
       .catch(err => {
-        console.warn(`[federation] Typing relay to ${peerOrigin} threw unexpectedly:`, err);
+        console.warn('[federation] Typing relay to %s threw unexpectedly:', peerOrigin, err);
       });
   }
 }

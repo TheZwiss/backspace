@@ -188,11 +188,6 @@
       "count": 1
     }
   },
-  "packages/server/src/utils/fileCleanup.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "packages/server/src/utils/spaceInviteSnapshot.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 7
