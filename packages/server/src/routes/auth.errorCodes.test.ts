@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { hashPassword } from '../utils/auth.js';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 
 setWorkerId(24);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -102,7 +103,26 @@ describe('auth routes send error codes', () => {
       payload: { username: 'alice', password: 'short' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toMatchObject({ code: 'password_too_short', details: { min: 8 } });
+    expect(res.json()).toMatchObject({ code: 'password_too_short', details: { min: PASSWORD_MIN_LENGTH } });
+  });
+
+  // The register page checks the same shared minimum before it moves to its
+  // second step (#397), so the boundary must sit exactly at the constant.
+  it('register: one character under the shared minimum is refused, the minimum itself is accepted', async () => {
+    const tooShort = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'alice', password: 'a'.repeat(PASSWORD_MIN_LENGTH - 1) },
+    });
+    expect(tooShort.statusCode).toBe(400);
+    expect(tooShort.json()).toMatchObject({ code: 'password_too_short', details: { min: PASSWORD_MIN_LENGTH } });
+
+    const atMinimum = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'alice', password: 'a'.repeat(PASSWORD_MIN_LENGTH) },
+    });
+    expect(atMinimum.statusCode).toBe(201);
   });
 
   it('register: closed registration without a token is invite_required', async () => {

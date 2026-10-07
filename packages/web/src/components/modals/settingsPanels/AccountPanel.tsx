@@ -12,11 +12,11 @@ import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
 import type { User, ChosenUserStatus, AvatarColor } from '@backspace/shared';
 import { describeError } from '../../../i18n/errors';
 
 const BIO_MAX_LENGTH = 190;
-const PASSWORD_MIN_LENGTH = 8;
 
 export function AccountPanel() {
   const { t } = useTranslation(['settings', 'common']);

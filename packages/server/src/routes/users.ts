@@ -7,6 +7,7 @@ import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/au
 import { connectionManager } from '../ws/handler.js';
 import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
 import { AVATAR_COLORS, isChosenUserStatus, type ChosenUserStatus } from '@backspace/shared';
+import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { applyChosenStatus } from '../ws/presence.js';
 import { presenceUpdateFor } from '../ws/presenceEvent.js';
@@ -93,8 +94,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body;
 
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
-      return sendError(reply, 400, 'password_too_short', { min: 8 });
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < PASSWORD_MIN_LENGTH) {
+      return sendError(reply, 400, 'password_too_short', { min: PASSWORD_MIN_LENGTH });
     }
 
     const db = getDb();

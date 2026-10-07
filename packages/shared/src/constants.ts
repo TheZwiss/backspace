@@ -67,3 +67,13 @@ export const GROUP_DM_NAME_MAX_LENGTH = 50;
 export const GROUP_DM_NAME_MIN_LENGTH = 1;
 export const GROUP_DM_ICON_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
+
+// ─── Account Constants ───────────────────────────────────────────────────────
+
+/**
+ * The fewest characters a password may have. The server refuses a shorter one
+ * at registration and password change (`password_too_short`, with this value
+ * as `details.min`), and the client checks it before sending so its message
+ * and the server's never disagree.
+ */
+export const PASSWORD_MIN_LENGTH = 8;
