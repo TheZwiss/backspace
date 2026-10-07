@@ -704,8 +704,10 @@ export type ServerEvent =
   | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
   | { type: 'dm_call_incoming'; dmChannelId: string | null; federatedCallId?: string; callerId: string; callerName: string; livekitUrl?: string; livekitToken?: string; callOrigin?: string }
   | { type: 'dm_call_accepted'; dmChannelId: string | null; federatedCallId?: string }
-  | { type: 'dm_call_rejected'; dmChannelId: string }
-  | { type: 'dm_call_ended'; dmChannelId: string }
+  // `dmChannelId` is null and `federatedCallId` set when the instance holds a
+  // federated call with no local copy of the DM (Path B, voice.md).
+  | { type: 'dm_call_rejected'; dmChannelId: string | null; federatedCallId?: string }
+  | { type: 'dm_call_ended'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; phase: DmCallPhase; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
   | { type: 'space_voice_state'; spaceId: string; voiceStates: Record<string, string[]>; voiceChannelElapsedSeconds: Record<string, number>; voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> }

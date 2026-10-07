@@ -11,7 +11,7 @@ vi.mock('../hooks/useLiveKit', () => ({
   getActiveRoom: vi.fn(() => null),
 }));
 
-import { canStartDmCall, startDmCall, cancelOutgoingDmCall } from './voiceActions';
+import { canStartDmCall, startDmCall, cancelOutgoingDmCall, isDmCallRunning, joinDmCall } from './voiceActions';
 import { wsSend } from '../hooks/useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSpaceStore } from '../stores/spaceStore';
@@ -26,6 +26,8 @@ function resetCallState(): void {
     activeDmCall: null,
     federatedCallId: null,
     callOrigin: null,
+    voiceUsers: new Map(),
+    connectFn: null,
   });
 }
 
@@ -105,6 +107,36 @@ describe('cancelOutgoingDmCall', () => {
     useVoiceStore.setState({ outgoingCall: { dmChannelId: 'other' } });
     expect(cancelOutgoingDmCall(DM)).toBe(false);
     expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: 'other' });
+    expect(wsSend).not.toHaveBeenCalled();
+  });
+});
+
+describe('isDmCallRunning', () => {
+  it('is true once someone is in the DM call', () => {
+    useVoiceStore.setState({ voiceUsers: new Map([[DM, ['u1']]]) });
+    expect(isDmCallRunning(useVoiceStore.getState(), DM)).toBe(true);
+  });
+
+  it('is false for a DM with nobody in a call', () => {
+    useVoiceStore.setState({ voiceUsers: new Map([[DM, []], ['other', ['u1']]]) });
+    expect(isDmCallRunning(useVoiceStore.getState(), DM)).toBe(false);
+  });
+});
+
+describe('joinDmCall', () => {
+  it('accepts the running call on the channel origin and connects at once', () => {
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ connectFn });
+    expect(joinDmCall(DM)).toBe(true);
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: DM });
+    expect(useVoiceStore.getState().outgoingCall).toBeNull();
+    expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: DM }, REMOTE);
+    expect(connectFn).toHaveBeenCalledWith(DM, true);
+  });
+
+  it('sends nothing while another call rings or runs', () => {
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: 'other' } });
+    expect(joinDmCall(DM)).toBe(false);
     expect(wsSend).not.toHaveBeenCalled();
   });
 });

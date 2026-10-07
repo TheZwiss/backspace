@@ -619,6 +619,7 @@
       "memberCount_one": "({{count}} member)",
       "memberCount_other": "({{count}} members)",
       "startVoiceCall": "Start Voice Call",
+      "joinCall": "Join Call",
       "startVideoCall": "Start Video Call",
       "addFriends": "Add Friends to DM"
     }

@@ -11,7 +11,7 @@ import { isMine, userDisplayName } from '../../utils/identity';
 import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import { canStartDmCall, startDmCall, cancelOutgoingDmCall } from '../../utils/voiceActions';
+import { canStartDmCall, startDmCall, cancelOutgoingDmCall, isDmCallRunning, joinDmCall } from '../../utils/voiceActions';
 import { useDmViewer } from '../../hooks/useDmViewer';
 import type { User } from '@backspace/shared';
 
@@ -26,6 +26,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const canStartCall = useVoiceStore(canStartDmCall);
+  const dmCallRunning = useVoiceStore((s) => !!params?.channelId && isDmCallRunning(s, params.channelId));
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
@@ -56,28 +57,32 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const rawMainOther = !isGroup ? otherMembers[0] : undefined;
   const canonicalMainOther = useCanonicalUserView((rawMainOther as unknown as User) ?? FALLBACK_USER, viewer.origin);
   const dmPartnerDeleted = dm ? isDeletedPartnerDm(dm, viewer) : false;
-  // The header call button has four states, in this order of precedence:
+  // The header call button has five states, in this order of precedence:
   // in a call with this DM (opens the call screen), ringing this DM (cancels),
-  // idle (starts a call), and busy (disabled: `canStartDmCall` refuses while
-  // any DM call rings or runs, including one ringing in from this DM).
-  const callState: 'inCall' | 'ringing' | 'idle' | 'busy' =
+  // busy (disabled: `canStartDmCall` refuses while any DM call rings or runs,
+  // including one ringing in from this DM), join (this DM's call already has
+  // people in it), and idle (starts a call).
+  const callState: 'inCall' | 'ringing' | 'join' | 'idle' | 'busy' =
     !!channelId && activeDmCall?.dmChannelId === channelId ? 'inCall'
       : !!channelId && outgoingCall?.dmChannelId === channelId ? 'ringing'
-        : canStartCall ? 'idle' : 'busy';
+        : !canStartCall ? 'busy' : dmCallRunning ? 'join' : 'idle';
   const handleCall = () => {
     if (!channelId || !dm || dmPartnerDeleted) return;
     if (callState === 'inCall') pushMobileScreen('voice-full');
     else if (callState === 'ringing') cancelOutgoingDmCall(channelId);
+    else if (callState === 'join') joinDmCall(channelId);
     else startDmCall(channelId);
   };
   const callLabel = callState === 'inCall'
     ? t('mobile:chat.openCall')
-    : callState === 'ringing' ? t('mobile:chat.cancelCall') : t('spaces:main.dm.startVoiceCall');
+    : callState === 'ringing' ? t('mobile:chat.cancelCall')
+      : callState === 'join' ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall');
   const callChipClass = callState === 'inCall'
     ? 'bg-accent-mint/20 text-accent-mint group-hover:bg-accent-mint/30'
     : callState === 'ringing'
       ? 'bg-accent-rose/20 text-accent-rose group-hover:bg-accent-rose/30'
-      : callState === 'idle' ? 'text-txt-secondary group-hover:text-txt-primary' : 'text-txt-tertiary/60';
+      : callState === 'join' ? 'text-accent-mint group-hover:text-accent-mint/80'
+        : callState === 'idle' ? 'text-txt-secondary group-hover:text-txt-primary' : 'text-txt-tertiary/60';
 
   // Resolve channel/DM name. Group DMs route through `formatDmHeaderName` so
   // a renamed group shows `dm.name` (previously this surface silently dropped
@@ -124,9 +129,10 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
         <TransferIndicator />
         {/* DM call button. The 44px button is the tap target; what is drawn is
             the inner 32px chip, so the header keeps one icon rhythm (-mx-1.5
-            gives the extra tap area back to the gaps). Idle and busy are bare
-            icons like the other header actions; ringing and in-call get the
-            round tinted chip the voice mini bar uses for its call controls. */}
+            gives the extra tap area back to the gaps). Idle, join and busy are
+            bare icons like the other header actions, join tinted mint; ringing
+            and in-call get the round tinted chip the voice mini bar uses for
+            its call controls. */}
         {dm && !dmPartnerDeleted && (
           <button
             type="button"

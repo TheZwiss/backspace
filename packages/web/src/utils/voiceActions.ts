@@ -149,6 +149,36 @@ export function startDmCall(dmChannelId: string): boolean {
 }
 
 /**
+ * Whether `dmChannelId` has a call with someone in it, as the DM's instance
+ * reports it through `voice_state_update` and the `ready` voice states. A
+ * member who is not in that call joins it rather than starting another
+ * (`joinDmCall`). A call that is still ringing has nobody in it yet; starting
+ * one there joins it on the server instead.
+ */
+export function isDmCallRunning(state: Pick<ReturnType<typeof useVoiceStore.getState>, 'voiceUsers'>, dmChannelId: string): boolean {
+  return (state.voiceUsers.get(dmChannelId)?.length ?? 0) > 0;
+}
+
+/**
+ * Join the call already running in `dmChannelId`, the same way accepting its
+ * ring does: the call becomes active here at once and LiveKit connects within
+ * the click (iOS needs the gesture for audio). Returns false, sending
+ * nothing, when `canStartDmCall` refuses.
+ */
+export function joinDmCall(dmChannelId: string): boolean {
+  const voice = useVoiceStore.getState();
+  if (!canStartDmCall(voice)) return false;
+  voice.setActiveDmCall({ dmChannelId });
+  wsSend({ type: 'dm_call_accept', dmChannelId }, getChannelOrigin(dmChannelId));
+  if (voice.connectFn) {
+    voice.connectFn(dmChannelId, true).catch((err: unknown) => {
+      console.error('[voiceActions] DM call join failed:', err);
+    });
+  }
+  return true;
+}
+
+/**
  * Stop ringing `dmChannelId` before anyone answered. A federated call is
  * ended where it was created (`callOrigin`, with its `federatedCallId`), a
  * local one on the DM channel's origin. Returns false, sending nothing, when

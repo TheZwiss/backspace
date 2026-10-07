@@ -170,6 +170,41 @@ export function teardownDmCall(): void {
 }
 
 /**
+ * Whether a `dm_call_ended` / `dm_call_rejected` is about the call this client
+ * holds (ringing in, ringing out or joined). Every member of a DM hears that
+ * its call ended, and a group decline is told to the decliner; neither may
+ * tear down a different call the client is in. The event names the call by
+ * the sending instance's DM id, by the conversation key, or both, and a slot
+ * may hold either, so the DM ids are also compared through their keys.
+ */
+export function dmCallEventIsOurs(event: { dmChannelId: string | null; federatedCallId?: string | null }): boolean {
+  const { incomingCall, outgoingCall, activeDmCall, federatedCallId } = useVoiceStore.getState();
+  const held = new Set<string>();
+  for (const slot of [incomingCall, outgoingCall, activeDmCall]) {
+    if (slot?.dmChannelId) held.add(slot.dmChannelId);
+  }
+  if (federatedCallId) held.add(federatedCallId);
+  if (held.size === 0) return false;
+
+  const { dmChannels } = useSpaceStore.getState();
+  const keyOf = (dmChannelId: string): string | null => dmChannels.find(d => d.id === dmChannelId)?.federatedId ?? null;
+  const named = new Set<string>();
+  if (event.dmChannelId) {
+    named.add(event.dmChannelId);
+    const key = keyOf(event.dmChannelId);
+    if (key) named.add(key);
+  }
+  if (event.federatedCallId) named.add(event.federatedCallId);
+
+  for (const id of held) {
+    if (named.has(id)) return true;
+    const key = keyOf(id);
+    if (key && named.has(key)) return true;
+  }
+  return false;
+}
+
+/**
  * Whether `spaceId`, as `origin` issued it, is the space whose roster
  * `spaceStore.members` holds: the open space (`loadSpaceDetail` sets both).
  * `members` is one space's roster, so a join or leave in any other space, or
@@ -1108,13 +1143,16 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'dm_call_rejected': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
-      teardownDmCall();
+      if (dmCallEventIsOurs(event)) teardownDmCall();
       break;
     }
 
     case 'dm_call_ended': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
-      teardownDmCall();
+      // The call is over: nobody is in it any more, whatever leave events an
+      // older server did not send.
+      if (event.dmChannelId) setVoiceUsers(event.dmChannelId, []);
+      if (dmCallEventIsOurs(event)) teardownDmCall();
       break;
     }
 
@@ -1307,8 +1345,15 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       void refreshSpaceAccess(origin, event.spaceId);
       break;
 
-    case 'error':
+    case 'error': {
       console.error(`WebSocket error (${origin || 'home'}):`, event.message);
+      // A refused dm_call_start names its DM: the call this client is placing
+      // there never started, so the calling state and its ring go.
+      const { outgoingCall, setOutgoingCall } = useVoiceStore.getState();
+      if (event.dmChannelId && outgoingCall?.dmChannelId === event.dmChannelId
+          && getChannelOrigin(event.dmChannelId) === origin) {
+        setOutgoingCall(null);
+      }
       // A coded error is the refusal of something the user just did (a voice
       // moderation action the role hierarchy refuses, for one); say so. Older
       // servers send no code, and those errors stay in the log.
@@ -1316,6 +1361,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         useUIStore.getState().addToast(describeErrorCode(event.code, event.message), 'warning');
       }
       break;
+    }
   }
 }
 

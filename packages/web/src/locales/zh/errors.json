@@ -213,6 +213,7 @@
   "internal_error": "服务器发生错误，请重试。",
   "voice_disabled": "此实例尚未配置语音与视频功能。",
   "voice_connect_forbidden": "您无权加入此语音频道。",
+  "dm_call_in_progress": "此对话中已有通话正在进行。",
   "file_not_found": "未找到该文件。",
   "directory_disabled": "此实例未连接到任何目录。",
   "directory_unreachable": "外部空间目前无法访问。内部空间仍可正常使用。",

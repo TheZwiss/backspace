@@ -619,6 +619,7 @@
       "memberCount_one": "({{count}} Mitglied)",
       "memberCount_other": "({{count}} Mitglieder)",
       "startVoiceCall": "Sprachanruf starten",
+      "joinCall": "Anruf beitreten",
       "startVideoCall": "Videoanruf starten",
       "addFriends": "Freunde zur Unterhaltung hinzufügen"
     }

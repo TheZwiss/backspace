@@ -213,6 +213,7 @@
   "internal_error": "Auf dem Server ist etwas schiefgelaufen. Versuche es erneut.",
   "voice_disabled": "Sprach- und Videochat sind auf dieser Instanz nicht eingerichtet.",
   "voice_connect_forbidden": "Du darfst diesem Sprachkanal nicht beitreten.",
+  "dm_call_in_progress": "In dieser Unterhaltung läuft bereits ein Anruf.",
   "file_not_found": "Diese Datei wurde nicht gefunden.",
   "directory_disabled": "Diese Instanz ist mit keinem Verzeichnis verbunden.",
   "directory_unreachable": "Der Äußere Space ist gerade nicht erreichbar. Der Innere Space funktioniert weiterhin.",

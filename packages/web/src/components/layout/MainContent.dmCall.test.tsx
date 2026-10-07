@@ -42,7 +42,7 @@ beforeEach(() => {
   useChatStore.setState({ currentChannelId: dm.id });
   useSpaceStore.setState({ currentSpaceId: null, channels: [], dmChannels: [dm], channelOriginMap: new Map() });
   useUIStore.setState({ showDms: true });
-  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, federatedCallId: null, callOrigin: null });
+  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, federatedCallId: null, callOrigin: null, voiceUsers: new Map(), connectFn: null });
 });
 
 describe('desktop DM header call actions', () => {
@@ -77,5 +77,18 @@ describe('desktop DM header call actions', () => {
       { type: 'dm_call_end', dmChannelId: dm.id, federatedCallId: 'remote-call' },
       'https://call-host.example',
     );
+  });
+
+  it('joins the call already running in the DM instead of starting one', () => {
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ voiceUsers: new Map([[dm.id, ['partner']]]), connectFn });
+    renderDm();
+    // The voice and video buttons both join; the voice one comes first.
+    fireEvent.click(screen.getAllByTitle('Join Call')[0]!);
+    expect(useVoiceStore.getState().outgoingCall).toBeNull();
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: dm.id });
+    expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: dm.id }, '');
+    expect(wsSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dm_call_start' }), expect.anything());
+    expect(connectFn).toHaveBeenCalledWith(dm.id, true);
   });
 });

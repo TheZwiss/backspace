@@ -20,6 +20,7 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => k
 const START = 'spaces:main.dm.startVoiceCall';
 const CANCEL = 'mobile:chat.cancelCall';
 const OPEN = 'mobile:chat.openCall';
+const JOIN = 'spaces:main.dm.joinCall';
 
 const partner = { id: 'partner', username: 'alice' } as User;
 const dm = { id: 'dm-1', members: [partner], ownerId: null } as DmChannel;
@@ -37,7 +38,7 @@ beforeEach(() => {
   useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, 'https://remote.example']]) });
   useChatStore.setState({ loadMessages: vi.fn() });
   useUIStore.setState({ mobileStack: [] });
-  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, federatedCallId: null, callOrigin: null });
+  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, federatedCallId: null, callOrigin: null, voiceUsers: new Map(), connectFn: null });
 });
 
 describe('mobile DM calls', () => {
@@ -90,6 +91,17 @@ describe('mobile DM calls', () => {
     fireEvent.click(button);
     expect(wsSend).not.toHaveBeenCalled();
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
+  });
+
+  it('joins the call already running in a group DM instead of starting one', () => {
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ voiceUsers: new Map([[groupDm.id, ['partner', 'bob']]]), connectFn });
+    render(<MobileChatScreen params={{ channelId: groupDm.id, spaceId: '@me' }} />);
+    fireEvent.click(screen.getByRole('button', { name: JOIN }));
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: groupDm.id });
+    expect(useVoiceStore.getState().outgoingCall).toBeNull();
+    expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: groupDm.id }, '');
+    expect(connectFn).toHaveBeenCalledWith(groupDm.id, true);
   });
 
   it('opens the call screen while in a call with this DM', () => {

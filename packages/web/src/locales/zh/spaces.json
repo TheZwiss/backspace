@@ -608,6 +608,7 @@
       "openGroupSettings": "打开群组设置",
       "memberCount_other": "({{count}} 名成员)",
       "startVoiceCall": "发起语音通话",
+      "joinCall": "加入通话",
       "startVideoCall": "发起视频通话",
       "addFriends": "添加好友到私信"
     }

@@ -641,6 +641,7 @@
       "memberCount_many": "({{count}} участников)",
       "memberCount_other": "({{count}} участника)",
       "startVoiceCall": "Начать голосовой звонок",
+      "joinCall": "Присоединиться к звонку",
       "startVideoCall": "Начать видеозвонок",
       "addFriends": "Добавить друзей в беседу"
     }
