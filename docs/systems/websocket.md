@@ -39,7 +39,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### Reactions (space + DM, auto-detected)
 | type | fields | notes |
 |------|--------|-------|
-| `reaction_add` | messageId, emoji | ADD_REACTIONS perm (space) |
+| `reaction_add` | messageId, emoji | ADD_REACTIONS perm (space). One reaction per user and emoji: a repeat stores nothing, sends no `reaction_added` and queues no relay. The client does not send one either (`chatStore.addReaction` skips a reaction the user holds or has an add in flight for) |
 | `reaction_remove` | messageId, emoji | own reactions only |
 
 ### Read State

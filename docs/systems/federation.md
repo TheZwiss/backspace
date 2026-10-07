@@ -1858,8 +1858,8 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
    - If `messageHomeInstance === getOurOrigin()` -> find by local ID (the message originated here)
    - Otherwise -> find by `(messageHomeInstance || sourceInstance, canonicalMessageId)` tracking -- uses `messageHomeInstance` when available (correct origin in 3-instance relay), falls back to `sourceInstance`
 2. Resolve reacting user via `resolveRelayActor` (must already exist): unknown → `user_not_found`
-3. Dedup: check existing reaction by `(dmMessageId, userId, emoji)`
-4. Insert `dm_reactions`, broadcast `reaction_added` to local clients
+3. Insert `dm_reactions` with `ON CONFLICT DO NOTHING` against the unique `(dm_message_id, user_id, emoji)` index (database.md "Reaction uniqueness (0024)"). No row written means the reaction is already held (a retry, or the same event pulled again under another id): accepted, nothing broadcast
+4. Otherwise broadcast `reaction_added` to local clients
 
 **`processReactionRemoveEvent` (`routes/federation/events/dmMessages.ts`):**
 - Same resolution logic
