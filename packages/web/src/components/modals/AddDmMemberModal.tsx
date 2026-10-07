@@ -8,7 +8,7 @@ import { useSpaceStore, dmCopyOnOrigin } from '../../stores/spaceStore';
 import { useSelfIdentity } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api } from '../../api/client';
-import { isMine, parseFederatedUsername, personRequest, type IdentityFields } from '../../utils/identity';
+import { isMine, parseFederatedUsername, personRequest, userKey, type IdentityFields } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { GroupDmUserIdentity, User } from '@backspace/shared';
@@ -21,6 +21,15 @@ import type { GroupDmUserIdentity, User } from '@backspace/shared';
 function groupMemberRef(row: IdentityFields, origin: string): GroupDmUserIdentity {
   const { target } = personRequest(row, origin);
   return { id: target.userId ?? row.id, homeUserId: target.homeUserId ?? null, homeInstance: target.homeInstance ?? null };
+}
+
+/**
+ * The person a friend row names (`userKey`). Friends come from every
+ * connected instance, whose row ids can coincide, and the DM's members are
+ * another instance's rows, so the list selects and compares by person.
+ */
+function friendKey(friend: TaggedFriend): string {
+  return userKey(friend, friend._instanceOrigin);
 }
 
 function AddDmFriendRow({
@@ -36,7 +45,7 @@ function AddDmFriendRow({
   isSelected: boolean;
   atCapacity: boolean;
   isAdding: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (key: string) => void;
 }) {
   const { t } = useTranslation(['dm', 'common']);
   const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
@@ -44,7 +53,7 @@ function AddDmFriendRow({
   const friendDisplayName = canonical.displayName ?? baseName;
   return (
     <button
-      onClick={() => onToggle(friend.id)}
+      onClick={() => onToggle(friendKey(friend))}
       disabled={isInDm || isAdding || atCapacity}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
         isInDm
@@ -109,9 +118,10 @@ export function AddDmMemberModal() {
   const dmChannelId = modalData.dmChannelId as string | undefined;
   const dmChannel = dmChannels.find(dm => dm.id === dmChannelId);
   const viewer = useDmViewer(dmChannelId);
-  const currentMemberIds = useMemo(
-    () => new Set(dmChannel?.members.map(m => m.id) ?? []),
-    [dmChannel?.members],
+  // The members as the DM's own instance issued them, by person.
+  const currentMemberKeys = useMemo(
+    () => new Set(dmChannel?.members.map(m => userKey(m, viewer.origin)) ?? []),
+    [dmChannel?.members, viewer.origin],
   );
   const memberCount = dmChannel?.members.length ?? 0;
   const maxMembers = 10;
@@ -140,31 +150,31 @@ export function AddDmMemberModal() {
     }
   }, [isOpen]);
 
-  const toggleFriend = (friendId: string) => {
-    if (currentMemberIds.has(friendId)) return;
+  const toggleFriend = (key: string) => {
+    if (currentMemberKeys.has(key)) return;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(friendId)) {
-        next.delete(friendId);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
         // Enforce remaining capacity
         if (next.size >= remainingSlots) return prev;
-        next.add(friendId);
+        next.add(key);
       }
       return next;
     });
   };
 
-  const removeFriend = (friendId: string) => {
+  const removeFriend = (key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.delete(friendId);
+      next.delete(key);
       return next;
     });
   };
 
   const selectedFriends = useMemo(
-    () => friends.filter((f) => selected.has(f.id)),
+    () => friends.filter((f) => selected.has(friendKey(f))),
     [friends, selected],
   );
 
@@ -239,12 +249,12 @@ export function AddDmMemberModal() {
           <div className="flex gap-1.5 flex-wrap">
             {selectedFriends.map((f) => (
               <span
-                key={f.id}
+                key={friendKey(f)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
                 <button
-                  onClick={() => removeFriend(f.id)}
+                  onClick={() => removeFriend(friendKey(f))}
                   className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
                 >
                   &times;
@@ -282,12 +292,13 @@ export function AddDmMemberModal() {
           )}
 
           {filteredFriends.map((friend) => {
-            const isInDm = currentMemberIds.has(friend.id);
-            const isSelected = selected.has(friend.id);
+            const key = friendKey(friend);
+            const isInDm = currentMemberKeys.has(key);
+            const isSelected = selected.has(key);
             const atCapacity = !isSelected && selected.size >= remainingSlots;
             return (
               <AddDmFriendRow
-                key={friend.id}
+                key={key}
                 friend={friend}
                 isInDm={isInDm}
                 isSelected={isSelected}

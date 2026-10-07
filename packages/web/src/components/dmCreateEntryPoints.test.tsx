@@ -311,3 +311,49 @@ describe('the add-member modal adds to a group through home\'s copy of it', () =
     expect(api.dm.addMember).not.toHaveBeenCalled();
   });
 });
+
+describe('the add-member modal knows who is in a DM pinned to another instance', () => {
+  // The group is REMOTE's copy: its member rows carry REMOTE's ids. Friends
+  // come from the page's instance, under its ids.
+  const FID_GROUP = '1e1e1e1e-0000-4000-8000-000000000000';
+  const groupRemote = wireDm({
+    id: 'dm-group-remote', federatedId: FID_GROUP, ownerId: 'alice-on-remote', createdAt: 5,
+    members: [aliceOnRemote, bobUnlinkedOnRemote],
+  });
+
+  beforeEach(() => {
+    useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(groupRemote)]);
+  });
+
+  it('shows a friend who is a member under the other instance\'s id as already in the DM', async () => {
+    // Home's row for bob names REMOTE's native bob.
+    const bob: TaggedFriend = { ...user('bob-on-home', 'bob-unlinked-remote', 'remote.example', 'bob'), _instanceOrigin: '' } as TaggedFriend;
+    useSocialStore.setState({ friends: [bob] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    expect(screen.getByText('Already in this DM')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /bob/ })).toBeDisabled();
+  });
+
+  it('does not take a friend whose id on home equals a member\'s id on REMOTE for that member', async () => {
+    const dave: TaggedFriend = { ...user('bob-unlinked-remote', null, null, 'dave'), _instanceOrigin: '' } as TaggedFriend;
+    useSocialStore.setState({ friends: [dave] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    expect(screen.queryByText('Already in this DM')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /dave/ })).toBeEnabled();
+  });
+
+  it('selects two friends from different instances that share a row id separately', async () => {
+    const dave: TaggedFriend = { ...user('same-id', null, null, 'dave'), _instanceOrigin: '' } as TaggedFriend;
+    const erin: TaggedFriend = { ...user('same-id', null, null, 'erin'), _instanceOrigin: REMOTE } as TaggedFriend;
+    useSocialStore.setState({ friends: [dave, erin] });
+    useUIStore.getState().openModal('addDmMember', { dmChannelId: 'dm-group-remote' });
+    renderAt(<AddDmMemberModal />);
+
+    await userEvent.click(screen.getByText('dave'));
+    expect(screen.getByText('Add 1 Friend')).toBeInTheDocument();
+  });
+});
