@@ -751,7 +751,7 @@ Two layers of replay protection:
 - **Self-homed guard:** an instance never creates a replicated stub homed at its own identity domain (`getOurIdentityDomain()`, DOMAIN-derived). A live self-reference resolves at tier 1; a self-domain identity reaching the create path is a dead incarnation and resolves to `null`. Wire snapshots may carry `deleted: true` — such identities also resolve to `null` at the create path (existing rows still resolve for historical attribution).
 - **Use when:** You MUST have a valid user ID. Always pass `{ username: profile?.username }` when profile data is available.
 
-**`hydrateReplicatedUserProfile(user, profile, db)`** -- `federation.ts:2041`
+**`hydrateReplicatedUserProfile(user, profile, db)`** -- `routes/federation/profile.ts`
 - Updates replicated stubs only (`homeInstance` must be set)
 - Fills profile columns only as "S2S Profile Hydration" states: empty columns of a row the home has not answered with a version, never a stored value
 - Resolves bare filenames to `{homeInstance}/api/uploads/{filename}` absolute URLs
@@ -853,7 +853,6 @@ A peer cannot forge either record, so it cannot manufacture standing to speak fo
 `profile_update` and `presence_update` (`profile.ts`, `events/dmState.ts`) use a **stricter** rule that predates this and is deliberately kept: the payload's `homeInstance` must equal the source domain outright, with no homeward branch — only a user's own home instance may mutate their profile or presence here. `group_metadata_update` gates on `dm_channels.owner_home_instance` instead. `file_rejected` carries no user attribution (it is a system event from the rejecting peer).
 
 All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalization, handling both bare domains and full URLs consistently.
-- `federation.ts:2447` -- same pattern in `processFriendRemoveEvent`
 
 ---
 
@@ -1213,7 +1212,7 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 
 ## 6. Group DM Lifecycle over Federation
 
-### member_add (`processMemberAddEvent` -- `federation.ts:1618`)
+### member_add (`processMemberAddEvent` -- `routes/federation/events/membership.ts`)
 
 **Required fields:** `event.federatedId`, `event.membership.user`
 
@@ -1254,7 +1253,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 5. Inserts `dm_members` row (idempotent -- skip if exists)
 6. Inserts system message, broadcasts `dm_member_added` to local WebSocket clients
 
-### member_remove (`processMemberRemoveEvent` -- `federation.ts:1825`)
+### member_remove (`processMemberRemoveEvent` -- `routes/federation/events/membership.ts`)
 
 1. Find channel by `federatedId` -- if not found, accept idempotently (a leave still moves the member's clock, a kick does not). A kick (`reason !== 'leave'`) on a 1-on-1 (no `ownerId`) is refused `invalid_target`
 2. Validate authority: owner's instance for kicks (`reason !== 'leave'`), any instance for self-leave
@@ -1265,7 +1264,7 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 7. Broadcast `dm_member_removed` to remaining local members
 8. If zero members remain -> soft-delete channel (`deletedAt = now`)
 
-### ownership_transfer (`processOwnershipTransferEvent` -- `federation.ts:1938`)
+### ownership_transfer (`processOwnershipTransferEvent` -- `routes/federation/events/membership.ts`)
 
 1. Find channel by `federatedId` -- if not found, accept idempotently. A 1-on-1 (no `ownerId`) is refused `invalid_target`: it has no owner to transfer
 2. Validate authority: `normalizeOriginForCompare(sourceInstance) === normalizeOriginForCompare(channel.ownerHomeInstance)`. Both sides are normalized to handle the bare-vs-full storage convention (see `dm-system.md` historical bugs for why this matters).
@@ -1595,33 +1594,33 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 ### Inbound Processing
 
-**`processFriendRequestCreateEvent` (`federation.ts:2082`):**
+**`processFriendRequestCreateEvent` (`routes/federation/events/friends.ts`):**
 - Authority check: `from.homeInstance !== sourceInstance` -> reject
 - Resolve sender via `resolveOrCreateReplicatedUser` + hydrate profile
 - Resolve recipient via `resolveLocalUser` (must be native to this instance)
 - Idempotency: if already friends or pending request exists, accept as no-op
 - Create `friend_requests` row, broadcast `friend_request_received` to recipient
 
-**`processFriendRequestUpdateEvent` (`federation.ts:2178`):**
+**`processFriendRequestUpdateEvent` (`routes/federation/events/friends.ts`):**
 - Authority check: `to.homeInstance !== sourceInstance` -> reject
 - Resolve sender (original requester) via `resolveLocalUser` (must exist locally)
 - Resolve recipient (acceptor/decliner) via `resolveOrCreateReplicatedUser`
 - Find pending request, update status
 - Broadcast `friend_request_accepted` or `friend_request_declined` to the original sender
 
-**`processFriendRequestCancelEvent` (`federation.ts:2254`):**
+**`processFriendRequestCancelEvent` (`routes/federation/events/friends.ts`):**
 - Authority check: `from.homeInstance !== sourceInstance` -> reject
 - Both users resolved via `resolveRelayActor`: both must exist locally, else accept idempotently.
 - Delete the pending friend request. Broadcast `friend_request_cancelled` to recipient.
 
-**`processFriendAddEvent` (`federation.ts:2318`):**
+**`processFriendAddEvent` (`routes/federation/events/friends.ts`):**
 - Authority check: `to.homeInstance !== sourceInstance` -> reject
 - Resolve both users via `resolveOrCreateReplicatedUser` + hydrate profiles
 - Insert `friends` row (idempotent)
 - Auto-resolve any pending `friend_requests` to `'accepted'` (handles out-of-order delivery)
 - Determine which user is local (`isOwnDomain` on `from`'s home domain, so a bare domain and a full origin both match) and broadcast `friend_request_accepted`
 
-**`processFriendRemoveEvent` (`federation.ts:2404`):**
+**`processFriendRemoveEvent` (`routes/federation/events/friends.ts`):**
 - Authority check: either `from.homeInstance` or `to.homeInstance` must be `sourceInstance`
 - Both users resolved via `resolveRelayActor`. If either is not found, accept idempotently.
 - Delete `friends` row in both directions
