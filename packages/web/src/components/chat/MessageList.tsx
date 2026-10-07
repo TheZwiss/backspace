@@ -1125,6 +1125,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
           {interleavedMessages.map((msg, i) => {
             const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
+            const dateLabel = showDate ? formatDateDivider(msg.createdAt) : null;
             const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
             const isUnreadStart = unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id;
 
@@ -1142,11 +1143,11 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
 
             return (
               <React.Fragment key={msg.id}>
-                {showDate && !isUnreadStart && (
+                {dateLabel && !isUnreadStart && (
                   <div className="flex items-center px-5 my-2 select-none pointer-events-none">
                     <div className="flex-1 h-[1px] bg-border-hard" />
                     <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
-                      {formatDateDivider(msg.createdAt)}
+                      {dateLabel}
                     </span>
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
@@ -1154,8 +1155,10 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                 {isUnreadStart && (
                   <UnreadDivider
                     label={t('chat:list.unread.label')}
-                    description={t('chat:list.unread.divider')}
-                    dateLabel={showDate ? formatDateDivider(msg.createdAt) : null}
+                    name={dateLabel
+                      ? t('chat:list.unread.dividerWithDate', { date: dateLabel })
+                      : t('chat:list.unread.divider')}
+                    dateLabel={dateLabel}
                   />
                 )}
                 {msg.type === 'system' ? (
@@ -1256,11 +1259,11 @@ function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
  * When the first unread message also starts a new day, the date sits in the
  * same rule instead of a second divider right above it.
  */
-function UnreadDivider({ label, description, dateLabel }: { label: string; description: string; dateLabel: string | null }) {
+function UnreadDivider({ label, name, dateLabel }: { label: string; name: string; dateLabel: string | null }) {
   return (
     <div
       role="separator"
-      aria-label={dateLabel ? `${description}, ${dateLabel}` : description}
+      aria-label={name}
       className="flex items-center pl-5 pr-4 my-2 select-none pointer-events-none"
     >
       <div className="flex-1 h-px bg-accent-rose/50" />

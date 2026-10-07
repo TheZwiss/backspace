@@ -40,6 +40,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ALL_PERMISSIONS, permissionsToString } from '../../utils/permissions';
 import { HttpError } from '../../api/client';
+import { formatters } from '../../i18n/formatters';
 import {
   CHANNEL,
   ROW_HEIGHT,
@@ -341,6 +342,20 @@ describe('opening at the first unread message (issue #375)', () => {
 
     await waitFor(() => expect(layout.scrollTop).toBe(layout.rowY['42']! - UNREAD_ROW_OFFSET));
     expect(dividerBefore('42')).toBe(true);
+  });
+
+  it('names the divider with the date when the first unread message starts a new day', async () => {
+    const nextDay = 1_700_000_000_000 + 2 * 24 * 60 * 60 * 1000;
+    const rows = page(1, 60).map((m) => (Number(m.id) > 40 ? { ...m, createdAt: nextDay + Number(m.id) * 60_000 } : m));
+    useChatStore.setState({ messages: new Map([[CHANNEL, rows]]), readStates: new Map([[CHANNEL, '40']]) });
+    const layout: ScrollLayout = { scrollHeight: 2800, clientHeight: 800, scrollTop: 0, rowY: stackRows(ids(1, 60), 16) };
+    stubScrollLayout(layout);
+    render(list());
+
+    const divider = await screen.findByRole('separator', { name: /new messages/i });
+    const date = formatters.formatFullDate(rows[40]!.createdAt);
+    expect(divider).toHaveAccessibleName(`New messages, ${date}`);
+    expect(divider).toHaveTextContent(date);
   });
 
   it('opens at the latest message when everything is read', async () => {

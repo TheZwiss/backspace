@@ -40,7 +40,8 @@
     },
     "unread": {
       "label": "新",
-      "divider": "新消息"
+      "divider": "新消息",
+      "dividerWithDate": "新消息，{{date}}"
     },
     "welcome": {
       "channel": {

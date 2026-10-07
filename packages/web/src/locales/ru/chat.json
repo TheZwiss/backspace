@@ -43,7 +43,8 @@
     },
     "unread": {
       "label": "Новые",
-      "divider": "Новые сообщения"
+      "divider": "Новые сообщения",
+      "dividerWithDate": "Новые сообщения, {{date}}"
     },
     "welcome": {
       "channel": {

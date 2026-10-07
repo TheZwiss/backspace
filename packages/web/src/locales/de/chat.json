@@ -41,7 +41,8 @@
     },
     "unread": {
       "label": "Neu",
-      "divider": "Neue Nachrichten"
+      "divider": "Neue Nachrichten",
+      "dividerWithDate": "Neue Nachrichten, {{date}}"
     },
     "welcome": {
       "channel": {

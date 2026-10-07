@@ -41,7 +41,8 @@
     },
     "unread": {
       "label": "New",
-      "divider": "New messages"
+      "divider": "New messages",
+      "dividerWithDate": "New messages, {{date}}"
     },
     "welcome": {
       "channel": {
