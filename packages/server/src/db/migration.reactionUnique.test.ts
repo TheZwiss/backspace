@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * created from the squashed 0000 had no unique key on the reaction tables,
  * so the same user's reaction could be stored several times. The migration
  * deletes the repeats, keeping the earliest row of each key (of two equally
- * early ones, the first inserted), then creates the unique indexes. The
+ * early ones, the lower rowid), then creates the unique indexes. The
  * upgrade from every database shape in the field is in preSquashUpgrade.test.ts.
  */
 
@@ -78,7 +78,8 @@ describe('migration 0024_reaction_unique', () => {
     expect(idsIn(db, table)).toEqual(['c-early']);
   });
 
-  it.each(TABLES)('keeps the first inserted of two equally early repeats in $table', (table) => {
+  it.each(TABLES)('keeps the lower rowid of two equally early repeats in $table', (table) => {
+    // Without a VACUUM the row inserted first has the lower rowid.
     insertReaction(db, table, 'z-first', 'bob', '👍', 100);
     insertReaction(db, table, 'a-second', 'bob', '👍', 100);
     applyMigration(db);

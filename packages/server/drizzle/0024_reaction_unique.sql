@@ -2,7 +2,7 @@
 -- Installs created from the squashed 0000 have no unique key on a reaction's
 -- (message, user, emoji), so the same user could store the same reaction more
 -- than once. Keep the earliest row of each key (lowest created_at, then the
--- first inserted) and delete the rest, so the unique indexes below can be
+-- lowest rowid) and delete the rest, so the unique indexes below can be
 -- created. Installs from before the squash already carry an inline UNIQUE on
 -- these columns and have no such rows; there the new index sits beside it.
 DELETE FROM `dm_reactions` WHERE EXISTS (

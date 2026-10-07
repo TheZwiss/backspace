@@ -119,7 +119,8 @@ function seed(dbPath: string): void {
  * unique key on (message, user, emoji), so the same user's reaction could be
  * stored several times; a pre-squash install had the inline UNIQUE and holds
  * no such rows. `kept` marks the row 0024 keeps of each key: the earliest,
- * and of two equally early ones the first inserted.
+ * and of two equally early ones the lower rowid (the first inserted here,
+ * where nothing renumbers rowids).
  */
 const SEEDED_REACTIONS = [
   { id: 'react-late', userId: 'user-1', emoji: '👍', createdAt: 200, kept: false, duplicate: true },
