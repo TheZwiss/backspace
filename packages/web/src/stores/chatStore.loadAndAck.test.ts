@@ -89,6 +89,22 @@ describe('per-channel load state', () => {
     expect(useChatStore.getState().loadStates.has(B)).toBe(false);
   });
 
+  it('waits on a channel no listing names, and loads it once one does', async () => {
+    const unknown = 'chan-unknown';
+    channelsMessages.mockResolvedValue([msg('1', unknown)]);
+
+    expect(await useChatStore.getState().loadMessages(unknown)).toBe(false);
+    expect(useChatStore.getState().loadStates.get(unknown)).toEqual({ status: 'waiting' });
+    expect(channelsMessages).not.toHaveBeenCalled();
+
+    useSpaceStore.setState({ channelOriginMap: new Map([[A, ''], [B, ''], [unknown, '']]) });
+    const load = useChatStore.getState().loadMessages(unknown);
+    expect(useChatStore.getState().loadStates.get(unknown)).toEqual({ status: 'loading' });
+    expect(await load).toBe(true);
+    expect(useChatStore.getState().loadStates.has(unknown)).toBe(false);
+    expect(useChatStore.getState().messages.get(unknown)?.map((m) => m.id)).toEqual(['1']);
+  });
+
   it('clears the failure when a retry succeeds', async () => {
     channelsMessages.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce([msg('1')]);
 

@@ -198,7 +198,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   const isDetached = useChatStore((s) => s.detachedChannels.has(channelId));
   const addToast = useUIStore((s) => s.addToast);
   const loadState = useChatStore((s) => s.loadStates.get(channelId));
-  const isLoading = loadState?.status === 'loading';
+  // Waiting for the ready that lists the channel is a load the list cannot
+  // start yet; it shows the same skeleton.
+  const isLoading = loadState?.status === 'loading' || loadState?.status === 'waiting';
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
   const ackChannel = useChatStore((s) => s.ackChannel);
   const saveScrollPosition = useChatStore((s) => s.saveScrollPosition);
@@ -495,8 +497,10 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
 
   // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
-  // Undefined until the ready that lists the channel: not refused, and loadMessages waits for that ready.
+  // Undefined until the ready that lists the channel: not refused. The load
+  // waits meanwhile (`loadStates` `waiting`, shown as loading).
   const isDm = useIsDmChannel(channelId);
+  const channelKnown = isDm !== undefined;
   const canReadHistory = isDm !== false || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
 
   // Channel-specific DM record (if applicable). Passed to SystemMessage so it
@@ -562,11 +566,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
   }, [messages, pendingBubbles, messagesById, channelId, currentUser, isDm]);
 
+  // Load on open, and again when a listing names a channel that was unknown,
+  // which ends its `waiting` state.
   useEffect(() => {
     if (canReadHistory) {
       loadMessages(channelId);
     }
-  }, [channelId, loadMessages, canReadHistory]);
+  }, [channelId, loadMessages, canReadHistory, channelKnown]);
 
   // Track the last message ID so the ack re-fires when a temp message is replaced by its server-confirmed ID
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? '' : '';

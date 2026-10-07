@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { Channel, DmChannel, SpaceWithChannelsAndMembers, User } from '@backspace/shared';
@@ -30,8 +30,9 @@ import { useUIStore } from '../../stores/uiStore';
 import i18n from '../../i18n';
 
 // Before the `ready` that lists a channel, the client does not know whether
-// it is a DM. The list waits instead of refusing; the composer stays locked;
-// both follow the listing when it arrives, whatever the URL says.
+// it is a DM. The list waits instead of refusing (its load is `waiting`,
+// shown as loading); the composer stays locked; both follow the listing when
+// it arrives, whatever the URL says.
 
 const me = { id: 'me', username: 'alice', displayName: 'Alice', avatar: null, createdAt: 1 } as unknown as User;
 const kai = { id: 'kai', username: 'kai', displayName: 'Kai', avatar: null, createdAt: 1 } as unknown as User;
@@ -69,18 +70,21 @@ afterEach(() => {
 });
 
 describe('MessageList while the channel is unknown', () => {
-  it('does not claim a missing permission, and loads once the listing names the DM', async () => {
+  it('does not claim a missing permission, shows the wait as loading, and loads once the listing names the DM', async () => {
     render(<MemoryRouter><MessageList channelId={DM.id} /></MemoryRouter>);
 
     expect(screen.queryByText(i18n.t('chat:list.noHistoryPermission'))).not.toBeInTheDocument();
+    expect(useChatStore.getState().loadStates.get(DM.id)).toEqual({ status: 'waiting' });
+    expect(await screen.findByRole('status', { name: i18n.t('chat:list.loading') })).toBeInTheDocument();
     expect(dmMessages).not.toHaveBeenCalled();
     expect(channelMessages).not.toHaveBeenCalled();
 
+    // The list asks itself once the kind is known; no ready reload is needed.
     await act(async () => { useSpaceStore.getState().populateFromReady('', [], [], [DM]); });
-    await act(async () => { await useChatStore.getState().loadMessages(DM.id, true); });
 
-    expect(dmMessages).toHaveBeenCalledWith(DM.id);
+    await waitFor(() => expect(dmMessages).toHaveBeenCalledWith(DM.id, undefined, expect.any(Number)));
     expect(channelMessages).not.toHaveBeenCalled();
+    await waitFor(() => expect(useChatStore.getState().loadStates.has(DM.id)).toBe(false));
   });
 
   it('refuses a known space channel without READ_MESSAGE_HISTORY on the DM route', () => {

@@ -28,10 +28,17 @@ const MESSAGES_AROUND_LIMIT = 50;
 export type LoadAroundResult = 'loaded' | 'not_found' | 'failed';
 
 /**
- * A channel's newest-page load (`loadMessages`), per channel: in flight, or
- * failed with the error the request ended on. No entry means idle.
+ * A channel's newest-page load (`loadMessages`), per channel. `waiting`: the
+ * channel is unknown (`getChannelKind`), so nothing can be asked yet: its
+ * origin and endpoint depend on what it is. It ends when a listing names the
+ * channel and `loadMessages` runs again (the open `MessageList` asks as soon
+ * as the kind is known). `loading`: in flight. `failed`: the request ended on
+ * `error`. No entry means idle.
  */
-export type ChannelLoadState = { status: 'loading' } | { status: 'failed'; error: unknown };
+export type ChannelLoadState =
+  | { status: 'waiting' }
+  | { status: 'loading' }
+  | { status: 'failed'; error: unknown };
 
 /**
  * Outcome of `loadNewerMessages`, which pages a detached window forward.
@@ -435,9 +442,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadMessages: async (channelId: string, force?: boolean) => {
     if (!force && get().hasMore.has(channelId)) return true;
-    // For server channels, bail if we don't know which instance owns this channel yet.
-    // The remote WS ready handler will call loadMessages once the map is populated.
-    if (!isDmChannel(channelId) && !useSpaceStore.getState().channelOriginMap.has(channelId)) return false;
+    // An unknown channel (no ready has listed it yet) waits: which instance
+    // and endpoint to ask depend on what the channel is.
+    if (!isDmChannel(channelId) && !useSpaceStore.getState().channelOriginMap.has(channelId)) {
+      if (get().loadStates.get(channelId)?.status !== 'waiting') {
+        set((state) => ({ loadStates: withLoadState(state.loadStates, channelId, { status: 'waiting' }) }));
+      }
+      return false;
+    }
 
     // Parallel-call dedup: if a load for this channel is already in flight,
     // return that Promise instead of starting a second fetch. Applies to

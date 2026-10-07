@@ -8,7 +8,7 @@ The chat message list (`packages/web/src/components/chat/MessageList.tsx`) is re
 |---|---|
 | `packages/web/src/components/chat/MessageList.tsx` | Render the message stream and own all scroll behavior. |
 | `packages/web/src/components/chat/scrollAnchor.ts` | `ScrollAnchor`, `resolveOpenTarget`, `firstUnreadMessageId`, `pageReachesReadPosition`: the pure parts of the anchoring model. |
-| `packages/web/src/stores/chatStore.ts` | `messages`, `hasMore`, `loadStates` (per channel: loading or failed with its error), `scrollPositions` (saved anchors, in memory, session-scoped), `readStates`, `detachedChannels` (detached windows and the live messages held for each), `presentReturns`; `loadMoreMessages` and `loadNewerMessages` page backward and forward. |
+| `packages/web/src/stores/chatStore.ts` | `messages`, `hasMore`, `loadStates` (per channel: waiting for an unknown channel, loading, or failed with its error), `scrollPositions` (saved anchors, in memory, session-scoped), `readStates`, `detachedChannels` (detached windows and the live messages held for each), `presentReturns`; `loadMoreMessages` and `loadNewerMessages` page backward and forward. |
 | `packages/web/src/components/chat/messageJumpContext.ts` | `MessageJumpContext` / `useMessageJump()`: the list's jump handle for its rows. |
 | `packages/web/src/components/chat/embeds/*.tsx` | Embed renderers — must obey the dimension reservation contract below. |
 | `packages/web/src/components/chat/AttachmentRenderer.tsx` | Reference for the dimension reservation pattern (`AttachmentRenderer.tsx:81-100`). |
@@ -75,9 +75,9 @@ The first unread row is held 64 px (`UNREAD_ROW_OFFSET_PX`) below the viewport t
 
 Federation: the read state, the message ids and the around-query all come from the channel's origin (`getChannelOrigin`), so a federated channel and a DM pinned to another instance compare ids of one instance. A peer without the around endpoint answers 404, which opens at the newest message.
 
-## Load failures
+## Load state
 
-`chatStore.loadStates` holds, per channel, `{ status: 'loading' }` while `loadMessages` is in flight and `{ status: 'failed', error }` after it failed; no entry means idle. The initial skeleton shows for the channel's own `loading` state. A `failed` channel with no messages shows `LoadFailedNotice` (`role="alert"`, `chat:list.loadFailed`, the reason from `describeError`, and a Try again button that calls `loadMessages(channelId, true)`), as an overlay over the scroll container per the ContainerRef invariant.
+`chatStore.loadStates` holds, per channel, `{ status: 'waiting' }` while the channel is unknown (`getChannelKind`, client-federation.md "Channel kind": no `ready` has listed it, so there is no instance or endpoint to ask), `{ status: 'loading' }` while `loadMessages` is in flight and `{ status: 'failed', error }` after it failed; no entry means idle. `waiting` ends when `loadMessages` runs for the channel once it is known: the list's load effect depends on whether the channel is known, so it asks as soon as a listing names it, and the first `ready` of a connection reloads the open channel too (the two calls share one request). The initial skeleton shows for the channel's own `waiting` and `loading` states: an unknown channel is a load that cannot start yet, not a refusal, so it never shows `chat:list.noHistoryPermission`. A `failed` channel with no messages shows `LoadFailedNotice` (`role="alert"`, `chat:list.loadFailed`, the reason from `describeError`, and a Try again button that calls `loadMessages(channelId, true)`), as an overlay over the scroll container per the ContainerRef invariant.
 
 ## Smooth-scroll intent
 
@@ -163,6 +163,7 @@ Renderers that do not reserve (they shift on load; see "Known limitations"):
 
 - Bare GIFs and markdown images shift on load. The ResizeObserver and load handlers re-apply the anchor, so the view stays on its anchor while they settle.
 - The 150px at-bottom tolerance is generous — sending a new message while the user is reading the last few messages 100px up from the bottom yanks them down. This is intentional today; if changed, update this doc and the spec history.
+- A channel that stays unknown after every instance has delivered its `ready` (a stale DM URL) stays `waiting` and keeps the skeleton. A space channel URL is redirected by `AppLayout` once the space's channels load; nothing does that for a DM. `pendingMessageRehydrate` knows when every `ready` is in (`channelsSettled`) but keeps it to itself.
 - A user scroll in the same frame as a layout change is read as layout and re-anchored; the next scroll event moves the anchor.
 - The smooth scroll is kept deliberately for Jump to Present and started for new-message arrival, per UX call; a new message usually lands at once instead (see "Rows change" in the anchoring table). The 2026-04-27 fix (smooth-scroll intent + scrollend final pin) closes the residual above-bottom-landing race without removing the animation.
 
