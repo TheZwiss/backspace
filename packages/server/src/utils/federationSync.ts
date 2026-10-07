@@ -5,7 +5,7 @@ import { getDb, schema } from '../db/index.js';
 import { buildFederationHeaders, getOurOrigin, normalizeOriginForCompare } from './federationAuth.js';
 import { federationFetch } from './federationFetch.js';
 import { dmDeleteKey, hasAppliedEvent } from './federationAppliedEvents.js';
-import { isFederationRelayEnabled } from './federationOutbox.js';
+import { isFederationRelayEnabled, MUTATION_LOG_RETENTION_MS } from './federationOutbox.js';
 import { classifyPulledRejection } from './federationRejections.js';
 import { friendPairClockSubject, memberClockSubject } from './federationSubjectClock.js';
 import { generateSnowflake } from './snowflake.js';
@@ -115,11 +115,47 @@ function isAfter(a: CursorPosition, b: CursorPosition): boolean {
 
 /**
  * Where a context's cursor starts when it has none: the whole log. Every
- * relay processor is safe to apply twice (friend events through the ledger).
- * A peer that had synced before the upgrade got every cursor from migration
- * 0022 instead, at its `last_synced_at`.
+ * relay processor is safe to apply twice (friend events through the ledger,
+ * within `friendHistoryFloor`). A peer that had synced before the upgrade got
+ * every cursor from migration 0022 instead, at its `last_synced_at`.
  */
 const INITIAL_CURSOR_TS = 0;
+
+/**
+ * The earliest point of a peer's log the friend context reads, or null.
+ *
+ * Friend events are applied once through the ledger (`federation_applied_events`),
+ * which this instance keeps since `instance_settings.ledger_started_at`, the
+ * upgrade that created it. A friend event applied before that cannot be
+ * recognized, and applied again it acts on the pair's newer state (a declined
+ * request returns). So the friend context never reads a peer's log before the
+ * ledger start, whatever its cursor: a peer that last synced long before the
+ * upgrade, one that never synced, and a peer row created after the upgrade
+ * (re-peered after a revoke or a reset) alike, and the first page's overlap
+ * stops there too. Once the ledger is older than the log's retention, every
+ * row a peer can serve is newer than it and the floor is dropped. Null on an
+ * instance that kept the ledger from its first boot.
+ *
+ * The ledger start is this instance's clock and the log the peer's; a peer
+ * clock running ahead lets through friend events up to that lead before the
+ * upgrade, which is the same tolerance the overlap gives.
+ */
+function friendHistoryFloor(now: number): number | null {
+  const row = getDb().select({ ledgerStartedAt: schema.instanceSettings.ledgerStartedAt })
+    .from(schema.instanceSettings)
+    .get();
+  const startedAt = row?.ledgerStartedAt ?? null;
+  if (startedAt === null || now - startedAt > MUTATION_LOG_RETENTION_MS) return null;
+  return startedAt;
+}
+
+/** Where a pass of `context` asks from: an overlap before the cursor, never before the context's floor. */
+function firstRequestSince(context: SyncContext, position: CursorPosition, now: number): number {
+  const since = Math.max(0, position.ts - FIRST_PAGE_OVERLAP_MS);
+  if (context !== 'friend') return since;
+  const floor = friendHistoryFloor(now);
+  return floor === null ? since : Math.max(since, floor);
+}
 
 /**
  * Restart every cursor of `peer` at 0, and drop its kept events, when the
@@ -408,7 +444,7 @@ async function pullContext(
 ): Promise<'ok' | 'http_error'> {
   const ourOrigin = getOurOrigin();
   let position = loadCursor(peer, context);
-  let since = Math.max(0, position.ts - FIRST_PAGE_OVERLAP_MS);
+  let since = firstRequestSince(context, position, Date.now());
   let afterId: string | undefined;
   let previousRequest: string | null = null;
 

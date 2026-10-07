@@ -22,7 +22,8 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-vi.mock('./federationOutbox.js', () => ({
+vi.mock('./federationOutbox.js', async (importActual) => ({
+  ...await importActual<typeof import('./federationOutbox.js')>(),
   isFederationRelayEnabled: () => true,
 }));
 
@@ -45,9 +46,9 @@ vi.mock('../routes/federation.js', () => ({
   processRelayEvents: (events: FederationRelayEvent[]) => processRelayEvents(events),
 }));
 
-function applyMigrations(db: Database.Database): void {
+function applyMigrations(db: Database.Database, which: (file: string) => boolean = () => true): void {
   const dir = path.resolve(__dirname, '../../drizzle');
-  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort()) {
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.sql') && which(f)).sort()) {
     const sqlText = fs.readFileSync(path.join(dir, f), 'utf8');
     for (const stmt of sqlText.split(/-->\s*statement-breakpoint/)) {
       const clean = stmt.trim();
@@ -248,6 +249,75 @@ describe('syncPeerMutationLog: cursors', () => {
       syncPeerMutationLog(PEER, 'accept_new'),
     ]);
     expect(maxInFlight).toBe(1);
+  });
+});
+
+describe('syncPeerMutationLog: where the first pull after the upgrade starts', () => {
+  const DAY = 86_400_000;
+
+  /** An instance on the previous release, with `peer` synced up to `lastSyncedAt`, upgraded now. */
+  function upgradeWithPeer(lastSyncedAt: number): void {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite, f => f < '0022');
+    sqlite.prepare('INSERT INTO instance_settings (id, updated_at) VALUES (1, 1)').run();
+    sqlite.prepare(`
+      INSERT INTO federation_peers (id, origin, hmac_secret, status, last_synced_at, created_at, peer_instance_id)
+      VALUES (?, ?, 'secret', 'active', ?, 1, 'epoch-1')
+    `).run(PEER, PEER_ORIGIN, lastSyncedAt);
+    applyMigrations(sqlite, f => f.startsWith('0022'));
+  }
+
+  function ledgerStartedAt(): number {
+    return testDb.select().from(schema.instanceSettings).get()!.ledgerStartedAt!;
+  }
+
+  it('continues every context of a peer that synced before from its last sync, and friend events not before the upgrade', async () => {
+    const { syncPeerMutationLog, FIRST_PAGE_OVERLAP_MS } = await import('./federationSync.js');
+    const lastSync = Date.now() - 3 * DAY;
+    upgradeWithPeer(lastSync);
+    const requests = serve({});
+    await syncPeerMutationLog(PEER, 'periodic');
+    const since = Object.fromEntries(requests.map(r => [r.contextType ?? 'dm', r.sinceTimestamp]));
+    expect(since).toEqual({ dm: lastSync - FIRST_PAGE_OVERLAP_MS, friend: ledgerStartedAt(), profile: lastSync - FIRST_PAGE_OVERLAP_MS });
+  });
+
+  it('reads friend events from the upgrade on for a peer row created after it', async () => {
+    const { syncPeerMutationLog } = await import('./federationSync.js');
+    upgradeWithPeer(0);
+    // Revoked and peered again: a new row, no cursors.
+    testDb.delete(schema.federationPeers).run();
+    seedPeer({ id: PEER, peerInstanceId: 'epoch-1' });
+    const requests = serve({});
+    await syncPeerMutationLog(PEER, 'accept_new');
+    const since = Object.fromEntries(requests.map(r => [r.contextType ?? 'dm', r.sinceTimestamp]));
+    expect(since).toEqual({ dm: 0, friend: ledgerStartedAt(), profile: 0 });
+  });
+
+  it('keeps the overlap after the upgrade, and drops the floor once the log no longer reaches the upgrade', async () => {
+    const { syncPeerMutationLog, FIRST_PAGE_OVERLAP_MS } = await import('./federationSync.js');
+    upgradeWithPeer(Date.now() - DAY);
+    const later = ledgerStartedAt() + 10 * 60_000;
+    testDb.update(schema.federationSyncCursors).set({ cursorTs: later }).run();
+    let requests = serve({});
+    await syncPeerMutationLog(PEER, 'periodic', ['friend']);
+    expect(requests[0]!.sinceTimestamp).toBe(later - FIRST_PAGE_OVERLAP_MS);
+
+    vi.restoreAllMocks();
+    testDb.update(schema.instanceSettings).set({ ledgerStartedAt: Date.now() - 91 * DAY }).run();
+    testDb.update(schema.federationSyncCursors).set({ cursorTs: 0 }).run();
+    requests = serve({});
+    await syncPeerMutationLog(PEER, 'periodic', ['friend']);
+    expect(requests[0]!.sinceTimestamp).toBe(0);
+  });
+
+  it('has no floor on an instance that kept the ledger from its first boot', async () => {
+    const { syncPeerMutationLog } = await import('./federationSync.js');
+    seedPeer();
+    testDb.insert(schema.instanceSettings).values({ id: 1, updatedAt: 1 }).run();
+    const requests = serve({});
+    await syncPeerMutationLog(PEER, 'periodic', ['friend']);
+    expect(requests[0]!.sinceTimestamp).toBe(0);
   });
 });
 

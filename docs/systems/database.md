@@ -405,6 +405,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | directoryBrowseEnabled | integer NOT NULL | 1 | The admin allows people on this instance to see spaces from other instances in Explore ("Outer Space"). The incoming half of the directory, independent of `directoryEnabled`, which is the outgoing half. `GET /api/directory` answers `404 directory_disabled` while it is 0, and `instance/info` reports `directoryAvailable: false`. Default 1, which is what every instance did before the column existed. `DIRECTORY_ENDPOINT` sits above it: with no endpoint there is nothing to browse whatever it says. Nowhere in the served document, so changing it never marks `directoryDirty`. See [directory.md](directory.md). |
 | supportCardEnabled | integer (boolean mode) NOT NULL | 1 | The web client's Backspace page shows the Support card, which links to the project's Ko-fi page. Read only by the web client, through `supportCardEnabled` on `GET /api/instance/info`; it hides only that card and changes nothing the server does. Default 1; migration `0017_fat_rafael_vega.sql` adds it, and an existing row takes the default. Written through `PATCH /api/settings/instance`. |
 | installedAt | integer | | First-boot timestamp (epoch ms). Backfilled by `ensureDefaults` from the oldest local non-deleted account, or `Date.now()` on a fresh DB, so it is non-null after boot and never overwritten. |
+| ledgerStartedAt | integer | | When this instance began recording applied relay events in `federation_applied_events` (epoch ms): set by migration 0022 on an existing instance, null on one that ran it before its first boot. The pull reads no friend event older than it (federation.md "Pull sync", "Cursor") |
 | updatedAt | integer NOT NULL | | |
 
 ---
@@ -570,7 +571,7 @@ Index `idx_outbox_queue` on (peerId, queueKey, createdAt); `idx_outbox_retry` on
 Retention: 90 days (cleaned by federation janitor)
 
 ### federation_sync_cursors
-Pull-sync position per peer and context (federation.md "Pull sync").
+Pull-sync position per peer and context (federation.md "Pull sync"). Migration 0022 created all three for every peer with `last_synced_at > 0`, at that time.
 PK: (peerId, contextType)
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|

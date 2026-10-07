@@ -7,6 +7,7 @@ import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import { generateSnowflake } from './snowflake.js';
 import { federationFetch } from './federationFetch.js';
+import { MUTATION_LOG_RETENTION_MS } from './federationOutbox.js';
 import { expireOutboxQueues } from './federationOutboxQueue.js';
 import { sweepAppliedEvents } from './federationAppliedEvents.js';
 import { sweepSubjectClocks } from './federationSubjectClock.js';
@@ -483,12 +484,12 @@ export function cleanupUnusedAutoPendingPeers(
 }
 
 /**
- * Delete federation mutation log entries older than `retentionDays` (default 90).
+ * Delete federation mutation log entries older than `MUTATION_LOG_RETENTION_MS`.
  * Returns the number of rows deleted.
  */
-export function cleanupFederationMutationLog(retentionDays: number = 90): number {
+export function cleanupFederationMutationLog(): number {
   const db = getDb();
-  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - MUTATION_LOG_RETENTION_MS;
   const result = db.delete(schema.federationMutationLog)
     .where(lt(schema.federationMutationLog.mutatedAt, cutoff))
     .run();
