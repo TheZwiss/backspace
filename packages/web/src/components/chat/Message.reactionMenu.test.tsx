@@ -11,10 +11,11 @@ import { Message } from './Message';
 
 // An open socket: every send is taken.
 vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn(() => true), wsSendAll: vi.fn() }));
-// The picker as a single choice: picking 👍.
+// The picker as a single choice: picking 👍. It says which layout it was
+// asked for: the full-width mobile one or the fixed desktop box.
 vi.mock('./EmojiPicker', () => ({
-  EmojiPicker: ({ onEmojiSelect }: { onEmojiSelect: (emoji: { native: string }) => void }) => (
-    <button type="button" data-testid="emoji-picker" onClick={() => onEmojiSelect({ native: '👍' })}>pick</button>
+  EmojiPicker: ({ onEmojiSelect, mobile = false }: { onEmojiSelect: (emoji: { native: string }) => void; mobile?: boolean }) => (
+    <button type="button" data-testid="emoji-picker" data-mobile={String(mobile)} onClick={() => onEmojiSelect({ native: '👍' })}>pick</button>
   ),
 }));
 vi.mock('../../audio/AudioManager', () => ({
@@ -177,6 +178,83 @@ describe.each([
     fireEvent.click(screen.getByTestId('emoji-picker'));
     expect(sent('reaction_add')).toEqual([]);
     expect(screen.queryByTestId('emoji-picker')).toBeNull();
+  });
+});
+
+describe('the picker the mobile long-press sheet opens', () => {
+  const innerWidth = window.innerWidth;
+
+  beforeEach(() => {
+    useUIStore.setState({ isMobile: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: innerWidth });
+  });
+
+  function openPickerFromSheet(): void {
+    openMenu();
+    const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
+    fireEvent.click(plus!);
+  }
+
+  // A bottom sheet as wide as the viewport, never a box positioned against
+  // the message row: nothing in it depends on where the message sits or on
+  // the viewport's width, so it cannot run off the side or the bottom.
+  it.each([360, 375])('is a full-width bottom sheet with the mobile picker at %i px', (width) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    renderMessage();
+    openPickerFromSheet();
+
+    const sheet = screen.getByRole('dialog', { name: 'Add reaction' });
+    expect(sheet.className).toContain('fixed');
+    expect(sheet.className).toContain('left-0');
+    expect(sheet.className).toContain('right-0');
+    expect(sheet.style.left).toBe('');
+    expect(sheet.style.top).toBe('');
+    expect(sheet.style.width).toBe('');
+    expect(sheet.style.bottom).toBe('var(--keyboard-inset)');
+    expect(screen.getByTestId('emoji-picker').dataset.mobile).toBe('true');
+    expect(screen.getByTestId('picker-sheet-backdrop')).toBeTruthy();
+  });
+
+  it.each([
+    ['a tap', 'touchStart'],
+    ['a click', 'mouseDown'],
+  ] as const)('closes on %s on the backdrop, sending nothing', (_label, event) => {
+    renderMessage();
+    openPickerFromSheet();
+    fireEvent[event](screen.getByTestId('picker-sheet-backdrop'));
+    expect(screen.queryByRole('dialog', { name: 'Add reaction' })).toBeNull();
+    expect(screen.queryByTestId('emoji-picker')).toBeNull();
+    expect(sent('reaction_add')).toEqual([]);
+  });
+
+  it('stays open for a tap inside the sheet', () => {
+    renderMessage();
+    openPickerFromSheet();
+    fireEvent.mouseDown(screen.getByRole('dialog', { name: 'Add reaction' }));
+    fireEvent.touchStart(screen.getByRole('dialog', { name: 'Add reaction' }));
+    expect(screen.getByTestId('emoji-picker')).toBeTruthy();
+  });
+
+  it('closes on Escape', () => {
+    renderMessage();
+    openPickerFromSheet();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('emoji-picker')).toBeNull();
+  });
+});
+
+describe('the picker the desktop context menu opens', () => {
+  it('is the popover with the desktop picker, not a sheet', () => {
+    renderMessage();
+    openMenu();
+    const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
+    fireEvent.click(plus!);
+    expect(screen.queryByRole('dialog', { name: 'Add reaction' })).toBeNull();
+    expect(screen.queryByTestId('picker-sheet-backdrop')).toBeNull();
+    expect(screen.getByTestId('emoji-picker').dataset.mobile).toBe('false');
   });
 });
 

@@ -21,6 +21,7 @@ import { EmbedRenderer } from './EmbedRenderer';
 import { FederationGlobeIcon } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { EmojiPicker } from './EmojiPicker';
+import { MobilePickerSheet } from './MobilePickerSheet';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isFederationGlobeApplicable, isMine, userDisplayName } from '../../utils/identity';
@@ -148,9 +149,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  // The reaction picker, and what it hangs off: the "+" of the hover bar, or
-  // the message row when the message menu opened it (the long-press sheet on
-  // mobile, where there is no hover bar).
+  // The reaction picker, and what opened it: the "+" of the hover bar, or the
+  // message menu ('row'). On desktop it hangs off that button or the message
+  // row; on mobile it is a bottom sheet whatever opened it.
   const [reactionPicker, setReactionPicker] = useState<'button' | 'row' | null>(null);
   const showReactionPicker = reactionPicker !== null;
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
@@ -165,6 +166,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const members = useSpaceStore((s) => s.members);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const isMobile = useUIStore((s) => s.isMobile);
   const jumpToMessage = useMessageJump();
 
   const pending = isPendingMessage(message) ? message.__pending : null;
@@ -299,9 +301,12 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? (message.content?.trim() ?? null)
     : imageEmbedSourceUrl;
 
-  // Close reaction picker on outside click
+  const closeReactionPicker = useCallback(() => setReactionPicker(null), []);
+
+  // Close the desktop reaction picker on outside click. The mobile sheet
+  // closes on a tap on its own backdrop.
   useEffect(() => {
-    if (!showReactionPicker) return;
+    if (!showReactionPicker || isMobile) return;
     const handler = (e: MouseEvent) => {
       if (reactionPickerRef.current?.contains(e.target as Node)) return;
       if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
@@ -309,17 +314,17 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showReactionPicker]);
+  }, [showReactionPicker, isMobile]);
 
-  // Close reaction picker on Escape
+  // Close the desktop reaction picker on Escape (the mobile sheet has its own).
   useEffect(() => {
-    if (!showReactionPicker) return;
+    if (!showReactionPicker || isMobile) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setReactionPicker(null);
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showReactionPicker]);
+  }, [showReactionPicker, isMobile]);
 
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
     addReaction(message.id, emoji.native);
@@ -717,8 +722,14 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         )}
       </div>
 
-      {/* Reaction emoji picker */}
-      {showInteractions && reactionPicker && canAddReactions && (() => {
+      {/* Reaction emoji picker: a bottom sheet on mobile */}
+      {showInteractions && reactionPicker && canAddReactions && isMobile && (
+        <MobilePickerSheet onClose={closeReactionPicker} label={t('common:actions.addReaction')}>
+          <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} mobile />
+        </MobilePickerSheet>
+      )}
+      {/* and on desktop a popover under the "+" or the message row */}
+      {showInteractions && reactionPicker && canAddReactions && !isMobile && (() => {
         const anchor = reactionPicker === 'button' ? reactionPickerBtnRef.current : rowRef.current;
         if (!anchor) return null;
         const PICKER_HEIGHT = 400;

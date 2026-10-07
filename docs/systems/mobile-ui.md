@@ -17,7 +17,7 @@ Source files:
 - `packages/web/src/components/layout/MobileVoiceMiniBar.tsx` — Persistent mini-bar overlay during voice calls
 - `packages/web/src/components/layout/MobileFolderSheet.tsx` — Bottom sheet for space folder contents, rename, color, ungroup
 - `packages/web/src/hooks/useSwipeGesture.ts` — Edge swipe-back touch gesture hook
-- `packages/web/src/hooks/useDragToClose.ts` — Bottom-sheet drag-down-to-dismiss gesture hook (shared by `InputPopover.MobileSheet`, `MobileVoiceJoinSheet`, `MobileFolderSheet`)
+- `packages/web/src/hooks/useDragToClose.ts`: bottom-sheet drag-down-to-dismiss gesture hook (shared by `MobilePickerSheet`, `MobileVoiceJoinSheet`, `MobileFolderSheet`)
 - `packages/web/src/hooks/useVisualViewportInset.ts` — Returns the bottom inset that floating overlays must use to sit above the iOS soft keyboard (when open) or above the home-indicator safe area (when closed). Used by `MessageInput` for the floating composer-bubble's `bottom` value.
 - `packages/web/src/stores/uiStore.ts` — Mobile navigation state (mobileScreen, mobileStack, push/pop actions)
 
@@ -777,7 +777,7 @@ Three hand-rolled bottom sheets share this gesture hook so each surface gets ide
 
 | Sheet | File | Drag-handle area |
 |---|---|---|
-| Emoji / GIF picker | `packages/web/src/components/chat/InputPopover.tsx` (`MobileSheet`) | Visible pill + tab bar |
+| Picker sheet: the composer's emoji / GIF picker (`InputPopover.tsx`) and the reaction picker the message menu's "+" opens (`Message.tsx`) | `packages/web/src/components/chat/MobilePickerSheet.tsx` | Visible pill + the caller's header (the composer's tab bar; none for reactions) |
 | Voice-channel join sheet | `packages/web/src/components/voice/MobileVoiceJoinSheet.tsx` | Visible pill + title row |
 | Space-folder sheet | `packages/web/src/components/layout/MobileFolderSheet.tsx` | Visible pill + folder header row |
 
@@ -816,7 +816,7 @@ const { sheetStyle, handleProps, isDragging, isClosing, hasInteracted } = useDra
 - **Tap-on-handle** is treated as a no-op (touch starts and ends inside the dead-zone → no offset → no commit). `hasInteracted` does flip true, but with `dragOffset === 0` the inline transform stays at `translateY(0)` and the visible state matches the open state.
 - **iOS pull-to-refresh** is blocked because `touchmove` is non-passive and calls `preventDefault()` once we cross the dead-zone.
 - **Internal scrolling** (e.g. emoji grid, GIF results, folder space list) is **untouched** — `handleProps.onTouchStart` is bound to the header element only, so scroll containers below it never enter drag mode.
-- **Open animation** (`animate-slide-up-sheet` for `MobileFolderSheet` / `InputPopover.MobileSheet`, the `translate-y-full → translate-y-0` flip for `MobileVoiceJoinSheet`) is gated by `!hasInteracted`. After the first touch, the open class never re-applies for the rest of the sheet's lifetime — the inline `transform` + transition becomes the sole animator for both snap-back and close-out.
+- **Open animation** (`animate-slide-up-sheet` for `MobileFolderSheet` / `MobilePickerSheet`, the `translate-y-full → translate-y-0` flip for `MobileVoiceJoinSheet`) is gated by `!hasInteracted`. After the first touch, the open class never re-applies for the rest of the sheet's lifetime; the inline `transform` + transition becomes the sole animator for both snap-back and close-out.
 
 ---
 
