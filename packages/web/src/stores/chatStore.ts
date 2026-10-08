@@ -7,6 +7,8 @@ import { isMe, myRowForOrigin } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { updateIsAboutRowId, withUserUpdate, type IdentityFields } from '../utils/identity';
 import { usePendingMessageStore } from './pendingMessageStore';
+import { useUIStore } from './uiStore';
+import { describeError } from '../i18n/errors';
 import type { ScrollAnchor } from '../components/chat/scrollAnchor';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
@@ -824,11 +826,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await client.messages.update(messageId, { content });
       }
       // Real update will arrive via WebSocket
-    } catch {
-      // Rollback: restore the original message on failure
+    } catch (error) {
+      // Rollback: restore the original message, and say why the edit was
+      // refused (a 1-on-1 whose partner was deleted, for one).
       if (originalMessage) {
         get().updateMessage(originalMessage);
       }
+      useUIStore.getState().addToast(describeError(error), 'warning');
     }
   },
 
@@ -848,11 +852,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         await client.messages.delete(messageId);
       }
       // Real deletion will arrive via WebSocket (already removed locally)
-    } catch {
-      // Rollback: re-add the message on failure
+    } catch (error) {
+      // Rollback: re-add the message, and say why the delete was refused.
       if (savedMessage) {
         get().addMessage(channelId, savedMessage);
       }
+      useUIStore.getState().addToast(describeError(error), 'warning');
     }
   },
 

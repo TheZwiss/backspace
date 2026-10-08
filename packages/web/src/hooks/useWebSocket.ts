@@ -1384,7 +1384,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // moderation action the role hierarchy refuses, for one); say so. Older
       // servers send no code, and those errors stay in the log.
       if (event.code) {
-        useUIStore.getState().addToast(describeErrorCode(event.code, event.message), 'warning');
+        useUIStore.getState().addToast(describeErrorCode(event.code, event.message, event.details), 'warning');
       }
       break;
     }
