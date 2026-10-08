@@ -2015,19 +2015,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'invite_invalid');
     }
 
-    // Request-only spaces are approval-gated and have no usable invite links, so
-    // refuse to send an invite card that would dead-end at the recipient's join
-    // guard. This is checked against our LOCAL spaces table by id, independent of
-    // the caller-supplied spaceInstanceOrigin: if the space is genuinely local and
-    // request-only we reject even when the origin is spoofed to look remote. A
-    // truly remote space is absent from this table (undefined → allowed); its own
-    // home instance enforces the same rule when the recipient tries to join.
-    const localSpace = db.select({ visibility: schema.spaces.visibility })
-      .from(schema.spaces).where(eq(schema.spaces.id, body.spaceId)).get();
-    if (localSpace?.visibility === 'request') {
-      return sendError(reply, 403, 'space_requires_approval');
-    }
-
     // The invite's content, in the form every receiving instance checks it
     // against (parseDmSystemEvent). An invite a receiver would refuse is not
     // sent, and nothing is written for it.

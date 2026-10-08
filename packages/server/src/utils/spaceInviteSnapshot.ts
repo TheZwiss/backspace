@@ -1,4 +1,4 @@
-import type { AvatarColor } from '@backspace/shared';
+import type { AvatarColor, InvitePreview, SpaceVisibility } from '@backspace/shared';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { safeFetch } from './ssrf.js';
@@ -14,14 +14,12 @@ export interface SpaceInviteSnapshot {
 }
 
 /**
- * Build a local invite snapshot directly from the DB. Used when the space
- * lives on this instance — avoids an HTTP roundtrip through our own domain
- * (which fails inside Docker due to NAT loopback) and is faster anyway.
- *
- * Returns the same shape as `fetchSpaceInviteSnapshot` so callers don't
- * branch downstream of the snapshot lookup.
+ * The invite preview for a code on this instance, or null when no space holds
+ * it. This is what `GET /api/spaces/invite/:code/preview` answers: the
+ * snapshot fields plus the space's current visibility, read on every call so
+ * a link follows the space's visibility at the time it is opened.
  */
-export function getLocalInviteSnapshot(inviteCode: string): SpaceInviteSnapshot | null {
+export function getLocalInvitePreview(inviteCode: string): InvitePreview | null {
   const db = getDb();
   const space = db.select().from(schema.spaces)
     .where(eq(schema.spaces.inviteCode, inviteCode)).get();
@@ -42,6 +40,29 @@ export function getLocalInviteSnapshot(inviteCode: string): SpaceInviteSnapshot 
     avatarColor: (space.avatarColor as AvatarColor | null) ?? null,
     memberCount,
     instanceName,
+    visibility: (space.visibility ?? 'private') as SpaceVisibility,
+  };
+}
+
+/**
+ * Build a local invite snapshot directly from the DB. Used when the space
+ * lives on this instance — avoids an HTTP roundtrip through our own domain
+ * (which fails inside Docker due to NAT loopback) and is faster anyway.
+ *
+ * Returns the same shape as `fetchSpaceInviteSnapshot` so callers don't
+ * branch downstream of the snapshot lookup.
+ */
+export function getLocalInviteSnapshot(inviteCode: string): SpaceInviteSnapshot | null {
+  const preview = getLocalInvitePreview(inviteCode);
+  if (!preview) return null;
+  return {
+    spaceId: preview.spaceId,
+    spaceName: preview.spaceName,
+    description: preview.description,
+    icon: preview.icon,
+    avatarColor: preview.avatarColor,
+    memberCount: preview.memberCount,
+    instanceName: preview.instanceName,
   };
 }
 

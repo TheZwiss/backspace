@@ -186,7 +186,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   space_uses_join_requests: 'Request-only spaces do not use invite links; entry is by join request',
   invite_code_required: 'Invite code is required',
   invite_not_found: 'Invalid invite code',
-  join_request_required: 'This space requires an approved join request',
+  join_request_required: 'This space takes join requests; send one and a manager will review it',
   cannot_change_own_roles: 'You cannot change your own roles',
   role_ids_invalid: 'roleIds must be an array of role IDs',
   member_not_found: 'Member not found',

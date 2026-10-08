@@ -145,6 +145,13 @@ export interface InvitePreview {
   avatarColor: AvatarColor | null;
   memberCount: number;
   instanceName: string;
+  /**
+   * The space's visibility when the preview was read. The invite page offers
+   * a join request for `request` and a join otherwise. Absent from an
+   * instance older than this field, where the page offers a join and switches
+   * to a request when the join answers `join_request_required`.
+   */
+  visibility?: SpaceVisibility;
 }
 
 export interface ExploreSpace {

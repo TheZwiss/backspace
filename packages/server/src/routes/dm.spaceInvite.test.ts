@@ -236,8 +236,9 @@ describe('POST /api/dm/space-invite', () => {
     expect(testDb.select().from(schema.dmMessages).all()).toHaveLength(0);
   });
 
-  it('rejects a space invite for a local request-only space (approval required)', async () => {
-    // Real local space with request visibility; the snapshot is mocked to match.
+  it('sends a space invite for a local space joined by request', async () => {
+    // The card carries the link like any other; the join routes turn a use of
+    // it into a join request, so the invite route has nothing to refuse.
     testDb.insert(schema.spaces).values({
       id: 'S-REQ', name: 'Req', ownerId: 'alice', inviteCode: 'reqcode',
       visibility: 'request', createdAt: 1,
@@ -256,35 +257,10 @@ describe('POST /api/dm/space-invite', () => {
         inviteCode: 'reqcode',
       },
     });
-    expect(res.statusCode).toBe(403);
-    // No DM card should be inserted for a request-only space.
-    expect(testDb.select().from(schema.dmMessages).all().length).toBe(0);
-  });
-
-  it('rejects a local request-only space even when spaceInstanceOrigin is spoofed to look remote', async () => {
-    // A caller can send an origin variant (trailing slash / different case) so
-    // `isLocal` is false and the fetch path is taken, but the space is genuinely
-    // local + request. The guard must not depend on the claimed origin.
-    testDb.insert(schema.spaces).values({
-      id: 'S-REQ2', name: 'Req2', ownerId: 'alice', inviteCode: 'reqcode2',
-      visibility: 'request', createdAt: 1,
-    }).run();
-    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      spaceId: 'S-REQ2', spaceName: 'Req2', description: null, icon: null,
-      avatarColor: null, memberCount: 1, instanceName: 'Backspace',
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/dm/space-invite',
-      payload: {
-        target: { userId: 'bob' },
-        spaceId: 'S-REQ2',
-        spaceInstanceOrigin: 'https://local.test/', // trailing slash defeats strict isLocal compare
-        inviteCode: 'reqcode2',
-      },
-    });
-    expect(res.statusCode).toBe(403);
-    expect(testDb.select().from(schema.dmMessages).all().length).toBe(0);
+    expect(res.statusCode).toBe(200);
+    const rows = testDb.select().from(schema.dmMessages).all();
+    expect(rows).toHaveLength(1);
+    expect(JSON.parse(rows[0]?.content ?? '{}').spaceId).toBe('S-REQ');
   });
 
   it('inserts a type=system message with parseable space_invite content on success', async () => {

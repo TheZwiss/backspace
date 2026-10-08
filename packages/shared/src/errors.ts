@@ -126,6 +126,8 @@ export const ERROR_CODES = [
   'invalid_body',
   'invalid_target',
   'cannot_invite_self',
+  // Sent up to 1.9.0 by POST /api/dm/space-invite for a local request space.
+  // A current server sends that invite; an older home still refuses it.
   'space_requires_approval',
   'message_lookup_failed',
   // admin-settings
@@ -188,9 +190,13 @@ export const ERROR_CODES = [
   'space_visibility_invalid',
   'space_update_failed',
   'space_owner_only',
+  // Sent up to 1.9.0 by POST /api/spaces/:id/invite for a request space. A
+  // current server hands that space its link; an older peer still sends it.
   'space_uses_join_requests',
   'invite_code_required',
   'invite_not_found',
+  // An invite code used on a request space. `details.spaceId` names the space
+  // to send `POST /api/spaces/:id/request-join` to (absent up to 1.9.0).
   'join_request_required',
   'cannot_change_own_roles',
   'role_ids_invalid',
