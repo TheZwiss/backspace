@@ -293,17 +293,69 @@ describe('WS DM message writes where the rule does not apply', () => {
     expect(created?.content).toBe('hi');
     expect(sent().some(([, e]) => e.type === 'dm_message_created')).toBe(true);
     expect(sent().some(([, e]) => e.type === 'error')).toBe(false);
+    expect(queueDmRelay).toHaveBeenCalledTimes(1);
+    expect(queueDmRelay).toHaveBeenCalledWith(expect.objectContaining({ id: created!.id }), dmId, 'create');
 
     sendToUser.mockClear();
+    queueDmRelay.mockClear();
     await send({ type: 'dm_message_edit', messageId: created!.id, content: 'hi again' });
     expect(messageRow(created!.id)?.content).toBe('hi again');
     expect(sent().some(([, e]) => e.type === 'dm_message_updated')).toBe(true);
+    expect(queueDmRelay).toHaveBeenCalledTimes(1);
+    expect(queueDmRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ id: created!.id, content: 'hi again' }), dmId, 'update',
+    );
 
     sendToUser.mockClear();
     await send({ type: 'dm_message_delete', messageId: created!.id });
     expect(messageRow(created!.id)).toBeUndefined();
     expect(sent().some(([, e]) => e.type === 'dm_message_deleted')).toBe(true);
     expect(sent().some(([, e]) => e.type === 'error')).toBe(false);
+    expect(queueDmMessageDeleteRelay).toHaveBeenCalledTimes(1);
+    expect(sendToWs).not.toHaveBeenCalled();
+  });
+
+  it('creates with an attachment: links it, sends one dm_message_created per member, relays once', async () => {
+    seedAttachment('att-own', 'alice');
+
+    await send({ type: 'dm_message_create', dmChannelId: LIVE, content: 'look', attachments: ['att-own'] });
+
+    const [created] = messagesIn(LIVE);
+    expect(created?.content).toBe('look');
+    const att = testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'att-own')).get();
+    expect(att?.dmMessageId).toBe(created!.id);
+
+    const createdEvents = sent().filter(([, e]) => e.type === 'dm_message_created');
+    expect(createdEvents.map(([to]) => to).sort()).toEqual(['alice', 'bob']);
+    const message = createdEvents[0]![1].message as { id: string; attachments: { id: string }[] };
+    expect(message.id).toBe(created!.id);
+    expect(message.attachments.map((a) => a.id)).toEqual(['att-own']);
+
+    expect(queueDmRelay).toHaveBeenCalledTimes(1);
+    expect(queueDmRelay).toHaveBeenCalledWith(
+      expect.objectContaining({ id: created!.id, attachments: [expect.objectContaining({ id: 'att-own' })] }),
+      LIVE,
+      'create',
+    );
+    expect(sendToWs).not.toHaveBeenCalled();
+  });
+
+  it('stores nothing when an attachment link fails: the insert and the links are one transaction', async () => {
+    seedAttachment('att-first', 'alice');
+    seedAttachment('att-fails', 'alice');
+    // Make linking the second attachment fail inside the write.
+    sqlite.exec(`CREATE TRIGGER fail_link BEFORE UPDATE OF dm_message_id ON attachments
+      WHEN NEW.id = 'att-fails' BEGIN SELECT RAISE(ABORT, 'link failed'); END`);
+
+    await expect(send({
+      type: 'dm_message_create', dmChannelId: LIVE, content: 'two files', attachments: ['att-first', 'att-fails'],
+    })).rejects.toThrow('link failed');
+
+    expect(messagesIn(LIVE)).toHaveLength(0);
+    const first = testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'att-first')).get();
+    expect(first?.dmMessageId).toBeNull();
+    expect(sent()).toHaveLength(0);
+    expect(queueDmRelay).not.toHaveBeenCalled();
   });
 });
 
