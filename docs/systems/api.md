@@ -39,7 +39,9 @@ Routes may tighten the limit for themselves with `config.rateLimit`; those
 overrides sit with their routes (`routes/auth.ts`, `routes/directory.ts`,
 `routes/explore.ts`, `routes/messages.ts`, `routes/dm.ts`, `routes/gif.ts`,
 `routes/users.ts`, `routes/social.ts`), and they are keyed the same way, per
-address, for the same reason. `DISABLE_RATE_LIMITS=1` or `=true`
+address, for the same reason. The WebSocket `dm_message_create` event applies
+the DM create route's limit to the socket's address in a counter of its own
+(websocket.md, "DM Messages"). `DISABLE_RATE_LIMITS=1` or `=true`
 switches every limit off and exists for test harnesses that share the loopback
 address; it is never set in production.
 

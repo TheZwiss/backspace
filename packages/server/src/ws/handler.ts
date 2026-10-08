@@ -4,6 +4,7 @@ import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
 import { eq, and, or, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
+import { recordSocketAddress } from './socketAddress.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import { idsHiddenFromEveryone } from '@backspace/shared/src/permissions.js';
 import type {
@@ -1939,6 +1940,8 @@ export function buildReadyPayload(userId: string): {
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {
   app.get('/ws', { websocket: true }, (socket, request) => {
     const ws = socket as unknown as WebSocket;
+    // Per-address limits on events key on this, as the HTTP limiter does.
+    recordSocketAddress(ws, request.ip);
     let authenticated = false;
     let userId: string | undefined;
     let username: string | undefined;

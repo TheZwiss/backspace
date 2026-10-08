@@ -471,7 +471,7 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 
 **Endpoint:** `POST /api/dm/:id/messages` -- `dm.ts:dmRoutes`
 
-**Rate limit:** 5 per 5 seconds per user
+**Rate limit:** 5 per 5 seconds per client address (`DM_MESSAGE_CREATE_RATE_LIMIT` in `utils/dmMessageRateLimit.ts`), `429 rate_limited` over it. The WS `dm_message_create` event applies the same numbers to the socket's address (recorded when it connects, `ws/socketAddress.ts`) before any other check and refuses with an `error` carrying `rate_limited`. The two paths count separately: the REST counter lives inside `@fastify/rate-limit`, which nothing outside the plugin can reach.
 
 **Request:** `{ content?: string, attachments?: string[], replyToId?: string }`
 

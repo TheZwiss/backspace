@@ -6,6 +6,7 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
+import { DM_MESSAGE_CREATE_RATE_LIMIT } from '../utils/dmMessageRateLimit.js';
 import { connectionManager } from '../ws/handler.js';
 import {
   type DmMessage,
@@ -2086,8 +2087,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string }; Body: CreateDmMessageRequest }>('/api/dm/:id/messages', {
     config: {
       rateLimit: {
-        max: 5,
-        timeWindow: '5 seconds',
+        // The WebSocket dm_message_create applies the same numbers, keyed on
+        // the same address (utils/dmMessageRateLimit.ts).
+        max: DM_MESSAGE_CREATE_RATE_LIMIT.max,
+        timeWindow: DM_MESSAGE_CREATE_RATE_LIMIT.windowMs,
         // Per client address; see the note on the space-invite limit above.
         keyGenerator: (request: FastifyRequest) => request.ip,
       },

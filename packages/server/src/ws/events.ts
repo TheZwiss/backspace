@@ -24,6 +24,8 @@ import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
 import { ERROR_MESSAGES, errorText } from '../utils/httpErrors.js';
 import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
 import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
+import { consumeWsDmMessageCreate } from '../utils/dmMessageRateLimit.js';
+import { socketAddressOf } from './socketAddress.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -795,11 +797,19 @@ function refuseDmMessage(ws: WebSocket, code: ErrorCode, details?: ErrorDetails)
 }
 
 /**
- * `dm_message_create`. The checks are the REST route's
- * (`checkDmMessageCreate`), so a 1-on-1 whose partner was deleted refuses
- * with `recipient_deleted` here too.
+ * `dm_message_create`. The limit and the checks are the REST route's: 5
+ * creates per 5 seconds per client address (`rate_limited`), counted before
+ * anything else as the route's limiter is, then `checkDmMessageCreate`, so a
+ * 1-on-1 whose partner was deleted refuses with `recipient_deleted` here too.
  */
 function handleDmMessageCreate(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
+  // A socket accepted on /ws always has an address; a stand-in without one
+  // counts under the user's row id rather than going uncounted.
+  if (!consumeWsDmMessageCreate(socketAddressOf(ws) ?? `user:${userId}`)) {
+    refuseDmMessage(ws, 'rate_limited');
+    return;
+  }
+
   const dmChannelId = event.dmChannelId;
   if (!dmChannelId || typeof dmChannelId !== 'string') {
     refuseDmMessage(ws, 'validation_failed');

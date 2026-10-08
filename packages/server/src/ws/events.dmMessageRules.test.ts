@@ -10,6 +10,14 @@ import type { WebSocket } from 'ws';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
 import * as schema from '../db/schema.js';
 import { setWorkerId, generateSnowflake } from '../utils/snowflake.js';
+import rateLimit from '@fastify/rate-limit';
+import { errorBody } from '../utils/httpErrors.js';
+import { recordSocketAddress } from './socketAddress.js';
+import {
+  DM_MESSAGE_CREATE_RATE_LIMIT,
+  _resetWsDmMessageCreateLimit,
+  consumeWsDmMessageCreate,
+} from '../utils/dmMessageRateLimit.js';
 
 // #420: the WebSocket create, edit and delete paths for DM messages follow
 // the REST routes' rules, including the read-only rule for a 1-on-1 whose
@@ -168,9 +176,10 @@ function messageRow(id: string): typeof schema.dmMessages.$inferSelect | undefin
 /** The socket of the last `send`, a fresh object per call. */
 let lastSocket: WebSocket | undefined;
 
-async function send(event: Record<string, unknown>, userId = 'alice'): Promise<void> {
+async function send(event: Record<string, unknown>, userId = 'alice', address?: string): Promise<void> {
   const { handleClientEvent } = await import('./events.js');
   lastSocket = {} as WebSocket;
+  if (address) recordSocketAddress(lastSocket, address);
   handleClientEvent(event, userId, userId, lastSocket, false);
 }
 
@@ -227,6 +236,7 @@ beforeEach(() => {
   seedDm(LEFT_GROUP, ['bob'], 'bob');
 
   currentUserId = 'alice';
+  _resetWsDmMessageCreateLimit();
   sendToUser.mockClear();
   sendToWs.mockClear();
   queueDmRelay.mockClear();
@@ -453,6 +463,107 @@ describe('every other refusal on the WS DM message paths carries a code', () => 
     expect(messagesIn(LIVE)).toHaveLength(3);
     expect(queueDmRelay).not.toHaveBeenCalled();
     expect(queueDmMessageDeleteRelay).not.toHaveBeenCalled();
+  });
+});
+
+describe('the WS dm_message_create rate limit', () => {
+  const { max } = DM_MESSAGE_CREATE_RATE_LIMIT;
+
+  async function createFrom(address: string, userId = 'alice', dmChannelId = LIVE): Promise<void> {
+    sendToWs.mockClear();
+    await send({ type: 'dm_message_create', dmChannelId, content: 'hi' }, userId, address);
+  }
+
+  it('admits the limit of creates from one address, then refuses with rate_limited and stores nothing', async () => {
+    for (let i = 0; i < max; i += 1) await createFrom('198.51.100.7');
+    expect(messagesIn(LIVE)).toHaveLength(max);
+    expect(sendToWs).not.toHaveBeenCalled();
+
+    sendToUser.mockClear();
+    queueDmRelay.mockClear();
+    await createFrom('198.51.100.7');
+
+    expectOnlyRefusal('rate_limited');
+    expect(messagesIn(LIVE)).toHaveLength(max);
+    expect(queueDmRelay).not.toHaveBeenCalled();
+  });
+
+  it('counts by address, not by user or socket, and counts before the checks', async () => {
+    // Two users on one address share the budget, as on the REST route.
+    for (let i = 0; i < max; i += 1) await createFrom('198.51.100.7', i % 2 === 0 ? 'alice' : 'bob');
+
+    sendToUser.mockClear();
+    sendToWs.mockClear();
+    // A create the checks would refuse is still answered by the limit first.
+    await send({ type: 'dm_message_create', dmChannelId: DEAD_LOCAL, content: 'x' }, 'alice', '198.51.100.7');
+    expectOnlyRefusal('rate_limited');
+
+    // Another address has its own budget.
+    await createFrom('203.0.113.9', 'bob');
+    expect(sendToWs).not.toHaveBeenCalled();
+    expect(messagesIn(LIVE)).toHaveLength(max + 1);
+  });
+
+  it('does not count edits or deletes', async () => {
+    const id = seedMessage(LIVE, 'alice', 'mine');
+    for (let i = 0; i < max + 2; i += 1) {
+      await send({ type: 'dm_message_edit', messageId: id, content: `edit ${i}` }, 'alice', '198.51.100.7');
+    }
+    sendToWs.mockClear();
+    await createFrom('198.51.100.7');
+    expect(sendToWs).not.toHaveBeenCalled();
+  });
+});
+
+describe('the WS DM create limiter', () => {
+  const { max, windowMs } = DM_MESSAGE_CREATE_RATE_LIMIT;
+
+  it('is 5 per 5 seconds, as POST /api/dm/:id/messages', () => {
+    expect(DM_MESSAGE_CREATE_RATE_LIMIT).toEqual({ max: 5, windowMs: 5_000 });
+  });
+
+  it('opens again when the window that started at the first create ends', () => {
+    const start = 1_000_000;
+    for (let i = 0; i < max; i += 1) expect(consumeWsDmMessageCreate('a', start + i)).toBe(true);
+    expect(consumeWsDmMessageCreate('a', start + windowMs - 1)).toBe(false);
+    expect(consumeWsDmMessageCreate('a', start + windowMs)).toBe(true);
+  });
+
+  it('admits everything when DISABLE_RATE_LIMITS is set', () => {
+    vi.stubEnv('DISABLE_RATE_LIMITS', '1');
+    try {
+      for (let i = 0; i < max * 3; i += 1) expect(consumeWsDmMessageCreate('a', 1)).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+describe('the REST create rate limit', () => {
+  it('refuses the create after the limit with 429 rate_limited', async () => {
+    const app = Fastify({ logger: false });
+    // The limiter as index.ts registers it, with its error shape.
+    await app.register(rateLimit, {
+      max: 200,
+      timeWindow: '1 minute',
+      keyGenerator: (request) => request.ip,
+      errorResponseBuilder: (_request, context) => ({
+        ...errorBody(429, 'rate_limited'),
+        retryAfter: Math.ceil(context.ttl / 1000),
+      }),
+    });
+    const { dmRoutes } = await import('../routes/dm.js');
+    await app.register(dmRoutes);
+    await app.ready();
+
+    const post = () => app.inject({ method: 'POST', url: `/api/dm/${LIVE}/messages`, payload: { content: 'hi' } });
+    for (let i = 0; i < DM_MESSAGE_CREATE_RATE_LIMIT.max; i += 1) expect((await post()).statusCode).toBe(201);
+    const refused = await post();
+
+    expect(refused.statusCode).toBe(429);
+    expect(JSON.parse(refused.body).code).toBe('rate_limited');
+    expect(messagesIn(LIVE)).toHaveLength(DM_MESSAGE_CREATE_RATE_LIMIT.max);
+    await app.close();
   });
 });
 
