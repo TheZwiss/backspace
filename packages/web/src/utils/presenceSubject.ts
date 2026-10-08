@@ -1,5 +1,5 @@
 import type { Activity, DmChannel, PresenceIdentity, SpaceWithChannelsAndMembers } from '@backspace/shared';
-import { useSocialStore } from '../stores/socialStore';
+import { friendRowAt, useSocialStore } from '../stores/socialStore';
 import { useSpaceStore } from '../stores/spaceStore';
 import { useActivityStore, type ActivityEntry } from '../stores/activityStore';
 import type { PresenceSubject } from './identity';
@@ -31,7 +31,8 @@ export function presenceSubjectOf(
 }
 
 function knownSubject(userId: string, origin: string): PresenceSubject {
-  const friend = useSocialStore.getState().friends.find(f => f.id === userId && f._instanceOrigin === origin);
+  // Any instance's row of a friend, not only the row their entry is shown by.
+  const friend = friendRowAt(useSocialStore.getState().friends, userId, origin);
   if (friend) return friend;
 
   const { spaces, currentSpaceId, members, dmChannels, channelOriginMap } = useSpaceStore.getState();
