@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.8.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.9.0" date="2026-10-08">
+      <description>
+        <p>Backspace is now available in Brazilian Portuguese. Spaces and channels have notification settings: every message, mentions only or nothing, with a mute for a set time, and the bell in the channel header opens them. In a group conversation, a call keeps running when one member hangs up, and a member who calls while a call is running joins it. Channel topics can be edited and read in full, a reaction counts once per person, and a reply no longer follows you into another conversation.</p>
+      </description>
+    </release>
     <release version="1.8.0" date="2026-10-07">
       <description>
         <p>Instances now catch up with each other regularly, so a direct message, friend or profile change that got lost between two instances arrives later instead of staying missing. Channels open at your first unread message, and the message list keeps your place while messages load and while the message box grows. People from different instances are no longer mixed up, and mentions and notifications on another instance's channels now recognise you. Roles can be dragged by their row again, and role changes no longer reset the open chat. Instance admins can see why a peer was rejected or needs attention.</p>
