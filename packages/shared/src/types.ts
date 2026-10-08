@@ -1,4 +1,4 @@
-import type { ErrorCode } from './errors.js';
+import type { ErrorCode, ErrorDetails } from './errors.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -772,10 +772,11 @@ export type ServerEvent =
   | { type: 'pong' }
   // `code` is set where the refusal has a stable ErrorCode (e.g. a voice
   // moderation action refused by the role hierarchy); older senders omit it.
-  // `dmChannelId` names the call of a refused `dm_call_start` or
+  // `details` fills the code's placeholders (`content_too_long` carries
+  // `max`), as in an HTTP error body. `dmChannelId` names the call of a refused `dm_call_start` or
   // `dm_call_accept`; a client calling or in that call drops it (voice.md,
   // "DM Call State Machine").
-  | { type: 'error'; message: string; code?: ErrorCode; dmChannelId?: string }
+  | { type: 'error'; message: string; code?: ErrorCode; details?: ErrorDetails; dmChannelId?: string }
   // The space's roles or a member's roles changed: what the receiver may see
   // or do there, and how its roles and members look, may be different now.
   // The client refetches that space's detail (docs/systems/websocket.md).

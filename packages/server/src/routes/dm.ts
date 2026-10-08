@@ -4,10 +4,10 @@ import { getDb, schema } from '../db/index.js';
 import { insertDmMember, reopenClosedDmMembers, setDmMemberClosed } from '../utils/dmMemberClosed.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
+import { isDmMember } from '../utils/permissions.js';
+import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
 import { connectionManager } from '../ws/handler.js';
 import {
-  MAX_MESSAGE_LENGTH,
   type DmMessage,
   type DmMessageWithUser,
   type CreateDmRequest,
@@ -60,7 +60,7 @@ import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser } from './federation.js';
 import { resolveRemoteIdentityForClient } from '../utils/federationClientIdentity.js';
-import { dmMessageEditRefusal, dmSystemContent, dmSystemName } from '../utils/dmSystemMessages.js';
+import { dmSystemContent, dmSystemName } from '../utils/dmSystemMessages.js';
 import { announceDmReconcile } from '../utils/dmConversationEvents.js';
 import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents.js';
 
@@ -158,24 +158,6 @@ export function fetchDmReplyToMessages(
     });
   }
   return map;
-}
-
-/**
- * True when `replyToId` names an existing message inside `dmChannelId`.
- *
- * Used by both DM message-create paths (REST and WebSocket) so a reply can only
- * ever point at the conversation it is posted into.
- */
-export function isDmReplyTargetInChannel(dmChannelId: string, replyToId: string): boolean {
-  const db = getDb();
-  const target = db.select({ id: schema.dmMessages.id })
-    .from(schema.dmMessages)
-    .where(and(
-      eq(schema.dmMessages.id, replyToId),
-      eq(schema.dmMessages.dmChannelId, dmChannelId),
-    ))
-    .get();
-  return target !== undefined;
 }
 
 /**
@@ -2112,48 +2094,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     },
   }, async (request, reply) => {
     const { id } = request.params;
-    const { content, attachments: attachmentIds, replyToId } = request.body;
 
-    if (!isDmMember(id, request.userId)) {
-      return sendError(reply, 403, 'not_dm_member');
+    const check = checkDmMessageCreate(id, request.userId, request.body ?? {});
+    if (!check.ok) {
+      return sendError(reply, check.refusal.status, check.refusal.code, check.refusal.details);
     }
-
-    if (isDeadOneOnOne(id, request.userId)) {
-      return sendError(reply, 403, 'recipient_deleted');
-    }
-
-    const hasContent = content && typeof content === 'string' && content.trim().length > 0;
-    const hasAttachments = attachmentIds && attachmentIds.length > 0;
-
-    if (!hasContent && !hasAttachments) {
-      return sendError(reply, 400, 'content_required');
-    }
-
-    if (content && content.length > MAX_MESSAGE_LENGTH) {
-      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
-    }
-
-    // A reply may only target a message in the channel it is posted into.
-    if (replyToId && !isDmReplyTargetInChannel(id, replyToId)) {
-      return sendError(reply, 400, 'reply_target_invalid');
-    }
+    const { content, attachmentIds, replyToId } = check.value;
 
     const db = getDb();
     const messageId = generateSnowflake();
     const now = Date.now();
-
-    // Verify attachment ownership before linking
-    if (attachmentIds && attachmentIds.length > 0) {
-      for (const attId of attachmentIds) {
-        const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
-        if (!att || att.messageId || att.dmMessageId) {
-          return sendError(reply, 400, 'attachment_invalid');
-        }
-        if (att.uploaderId && att.uploaderId !== request.userId) {
-          return sendError(reply, 400, 'attachment_not_owned');
-        }
-      }
-    }
 
     // Insert message and link attachments atomically
     db.transaction((tx) => {
@@ -2161,18 +2111,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         id: messageId,
         dmChannelId: id,
         userId: request.userId,
-        replyToId: replyToId || null,
-        content: content?.trim() || null,
+        replyToId,
+        content,
         createdAt: now,
       }).run();
 
-      if (attachmentIds && attachmentIds.length > 0) {
-        for (const attId of attachmentIds) {
-          tx.update(schema.attachments)
-            .set({ dmMessageId: messageId })
-            .where(eq(schema.attachments.id, attId))
-            .run();
-        }
+      for (const attId of attachmentIds) {
+        tx.update(schema.attachments)
+          .set({ dmMessageId: messageId })
+          .where(eq(schema.attachments.id, attId))
+          .run();
       }
     });
 
@@ -2189,7 +2137,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     // Resolve embeds asynchronously after responding
     setImmediate(() => {
-      resolveEmbeds(messageId, content?.trim() || null, id, true, null).catch(() => {});
+      resolveEmbeds(messageId, content, id, true, null).catch(() => {});
     });
 
     return reply.code(201).send(message);
@@ -2198,35 +2146,17 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // PATCH /api/dm/messages/:id - Edit a DM message
   app.patch<{ Params: { id: string }; Body: { content: string } }>('/api/dm/messages/:id', async (request, reply) => {
     const { id } = request.params;
-    const { content } = request.body;
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return sendError(reply, 400, 'content_required');
+    const check = checkDmMessageEdit(id, request.userId, request.body?.content);
+    if (!check.ok) {
+      return sendError(reply, check.refusal.status, check.refusal.code, check.refusal.details);
     }
-
-    if (content.length > MAX_MESSAGE_LENGTH) {
-      return sendError(reply, 400, 'content_too_long', { max: MAX_MESSAGE_LENGTH });
-    }
+    const { message: msg, content } = check.value;
 
     const db = getDb();
-
-    const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
-    if (!msg) {
-      return sendError(reply, 404, 'message_not_found');
-    }
-
-    const editRefusal = dmMessageEditRefusal(msg, request.userId);
-    if (editRefusal) {
-      return sendError(reply, 403, editRefusal);
-    }
-
-    if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
-      return sendError(reply, 403, 'recipient_deleted');
-    }
-
     const now = Date.now();
     db.update(schema.dmMessages)
-      .set({ content: content.trim(), editedAt: now })
+      .set({ content, editedAt: now })
       .where(eq(schema.dmMessages.id, id))
       .run();
 
@@ -2256,7 +2186,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     // Resolve new embeds asynchronously (old ones already deleted above)
     setImmediate(() => {
-      resolveEmbeds(id, content.trim(), msg.dmChannelId, true, null).catch(() => {});
+      resolveEmbeds(id, content, msg.dmChannelId, true, null).catch(() => {});
     });
 
     return reply.code(200).send(updated);
@@ -2265,20 +2195,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // DELETE /api/dm/messages/:id - Delete a DM message
   app.delete<{ Params: { id: string } }>('/api/dm/messages/:id', async (request, reply) => {
     const { id } = request.params;
+
+    const check = checkDmMessageDelete(id, request.userId);
+    if (!check.ok) {
+      return sendError(reply, check.refusal.status, check.refusal.code, check.refusal.details);
+    }
+    const msg = check.value;
     const db = getDb();
-
-    const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
-    if (!msg) {
-      return sendError(reply, 404, 'message_not_found');
-    }
-
-    if (msg.userId !== request.userId) {
-      return sendError(reply, 403, 'not_message_author');
-    }
-
-    if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
-      return sendError(reply, 403, 'recipient_deleted');
-    }
 
     // The relay names the message by its shared coordinates, read from the
     // row before it is gone.

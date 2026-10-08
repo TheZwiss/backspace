@@ -233,6 +233,7 @@ describe('DM reply targets are confined to their own channel', () => {
       expect(sendToUser).toHaveBeenCalledWith('attacker', {
         type: 'error',
         message: 'Invalid reply target',
+        code: 'reply_target_invalid',
       });
     });
 
