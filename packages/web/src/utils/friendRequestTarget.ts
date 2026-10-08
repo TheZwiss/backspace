@@ -1,5 +1,5 @@
 import type { SendFriendRequest } from '@backspace/shared';
-import { homeIdentityOf, parseFederatedUsername, type IdentityFields } from './identity';
+import { deliveringHost, homeIdentityOf, parseFederatedUsername, type IdentityFields } from './identity';
 
 /**
  * The body of a friend request for a user the client already holds.
@@ -29,4 +29,18 @@ export function friendRequestTarget(
   if (!identity || (origin === '' && !user.homeInstance)) return { username: user.username };
   const { baseName } = parseFederatedUsername(user.username);
   return { username: `${baseName}@${identity.host}`, homeUserId: identity.userId, homeInstance: identity.host };
+}
+
+/**
+ * `body`, written as the page's own instance reads it, readdressed for the
+ * instance `to` (`''` is the page's own) that the request is sent to. A bare
+ * username is a handle on the page's instance, so for any other instance it
+ * gets the page's host (`bob` becomes `bob@<page host>`), which is what the
+ * Add Friend box shows for it. An identity, and a username that already names
+ * its host, mean the same on every instance and are sent as they are.
+ */
+export function addressedTo(body: SendFriendRequest, to: string): SendFriendRequest {
+  if (to === '' || body.homeUserId !== undefined || body.homeInstance !== undefined) return body;
+  if (body.username === undefined || parseFederatedUsername(body.username).domain !== null) return body;
+  return { ...body, username: `${body.username}@${deliveringHost('')}` };
 }

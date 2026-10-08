@@ -78,5 +78,6 @@
     "quietDescription": "当好友开始活动时（例如玩游戏或进行语音通话），我们将在此处展示！",
     "online": "在线 — {{n}}",
     "offline": "离线 — {{n}}"
-  }
+  },
+  "instanceNotConnected": "未连接到 {{host}}。请重新连接后再试。"
 }

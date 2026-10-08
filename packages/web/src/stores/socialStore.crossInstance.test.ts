@@ -10,15 +10,20 @@ import type { Friend, FriendRequest, User } from '@backspace/shared';
  * home and Cleo to orbit, and both have row id u-1. Bob is native to orbit
  * (b-1); home knows him as replicated row nb.
  */
-const { ORBIT, homeApi, orbitApi } = vi.hoisted(() => {
+const { ORBIT, homeApi, orbitApi, instances } = vi.hoisted(() => {
   const socialApi = () => ({
     friends: vi.fn<() => Promise<Friend[]>>(),
     requests: vi.fn<() => Promise<FriendRequest[]>>(),
+    search: vi.fn<(query: string) => Promise<User[]>>(async () => []),
     removeFriend: vi.fn<(id: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
     updateRequest: vi.fn<(id: string, status: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
     cancelRequest: vi.fn<(id: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
   });
-  return { ORBIT: 'https://orbit.example', homeApi: socialApi(), orbitApi: socialApi() };
+  const orbitApi = socialApi();
+  const ORBIT = 'https://orbit.example';
+  // The connections the client holds; a test that removes orbit empties it.
+  const instances: { origin: string; status: string; api: { social: typeof orbitApi } }[] = [];
+  return { ORBIT, homeApi: socialApi(), orbitApi, instances };
 });
 
 vi.mock('../api/client', () => ({
@@ -27,7 +32,7 @@ vi.mock('../api/client', () => ({
 
 vi.mock('./instanceStore', () => ({
   useInstanceStore: {
-    getState: () => ({ instances: [{ origin: ORBIT, status: 'connected', api: { social: orbitApi } }] }),
+    getState: () => ({ instances }),
     subscribe: () => () => {},
   },
   waitForAutoConnect: async () => {},
@@ -41,7 +46,14 @@ vi.mock('../utils/assetUrls', () => ({
   normalizeUserAssets: (u: unknown) => u,
 }));
 
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from './socialStore';
+import {
+  SocialInstanceNotConnectedError,
+  friendRowAt,
+  pendingRequestWith,
+  useSocialStore,
+  type TaggedFriend,
+  type TaggedFriendRequest,
+} from './socialStore';
 
 function user(id: string, username: string, home: { homeInstance: string; homeUserId: string } | null = null): User {
   return {
@@ -88,6 +100,7 @@ function requests(): TaggedFriendRequest[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  instances.splice(0, instances.length, { origin: ORBIT, status: 'connected', api: { social: orbitApi } });
   useSocialStore.getState().reset();
   homeApi.friends.mockResolvedValue([friend(daveOnHome), friend(bobOnHome)]);
   orbitApi.friends.mockResolvedValue([friend(cleoOnOrbit), friend(bobOnOrbit)]);
@@ -246,5 +259,119 @@ describe('actions on a merged entry', () => {
     const erin = friends().filter(f => f.username.startsWith('erin'));
     expect(erin.map(shown)).toEqual(['orbit e-o erin@nova.example']);
     expect(erin[0]!.status).toBe('dnd');
+  });
+});
+
+describe('a no-op removal', () => {
+  beforeEach(async () => {
+    await useSocialStore.getState().loadFriends();
+    await useSocialStore.getState().loadRequests();
+  });
+
+  it('keeps the same lists when nothing matched, so subscribers do not re-render', () => {
+    const before = useSocialStore.getState();
+    useSocialStore.getState().removeFriendLocally('nobody', ORBIT);
+    useSocialStore.getState().removeRequestById('r-nobody', ORBIT, 'nobody');
+    useSocialStore.getState().removeDeletedUser(user('nobody', 'nobody'), ORBIT);
+    useSocialStore.getState().removeInstanceRows('https://never.example');
+    expect(useSocialStore.getState()).toBe(before);
+  });
+});
+
+describe('rows of a merged entry', () => {
+  beforeEach(async () => {
+    await useSocialStore.getState().loadFriends();
+    await useSocialStore.getState().loadRequests();
+  });
+
+  it("applies the home's profile update to every row of a merged entry", () => {
+    useSocialStore.getState().updateFriendProfile({ ...bobOnOrbit, displayName: 'Robert' }, ORBIT);
+    const bob = friends().find(f => f.username === 'bob')!;
+    expect(bob.displayName).toBe('Robert');
+    expect(bob._rows?.map(r => r.displayName)).toEqual(['Robert', 'Robert']);
+    expect(friendNames()).toEqual(['home u-1 dave', 'orbit b-1 bob', 'orbit u-1 cleo']);
+  });
+
+  it('replaces a row the same instance sends again instead of adding a second one', () => {
+    useSocialStore.getState().addIncomingRequest(request('r-bob-orbit', 'me-orbit', { ...bobOnOrbit, displayName: 'Robert' }), ORBIT);
+    const bob = requests().find(r => r.user?.username === 'bob')!;
+    expect(bob._rows?.map(shown)).toEqual(['home r-bob-home bob@orbit.example', 'orbit r-bob-orbit bob']);
+    expect(bob.user?.displayName).toBe('Robert');
+  });
+
+  it("finds a friend row by any instance's id, not only the row the entry is shown by", () => {
+    expect(friendRowAt(friends(), 'nb', '')?.username).toBe('bob@orbit.example');
+    expect(friendRowAt(friends(), 'nb', ORBIT)).toBeUndefined();
+  });
+
+  it('finds the pending request with a person as the asking instance holds it', () => {
+    expect(pendingRequestWith(requests(), bobOnHome, '')?.id).toBe('r-bob-home');
+    expect(pendingRequestWith(requests(), bobOnOrbit, ORBIT)?.id).toBe('r-bob-orbit');
+    // Row u-1 on the page's instance is Dave, not Cleo.
+    expect(pendingRequestWith(requests(), cleoOnOrbit, '')?.user?.username).toBe('dave');
+    expect(pendingRequestWith(requests(), user('x-1', 'xena'), ORBIT)).toBeUndefined();
+  });
+});
+
+describe('searching users on several instances', () => {
+  it('returns two users native to different instances with the same row id as two results', async () => {
+    homeApi.search.mockResolvedValue([daveOnHome, bobOnHome]);
+    orbitApi.search.mockResolvedValue([cleoOnOrbit, bobOnOrbit]);
+    const results = await useSocialStore.getState().searchUsers('a');
+    expect(results.map(shown)).toEqual(['home u-1 dave', 'orbit b-1 bob', 'orbit u-1 cleo']);
+    expect(results.every(r => !('_rows' in r))).toBe(true);
+  });
+});
+
+describe('an instance that is disconnected or removed', () => {
+  beforeEach(async () => {
+    await useSocialStore.getState().loadFriends();
+    await useSocialStore.getState().loadRequests();
+  });
+
+  it("drops that instance's rows; a person another instance lists stays, shown by its row", () => {
+    useSocialStore.getState().removeInstanceRows(ORBIT);
+    expect(friendNames()).toEqual(['home u-1 dave', 'home nb bob@orbit.example']);
+    expect(requestNames()).toEqual(['home r-1 dave', 'home r-bob-home bob@orbit.example']);
+    expect(friends().find(f => f.id === 'nb')?._rows).toBeUndefined();
+  });
+
+  it('then acts on the instance whose row is left', async () => {
+    useSocialStore.getState().removeInstanceRows(ORBIT);
+    instances.splice(0, instances.length);
+    await useSocialStore.getState().removeFriend(bobOnHome, '');
+    expect(homeApi.removeFriend).toHaveBeenCalledWith('nb');
+    expect(orbitApi.removeFriend).not.toHaveBeenCalled();
+  });
+
+  it('refuses an action on rows of an origin the client no longer holds, and sends nothing', async () => {
+    instances.splice(0, instances.length);
+    await expect(useSocialStore.getState().removeFriend(bobOnOrbit, ORBIT)).rejects.toBeInstanceOf(SocialInstanceNotConnectedError);
+    await expect(useSocialStore.getState().updateFriendRequest('r-1', ORBIT, 'accepted')).rejects.toThrow('orbit.example');
+    await expect(useSocialStore.getState().cancelFriendRequest('r-1', ORBIT)).rejects.toBeInstanceOf(SocialInstanceNotConnectedError);
+    expect(homeApi.removeFriend).not.toHaveBeenCalled();
+    expect(homeApi.updateRequest).not.toHaveBeenCalled();
+    expect(homeApi.cancelRequest).not.toHaveBeenCalled();
+    expect(useSocialStore.getState().isLoading).toBe(false);
+    expect(friendNames()).toEqual(['home u-1 dave', 'orbit b-1 bob', 'orbit u-1 cleo']);
+  });
+});
+
+describe('an accept or cancel from a discover card', () => {
+  beforeEach(async () => {
+    await useSocialStore.getState().loadRequests();
+  });
+
+  it("drops the person's entry by the card's user when the list lacks the card's request row", async () => {
+    // The card was loaded from orbit with a request id the list does not hold yet.
+    await useSocialStore.getState().updateFriendRequest('r-bob-new', ORBIT, 'accepted', bobOnOrbit);
+    expect(orbitApi.updateRequest).toHaveBeenCalledWith('r-bob-new', 'accepted');
+    expect(requestNames()).toEqual(['home r-1 dave', 'orbit r-1 cleo']);
+  });
+
+  it('cancels the same way, and keeps a different person with the same id on another instance', async () => {
+    await useSocialStore.getState().cancelFriendRequest('r-new', ORBIT, cleoOnOrbit);
+    expect(orbitApi.cancelRequest).toHaveBeenCalledWith('r-new');
+    expect(requestNames()).toEqual(['home r-1 dave', 'orbit r-bob-orbit bob']);
   });
 });

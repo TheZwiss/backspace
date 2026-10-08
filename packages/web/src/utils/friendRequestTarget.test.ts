@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { friendRequestTarget } from './friendRequestTarget';
+import { addressedTo, friendRequestTarget } from './friendRequestTarget';
 
 describe('friendRequestTarget', () => {
   it('names a replicated user by its home identity, with its handle for older servers', () => {
@@ -46,5 +46,24 @@ describe('friendRequestTarget', () => {
       { id: 'stub-4', username: 'old@orbit.test', homeUserId: null, homeInstance: 'orbit.test' },
       '',
     )).toEqual({ username: 'old@orbit.test' });
+  });
+});
+
+describe('addressedTo', () => {
+  const pageHost = window.location.host;
+
+  it("leaves every body unchanged for the page's own instance", () => {
+    expect(addressedTo({ username: 'bob' }, '')).toEqual({ username: 'bob' });
+  });
+
+  it("names a native user of the page's instance by the page's host for another instance", () => {
+    const body = friendRequestTarget({ id: 'bob-id', username: 'bob', homeUserId: null, homeInstance: null }, '');
+    expect(addressedTo(body, 'https://orbit.test')).toEqual({ username: `bob@${pageHost}` });
+  });
+
+  it('sends an identity and a handle with a host unchanged', () => {
+    const identity = { username: 'yoko@orbit.test', homeUserId: 'yoko-home', homeInstance: 'orbit.test' };
+    expect(addressedTo(identity, 'https://orbit.test')).toBe(identity);
+    expect(addressedTo({ username: 'old@orbit.test' }, 'https://orbit.test')).toEqual({ username: 'old@orbit.test' });
   });
 });

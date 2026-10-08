@@ -82,5 +82,6 @@
     "quietDescription": "Quando um amigo começar uma atividade, como jogar ou ficar num canal de voz, ela aparecerá aqui!",
     "online": "Online — {{n}}",
     "offline": "Offline — {{n}}"
-  }
+  },
+  "instanceNotConnected": "Não conectado a {{host}}. Conecte-se novamente e tente de novo."
 }

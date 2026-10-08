@@ -18,7 +18,8 @@ vi.mock('./authStore', async () => {
 import { useInstanceStore } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
-import type { DmChannel } from '@backspace/shared';
+import { useSocialStore } from './socialStore';
+import type { DmChannel, Friend } from '@backspace/shared';
 
 let mockFailover: ReturnType<typeof vi.spyOn>;
 
@@ -93,5 +94,36 @@ describe('instanceStore failover triggers', () => {
     useInstanceStore.getState().forceRemoveEntry('https://b.example');
 
     expect(useSpaceStore.getState().dmChannels.map(d => d.id)).toEqual(['home-1']);
+  });
+
+  describe("an instance's friends and requests", () => {
+    function friendRow(id: string, origin: string): Friend & { _instanceOrigin: string } {
+      return {
+        id, username: id, displayName: null, avatar: null, banner: null, accentColor: null, avatarColor: null, bio: null,
+        status: 'online', customStatus: null, isAdmin: false, createdAt: 1, addedAt: 1,
+        homeInstance: null, homeUserId: id, replicatedInstances: [], _instanceOrigin: origin,
+      } as Friend & { _instanceOrigin: string };
+    }
+
+    beforeEach(() => {
+      useSocialStore.getState().reset();
+      useSocialStore.setState({ friends: [friendRow('f-home', ''), friendRow('f-b', 'https://b.example')] });
+      useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
+    });
+
+    it('disconnectInstance drops the rows that instance listed', () => {
+      useInstanceStore.getState().disconnectInstance('https://b.example');
+      expect(useSocialStore.getState().friends.map(f => f.id)).toEqual(['f-home']);
+    });
+
+    it('forceRemoveEntry drops the rows that instance listed', () => {
+      useInstanceStore.getState().forceRemoveEntry('https://b.example');
+      expect(useSocialStore.getState().friends.map(f => f.id)).toEqual(['f-home']);
+    });
+
+    it('a socket that drops keeps them: the instance is still held', () => {
+      useInstanceStore.getState().setInstanceStatus('https://b.example', 'disconnected');
+      expect(useSocialStore.getState().friends.map(f => f.id)).toEqual(['f-home', 'f-b']);
+    });
   });
 });

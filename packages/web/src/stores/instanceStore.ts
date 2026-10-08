@@ -16,6 +16,7 @@ import {
   setTokenForOriginResolver,
 } from '../utils/crossStoreResolvers';
 import { useSpaceStore } from './spaceStore';
+import { useSocialStore } from './socialStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
 // dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
 // so a static import here does not create an import-time cycle.
@@ -940,8 +941,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     if (userId) saveCachedTokens(get().instances, userId);
 
     // Drops this origin's content. A DM with a copy on another instance moves
-    // to that copy (the pin rule); a DM without one is removed.
+    // to that copy (the pin rule); a DM without one is removed. A friend or
+    // request another instance also lists is then shown by that instance's
+    // row, so actions on it go to an instance the user still holds.
     useSpaceStore.getState().removeInstanceSpaces(origin);
+    useSocialStore.getState().removeInstanceRows(origin);
 
     // Sync updated lists to remaining instances (fire-and-forget)
     get().syncInstanceList().catch(() => {});
@@ -1185,8 +1189,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return { instances: updated, registry, registryUpdatedAt };
     });
 
-    // Same as disconnectInstance: DMs with a copy elsewhere move to it.
+    // Same as disconnectInstance: DMs with a copy elsewhere move to it, and
+    // friends and requests another instance lists are shown by its row.
     useSpaceStore.getState().removeInstanceSpaces(origin);
+    useSocialStore.getState().removeInstanceRows(origin);
 
     get().syncRegistry().catch(() => {});
   },
