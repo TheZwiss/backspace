@@ -121,9 +121,10 @@ DELETE /spaces/:id                                                             �
 POST   /spaces/:id/invite                                                      → { inviteCode }  [CREATE_INVITE]
 POST   /spaces/:id/join       { inviteCode }                                   → { space }
 POST   /spaces/join           { inviteCode }                                   → { space }
-GET    /spaces/invite/:code/preview                                            → invite preview
+GET    /spaces/invite/:code/preview                                            → InvitePreview (no auth)
 PATCH  /spaces/:id/transfer-ownership  { newOwnerId }                          → { space }  [owner]
 ```
+`POST /spaces/:id/invite` answers every visibility, `request` included (up to 1.9.0 it refused a request space with `403 space_uses_join_requests`). The two join routes never admit anyone to a `request` space: after the code matches they answer `403 user_banned`, `409 already_member`, then, for a request space, `409 join_request_pending` when the caller's request is waiting and otherwise `403 join_request_required` with `details: { spaceId }`, the id for `POST /spaces/:id/request-join`. They read the space's visibility on each call, so a code follows the space when its visibility changes. `InvitePreview` carries `visibility` (absent from an instance up to 1.9.0). See [spaces.md](spaces.md), "Join by Invite Code".
 `directoryListed` must be a boolean (`400 field_not_boolean`), is refused with `400 directory_private_space` when the resulting visibility is `private`, and is cleared in the same write when a listed space is switched to `private`. `Space.directoryListed` is carried on every space response and in the WebSocket ready payload. A change to the flag, to a served field (`name`, `description`, `icon`, `banner`, `avatarColor`, `visibility`) of a listed space, or a `DELETE` of a listed space marks the directory dirty so the pinger tells the hub. See [directory.md](directory.md).
 
 ### Members
@@ -222,7 +223,7 @@ POST   /dm/:id/members         { userId } | { homeUserId, homeInstance } → DmC
 DELETE /dm/:id/members                                              → { success } (leave) [group only]
 DELETE /dm/:id/members/:targetUserId  ?homeInstance=                → { success } [owner kick; cannot self-kick; group only; segment is homeUserId when ?homeInstance is set]
 POST   /dm/:id/transfer        { newOwnerId? | (homeUserId+homeInstance) } → { success } [owner; group only; resolved member must be in channel; not self]
-POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend; 400 invite_invalid when the snapshot would not make a well-formed invite (dm-system.md, "System messages")]
+POST   /dm/space-invite        { target: { userId } | { homeUserId, homeInstance }, spaceId, spaceInstanceOrigin, inviteCode } → SpaceInviteResponse { dmChannelId, messageId, message } [target must be a friend; 400 invite_invalid when the snapshot would not make a well-formed invite (dm-system.md, "System messages"); a space of any visibility, `request` included (refused up to 1.9.0 with 403 space_requires_approval)]
 GET    /dm/:id/messages        ?before=|after=&limit=50 (1-100)     → DmMessageWithUser[] [member]
 POST   /dm/:id/messages        { content?, attachments?, replyToId? } → 201 DmMessageWithUser [member; content or attachments required]
 PATCH  /dm/messages/:id        { content }                          → DmMessageWithUser [member and author; 403 not_dm_member after leaving the group; 403 system_message_immutable for a system message]
@@ -292,7 +293,7 @@ has: `file`|`image`|`link`
 ```
 GET    /spaces/explore                   ?q=&limit=&offset=  → { spaces[], total, totalAll, discoveryEnabled }
 POST   /spaces/:id/public-join                               → { space }
-POST   /spaces/:id/request-join          { message? }        → { request }
+POST   /spaces/:id/request-join          { message? }        → { request }  [5/min; also where an invite to a request space leads]
 GET    /spaces/:id/join-requests         ?status=            → { requests[] }  [MANAGE_SPACE]
 PATCH  /spaces/:id/join-requests/:rid    { action }          → { request }  [MANAGE_SPACE]
 GET    /users/@me/join-requests          ?status=            → { requests[] }

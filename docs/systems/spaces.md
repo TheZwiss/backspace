@@ -19,6 +19,7 @@ Source files:
 - `packages/web/src/hooks/useDragManager.ts` — Channel/category/voice-user drag-and-drop
 - `packages/web/src/hooks/useSpaceJoin.ts` — Shared join/request state machine over exploreStore (used by ExplorePage SpaceCard and the JoinSpace modal preview card)
 - `packages/web/src/utils/inviteParser.ts` — Invite code/URL/qualified-code parser
+- `packages/web/src/utils/joinErrors.ts`, `utils/inviteJoinRequest.ts` - `JoinRequestRequiredError` and the join refusal checks; `sendInviteJoinRequest`, the join request an invite to a request space leads to
 
 Cross-references: [database.md](database.md) (table schemas), [permissions.md](permissions.md) (resolution algorithm, override tiers), [websocket.md](websocket.md) (event types), [federation.md](federation.md) (peer relay), [voice.md](voice.md) (voice channel join)
 
@@ -117,7 +118,7 @@ Cross-references: [database.md](database.md) (table schemas), [permissions.md](p
 
 **Behavior:** Returns existing `inviteCode` if one exists. Only generates a new one (`crypto.randomBytes(4).toString('hex')`) if the space has no invite code. Invite codes are permanent (no expiration).
 
-**Visibility gate:** returns `403` for `request`-visibility spaces — they are approval-gated and have no usable invite link (the join endpoints reject invite-code joins for them), so the endpoint refuses to hand one out. The client (`InviteModal`) shows an "invite by join request" notice instead of the invite UI for such spaces, and `POST /api/dm/space-invite` likewise rejects a `request`-visibility **local** space with `403 space_requires_approval` (remote request spaces are enforced by their home instance at join time).
+**Every visibility has a link.** A `request` space gets its code like any other. The code never admits anyone to it: a join by code answers `join_request_required` and the client turns that into a join request (see "Join by Invite Code" and "Invite links to a space joined by request" below). Up to 1.9.0 this endpoint refused a request space with `403 space_uses_join_requests`, and `POST /api/dm/space-invite` refused a local one with `403 space_requires_approval`; neither is sent any more, and both stay in the code list because an older instance still sends them.
 
 **Response:** `{ inviteCode: string }`
 
@@ -143,7 +144,7 @@ If the parsed origin matches `window.location.origin`, it is treated as a bare c
 
 `POST /api/dm/space-invite` (see [dm-system.md](dm-system.md)) sends a structured invite card to a friend via DM. The card carries a snapshot of the space (name, icon, member count, description) plus the canonical identifiers (`spaceId`, `spaceInstanceOrigin`, `inviteCode`).
 
-The endpoint lives on the **caller's home instance**, not the space's home. The caller's instance fetches the snapshot server-to-server from the space's `GET /api/spaces/invite/:code/preview` endpoint, then inserts a `type='system'` DM message with `event: 'space_invite'` content. Three-way federation (sender on X, recipient on Y, space on Z) is supported without new federation event kinds.
+The endpoint lives on the **caller's home instance**, not the space's home. The caller's instance fetches the snapshot server-to-server from the space's `GET /api/spaces/invite/:code/preview` endpoint, then inserts a `type='system'` DM message with `event: 'space_invite'` content. Three-way federation (sender on X, recipient on Y, space on Z) is supported without new federation event kinds. A space of any visibility can be invited to; for a `request` space the card leads the recipient to a join request (see "Invite links to a space joined by request").
 
 `InviteModal` sends the request to `getFriendsHomeOrigin()` (`instanceStore.ts`, see [client-federation.md](client-federation.md) §5): the page's instance for a native account, and the connected true home for a federated account signed in to another instance, whose friends are checked there (#391). Each friend is named as that instance knows them (`personRequest(friend, origin, home)`), and the space's origin is translated for it: `''` only when the space is on the receiving instance, else the space's absolute origin (the page's own `window.location.origin` for a space on the page's instance). With no live session on the true home it falls back to the page's instance.
 
@@ -166,8 +167,11 @@ The friend-picker surface in `InviteModal` uses the same per-space invite code a
   avatarColor: AvatarColor | null;
   memberCount: number;     // live count from space_members
   instanceName: string;    // from instance_settings
+  visibility?: SpaceVisibility; // read on every call; absent from an instance up to 1.9.0
 }
 ```
+
+Built by `getLocalInvitePreview` (`utils/spaceInviteSnapshot.ts`). `getLocalInviteSnapshot`, which the DM invite route stores in the card, is the same read without `visibility`.
 
 ### Join by Invite Code
 
@@ -178,9 +182,17 @@ Two endpoints serve the same purpose:
 | `POST /api/spaces/:id/join` | Join when spaceId is known (body: `{ inviteCode }`) |
 | `POST /api/spaces/join` | Join by code only, spaceId looked up from `inviteCode` |
 
-**Validations:** invite code match, not banned, not already a member, and **space visibility is not `request`**.
+Both run the same check after the code matches (`inviteJoinRefusal` in `spaces.ts`), against the space's visibility at the time of the call, so a link follows the space when its visibility changes:
 
-**Visibility gate:** invite-code joins are rejected (`403`) for `request`-visibility spaces — entry to a request-only space must go through `POST /api/spaces/:id/request-join` + manager approval, never a bearer invite code. `private` spaces remain invite-joinable (an invite is their only entry path); `public` spaces are joinable by code or via `POST /api/spaces/:id/public-join`. Combined with the permission membership gate (a non-member cannot obtain `CREATE_INVITE`, see [permissions.md](permissions.md)), this closes the invite-bypass path where a non-member could mint a code for a request-only space and self-join without approval.
+| Case | Answer |
+|------|--------|
+| Banned | `403 user_banned` |
+| Already a member | `409 already_member` |
+| `request` space, a request of theirs is pending | `409 join_request_pending` (the answer `request-join` gives) |
+| `request` space, otherwise (a declined request included) | `403 join_request_required`, `details: { spaceId }` |
+| `private` or `public` space | joins (side effects below) |
+
+**A code never admits anyone to a `request` space.** Entry is `POST /api/spaces/:id/request-join` and a manager's approval; `details.spaceId` is the id to send that request to, so a client holding only a code can do it. An instance up to 1.9.0 sends `join_request_required` without `details`; the client then reads the id from the invite preview. `private` spaces are joined by code (an invite is their only entry path); `public` spaces by code or via `POST /api/spaces/:id/public-join`. Combined with the permission membership gate (a non-member cannot obtain `CREATE_INVITE`, see [permissions.md](permissions.md)), a non-member cannot mint a code for a request space, and a code to one leads only to a request.
 
 **Side effects:**
 1. Insert `space_members` row
@@ -190,15 +202,18 @@ Two endpoints serve the same purpose:
 
 ### Join Page (`JoinPage.tsx`)
 
-Public route at `/join/:inviteCode`. Handles five phases:
+Public route at `/join/:inviteCode`. Handles six phases:
 
 | Phase | Trigger | UI |
 |-------|---------|-----|
-| `preview` | Initial load | Space preview card + join button (auth) or login/register links (unauth) |
-| `connect` | `NotConnectedError` on join attempt | Password prompt for federation connect |
+| `preview` | Initial load | Space preview card + join button (auth) or login/register links (unauth); for a request space, the request notice, an optional note and "Ask to join as {name}" |
+| `connect` | `NotConnectedError` on join or request attempt | Password prompt for federation connect ("Connect & Ask to Join" for a request) |
 | `fallback` | `RemoteLoginRequiredError` on connect | Username + password for an account on the remote, under the `FallbackNotice` its `reason` selects |
 | `other-instance` | User clicks "I use another instance" | Domain input for federation redirect |
-| `already-member` | Join returns "already a member" | Green checkmark + auto-redirect (2s timer) |
+| `already-member` | Join or request returns `already_member` | Green checkmark + auto-redirect (2s timer) |
+| `request-sent` | Request sent, or one was already pending | "Request sent to {space}" or "Your request to join {space} is waiting", and Back to Backspace |
+
+**The page's action** is `join` or `request`, read from the preview's `visibility` on load. `request` sends `sendInviteJoinRequest(preview.spaceId, origin, note)` to the space's instance, after the connect step when that instance is remote. It changes when the server says otherwise: a join answered with `join_request_required` (an instance without `visibility` in its preview, or a space switched to `request` after the page loaded) switches to `request` for the user to send; a join answered with `join_request_pending` shows the waiting request; a request answered with `space_not_requestable` (the space left `request`) joins by the code instead. Banned is shown as the refusal text, as on every join path.
 
 **Federation redirect flow (other-instance):**
 1. User enters their home domain (e.g., `my-instance.com`)
@@ -207,6 +222,16 @@ Public route at `/join/:inviteCode`. Handles five phases:
 4. Their home instance's JoinPage receives the qualified code, parses origin, and handles federation connect
 
 **Preview fetching:** For remote invites, creates a temporary API client via `createApiClient(origin, () => null)` to fetch the preview without authentication.
+
+### Invite links to a space joined by request
+
+Every surface that takes a code reaches the join request flow the same way, so none of them ends at the refusal:
+
+- `spaceStore.joinByCode` turns a `join_request_required` refusal into `JoinRequestRequiredError` (`utils/joinErrors.ts`), an `HttpError` with that code plus `spaceId` and `origin` (`''` for the page's instance). The id comes from `details.spaceId`, else from the invite preview; when neither names it the original refusal is thrown. `connectedJoinOrigin(origin)` is the shared origin check: `''` for the page's own instance, the origin when it holds a connected session, else `NotConnectedError`.
+- `exploreStore.requestJoinSpace(spaceId, origin, message?)` sends `POST /api/spaces/:id/request-join` to that origin and records the request in `myRequests` tagged with it. `sendInviteJoinRequest` (`utils/inviteJoinRequest.ts`) wraps it and reports `join_request_pending` as `'pending'` instead of throwing. The request route's rate limit (5 per minute) and the manager's approval apply unchanged.
+- The space on another instance is reached as for a join: the request goes to the space's instance through the user's connected session there, so the request, the ban check and the membership check all use the user's row on that instance.
+- Surfaces: the Join Page (above); the Join Space dialog, which moves to a `request` step (note, Send Request) and then to `request-sent`; and a DM invite card (`SpaceInviteCard`), which shows "Ask to join" when the live preview says `request` or the join was refused with `join_request_required`, then "Request sent" or "Request pending".
+- Inviters: Invite Friends (`InviteModal`) shows the friend list and the link for a request space, with an intro that says people who open it ask to join; the space menu's Invite People (`SpaceSidebar`, `MobileSpacesScreen`) copies the link and confirms with "Invite link copied. People who open it can ask to join."
 
 ### Join Space Modal (`JoinSpaceModal`)
 
@@ -246,7 +271,7 @@ point, not a replacement.
 | Value | Explore listing | Join mechanism |
 |-------|----------------|----------------|
 | `private` | Not listed | Invite code only |
-| `request` | Listed | Submit join request, requires approval |
+| `request` | Listed | Submit join request, requires approval (an invite link leads to the same request) |
 | `public` | Listed | Instant join, no invite needed |
 
 A `request` or `public` space whose owner has switched on "List in the global Backspace directory" (`spaces.directoryListed`) is additionally served on `GET /api/directory/spaces` while the instance admin allows it (`instance_settings.directoryEnabled`, which itself requires discovery on), and from there appears in Outer Space on other instances. The switch lives in the space settings Discovery panel, always rendered, and disabled with the first reason that applies, read from the settings document of the instance the space lives on (`streamingLimits` for a home space; a remote space asks its own instance's `GET /api/settings/streaming` on mount, and a load whose origin changed under it writes nothing): the instance has no `DIRECTORY_ENDPOINT` (`directoryConfigured: false`), so a listing would reach no hub and the administrator's own switch cannot change that; then the administrator's listing opt-in is off (`directoryEnabled: false`); then the space is private. The endpoint is asked first because it is the fact the administrator cannot fix from the settings the second reason points at. A fourth state is not a reason: while the document is unknown the switch is disabled and says nothing, and a load that came back empty says so with a Retry (see below). The opt-in reason has a second voice for the administrator of the instance the space lives on, who is told which setting is off rather than that an administrator has to act, and is offered "Turn it on" beside it; that action confirms first and then writes the whole global rung (`discoveryEnabled` and `directoryEnabled` together, the pair the server requires). It is offered only when `settingsStore.isAdmin` is true and the space's `_instanceOrigin` is empty, because admin rights are per instance and the client holds that flag only for home, and because the write goes to home; a remote space keeps the owner-voiced sentence unchanged. The switch is followed by a one-sentence disclosure of what listing makes public. See [directory.md](directory.md) §10.
@@ -398,7 +423,7 @@ Used to target `join_request_received` events. Iterates all space members and re
 ### Join
 
 Three join paths:
-1. **Invite code** — `POST /api/spaces/:id/join` or `POST /api/spaces/join`
+1. **Invite code** — `POST /api/spaces/:id/join` or `POST /api/spaces/join` (`private` and `public` spaces; a code to a `request` space leads to path 3)
 2. **Public join** — `POST /api/spaces/:id/public-join` (visibility=public)
 3. **Request accept** — `PATCH /api/spaces/:id/join-requests/:requestId` with `action: 'accept'`
 

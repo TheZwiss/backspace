@@ -832,7 +832,7 @@ JSON content shape:
 }
 ```
 
-The `spaceInstanceOrigin` is the space's home instance, **not** the sender's. The recipient's client uses it to fetch the live preview (`getApiForOrigin(spaceInstanceOrigin).spaces.invitePreview`) and to call `joinByCode(code, spaceInstanceOrigin)` on click.
+The `spaceInstanceOrigin` is the space's home instance, **not** the sender's. The recipient's client uses it to fetch the live preview (`getApiForOrigin(spaceInstanceOrigin).spaces.invitePreview`) and to call `joinByCode(code, spaceInstanceOrigin)` on click. For a space joined by request (the live preview's `visibility`, or a join answered with `join_request_required`) the card's action is "Ask to join", which sends a join request to the same origin; the route sends invites to such spaces since it stopped refusing them with `space_requires_approval` after 1.9.0 (spaces.md, "Invite links to a space joined by request").
 
 ### Rendering
 

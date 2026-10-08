@@ -344,6 +344,8 @@ section shows this text as its unreachable state), `directory_private_space`
 (`directoryListed: true` on a private space) and
 `directory_requires_discovery` (`directoryEnabled: true` with discovery off).
 
+Two codes are no longer sent by a current server but stay in the list, because an older instance still sends them and a code never changes meaning: `space_uses_join_requests` (an invite link refused for a space joined by request) and `space_requires_approval` (a DM invite to one refused). Both stopped after 1.9.0, when a request space got an invite link that leads to a join request; `join_request_required` now carries `details.spaceId` for that request ([spaces.md](spaces.md), "Join by Invite Code").
+
 Concurrent permission edits ([permissions.md](permissions.md), "Concurrent
 edits") added two `409` codes: `overrides_conflict` (a channel or category
 override changed since the editor loaded it) and `role_permissions_conflict`
