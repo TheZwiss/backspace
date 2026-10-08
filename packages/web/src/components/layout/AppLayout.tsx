@@ -29,7 +29,7 @@ import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
 import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
 import { NotificationController } from '../NotificationController';
-import { UserProfilePopout } from '../ui/UserProfilePopout';
+import { UserProfilePopoutLayer } from '../ui/UserProfilePopoutLayer';
 import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
 import { InstanceUpdateToast } from '../ui/InstanceUpdateToast';
@@ -231,8 +231,6 @@ export function AppLayout() {
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
-  const userProfilePopout = useUIStore((s) => s.userProfilePopout);
-  const closeUserProfile = useUIStore((s) => s.closeUserProfile);
   
   const channels = useSpaceStore((s) => s.channels);
 
@@ -477,23 +475,7 @@ export function AppLayout() {
       <NotificationController />
       <UpdateToast />
 
-      {/* User Profile Popout */}
-      {userProfilePopout.user && userProfilePopout.anchor && (
-        <>
-          <div
-            className="fixed inset-0 z-[145]"
-            onClick={closeUserProfile}
-          />
-          <UserProfilePopout
-            user={userProfilePopout.user}
-            origin={userProfilePopout.origin}
-            onClose={closeUserProfile}
-            anchor={userProfilePopout.anchor}
-            placement={userProfilePopout.placement}
-            member={userProfilePopout.member}
-          />
-        </>
-      )}
+      <UserProfilePopoutLayer />
 
       {/* Federation toasts render through ToastContainer below (raised by the
           useFederationToasts() hook above); this also mounts the instance
