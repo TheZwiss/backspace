@@ -1,8 +1,7 @@
 import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { getOurOrigin } from '../../../utils/federationAuth.js';
-import { mapCallReasonToEventReason, sendCallRelay } from '../../../utils/federationOutbox.js';
-import { generateSnowflake } from '../../../utils/snowflake.js';
+import { fanOutCallEvent } from '../../../utils/callFanout.js';
 import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
@@ -32,6 +31,17 @@ function callTokensByLocalUser(
     if (resolved.kind === 'found') byLocalUser.set(resolved.user.id, holder.token);
   }
   return byLocalUser;
+}
+
+/**
+ * The local row of a relayed call event's actor, or '' when it resolves to
+ * none. A fan-out from here names the actor only when a peer would accept it
+ * from this instance (`callRelayActor`); otherwise it names the caller.
+ */
+function localActorId(actor: RelayActor | undefined, db: ReturnType<typeof getDb>): string {
+  if (!actor) return '';
+  const resolved = resolveRelayActor(actor, db);
+  return resolved.kind === 'found' ? resolved.user.id : '';
 }
 
 /**
@@ -348,9 +358,7 @@ export function processDmCallAcceptEvent(
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
     const hostCallerId = (room.metadata as DmRoomMeta).callerId;
     const localDmId = dmChannelId!;
-    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_accept', {
-      call: { acceptor: event.call.acceptor },
-    }, normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_accept', [localActorId(event.call.acceptor, db), hostCallerId], normalizedSource, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'accept', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_accept threw:', err),
@@ -423,9 +431,7 @@ export function processDmCallRejectEvent(
     // In a 1-on-1 the decline ends the call, and the instance that sent it
     // already knows.
     connectionManager.endDmRoom(localDmId, 'dm_call_rejected');
-    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
-      call: { endedBy: event.call.rejector },
-    }, normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.rejector, db), hostCallerId], normalizedSource, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'reject', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end (reject) threw:', err),
@@ -491,9 +497,7 @@ export function processDmCallEndEvent(
     // In a 1-on-1 either side's end ends the call, and the instance that
     // sent it already knows.
     connectionManager.endDmRoom(localDmId, 'dm_call_ended');
-    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
-      call: { endedBy: event.call.endedBy },
-    }, normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.endedBy, db), hostCallerId], normalizedSource, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'end', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end threw:', err),
@@ -647,71 +651,6 @@ export function processDmTypingStopEvent(
   }
 
   accepted.push(event.messageId);
-}
-
-
-/**
- * Fan out a call event to all remote instances with DM members,
- * optionally excluding the instance that triggered the event.
- */
-export async function fanOutCallEvent(
-  dmChannelId: string,
-  federatedId: string,
-  eventType: 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end',
-  extraFields: Partial<FederationRelayEvent>,
-  excludeOrigin: string | undefined,
-  db: ReturnType<typeof getDb>,
-): Promise<CallFanoutFailure[]> {
-  const members = db.select({ homeInstance: schema.users.homeInstance })
-    .from(schema.dmMembers)
-    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
-
-  const ourOrigin = getOurOrigin();
-  const targets = new Set<string>();
-  for (const m of members) {
-    if (m.homeInstance) {
-      const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
-      if (normalized !== ourOrigin && normalized !== excludeOrigin) {
-        targets.add(normalized);
-      }
-    }
-  }
-  if (targets.size === 0) return [];
-
-  const relayEvent: FederationRelayEvent = {
-    eventType,
-    messageId: generateSnowflake(),
-    encryptionVersion: 0,
-    timestamp: Date.now(),
-    federatedId,
-    ...extraFields,
-  } as FederationRelayEvent;
-
-  const labelByOrigin = new Map<string, string | null>();
-  for (const r of db.select({ origin: schema.federationPeers.origin, instanceName: schema.federationPeers.instanceName })
-    .from(schema.federationPeers)
-    .all()) {
-    labelByOrigin.set(r.origin, r.instanceName ?? null);
-  }
-
-  const results = await Promise.all(
-    Array.from(targets).map(async origin => ({ origin, result: await sendCallRelay(origin, [relayEvent]) })),
-  );
-
-  const failures: CallFanoutFailure[] = [];
-  for (const { origin, result } of results) {
-    if (!result.ok) {
-      console.error(`[federation] Fan-out ${eventType} to ${origin} failed (${result.reason}): ${result.error}`);
-      failures.push({
-        origin,
-        peerLabel: labelByOrigin.get(origin) ?? undefined,
-        reason: mapCallReasonToEventReason(result.reason),
-      });
-    }
-  }
-  return failures;
 }
 
 

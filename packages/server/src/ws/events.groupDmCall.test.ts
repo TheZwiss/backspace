@@ -786,7 +786,9 @@ describe('a member here who leaves a call hosted on a peer without hanging up', 
     vi.advanceTimersByTime(1);
     await settle();
 
-    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    // Nobody here is in the call and its ring window has closed, so the
+    // record goes too.
+    expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
     expect(relayedTo(PEER)).toEqual([expect.objectContaining({
       eventType: 'dm_call_end',
       federatedId: REMOTE_FID,
@@ -818,7 +820,7 @@ describe('a member here who leaves a call hosted on a peer without hanging up', 
     vi.advanceTimersByTime(VOICE_RECONNECT_GRACE_MS);
     await settle();
 
-    expect(connectionManager.getFederatedCall(REMOTE_FID)?.joinedUserIds).toEqual([]);
+    expect(connectionManager.getFederatedCall(REMOTE_FID)).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

@@ -675,6 +675,23 @@ class ConnectionManager implements ReplicaSessionHost {
     return left;
   }
 
+  /**
+   * End every DM call hosted here that `userId` placed and that still rings,
+   * except `exceptRoomId`: the user started another call or joined voice, and
+   * holds one call at a time. Each end goes to the DM members and is relayed
+   * to the peers in the caller's name, so members ringing on other instances
+   * stop ringing too.
+   */
+  endRingingCallsPlacedBy(userId: string, exceptRoomId?: string): void {
+    for (const [roomId, room] of Array.from(this.voiceRooms)) {
+      if (room.roomType !== 'dm' || roomId === exceptRoomId) continue;
+      const meta = room.metadata as DmRoomMeta;
+      if (meta.state !== 'ringing' || meta.callerId !== userId) continue;
+      this.endDmRoom(roomId, 'dm_call_ended');
+      this.fanOutCallEnd(roomId, userId);
+    }
+  }
+
   /** Create a DM room in ringing state with 60s auto-cleanup. */
   createDmRoom(dmChannelId: string, callerId: string): boolean {
     const row = getDb().select({ ownerId: schema.dmChannels.ownerId, federatedId: schema.dmChannels.federatedId })
@@ -859,7 +876,12 @@ class ConnectionManager implements ReplicaSessionHost {
     return true;
   }
 
-  /** Register a federated call received via S2S. Adds 60s ringing timeout. */
+  /**
+   * Register a federated call received via S2S, with its 60 s ring window.
+   * A call still ringing when the window closes ends here. One answered by
+   * then is dropped silently if nobody here is in it any more
+   * (`dropFederatedCallIfIdle`).
+   */
   createFederatedCall(entry: FederatedCallEntry): void {
     this.clearFederatedCall(entry.federatedId);
     this.federatedCalls.set(entry.federatedId, entry);
@@ -867,6 +889,10 @@ class ConnectionManager implements ReplicaSessionHost {
     const timeout = setTimeout(() => {
       this.federatedCallTimeouts.delete(entry.federatedId);
       const call = this.federatedCalls.get(entry.federatedId);
+      if (call && call.state === 'active') {
+        this.dropFederatedCallIfIdle(entry.federatedId);
+        return;
+      }
       if (call && call.state === 'ringing') {
         this.federatedCalls.delete(entry.federatedId);
         const endEvent = {
@@ -895,17 +921,43 @@ class ConnectionManager implements ReplicaSessionHost {
     return undefined;
   }
 
-  /** Transition a federated call from ringing → active. */
+  /**
+   * Transition a federated call from ringing → active. The ring window keeps
+   * running: members here who were rung may still answer until it closes.
+   */
   activateFederatedCall(federatedId: string): boolean {
     const call = this.federatedCalls.get(federatedId);
     if (!call || call.state !== 'ringing') return false;
     call.state = 'active';
-    const timeout = this.federatedCallTimeouts.get(federatedId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.federatedCallTimeouts.delete(federatedId);
-    }
     return true;
+  }
+
+  /**
+   * `userId` is no longer in the call hosted on a peer (`joinedUserIds`): they
+   * hung up, or left it without hanging up. The record goes once it can no
+   * longer matter (`dropFederatedCallIfIdle`).
+   */
+  leaveFederatedCallEntry(federatedId: string, userId: string): void {
+    const entry = this.federatedCalls.get(federatedId);
+    if (!entry) return;
+    entry.joinedUserIds = entry.joinedUserIds.filter(id => id !== userId);
+    this.dropFederatedCallIfIdle(federatedId);
+  }
+
+  /**
+   * Drop the record of a call hosted on a peer that can no longer matter: it
+   * was answered, nobody here is in it, and its ring window has closed, so no
+   * member here can still answer it. Without this, a record whose final end
+   * from the host never came (a lost relay, or a host up to 1.8.0 that ends
+   * some calls without telling its peers) stayed until a restart. Silent:
+   * nobody here holds the call, and a member in it through another instance
+   * must not be told it ended.
+   */
+  dropFederatedCallIfIdle(federatedId: string): void {
+    const entry = this.federatedCalls.get(federatedId);
+    if (!entry || entry.state !== 'active' || entry.joinedUserIds.length > 0) return;
+    if (this.federatedCallTimeouts.has(federatedId)) return;
+    this.clearFederatedCall(federatedId);
   }
 
   /** Remove a federated call entry and clear its timeout. */
