@@ -203,6 +203,8 @@ variable.
 
 **Portal target — `usePortalContainer()`:** Every overlay (context menu, tooltip, popover, modal, screen-share picker) MUST portal through `usePortalContainer()` (`packages/web/src/hooks/usePortalContainer.ts`) instead of hard-coding `document.body`. The hook returns `document.fullscreenElement ?? document.body` and re-renders subscribers on `fullscreenchange`. Without this, anything portaled while an element (e.g. the voice container in fullscreen mode) is in the browser's Fullscreen API top-layer is rendered outside that layer and is invisible. Components mounted at App root that render with `fixed inset-0` (not just portals) must also portal through this hook for the same reason.
 
+The shared `Modal` (`components/ui/Modal.tsx`) portals itself through this hook, so a caller mounts it wherever its state lives and never wraps it in another portal. Rendering in place is not safe: an ancestor with `transform`, `filter` or `backdrop-filter` becomes the containing block of a `fixed` element, and a dialog mounted inside the `.glass-strip` space strip rendered 72px wide. A `Modal` inside another `Modal`'s content gets an overlay `z-index` one above its parent (200, 201, ...), because portaled siblings that open in the same render are appended child first.
+
 ### Glass Material Properties
 ```css
 .glass {

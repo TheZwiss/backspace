@@ -327,6 +327,12 @@ no code or the catalog has no entry. A `code` that is missing from the
 `errors` namespace is a check-script failure, so every code shipped by the
 server has words in every language.
 
+A surface whose own failure text says more than an uncoded failure would (a
+browser exception from a clipboard write, a server's bare English `error`)
+uses `describeCodedError(err, fallback)` from the same file: the code's text
+when the error is an `HttpError` with a code, else `fallback`. The space
+menu's Invite People toasts and the notification settings save use it.
+
 Federation: error bodies relayed from a peer instance follow the same
 contract, so a code from a newer peer is localized and a bare `error` from
 an older peer is shown as is.
