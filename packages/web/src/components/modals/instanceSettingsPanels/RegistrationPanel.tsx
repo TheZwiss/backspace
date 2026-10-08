@@ -1,4 +1,3 @@
-import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
 import i18n from '../../../i18n';
 import { formatters, useFormatters } from '../../../i18n/formatters';
@@ -457,7 +456,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     }
   };
 
-  return createPortal(
+  return (
     <Modal
       isOpen
       onClose={handleClose}
@@ -582,8 +581,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
           </div>
         </div>
       </form>
-    </Modal>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -683,7 +681,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
   // browser native validation matches the server's constraint.
   const maxUsesMin = Math.max(1, invite.usedCount);
 
-  return createPortal(
+  return (
     <Modal
       isOpen
       onClose={handleClose}
@@ -803,8 +801,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
           </div>
         </div>
       </form>
-    </Modal>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -908,7 +905,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
     ? t('admin:invites.reinstateModal.descriptionRevoked')
     : t('admin:invites.reinstateModal.descriptionLapsed');
 
-  return createPortal(
+  return (
     <Modal
       isOpen
       onClose={handleClose}
@@ -1024,8 +1021,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
           </div>
         </div>
       </form>
-    </Modal>,
-    document.body,
+    </Modal>
   );
 }
 
@@ -1070,7 +1066,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
     };
   }, [invite.id, addToast, t]);
 
-  return createPortal(
+  return (
     <Modal
       isOpen
       onClose={onClose}
@@ -1150,8 +1146,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
           </div>
         )}
       </div>
-    </Modal>,
-    document.body,
+    </Modal>
   );
 }
 

@@ -1,6 +1,8 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,7 +15,39 @@ interface ModalProps {
   mobileStyle?: 'fullscreen' | 'sheet' | 'default';
 }
 
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default' }: ModalProps) {
+/**
+ * Shared dialog shell. It always renders through a portal into
+ * `usePortalContainer()`, never in place. A `fixed inset-0` overlay is only
+ * sized to the window while no ancestor sets `transform`, `filter` or
+ * `backdrop-filter`; any of those makes the ancestor the containing block, and
+ * the dialog is then sized and clipped to it (the 72px space strip is
+ * `.glass-strip`, a dialog opened from its menu rendered inside the strip).
+ * Callers mount a Modal wherever its state lives and do not portal it again.
+ *
+ * A Modal rendered inside another Modal's content stacks one level above it.
+ * All overlays are siblings at the portal target, so document order alone
+ * would decide, and a parent and child that open in the same render are
+ * appended child first.
+ */
+export function Modal(props: ModalProps) {
+  const portalContainer = usePortalContainer();
+  const depth = useContext(ModalDepthContext);
+  if (!props.isOpen) return null;
+  return createPortal(
+    <ModalDepthContext.Provider value={depth + 1}>
+      <ModalSurface {...props} zIndex={MODAL_BASE_Z_INDEX + depth} />
+    </ModalDepthContext.Provider>,
+    portalContainer,
+  );
+}
+
+/** The overlay z-index of a top-level Modal; nested ones add their depth. */
+const MODAL_BASE_Z_INDEX = 200;
+
+/** How many Modals enclose this point of the tree. */
+const ModalDepthContext = createContext(0);
+
+function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', zIndex }: ModalProps & { zIndex: number }) {
   const { t } = useTranslation('common');
   const isMobile = useUIStore((s) => s.isMobile);
   const closeLabel = size === 'settings' ? t('chrome.closeSettings') : t('actions.close');
@@ -25,18 +59,14 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
   }, [onClose]);
 
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
-
-  if (!isOpen) return null;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
+      <div className="fixed inset-0 flex flex-col bg-surface-base animate-fade-in" style={{ zIndex }}>
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
             {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
@@ -61,7 +91,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
   // Mobile bottom sheet style
   if (isMobile && mobileStyle === 'sheet') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
+      <div className="fixed inset-0 flex items-end justify-center animate-fade-in" style={{ zIndex }}>
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -92,7 +122,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
   // Settings size variant — large glass overlay for settings screens
   if (size === 'settings') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+      <div className="fixed inset-0 flex items-center justify-center animate-fade-in" style={{ zIndex }}>
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -116,7 +146,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
 
   // Default centered dialog (desktop and mobile default)
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div className="fixed inset-0 flex items-center justify-center animate-fade-in" style={{ zIndex }}>
       <div
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
