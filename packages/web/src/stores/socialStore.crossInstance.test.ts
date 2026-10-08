@@ -14,9 +14,9 @@ const { ORBIT, homeApi, orbitApi } = vi.hoisted(() => {
   const socialApi = () => ({
     friends: vi.fn<() => Promise<Friend[]>>(),
     requests: vi.fn<() => Promise<FriendRequest[]>>(),
-    removeFriend: vi.fn(async (_id: string) => ({ success: true })),
-    updateRequest: vi.fn(async (_id: string, _status: string) => ({ success: true })),
-    cancelRequest: vi.fn(async (_id: string) => ({ success: true })),
+    removeFriend: vi.fn<(id: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
+    updateRequest: vi.fn<(id: string, status: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
+    cancelRequest: vi.fn<(id: string) => Promise<{ success: boolean }>>(async () => ({ success: true })),
   });
   return { ORBIT: 'https://orbit.example', homeApi: socialApi(), orbitApi: socialApi() };
 });
