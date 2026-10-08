@@ -267,5 +267,10 @@
   "micPrearm": {
     "denied": "Acesso ao microfone negado. Você entrou como ouvinte. Toque em \"Permitir microfone\" para conceder acesso.",
     "notFound": "Nenhum microfone encontrado. Você entrou como ouvinte."
+  },
+  "micRetry": {
+    "stillDenied": "O acesso ao microfone continua negado. Permita-o para este site nas configurações do navegador ou do dispositivo.",
+    "notFound": "Nenhum microfone encontrado.",
+    "failed": "Não foi possível acessar o microfone."
   }
 }

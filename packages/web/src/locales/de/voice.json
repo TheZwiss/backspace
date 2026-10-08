@@ -265,5 +265,10 @@
   "micPrearm": {
     "denied": "Mikrofonzugriff verweigert. Du bist als Zuhörer beigetreten. Tippe auf „Mikrofon erlauben“, um den Zugriff zu gewähren.",
     "notFound": "Kein Mikrofon gefunden. Du bist als Zuhörer beigetreten."
+  },
+  "micRetry": {
+    "stillDenied": "Der Mikrofonzugriff ist weiterhin verweigert. Erlaube ihn für diese Seite in den Browser- oder Geräteeinstellungen.",
+    "notFound": "Kein Mikrofon gefunden.",
+    "failed": "Auf das Mikrofon konnte nicht zugegriffen werden."
   }
 }

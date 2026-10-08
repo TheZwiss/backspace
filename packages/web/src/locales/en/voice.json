@@ -265,5 +265,10 @@
   "micPrearm": {
     "denied": "Microphone access denied. You joined as a listener. Tap \"Allow microphone\" to grant access.",
     "notFound": "No microphone detected. You joined as a listener."
+  },
+  "micRetry": {
+    "stillDenied": "Microphone access is still denied. Allow it for this site in your browser or device settings.",
+    "notFound": "No microphone detected.",
+    "failed": "Could not access the microphone."
   }
 }

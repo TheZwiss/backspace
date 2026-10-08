@@ -284,20 +284,11 @@ export async function requestMicPermission(): Promise<boolean> {
   } catch (err: unknown) {
     const name = err instanceof Error ? err.name : '';
     if (name === 'NotAllowedError') {
-      useUIStore.getState().addToast(
-        'Microphone permission still denied. Open Settings → Safari to grant access.',
-        'warning',
-      );
+      useUIStore.getState().addToast(i18n.t('voice:micRetry.stillDenied'), 'warning');
     } else if (name === 'NotFoundError') {
-      useUIStore.getState().addToast(
-        'No microphone detected.',
-        'warning',
-      );
+      useUIStore.getState().addToast(i18n.t('voice:micRetry.notFound'), 'warning');
     } else {
-      useUIStore.getState().addToast(
-        'Could not access the microphone.',
-        'warning',
-      );
+      useUIStore.getState().addToast(i18n.t('voice:micRetry.failed'), 'warning');
     }
     return false;
   }
