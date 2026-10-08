@@ -51,6 +51,7 @@ const { connectInstance, disconnectInstance, dmCallEventIsOurs } = await import(
 const { useSpaceStore } = await import('../stores/spaceStore');
 const { useUIStore } = await import('../stores/uiStore');
 const { useVoiceStore } = await import('../stores/voiceStore');
+const { useAuthStore } = await import('../stores/authStore');
 const { startDmCall } = await import('../utils/voiceActions');
 const { initI18n } = await import('../i18n');
 const i18n = (await import('../i18n')).default;
@@ -284,6 +285,81 @@ describe('a ring answered on another device', () => {
     expect(useVoiceStore.getState().activeDmCall).toBeNull();
     expect(useVoiceStore.getState().currentVoiceChannelId).toBe('voice-1');
     expect(connectFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('who answered a group call', () => {
+  // The ring plays while incomingCall is set. Another member's answer must
+  // leave it on, so this member can still answer; an answer by the same
+  // person on another session stops it. Compared by federated identity.
+  const PEER = 'https://peer.example';
+
+  function ringing(ws: FakeWebSocket): void {
+    ws.deliver({ type: 'dm_call_incoming', dmChannelId: GROUP, callerId: 'c', callerName: 'C' });
+    expect(useVoiceStore.getState().incomingCall).not.toBeNull();
+  }
+
+  beforeEach(() => {
+    // Signed in to this page's instance with an account whose home is PEER.
+    useAuthStore.setState({ user: { id: 'me-here', username: 'me@peer.example', homeUserId: 'me-home', homeInstance: 'peer.example' } as never });
+  });
+
+  it('keeps ringing when another member answered', () => {
+    const ws = homeSocket();
+    ringing(ws);
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP, answeredBy: { homeUserId: 'someone-else', homeInstance: PEER } });
+
+    expect(useVoiceStore.getState().incomingCall).not.toBeNull();
+  });
+
+  it('keeps ringing when a member of another instance answered under the same id', () => {
+    const ws = homeSocket();
+    ringing(ws);
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP, answeredBy: { homeUserId: 'me-home', homeInstance: 'https://other.example' } });
+
+    expect(useVoiceStore.getState().incomingCall).not.toBeNull();
+  });
+
+  it('stops ringing when this user answered on another session, whichever form names the home', () => {
+    const ws = homeSocket();
+    ringing(ws);
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP, answeredBy: { homeUserId: 'me-home', homeInstance: PEER } });
+
+    expect(useVoiceStore.getState().incomingCall).toBeNull();
+    expect(useVoiceStore.getState().activeDmCall).toBeNull();
+  });
+
+  it('stops ringing on an accept from a server that does not say who answered', () => {
+    const ws = homeSocket();
+    ringing(ws);
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().incomingCall).toBeNull();
+  });
+
+  it('still connects the caller, whoever answered', () => {
+    const ws = homeSocket();
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ outgoingCall: outgoing(GROUP), connectFn });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP, answeredBy: { homeUserId: 'someone-else', homeInstance: PEER } });
+
+    expect(useVoiceStore.getState().outgoingCall).toBeNull();
+    expect(connectFn).toHaveBeenCalledWith(GROUP, true);
+  });
+
+  it('leaves a ring for another call alone when the call this client is in is answered', () => {
+    const ws = homeSocket();
+    useVoiceStore.setState({ activeDmCall: active(OTHER) });
+    ringing(ws);
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: OTHER });
+
+    expect(useVoiceStore.getState().incomingCall).not.toBeNull();
   });
 });
 

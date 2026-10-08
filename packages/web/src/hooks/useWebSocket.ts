@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { useAuthStore } from '../stores/authStore';
+import { isMyIdentity, useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, User } from '@backspace/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, FederatedIdentity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { dmCallCredentialsFrom, dmCallIds, dmCallOrigin, dmCallRefFrom, dmCallRoomKey } from '../utils/dmCall';
@@ -178,16 +178,27 @@ export function teardownDmCall(): void {
  * the sending instance's DM id, by the conversation key, or both, and a slot
  * may hold either, so the DM ids are also compared through their keys.
  */
-export function dmCallEventIsOurs(event: { dmChannelId: string | null; federatedCallId?: string | null }): boolean {
+export function dmCallEventIsOurs(event: DmCallEventIds): boolean {
   const { incomingCall, outgoingCall, activeDmCall } = useVoiceStore.getState();
   // Each slot carries the ids of its own call, so an id a past ring left
   // behind can never make another call's event look like this one's.
-  const held = new Set<string>();
-  if (incomingCall) for (const id of dmCallIds(incomingCall)) held.add(id);
-  if (outgoingCall) held.add(outgoingCall.dmChannelId);
-  if (activeDmCall) for (const id of dmCallIds(activeDmCall)) held.add(id);
-  if (held.size === 0) return false;
+  const held: string[] = [];
+  if (incomingCall) held.push(...dmCallIds(incomingCall));
+  if (outgoingCall) held.push(outgoingCall.dmChannelId);
+  if (activeDmCall) held.push(...dmCallIds(activeDmCall));
+  return dmCallEventNames(event, held);
+}
 
+type DmCallEventIds = { dmChannelId: string | null; federatedCallId?: string | null };
+
+/**
+ * Whether `event` names the call one slot holds under `held` (its DM id, its
+ * key, or both). The event may name it by the sending instance's DM id, by
+ * the conversation key, or both, so DM ids are also compared through their
+ * keys.
+ */
+function dmCallEventNames(event: DmCallEventIds, held: readonly string[]): boolean {
+  if (held.length === 0) return false;
   const { dmChannels } = useSpaceStore.getState();
   const keyOf = (dmChannelId: string): string | null => dmChannels.find(d => d.id === dmChannelId)?.federatedId ?? null;
   const named = new Set<string>();
@@ -204,6 +215,20 @@ export function dmCallEventIsOurs(event: { dmChannelId: string | null; federated
     if (key && named.has(key)) return true;
   }
   return false;
+}
+
+/**
+ * Whether a `dm_call_accepted` stops this client's ring: it names the call
+ * that is ringing, and the member who answered is the signed-in user (another
+ * of their sessions), compared by federated identity. In a group call another
+ * member's answer leaves the ring on, so this member can still answer. An
+ * event from a server up to 1.9.0 does not say who answered and stops it, as
+ * it always did.
+ */
+export function acceptStopsRing(event: DmCallEventIds & { answeredBy?: FederatedIdentity }): boolean {
+  const { incomingCall } = useVoiceStore.getState();
+  if (!incomingCall || !dmCallEventNames(event, dmCallIds(incomingCall))) return false;
+  return !event.answeredBy || isMyIdentity(event.answeredBy);
 }
 
 /**
@@ -1120,8 +1145,11 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // calling another DM, or sitting in a voice channel, stays where it is.
       if (!dmCallEventIsOurs(event)) break;
       const { setIncomingCall, setOutgoingCall, outgoingCall, activeDmCall, setActiveDmCall, connectFn } = useVoiceStore.getState();
-      setIncomingCall(null);
-      setOutgoingCall(null);
+      // The ring stops only when this user answered, on another session. The
+      // calling tone stops on any answer to the call this session placed.
+      if (acceptStopsRing(event)) setIncomingCall(null);
+      const answersOutgoing = !!outgoingCall && dmCallEventNames(event, [outgoingCall.dmChannelId]);
+      if (answersOutgoing) setOutgoingCall(null);
 
       // Only the caller enters the call here: its session is the only one
       // with `outgoingCall`, and it connects below. A client that accepted or
@@ -1132,7 +1160,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // A call already held keeps the id it is held by. The event may name it
       // by another instance's DM id (a client that hears both the host and its
       // home), and the hang-up must go out under the held id.
-      if (!activeDmCall && outgoingCall) {
+      if (!activeDmCall && outgoingCall && answersOutgoing) {
         const call = { dmChannelId: outgoingCall.dmChannelId, federatedCallId: null, callOrigin: null, livekit: null };
         setActiveDmCall(call);
         // The caller connects to the DM room. `connect()` de-dupes an

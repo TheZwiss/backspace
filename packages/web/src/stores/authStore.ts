@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
-import { isChosenUserStatus, type ChosenUserStatus, type User } from '@backspace/shared';
+import { isChosenUserStatus, type ChosenUserStatus, type FederatedIdentity, type User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useChatStore } from './chatStore';
 import { useSpaceStore } from './spaceStore';
@@ -13,7 +13,7 @@ import { useExploreStore } from './exploreStore';
 import { useDirectoryStore } from './directoryStore';
 import { useNotificationSettingsStore } from './notificationSettingsStore';
 import { deleteAccountOnRemotes } from '../utils/federationOps';
-import { isMine, ownRowAt, selfIdentityOf, type IdentityFields, type SelfIdentity } from '../utils/identity';
+import { homeHostOf, homeIdentityOf, isMine, ownRowAt, selfIdentityOf, type IdentityFields, type SelfIdentity } from '../utils/identity';
 import { myChosenStatus, statusAuthority, type OwnStatusReport } from '../utils/selfStatus';
 import i18n from '../i18n';
 
@@ -358,6 +358,18 @@ export function useSelfIdentity(): SelfIdentity | null {
 export function isMe(row: IdentityFields, origin: string): boolean {
   const { user, myRowIds } = useAuthStore.getState();
   return isMine(row, origin, selfIdentityOf(user, myRowIds));
+}
+
+/**
+ * Whether a federated identity on the wire (a home user id and the instance
+ * that homes it) is the signed-in user, compared by home identity, never by
+ * a row id.
+ */
+export function isMyIdentity(identity: FederatedIdentity): boolean {
+  const { user } = useAuthStore.getState();
+  const self = user ? homeIdentityOf(user, '') : null;
+  if (!self) return false;
+  return self.userId === identity.homeUserId && homeHostOf(self.host) === homeHostOf(identity.homeInstance);
 }
 
 /**
