@@ -23,9 +23,11 @@ vi.mock('../db/index.js', () => ({
 }));
 
 const sendToUser = vi.fn();
+const sendToWs = vi.fn();
 vi.mock('./handler.js', () => ({
   connectionManager: {
     sendToUser: (...args: unknown[]) => sendToUser(...args),
+    sendToWs: (...args: unknown[]) => sendToWs(...args),
     sendToDmMembers: vi.fn(),
     getAllOnlineUserIds: () => [],
   },
@@ -62,6 +64,7 @@ describe('WS dm_message_edit on a system message', () => {
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
     sendToUser.mockReset();
+    sendToWs.mockReset();
     queueDmRelay.mockReset();
     seedUser('alice');
     seedUser('bob');
@@ -76,12 +79,15 @@ describe('WS dm_message_edit on a system message', () => {
 
   it('refuses the edit and leaves the row and the relay untouched', async () => {
     const { handleClientEvent } = await import('./events.js');
-    handleClientEvent({ type: 'dm_message_edit', messageId: 'm1', content: 'something else' }, 'alice', 'alice', {} as WebSocket, false);
+    const socket = {} as WebSocket;
+    handleClientEvent({ type: 'dm_message_edit', messageId: 'm1', content: 'something else' }, 'alice', 'alice', socket, false);
 
     const row = testDb.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, 'm1')).get();
     expect(row?.content).toBe(JSON.stringify({ event: 'name_changed', oldName: null, newName: 'Crew' }));
     expect(row?.editedAt).toBeNull();
     expect(queueDmRelay).not.toHaveBeenCalled();
-    expect(sendToUser).toHaveBeenCalledWith('alice', expect.objectContaining({ type: 'error', code: 'system_message_immutable' }));
+    // The refusal goes to the socket that sent the edit only.
+    expect(sendToWs).toHaveBeenCalledWith(socket, expect.objectContaining({ type: 'error', code: 'system_message_immutable' }));
+    expect(sendToUser).not.toHaveBeenCalled();
   });
 });
