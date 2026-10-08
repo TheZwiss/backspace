@@ -31,9 +31,11 @@ vi.mock('../utils/auth.js', () => ({
 }));
 
 const sendToUser = vi.fn();
+const sendToWs = vi.fn();
 vi.mock('../ws/handler.js', () => ({
   connectionManager: {
     sendToUser: (...args: unknown[]) => sendToUser(...args),
+    sendToWs: (...args: unknown[]) => sendToWs(...args),
     sendToDmMembers: vi.fn(),
     sendToRoom: vi.fn(),
     sendToAdmins: vi.fn(),
@@ -165,6 +167,7 @@ describe('DM reply targets are confined to their own channel', () => {
 
     currentUserId = 'attacker';
     sendToUser.mockClear();
+    sendToWs.mockClear();
     app = await buildApp();
   });
 
@@ -217,12 +220,13 @@ describe('DM reply targets are confined to their own channel', () => {
   describe('WS create — dm_message_create', () => {
     it('rejects a reply target that lives in another DM channel and persists nothing', async () => {
       const { handleClientEvent } = await import('../ws/events.js');
+      const socket = {} as never;
 
       handleClientEvent(
         { type: 'dm_message_create', dmChannelId: DM_A, content: 'hi', replyToId: secretMessageId },
         'attacker',
         'attacker',
-        {} as never,
+        socket,
         false,
       );
 
@@ -230,7 +234,7 @@ describe('DM reply targets are confined to their own channel', () => {
         .where(eq(schema.dmMessages.dmChannelId, DM_A)).all();
       expect(inA).toHaveLength(0);
 
-      expect(sendToUser).toHaveBeenCalledWith('attacker', {
+      expect(sendToWs).toHaveBeenCalledWith(socket, {
         type: 'error',
         message: 'Invalid reply target',
         code: 'reply_target_invalid',

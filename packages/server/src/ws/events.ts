@@ -161,16 +161,16 @@ export function handleClientEvent(
       handleVoiceLeave(userId);
       break;
     case 'dm_message_create':
-      handleDmMessageCreate(event, userId);
+      handleDmMessageCreate(event, userId, ws);
       break;
     case 'dm_typing_start':
       handleDmTypingStart(event, userId, username);
       break;
     case 'dm_message_edit':
-      handleDmMessageEdit(event, userId);
+      handleDmMessageEdit(event, userId, ws);
       break;
     case 'dm_message_delete':
-      handleDmMessageDelete(event, userId);
+      handleDmMessageDelete(event, userId, ws);
       break;
     case 'reaction_add':
       handleReactionAdd(event, userId);
@@ -782,12 +782,14 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string, ws: W
 // ─── DM Message Handlers ───────────────────────────────────────────────────
 
 /**
- * Refuse a WebSocket action with a coded `error` to the acting user. The
- * English text is the code's, with `details` filled in; the client shows the
- * code's text in the user's language (websocket.md, "error").
+ * Refuse a DM message event with a coded `error` on the socket that sent it.
+ * The client shows a coded error as a toast, and the user's other sessions
+ * did not take the action, so they are not told about it (as `refuseDmCall`).
+ * The English text is the code's, with `details` filled in; the client shows
+ * the code's text in the user's language (websocket.md, "error").
  */
-function refuseToUser(userId: string, code: ErrorCode, details?: ErrorDetails): void {
-  connectionManager.sendToUser(userId, details
+function refuseDmMessage(ws: WebSocket, code: ErrorCode, details?: ErrorDetails): void {
+  connectionManager.sendToWs(ws, details
     ? { type: 'error', message: errorText(code, details), code, details }
     : { type: 'error', message: errorText(code), code });
 }
@@ -797,10 +799,10 @@ function refuseToUser(userId: string, code: ErrorCode, details?: ErrorDetails): 
  * (`checkDmMessageCreate`), so a 1-on-1 whose partner was deleted refuses
  * with `recipient_deleted` here too.
  */
-function handleDmMessageCreate(event: Record<string, unknown>, userId: string): void {
+function handleDmMessageCreate(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const dmChannelId = event.dmChannelId;
   if (!dmChannelId || typeof dmChannelId !== 'string') {
-    refuseToUser(userId, 'validation_failed');
+    refuseDmMessage(ws, 'validation_failed');
     return;
   }
 
@@ -810,7 +812,7 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     replyToId: event.replyToId,
   });
   if (!check.ok) {
-    refuseToUser(userId, check.refusal.code, check.refusal.details);
+    refuseDmMessage(ws, check.refusal.code, check.refusal.details);
     return;
   }
   const { content, attachmentIds, replyToId } = check.value;
@@ -841,7 +843,7 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
 
   const dmMessage = getDmMessageWithUser(messageId);
   if (!dmMessage) {
-    refuseToUser(userId, 'message_create_failed');
+    refuseDmMessage(ws, 'message_create_failed');
     return;
   }
 
@@ -906,16 +908,16 @@ function handleDmTypingStart(event: Record<string, unknown>, userId: string, use
 }
 
 /** `dm_message_edit`, on the REST route's checks (`checkDmMessageEdit`). */
-function handleDmMessageEdit(event: Record<string, unknown>, userId: string): void {
+function handleDmMessageEdit(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const messageId = event.messageId;
   if (!messageId || typeof messageId !== 'string') {
-    refuseToUser(userId, 'validation_failed');
+    refuseDmMessage(ws, 'validation_failed');
     return;
   }
 
   const check = checkDmMessageEdit(messageId, userId, event.content);
   if (!check.ok) {
-    refuseToUser(userId, check.refusal.code, check.refusal.details);
+    refuseDmMessage(ws, check.refusal.code, check.refusal.details);
     return;
   }
   const { message: msg, content } = check.value;
@@ -932,7 +934,7 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
 
   const updated = getDmMessageWithUser(messageId);
   if (!updated) {
-    refuseToUser(userId, 'message_update_failed');
+    refuseDmMessage(ws, 'message_update_failed');
     return;
   }
 
@@ -958,16 +960,16 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
 }
 
 /** `dm_message_delete`, on the REST route's checks (`checkDmMessageDelete`). */
-function handleDmMessageDelete(event: Record<string, unknown>, userId: string): void {
+function handleDmMessageDelete(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const messageId = event.messageId;
   if (!messageId || typeof messageId !== 'string') {
-    refuseToUser(userId, 'validation_failed');
+    refuseDmMessage(ws, 'validation_failed');
     return;
   }
 
   const check = checkDmMessageDelete(messageId, userId);
   if (!check.ok) {
-    refuseToUser(userId, check.refusal.code, check.refusal.details);
+    refuseDmMessage(ws, check.refusal.code, check.refusal.details);
     return;
   }
   const msg = check.value;

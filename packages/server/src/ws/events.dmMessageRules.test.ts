@@ -37,9 +37,11 @@ vi.mock('../utils/auth.js', () => ({
 }));
 
 const sendToUser = vi.fn();
+const sendToWs = vi.fn();
 vi.mock('./handler.js', () => ({
   connectionManager: {
     sendToUser: (...args: unknown[]) => sendToUser(...args),
+    sendToWs: (...args: unknown[]) => sendToWs(...args),
     sendToDmMembers: vi.fn(),
     sendToRoom: vi.fn(),
     sendToAdmins: vi.fn(),
@@ -163,21 +165,30 @@ function messageRow(id: string): typeof schema.dmMessages.$inferSelect | undefin
   return testDb.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
 }
 
+/** The socket of the last `send`, a fresh object per call. */
+let lastSocket: WebSocket | undefined;
+
 async function send(event: Record<string, unknown>, userId = 'alice'): Promise<void> {
   const { handleClientEvent } = await import('./events.js');
-  handleClientEvent(event, userId, userId, {} as WebSocket, false);
+  lastSocket = {} as WebSocket;
+  handleClientEvent(event, userId, userId, lastSocket, false);
 }
 
-/** Every event the server sent, as `[recipient, event]` pairs. */
+/** Every event the server sent to a user's sessions, as `[recipient, event]` pairs. */
 function sent(): [string, Record<string, unknown>][] {
   return sendToUser.mock.calls.map((c) => [c[0] as string, c[1] as Record<string, unknown>]);
 }
 
-function expectOnlyRefusal(userId: string, code: string, details?: Record<string, unknown>): void {
-  const calls = sent();
-  expect(calls).toHaveLength(1);
-  const [recipient, event] = calls[0]!;
-  expect(recipient).toBe(userId);
+/**
+ * The server answered with one coded `error`, on the socket that sent the
+ * event and nowhere else: the user's other sessions did not act, and a coded
+ * error shows as a toast there.
+ */
+function expectOnlyRefusal(code: string, details?: Record<string, unknown>): void {
+  expect(sent()).toHaveLength(0);
+  expect(sendToWs).toHaveBeenCalledTimes(1);
+  const [socket, event] = sendToWs.mock.calls[0] as [WebSocket, Record<string, unknown>];
+  expect(socket).toBe(lastSocket);
   expect(event.type).toBe('error');
   expect(event.code).toBe(code);
   expect(typeof event.message).toBe('string');
@@ -214,6 +225,7 @@ beforeEach(() => {
 
   currentUserId = 'alice';
   sendToUser.mockClear();
+  sendToWs.mockClear();
   queueDmRelay.mockClear();
   queueDmMessageDeleteRelay.mockClear();
 });
@@ -226,7 +238,7 @@ describe('WS DM message writes in a 1-on-1 whose partner was deleted', () => {
   ])('refuses dm_message_create with %s, stores and sends nothing', async (_label, dmId, userId) => {
     await send({ type: 'dm_message_create', dmChannelId: dmId, content: 'hello?' }, userId);
 
-    expectOnlyRefusal(userId, 'recipient_deleted');
+    expectOnlyRefusal('recipient_deleted');
     expect(messagesIn(dmId)).toHaveLength(0);
     expect(queueDmRelay).not.toHaveBeenCalled();
   });
@@ -236,7 +248,7 @@ describe('WS DM message writes in a 1-on-1 whose partner was deleted', () => {
 
     await send({ type: 'dm_message_create', dmChannelId: DEAD_LOCAL, attachments: ['att-1'] });
 
-    expectOnlyRefusal('alice', 'recipient_deleted');
+    expectOnlyRefusal('recipient_deleted');
     const att = testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'att-1')).get();
     expect(att?.dmMessageId).toBeNull();
   });
@@ -250,7 +262,7 @@ describe('WS DM message writes in a 1-on-1 whose partner was deleted', () => {
 
     await send({ type: 'dm_message_edit', messageId: id, content: 'after' }, userId);
 
-    expectOnlyRefusal(userId, 'recipient_deleted');
+    expectOnlyRefusal('recipient_deleted');
     expect(messageRow(id)?.content).toBe('before');
     expect(messageRow(id)?.editedAt).toBeNull();
     expect(queueDmRelay).not.toHaveBeenCalled();
@@ -265,7 +277,7 @@ describe('WS DM message writes in a 1-on-1 whose partner was deleted', () => {
 
     await send({ type: 'dm_message_delete', messageId: id }, userId);
 
-    expectOnlyRefusal(userId, 'recipient_deleted');
+    expectOnlyRefusal('recipient_deleted');
     expect(messageRow(id)).toBeDefined();
     expect(queueDmMessageDeleteRelay).not.toHaveBeenCalled();
   });
@@ -307,14 +319,14 @@ describe('every other refusal on the WS DM message paths carries a code', () => 
     ['create with an unknown attachment', { type: 'dm_message_create', dmChannelId: LIVE, attachments: ['no-such-att'] }, 'attachment_invalid'],
   ])('%s', async (_label, event, code, details) => {
     await send(event);
-    expectOnlyRefusal('alice', code, details);
+    expectOnlyRefusal(code, details);
     expect(messagesIn(LIVE)).toHaveLength(0);
   });
 
   it('create with an attachment another user uploaded', async () => {
     seedAttachment('att-bob', 'bob');
     await send({ type: 'dm_message_create', dmChannelId: LIVE, attachments: ['att-bob'] });
-    expectOnlyRefusal('alice', 'attachment_not_owned');
+    expectOnlyRefusal('attachment_not_owned');
     expect(messagesIn(LIVE)).toHaveLength(0);
   });
 
@@ -337,7 +349,7 @@ describe('every other refusal on the WS DM message paths carries a code', () => 
 
     await send(build(ids));
 
-    expectOnlyRefusal('alice', code, details);
+    expectOnlyRefusal(code, details);
     expect(messagesIn(LIVE).map((m) => [m.id, m.content, m.editedAt])).toEqual(expect.arrayContaining([
       [ids.own, 'mine', null],
       [ids.bobs, 'his', null],
