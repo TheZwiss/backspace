@@ -112,3 +112,9 @@
 {"snapshot_date":"2026-10-06","dimension":"FR","title":"","count":8,"uniques":8}
 {"snapshot_date":"2026-10-06","dimension":"DE","title":"","count":5,"uniques":5}
 {"snapshot_date":"2026-10-06","dimension":"US","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-10-07","dimension":"other","title":"","count":12,"uniques":12}
+{"snapshot_date":"2026-10-07","dimension":"BR","title":"","count":11,"uniques":11}
+{"snapshot_date":"2026-10-07","dimension":"RU","title":"","count":11,"uniques":11}
+{"snapshot_date":"2026-10-07","dimension":"FR","title":"","count":8,"uniques":8}
+{"snapshot_date":"2026-10-07","dimension":"DE","title":"","count":5,"uniques":5}
+{"snapshot_date":"2026-10-07","dimension":"US","title":"","count":4,"uniques":4}
