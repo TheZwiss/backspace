@@ -267,10 +267,11 @@ describe('who a relay from the host names', () => {
     await settle();
 
     expect(relayedTo(PEER)).toEqual([]);
+    // The accept is named after the caller, and says who answered.
     expect(relayedTo(PEER2)).toEqual([expect.objectContaining({
       eventType: 'dm_call_accept',
       federatedId: GROUP_FID,
-      call: { acceptor: { homeUserId: 'alice', homeInstance: HERE } },
+      call: { acceptor: { homeUserId: 'alice', homeInstance: HERE }, answeredBy: DAVE },
     })]);
   });
 
@@ -294,8 +295,9 @@ describe('who a relay from the host names', () => {
     })]);
   });
 
-  it('names a federated account by its home, not by this instance, when it ends a call', async () => {
-    // grace (homed on PEER2) calls heidi (on PEER) from this instance, and hangs up.
+  it('names a federated account by its home, and tells nothing to a peer that accepts no name for the call', async () => {
+    // grace (homed on PEER2) is in a call with heidi (on PEER) hosted here,
+    // and hangs up.
     connectionManager.createDmRoom(GRACE_PEER_PAIR, 'grace');
     connectionManager.setVoiceWs('grace', ws('grace'));
 
@@ -303,18 +305,16 @@ describe('who a relay from the host names', () => {
     await settle();
 
     // PEER2 is grace's home, so it is told in her name. PEER accepts from
-    // here only an actor homed here, and nobody in this call is, so it gets
-    // her real identity rather than one this instance makes up.
+    // here only an actor homed here or on PEER, and nobody in this call is:
+    // it refuses her own identity as it refused this instance's address for
+    // her at the start, so the start never went there and the end does not
+    // either (the start test is in events.callStartTokenScoping.test.ts).
     expect(relayedTo(PEER2)).toEqual([expect.objectContaining({
       eventType: 'dm_call_end',
       federatedId: GRACE_PEER_PAIR_FID,
       call: { endedBy: GRACE },
     })]);
-    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
-      eventType: 'dm_call_end',
-      federatedId: GRACE_PEER_PAIR_FID,
-      call: { endedBy: GRACE },
-    })]);
+    expect(relayedTo(PEER)).toEqual([]);
   });
 
   it('names a member homed here by this instance', async () => {
@@ -330,7 +330,10 @@ describe('who a relay from the host names', () => {
     })]);
   });
 
-  it('names a federated account by its home when it relays its accept to the host', async () => {
+  it('sends no accept a host would refuse, and tells the member the accept did not go through', async () => {
+    // A host rings a member only through their home, so it does not hand
+    // this instance a call for grace, whose home is PEER2. Were it held here
+    // anyway, the host (PEER) would refuse any name for her from here.
     connectionManager.createFederatedCall(remoteCall({
       dmChannelId: PAIR,
       federatedId: PAIR_FID,
@@ -342,10 +345,95 @@ describe('who a relay from the host names', () => {
     await accept({ federatedCallId: PAIR_FID }, 'grace', ws('grace'));
     await settle();
 
+    expect(relayedTo(PEER)).toEqual([]);
+    expect(received('grace', 'dm_call_undeliverable')).toEqual([expect.objectContaining({
+      phase: 'accept',
+      terminal: true,
+      failures: [expect.objectContaining({ reason: 'identity_not_accepted' })],
+    })]);
+  });
+
+  it('relays the accept of a member homed here in their name, saying they answered', async () => {
+    connectionManager.createFederatedCall(remoteCall({ group: false }));
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    await settle();
+
+    const bob = { homeUserId: 'bob', homeInstance: HERE };
     expect(relayedTo(PEER)).toEqual([expect.objectContaining({
       eventType: 'dm_call_accept',
-      call: { acceptor: GRACE },
+      call: { acceptor: bob, answeredBy: bob },
     })]);
+  });
+});
+
+describe('who answered a call', () => {
+  // dm_call_accepted names the member who answered, so a group's other
+  // members keep ringing and only the answering member's other sessions stop.
+  const ALICE = { homeUserId: 'alice', homeInstance: HERE };
+  const BOB = { homeUserId: 'bob', homeInstance: HERE };
+
+  it('names the member who joined a call hosted here, to the members here and to the peers', async () => {
+    connectionManager.createDmRoom(GROUP, 'alice');
+    connectionManager.setVoiceWs('alice', ws('alice'));
+
+    await accept({ dmChannelId: GROUP }, 'bob', ws('bob'));
+    await settle();
+
+    expect(received('alice', 'dm_call_accepted')).toEqual([expect.objectContaining({ dmChannelId: GROUP, answeredBy: BOB })]);
+    for (const peer of [PEER, PEER2]) {
+      expect(relayedTo(peer)).toEqual([expect.objectContaining({
+        eventType: 'dm_call_accept',
+        call: { acceptor: BOB, answeredBy: BOB },
+      })]);
+    }
+  });
+
+  it('names the remote member whose relayed accept reached the host, though the fan-out is named after the caller', async () => {
+    connectionManager.createDmRoom(GROUP, 'alice');
+    connectionManager.setVoiceWs('alice', ws('alice'));
+
+    relayed(processDmCallAcceptEvent, 'dm_call_accept', DAVE, GROUP_FID, true);
+    await settle();
+
+    expect(received('bob', 'dm_call_accepted')).toEqual([expect.objectContaining({ answeredBy: DAVE })]);
+    expect(relayedTo(PEER2)).toEqual([expect.objectContaining({
+      call: { acceptor: ALICE, answeredBy: DAVE },
+    })]);
+  });
+
+  it('names the member who answered a call hosted on a peer, here and to the host', async () => {
+    connectionManager.createFederatedCall(remoteCall());
+
+    await accept({ federatedCallId: REMOTE_FID }, 'bob', ws('bob'));
+    await settle();
+
+    expect(received('alice', 'dm_call_accepted')).toEqual([expect.objectContaining({ federatedCallId: REMOTE_FID, answeredBy: BOB })]);
+    expect(relayedTo(PEER)).toEqual([expect.objectContaining({
+      call: expect.objectContaining({ acceptor: BOB, answeredBy: BOB }),
+    })]);
+  });
+
+  it('passes on whom the host names as having answered', () => {
+    connectionManager.createFederatedCall(remoteCall());
+
+    processDmCallAcceptEvent({
+      eventType: 'dm_call_accept',
+      messageId: 'msg-answered',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: REMOTE_FID,
+      call: { acceptor: DAVE, answeredBy: FRANK },
+    }, PEER, testDb, [], []);
+
+    expect(received('alice', 'dm_call_accepted')).toEqual([expect.objectContaining({ answeredBy: FRANK })]);
+  });
+
+  it('takes the acceptor as who answered from a host up to 1.9.0, which does not say', () => {
+    connectionManager.createFederatedCall(remoteCall());
+
+    relayed(processDmCallAcceptEvent, 'dm_call_accept', DAVE, REMOTE_FID);
+
+    expect(received('bob', 'dm_call_accepted')).toEqual([expect.objectContaining({ answeredBy: DAVE })]);
   });
 });
 

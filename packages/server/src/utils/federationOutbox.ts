@@ -639,7 +639,10 @@ export type CallRelayFailureReason =
   | 'peer_awaiting_approval'
   | 'peer_admin_required'
   | 'peer_transient_failure'
-  | 'post_failed';
+  | 'post_failed'
+  // Not sent: the peer accepts no name this instance could give the actor
+  // (utils/callFanout.ts, `callRelayActor`).
+  | 'identity_not_accepted';
 
 export type CallRelayResult =
   | {
@@ -668,6 +671,7 @@ export function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCa
     case 'peer_admin_required': return 'peer_transient_failure'; // gate-unreachable from system intent; defensive map
     case 'peer_transient_failure': return 'peer_transient_failure';
     case 'post_failed': return 'peer_transient_failure'; // 4xx looks transient to users
+    case 'identity_not_accepted': return 'identity_not_accepted';
   }
 }
 

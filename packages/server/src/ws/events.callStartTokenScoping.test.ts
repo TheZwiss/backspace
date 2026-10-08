@@ -369,3 +369,98 @@ describe('sendFederatedCallStart: group call rules', () => {
     expect(call?.perMember).toBe(perMember);
   });
 });
+
+describe('sendFederatedCallStart: the name it gives the caller', () => {
+  // A call start names its caller the way every call relay names its actor
+  // (`callRelayActor`): by their own identity, to a peer that accepts it from
+  // here, which is one where the caller is homed here or on that peer.
+  const ORBIT = 'https://orbit.example';
+  const NOVA = 'https://nova.example';
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    const cm = await importManager();
+    for (const [fedId] of cm.getAllFederatedCalls()) cm.clearFederatedCall(fedId);
+    sendCallRelayMock.mockReset();
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
+    seedActivePeer(ORBIT, 'Orbit');
+    seedActivePeer(NOVA, 'Nova');
+    seedLocalUser('alice', { homeUserId: null, homeInstance: null });
+    // grace is a federated account here; her home is orbit.
+    seedLocalUser('grace', { homeUserId: 'grace-home', homeInstance: ORBIT });
+    seedLocalUser('frank-stub', { homeUserId: 'frank-home', homeInstance: ORBIT });
+    seedLocalUser('heidi-stub', { homeUserId: 'heidi-home', homeInstance: NOVA });
+  });
+
+  afterEach(async () => {
+    const cm = await importManager();
+    for (const id of ['dm-native', 'dm-grace-group', 'dm-grace-heidi']) cm.destroyRoom(id);
+    vi.restoreAllMocks();
+    sqlite.close();
+  });
+
+  it('names a caller homed here by this instance', async () => {
+    seedDmChannel('dm-native', 'fed-native', 'alice');
+    seedDmMember('dm-native', 'alice');
+    seedDmMember('dm-native', 'heidi-stub');
+    const cm = await importManager();
+    cm.createDmRoom('dm-native', 'alice');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-native', 'alice', 'Alice');
+
+    expect(relayTo(NOVA)?.call?.caller).toEqual({ homeUserId: 'alice', homeInstance: 'https://local.example', displayName: 'Alice' });
+  });
+
+  it('names a federated account by its home, rings its home\'s members, and reports a third instance it cannot name the caller to', async () => {
+    // grace (home orbit) calls a group with alice here, frank on orbit and heidi on nova.
+    seedDmChannel('dm-grace-group', 'fed-grace-group', 'grace');
+    for (const m of ['grace', 'alice', 'frank-stub', 'heidi-stub']) seedDmMember('dm-grace-group', m);
+    const cm = await importManager();
+    cm.createDmRoom('dm-grace-group', 'grace');
+    const sent = vi.spyOn(cm, 'sendToUser');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-grace-group', 'grace', 'Grace');
+
+    // orbit is her home: it accepts her coming home, and is given a token for
+    // frank only, never one for the caller.
+    expect(relayedOrigins()).toEqual([ORBIT]);
+    const toOrbit = relayTo(ORBIT)!;
+    expect(toOrbit.call?.caller).toEqual({ homeUserId: 'grace-home', homeInstance: ORBIT, displayName: 'Grace' });
+    expect(toOrbit.call?.memberTokens?.map(t => t.homeUserId)).toEqual(['frank-home']);
+    // nova accepts from here neither this instance's address for her nor her
+    // own identity, so nothing goes there and she is told why.
+    expect(sent).toHaveBeenCalledWith('grace', expect.objectContaining({
+      type: 'dm_call_undeliverable',
+      phase: 'start',
+      terminal: false,
+      failures: [expect.objectContaining({ reason: 'identity_not_accepted', peerOrigin: NOVA, affectedUserIds: ['heidi-stub'] })],
+    }));
+    expect(cm.getRoom('dm-grace-group')).toBeDefined();
+  });
+
+  it('ends the ring when the only members it would ring are on such a third instance', async () => {
+    seedDmChannel('dm-grace-heidi', 'fed-grace-heidi', null);
+    seedDmMember('dm-grace-heidi', 'grace');
+    seedDmMember('dm-grace-heidi', 'heidi-stub');
+    const cm = await importManager();
+    cm.createDmRoom('dm-grace-heidi', 'grace');
+    const sent = vi.spyOn(cm, 'sendToUser');
+
+    const { sendFederatedCallStartForTest } = await importSUT();
+    await sendFederatedCallStartForTest('dm-grace-heidi', 'grace', 'Grace');
+
+    // Before, nova got the start under this instance's address, rang heidi,
+    // and then refused the end, which named grace by her home.
+    expect(relayedOrigins()).toEqual([]);
+    expect(cm.getRoom('dm-grace-heidi')).toBeUndefined();
+    expect(sent).toHaveBeenCalledWith('grace', expect.objectContaining({
+      type: 'dm_call_undeliverable',
+      terminal: true,
+      failures: [expect.objectContaining({ reason: 'identity_not_accepted', peerOrigin: NOVA })],
+    }));
+  });
+});

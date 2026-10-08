@@ -635,7 +635,22 @@ export type DmCallUndeliverableReason =
   | 'peer_awaiting_approval'
   | 'peer_transient_failure'
   | 'livekit_unavailable'
-  | 'no_recipient';
+  | 'no_recipient'
+  // The peer accepts no name this instance could give the call's caller (a
+  // federated account here whose home is a third instance), so its members
+  // cannot be rung through this instance (federation.md, "Who a call relay
+  // names").
+  | 'identity_not_accepted';
+
+/**
+ * A person's federated identity on the wire: their home user id and the
+ * instance that homes them. Compared by home user id and instance host,
+ * never by a local row id.
+ */
+export interface FederatedIdentity {
+  homeUserId: string;
+  homeInstance: string;
+}
 
 export type DmCallPhase = 'start' | 'accept' | 'reject' | 'end' | 'host_unreachable';
 
@@ -710,7 +725,10 @@ export type ServerEvent =
   | { type: 'friend_request_received'; request: FriendRequest }
   | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
   | { type: 'dm_call_incoming'; dmChannelId: string | null; federatedCallId?: string; callerId: string; callerName: string; livekitUrl?: string; livekitToken?: string; callOrigin?: string }
-  | { type: 'dm_call_accepted'; dmChannelId: string | null; federatedCallId?: string }
+  // `answeredBy` names the member whose answer this is, by federated
+  // identity, so only that person's other sessions stop ringing. Absent from
+  // servers up to 1.9.0.
+  | { type: 'dm_call_accepted'; dmChannelId: string | null; federatedCallId?: string; answeredBy?: FederatedIdentity }
   // `dmChannelId` is null and `federatedCallId` set when the instance holds a
   // federated call with no local copy of the DM (Path B, voice.md).
   | { type: 'dm_call_rejected'; dmChannelId: string | null; federatedCallId?: string }
@@ -1462,6 +1480,15 @@ export interface FederationCallPayload {
    * the call for all of the sender's members.
    */
   perMember?: boolean;
+  /**
+   * On `dm_call_accept`: the member who answered. `acceptor` names a user the
+   * receiving peer accepts from the sender, which is the caller when the
+   * member who answered is homed on a third instance; this names the member
+   * themselves. It authorizes nothing: it only tells the receiver whose other
+   * sessions stop ringing. Senders up to 1.9.0 omit it, and `acceptor` is
+   * then the best answer there is.
+   */
+  answeredBy?: FederatedIdentity;
 }
 
 export interface FederationMembershipPayload {

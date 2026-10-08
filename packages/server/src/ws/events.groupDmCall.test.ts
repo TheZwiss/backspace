@@ -862,7 +862,7 @@ describe('a member here who leaves a call hosted on a peer without hanging up', 
 
     expect(relayedTo(PEER)).toEqual([expect.objectContaining({
       eventType: 'dm_call_accept',
-      call: { acceptor: BOB_HERE, perMember: true },
+      call: { acceptor: BOB_HERE, perMember: true, answeredBy: BOB_HERE },
     })]);
   });
 
@@ -873,7 +873,7 @@ describe('a member here who leaves a call hosted on a peer without hanging up', 
 
     expect(relayedTo(PEER)).toEqual([expect.objectContaining({
       eventType: 'dm_call_accept',
-      call: { acceptor: BOB_HERE },
+      call: { acceptor: BOB_HERE, answeredBy: BOB_HERE },
     })]);
   });
 });

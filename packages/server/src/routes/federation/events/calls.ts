@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { getDb, schema } from '../../../db/index.js';
 import { getOurOrigin } from '../../../utils/federationAuth.js';
 import { fanOutCallEvent } from '../../../utils/callFanout.js';
@@ -6,7 +5,7 @@ import { connectionManager } from '../../../ws/handler.js';
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { CallFanoutFailure } from '../../../utils/federationOutbox.js';
 import type { DmRoomMeta, FederatedCallEntry } from '../../../ws/handler.js';
-import type { DmCallUndeliverableFailure, FederationCallPayload, FederationRelayEvent, ServerEvent } from '@backspace/shared';
+import type { DmCallUndeliverableFailure, FederatedIdentity, FederationCallPayload, FederationRelayEvent, ServerEvent } from '@backspace/shared';
 import { extractDomain, resolveOrCreateReplicatedUser, resolveRelayActor, attributionRefusal, type RelayActor } from '../identity.js';
 import { isGroupConversation } from '../../../utils/dmConversation.js';
 import { isDmMember } from '../../../utils/permissions.js';
@@ -72,6 +71,23 @@ function applyRelayedGroupLeave(
     ? connectionManager.leaveGroupDmCall(localDmId, resolved.user.id)
     : connectionManager.declineGroupDmCall(localDmId, resolved.user.id);
   return outcome === 'ended';
+}
+
+/**
+ * Who answered, for a relayed `dm_call_accept`: `answeredBy` when the sender
+ * set it, else `acceptor`. A sender up to 1.9.0 sets only `acceptor`, which is
+ * the member who answered whenever that member could be someone here (homed
+ * on the sender or on this instance); otherwise it is the caller, who is not
+ * ringing, so nobody's ring stops for it. The value only decides whose other
+ * sessions stop ringing; it authorizes nothing.
+ */
+function answererOf(call: FederationCallPayload): FederatedIdentity | null {
+  const named = call.answeredBy;
+  if (named && typeof named.homeUserId === 'string' && named.homeUserId.length > 0
+    && typeof named.homeInstance === 'string' && named.homeInstance.length > 0) {
+    return { homeUserId: named.homeUserId, homeInstance: named.homeInstance };
+  }
+  return call.acceptor ? { homeUserId: call.acceptor.homeUserId, homeInstance: call.acceptor.homeInstance } : null;
 }
 
 export function processDmCallStartEvent(
@@ -347,18 +363,21 @@ export function processDmCallAcceptEvent(
       });
     }
 
-    // Broadcast accepted locally — include federatedCallId so all clients can match
+    // Broadcast accepted locally — include federatedCallId so all clients can
+    // match, and who answered, so only that member's sessions stop ringing.
+    const answeredBy = answererOf(event.call);
     connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_accepted',
       dmChannelId: dmChannelId!,
       federatedCallId: event.federatedId,
+      ...(answeredBy ? { answeredBy } : {}),
     } as ServerEvent);
 
     // Fan out to ALL other remote instances (exclude the one that sent the accept)
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
     const hostCallerId = (room.metadata as DmRoomMeta).callerId;
     const localDmId = dmChannelId!;
-    void fanOutCallEvent(localDmId, 'dm_call_accept', [localActorId(event.call.acceptor, db), hostCallerId], normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_accept', [localActorId(event.call.acceptor, db), hostCallerId], normalizedSource, { answeredBy }, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'accept', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_accept threw:', err),
@@ -373,10 +392,12 @@ export function processDmCallAcceptEvent(
       const wasRinging = fedCall.state === 'ringing';
       connectionManager.activateFederatedCall(event.federatedId);
       if (wasRinging) {
+        const answeredBy = answererOf(event.call);
         connectionManager.sendToFederatedCallUsers(event.federatedId, {
           type: 'dm_call_accepted',
           dmChannelId: fedCall.dmChannelId,
           federatedCallId: event.federatedId,
+          ...(answeredBy ? { answeredBy } : {}),
         } as ServerEvent);
       }
     }
@@ -431,7 +452,7 @@ export function processDmCallRejectEvent(
     // In a 1-on-1 the decline ends the call, and the instance that sent it
     // already knows.
     connectionManager.endDmRoom(localDmId, 'dm_call_rejected');
-    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.rejector, db), hostCallerId], normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.rejector, db), hostCallerId], normalizedSource, {}, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'reject', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end (reject) threw:', err),
@@ -497,7 +518,7 @@ export function processDmCallEndEvent(
     // In a 1-on-1 either side's end ends the call, and the instance that
     // sent it already knows.
     connectionManager.endDmRoom(localDmId, 'dm_call_ended');
-    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.endedBy, db), hostCallerId], normalizedSource, db).then(failures => {
+    void fanOutCallEvent(localDmId, 'dm_call_end', [localActorId(event.call.endedBy, db), hostCallerId], normalizedSource, {}, db).then(failures => {
       emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'end', failures);
     }).catch(err =>
       console.error('[federation] Fan-out dm_call_end threw:', err),

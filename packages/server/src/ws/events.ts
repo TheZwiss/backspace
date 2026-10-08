@@ -10,7 +10,7 @@ import { fetchReplyToMessages, isReplyTargetInChannel } from '../routes/messages
 import { MAX_MESSAGE_LENGTH, isChosenUserStatus, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
-import { fanOutCallEvent, relayCallEvent, type CallRelayEventType } from '../utils/callFanout.js';
+import { callRelayActor, fanOutCallEvent, relayCallEvent, userRelayIdentity, type CallRelayEventType } from '../utils/callFanout.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { applyChosenStatus } from './presence.js';
@@ -20,6 +20,7 @@ import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedR
 import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
 import { canonicalizeHomeInstance, getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
+import type { RelayActor } from '../routes/federation/identity.js';
 import { config } from '../config.js';
 import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
 import { ERROR_MESSAGES, errorText } from '../utils/httpErrors.js';
@@ -1473,10 +1474,14 @@ async function joinHostedDmCall(dmChannelId: string, userId: string, ws: WebSock
   // Look up federatedId for the broadcast so all clients (including remote) can match
   const fedIdRow = getDb().select({ federatedId: schema.dmChannels.federatedId })
     .from(schema.dmChannels).where(eq(schema.dmChannels.id, dmChannelId)).get();
+  // Who answered, so only their own other sessions stop ringing: in a group
+  // call the other members are still free to answer.
+  const answeredBy = userRelayIdentity(userId, getDb());
   connectionManager.sendToDmMembers(dmChannelId, {
     type: 'dm_call_accepted',
     dmChannelId,
     federatedCallId: fedIdRow?.federatedId ?? undefined,
+    ...(answeredBy ? { answeredBy } : {}),
   } as ServerEvent);
   connectionManager.sendToDmMembers(dmChannelId, {
     type: 'voice_state_update',
@@ -1484,7 +1489,7 @@ async function joinHostedDmCall(dmChannelId: string, userId: string, ws: WebSock
     userId,
     action: 'join',
   });
-  const acceptFanoutFailures = await sendFederatedCallAccept(dmChannelId, [userId, meta.callerId]);
+  const acceptFanoutFailures = await sendFederatedCallAccept(dmChannelId, [userId, meta.callerId], answeredBy);
   emitFanoutUndeliverable(
     userId,
     dmChannelId,
@@ -1505,8 +1510,9 @@ function relayToCallHost(
   fedCall: FederatedCallEntry,
   userId: string,
   eventType: CallRelayEventType,
+  answeredBy: RelayActor | null = null,
 ): Promise<CallRelayResult> {
-  return relayCallEvent(fedCall.federatedCallHost, eventType, fedCall.federatedId, [userId], fedCall.group);
+  return relayCallEvent(fedCall.federatedCallHost, eventType, fedCall.federatedId, [userId], { perMember: fedCall.group, answeredBy });
 }
 
 /**
@@ -1611,14 +1617,16 @@ async function handleDmCallAccept(event: Record<string, unknown>, userId: string
     // the only leave the host hears of when the tab closes or the network
     // goes.
     connectionManager.setVoiceWs(userId, ws);
+    const db = getDb();
+    const answeredBy = userRelayIdentity(userId, db);
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_accepted',
       dmChannelId: fedCall.dmChannelId,
       federatedCallId: fedCall.federatedId,
+      ...(answeredBy ? { answeredBy } : {}),
     } as ServerEvent);
 
-    const db = getDb();
-    const result = await relayToCallHost(fedCall, userId, 'dm_call_accept');
+    const result = await relayToCallHost(fedCall, userId, 'dm_call_accept', answeredBy);
 
     if (!result.ok) {
       console.error('[federation] dm_call_accept relay to %s failed (%s): %s', fedCall.federatedCallHost, result.reason, result.error);
@@ -1875,16 +1883,20 @@ async function sendFederatedCallStart(
 
   // Classify members relative to this instance. `homeInstance` is stored in two
   // shapes (bare host and full URL), so every comparison goes through
-  // normalizeOriginForCompare; the peer-facing origin is canonicalized.
+  // normalizeOriginForCompare; the peer-facing origin is canonicalized. The
+  // caller is never rung, so a caller homed elsewhere (a federated account
+  // here) is not a recipient: their home gets no token for them.
   const ourOriginKey = normalizeOriginForCompare(ourOrigin);
   const remoteMembers = members.filter(m => {
+    if (m.userId === callerId) return false;
     const key = normalizeOriginForCompare(m.homeInstance);
     return key !== null && key !== ourOriginKey;
   });
 
-  // A purely local call has no federated recipient. Relaying it anyway would
-  // hand every peered instance the call's existence, its participant roster and
-  // room credentials for a conversation none of them hosts a party to.
+  // A call with no member homed elsewhere has no federated recipient. Relaying
+  // it anyway would hand every peered instance the call's existence, its
+  // participant roster and room credentials for a conversation none of them
+  // hosts a party to.
   if (remoteMembers.length === 0) return;
 
   const localNonCallerMembers = members.filter(m => {
@@ -1921,8 +1933,6 @@ async function sendFederatedCallStart(
     displayName: m.displayName || m.username,
   }));
 
-  const callerHomeUserId = members.find(m => m.userId === callerId)?.homeUserId || callerId;
-
   // A group call follows the group rules here, and the peers holding its
   // entry are told so (`perMember`, voice.md "Group calls across instances").
   const room = connectionManager.getRoom(dmChannelId);
@@ -1952,7 +1962,7 @@ async function sendFederatedCallStart(
    * `participants` is the non-secret roster and stays complete: the recipient
    * needs it for Path B identity matching when the DM has no local row yet.
    */
-  const buildRelayEvent = async (recipients: typeof members) => {
+  const buildRelayEvent = async (recipients: typeof members, caller: RelayActor) => {
     // `tokens` (by home user id) is for receivers that predate `memberTokens`,
     // which names each holder with its home instance (FederationCallPayload).
     const tokens: Record<string, string> = {};
@@ -1976,8 +1986,8 @@ async function sendFederatedCallStart(
         tokens,
         memberTokens,
         caller: {
-          homeUserId: callerHomeUserId,
-          homeInstance: ourOrigin,
+          homeUserId: caller.homeUserId,
+          homeInstance: caller.homeInstance,
           displayName: callerName,
         },
         participants,
@@ -2000,13 +2010,29 @@ async function sendFederatedCallStart(
   }
 
   // ─── Targeted relay: fan out in parallel, await results ────────────────────
-  // Each peer's result has THREE possible classifications:
+  // Each peer's result has FOUR possible classifications:
+  //   no name the peer accepts for the caller  → identity_not_accepted, not sent
   //   ok=true, messageId NOT in undeliverable → delivered
   //   ok=true, messageId IN undeliverable     → new: no_recipient failure (#18)
   //   ok=false                                → existing failure reasons
   const targetedResults = await Promise.all(
     Array.from(targetedPeers.entries()).map(async ([peerOrigin, recipients]) => {
-      const relayEvent = await buildRelayEvent(recipients);
+      // The caller is named as every call relay names its actor
+      // (`callRelayActor`): by their own identity, which a peer accepts from
+      // here only when they are homed here or on that peer. A federated
+      // account here whose home is a third instance cannot be named to this
+      // peer at all, so its members cannot be rung through this instance.
+      const caller = callRelayActor(peerOrigin, [callerId], db);
+      if (!caller) {
+        console.warn('[federation] dm_call_start to %s not sent: the peer accepts no name for the caller from this instance', peerOrigin);
+        return {
+          origin: peerOrigin,
+          ok: false as const,
+          reason: 'identity_not_accepted' as const satisfies DmCallUndeliverableReason,
+          error: 'caller not accepted by the peer',
+        };
+      }
+      const relayEvent = await buildRelayEvent(recipients, caller);
       const result = await sendCallRelay(peerOrigin, [relayEvent]);
       if (result.ok) {
         if (result.undeliverable.includes(relayEvent.messageId)) {
@@ -2147,9 +2173,14 @@ function emitFanoutUndeliverable(
  * Relay a join of the call hosted here for `dmChannelId` to every peer with a
  * member in it. `actorUserIds` are the local users the accept may be named
  * after, in order: the member who joined, then the caller (`callRelayActor`).
+ * `answeredBy` is the member who joined, whoever the accept is named after.
  */
-function sendFederatedCallAccept(dmChannelId: string, actorUserIds: readonly string[]): Promise<CallFanoutFailure[]> {
-  return fanOutCallEvent(dmChannelId, 'dm_call_accept', actorUserIds, undefined);
+function sendFederatedCallAccept(
+  dmChannelId: string,
+  actorUserIds: readonly string[],
+  answeredBy: RelayActor | null,
+): Promise<CallFanoutFailure[]> {
+  return fanOutCallEvent(dmChannelId, 'dm_call_accept', actorUserIds, undefined, { answeredBy });
 }
 
 /**
