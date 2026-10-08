@@ -109,7 +109,7 @@ export function DmRosterPanel() {
     }
     if (action === 'remove-friend') {
       try {
-        await removeFriendStore(member.id);
+        await removeFriendStore(member, viewer.origin);
       } catch (err) {
         addToast(
           err instanceof Error ? err.message : t('dm:removeFriend.failed'),

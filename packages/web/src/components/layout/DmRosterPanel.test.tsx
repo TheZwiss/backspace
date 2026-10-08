@@ -359,7 +359,7 @@ describe('DmRosterPanel — action wiring', () => {
     expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
-  it('remove-friend action: calls socialStore.removeFriend with the row user id', async () => {
+  it('remove-friend action: calls socialStore.removeFriend with the member row and the DM origin', async () => {
     const u = userEvent.setup();
     const me = makeUser({ id: 'me' });
     const friend = makeUser({ id: 'friend-1', username: 'friend', displayName: 'Friend' });
@@ -384,7 +384,7 @@ describe('DmRosterPanel — action wiring', () => {
     await u.click(removeBtn);
 
     await waitFor(() => {
-      expect(socialState.removeFriend).toHaveBeenCalledWith('friend-1');
+      expect(socialState.removeFriend).toHaveBeenCalledWith(expect.objectContaining({ id: 'friend-1' }), '');
     });
   });
 

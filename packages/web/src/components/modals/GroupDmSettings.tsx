@@ -283,7 +283,7 @@ export function GroupDmSettings() {
     }
     if (action === 'remove-friend') {
       try {
-        await useSocialStore.getState().removeFriend(member.id);
+        await useSocialStore.getState().removeFriend(member, viewer.origin);
       } catch (err) {
         addToast(
           err instanceof Error ? err.message : t('dm:removeFriend.failed'),

@@ -110,7 +110,7 @@ interface FriendsPageProps {
 export function FriendsPage({ mobile }: FriendsPageProps) {
   const { t } = useTranslation(['social', 'common']);
   const [activeTab, setActiveTab] = useState<Tab>('online');
-  const [pendingUnfriend, setPendingUnfriend] = useState<{ id: string; name: string } | null>(null);
+  const [pendingUnfriend, setPendingUnfriend] = useState<{ friend: TaggedFriend; name: string } | null>(null);
   const navigate = useNavigate();
   const addToast = useUIStore((s) => s.addToast);
 
@@ -182,7 +182,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             ) : (
               <>
                 {onlineFriends.map(friend => (
-                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: userDisplayName(friend) })} onDm={() => handleOpenDm(friend, friend._instanceOrigin)} />
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ friend, name: userDisplayName(friend) })} onDm={() => handleOpenDm(friend, friend._instanceOrigin)} />
                 ))}
               </>
             )}
@@ -202,7 +202,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             ) : (
               <>
                 {friends.map(friend => (
-                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: userDisplayName(friend) })} onDm={() => handleOpenDm(friend, friend._instanceOrigin)} />
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ friend, name: userDisplayName(friend) })} onDm={() => handleOpenDm(friend, friend._instanceOrigin)} />
                 ))}
               </>
             )}
@@ -226,8 +226,8 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                     key={`${req.id}:${req._instanceOrigin}`}
                     request={req}
                     type="incoming"
-                    onAccept={() => updateFriendRequest(req.id, 'accepted')}
-                    onDecline={() => updateFriendRequest(req.id, 'declined')}
+                    onAccept={() => updateFriendRequest(req.id, req._instanceOrigin, 'accepted')}
+                    onDecline={() => updateFriendRequest(req.id, req._instanceOrigin, 'declined')}
                   />
                 ))}
                 {pendingOutgoing.map(req => (
@@ -235,7 +235,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                     key={`${req.id}:${req._instanceOrigin}`}
                     request={req}
                     type="outgoing"
-                    onCancel={() => cancelFriendRequest(req.id)}
+                    onCancel={() => cancelFriendRequest(req.id, req._instanceOrigin)}
                   />
                 ))}
               </>
@@ -409,7 +409,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         onClose={() => setPendingUnfriend(null)}
         onConfirm={async () => {
           if (pendingUnfriend) {
-            await removeFriend(pendingUnfriend.id);
+            await removeFriend(pendingUnfriend.friend, pendingUnfriend.friend._instanceOrigin);
             setPendingUnfriend(null);
           }
         }}
@@ -711,7 +711,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     setError('');
     try {
-      await updateFriendRequest(user.requestId, 'accepted');
+      await updateFriendRequest(user.requestId, user._instanceOrigin, 'accepted');
       onRelationshipChange(user.id, user._instanceOrigin, 'friends');
     } catch (err) {
       setError(describeError(err));
@@ -725,7 +725,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     setError('');
     try {
-      await updateFriendRequest(user.requestId, 'declined');
+      await updateFriendRequest(user.requestId, user._instanceOrigin, 'declined');
       onRelationshipChange(user.id, user._instanceOrigin, 'none');
     } catch (err) {
       setError(describeError(err));

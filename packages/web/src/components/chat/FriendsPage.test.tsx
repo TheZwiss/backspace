@@ -490,7 +490,7 @@ describe('FriendsPage', () => {
       await user.click(cancelButton);
 
       await waitFor(() => {
-        expect(mockCancel).toHaveBeenCalledWith('req-out-1');
+        expect(mockCancel).toHaveBeenCalledWith('req-out-1', '');
       });
     });
   });
@@ -502,6 +502,7 @@ describe('FriendsPage', () => {
 
       const incomingRequest = makeRequest({
         id: 'req-in-1',
+        _instanceOrigin: 'https://orbit.test',
         fromId: 'sender-id',
         toId: 'current-user',
         user: {
@@ -539,7 +540,7 @@ describe('FriendsPage', () => {
       await user.click(acceptButton);
 
       await waitFor(() => {
-        expect(mockUpdate).toHaveBeenCalledWith('req-in-1', 'accepted');
+        expect(mockUpdate).toHaveBeenCalledWith('req-in-1', 'https://orbit.test', 'accepted');
       });
     });
 
@@ -583,7 +584,7 @@ describe('FriendsPage', () => {
       await user.click(declineButton);
 
       await waitFor(() => {
-        expect(mockUpdate).toHaveBeenCalledWith('req-in-2', 'declined');
+        expect(mockUpdate).toHaveBeenCalledWith('req-in-2', '', 'declined');
       });
     });
   });

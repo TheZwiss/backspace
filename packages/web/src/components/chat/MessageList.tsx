@@ -1416,7 +1416,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         {isFriend && otherUser && (
           <div className="mt-4">
             <button
-              onClick={() => friend && removeFriend(friend.id)}
+              onClick={() => friend && removeFriend(friend, friend._instanceOrigin)}
               className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               {t('chat:list.welcome.dm.removeFriend')}
