@@ -407,9 +407,13 @@ English text. Two responses carry extra fields next to the shared shape: the
 username availability check (`available`, `reason`) and the owned-spaces
 rejection (`ownedSpaces`). The only sites left without codes are the
 test-only peer seeding route and most of the WebSocket handler's error
-messages, which are a separate protocol. The WebSocket refusals that carry a
-code are `role_hierarchy` (voice moderation), `system_message_immutable` and
-`not_message_author` (`dm_message_edit`), `dm_call_in_progress`,
+messages, which are a separate protocol. A WebSocket `error` carries
+`details` next to `code` where the code's text has placeholders, and the
+client passes them to `describeErrorCode`. The WebSocket refusals that carry a
+code are `role_hierarchy` (voice moderation), every refusal of
+`dm_message_create`, `dm_message_edit` and `dm_message_delete` (the REST
+routes' codes, from `utils/dmMessageRules.ts`; see
+[websocket.md](websocket.md#dm-messages)), `dm_call_in_progress`,
 `not_dm_member` and `validation_failed` (`dm_call_start`), and
 `dm_call_not_found`, `not_dm_member` and `validation_failed`
 (`dm_call_accept`; see [voice.md](voice.md#dm-call-state-machine)).

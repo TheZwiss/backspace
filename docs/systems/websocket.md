@@ -32,9 +32,11 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | notes |
 |------|--------|-------|
 | `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel |
-| `dm_message_edit` | messageId, content | author only; a system message cannot be edited (`error` with `code: 'system_message_immutable'`) |
+| `dm_message_edit` | messageId, content | author only; a system message cannot be edited |
 | `dm_message_delete` | messageId | author only |
 | `dm_typing_start` | dmChannelId | 5s auto-expire |
+
+The three DM message events run the REST routes' checks (`utils/dmMessageRules.ts`), so they refuse what the routes refuse, in the same order and with the same codes (dm-system.md, "Message Operations"), `recipient_deleted` in a 1-on-1 whose partner was deleted included. A missing `dmChannelId` or `messageId` is `validation_failed`. Each refusal is an `error` with its code, and `details` where the code has placeholders, sent to the user; nothing is stored, broadcast or relayed. The web client sends these actions over REST, not over these events.
 
 ### Reactions (space + DM, auto-detected)
 | type | fields | notes |
@@ -94,7 +96,7 @@ All four also need the actor to outrank the target (permissions.md, "Role hierar
 |------|--------|-------|
 | `ready` | (see Ready Payload below) | user |
 | `pong` | — | user |
-| `error` | message, code?, dmChannelId? | user; a refused `dm_call_start` or `dm_call_accept` goes to the sending socket only and names its `dmChannelId` |
+| `error` | message, code?, details?, dmChannelId? | user; `details` fills the code's placeholders, as in an HTTP error body (`content_too_long` carries `max`); a refused `dm_call_start` or `dm_call_accept` goes to the sending socket only and names its `dmChannelId` |
 
 ### Messages
 | type | fields | scope |
@@ -201,8 +203,9 @@ connected to an old server still gets the old `ready` push.
 An `error` that carries a `code` is the refusal of something the user just
 did (`role_hierarchy` from the voice moderation events, `dm_call_in_progress`,
 `not_dm_member` and `validation_failed` from `dm_call_start`, `dm_call_not_found`,
-`not_dm_member` and `validation_failed` from `dm_call_accept`); the client shows it as a warning
-toast in the user's language (`describeErrorCode`). An `error` without a code
+`not_dm_member` and `validation_failed` from `dm_call_accept`, and the DM
+message events (see "DM Messages")); the client shows it as a warning
+toast in the user's language (`describeErrorCode`, with the event's `details`). An `error` without a code
 is only logged. An `error` with a `dmChannelId` equal to the DM the client is
 calling, from the instance that serves that DM, also clears the calling state
 (`outgoingCall`), which stops the outgoing ring. A `dm_call_not_found` or

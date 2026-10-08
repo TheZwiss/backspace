@@ -665,7 +665,8 @@ computation: the reply preview inherits exactly the `VIEW_CHANNEL` +
 `READ_MESSAGE_HISTORY` gate that already guards the message carrying it.
 
 The DM side has the same rule with its own pair of helpers
-(`isDmReplyTargetInChannel` / `fetchDmReplyToMessages` in `routes/dm.ts`), where
+(`isDmReplyTargetInChannel` in `utils/dmMessageRules.ts` and
+`fetchDmReplyToMessages` in `routes/dm.ts`), where
 membership is binary so the two candidate predicates coincide.
 
 Covered by `packages/server/src/routes/messages.replyAuthorization.test.ts` and
