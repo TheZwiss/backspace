@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User } from '@backspace/shared';
-import { isIncomingRequest, isOutgoingRequest, useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
+import { friendEntryOf, isIncomingRequest, isOutgoingRequest, pendingRequestWith, useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
 import { useTranslation, Trans } from 'react-i18next';
@@ -14,7 +14,6 @@ import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
-import { api } from '../../api/client';
 import { Mascot } from '../ui/Mascot';
 import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
@@ -490,23 +489,31 @@ function AddFriendTab({
 
   const isSearchMode = query.trim().length > 0;
 
-  // Enrich search results with friend/request status at render time
+  // Enrich search results with friend/request status at render time. A
+  // result and a list entry are the same person when their `userKey`s match,
+  // whichever instance's row each is shown by. A pending request's id is good
+  // only on the instance that holds it, so a card with a request is shown by
+  // that request's row of the person.
   const enrichedSearchResults: TaggedDiscoverUser[] = useMemo(() => {
     if (!isSearchMode) return [];
     return rawSearchResults
       .filter(u => !selfIds.has(`${u.id}:${u._instanceOrigin}`))
       .map(user => {
-        const isFriend = friends.some(f => f.id === user.id && f._instanceOrigin === user._instanceOrigin);
-        if (isFriend) {
+        if (friendEntryOf(friends, user, user._instanceOrigin)) {
           return { ...user, relationship: 'friends' as const, mutualFriendCount: 0, mutualSpaceCount: 0 };
         }
-        const outbound = requests.find(r => r.status === 'pending' && isOutgoingRequest(r) && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
-        if (outbound) {
-          return { ...user, relationship: 'outbound_pending' as const, requestId: outbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
-        }
-        const inbound = requests.find(r => r.status === 'pending' && isIncomingRequest(r) && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
-        if (inbound) {
-          return { ...user, relationship: 'inbound_pending' as const, requestId: inbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
+        const pending = pendingRequestWith(requests, user, user._instanceOrigin);
+        if (pending?.user && (isOutgoingRequest(pending) || isIncomingRequest(pending))) {
+          const shownBy = pending._instanceOrigin === user._instanceOrigin
+            ? user
+            : { ...pending.user, _instanceOrigin: pending._instanceOrigin };
+          return {
+            ...shownBy,
+            relationship: isOutgoingRequest(pending) ? 'outbound_pending' as const : 'inbound_pending' as const,
+            requestId: pending.id,
+            mutualFriendCount: 0,
+            mutualSpaceCount: 0,
+          };
         }
         return { ...user, relationship: 'none' as const, mutualFriendCount: 0, mutualSpaceCount: 0 };
       });
@@ -676,6 +683,7 @@ function UserDiscoverCard({
   const { t } = useTranslation(['social', 'common']);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
+  const cancelFriendRequest = useSocialStore((s) => s.cancelFriendRequest);
   const openModal = useUIStore((s) => s.openModal);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -711,7 +719,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     setError('');
     try {
-      await updateFriendRequest(user.requestId, user._instanceOrigin, 'accepted');
+      await updateFriendRequest(user.requestId, user._instanceOrigin, 'accepted', user);
       onRelationshipChange(user.id, user._instanceOrigin, 'friends');
     } catch (err) {
       setError(describeError(err));
@@ -725,7 +733,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     setError('');
     try {
-      await updateFriendRequest(user.requestId, user._instanceOrigin, 'declined');
+      await updateFriendRequest(user.requestId, user._instanceOrigin, 'declined', user);
       onRelationshipChange(user.id, user._instanceOrigin, 'none');
     } catch (err) {
       setError(describeError(err));
@@ -739,11 +747,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     setError('');
     try {
-      const origin = user._instanceOrigin;
-      const client = origin
-        ? (useInstanceStore.getState().instances.find(i => i.origin === origin)?.api ?? api)
-        : api;
-      await client.social.cancelRequest(user.requestId);
+      await cancelFriendRequest(user.requestId, user._instanceOrigin, user);
       onRelationshipChange(user.id, user._instanceOrigin, 'none');
     } catch (err) {
       setError(describeError(err));

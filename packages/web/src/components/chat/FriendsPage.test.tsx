@@ -324,6 +324,62 @@ describe('FriendsPage', () => {
       expect(screen.queryByText(/Send friend request to/)).not.toBeInTheDocument();
     });
 
+    describe('search results and the lists, matched by person', () => {
+      // Bob is native to orbit (b-1); the page's instance holds a replicated row of him (nb).
+      const bobOnOrbit = {
+        id: 'b-1', username: 'bob', displayName: 'Bob', avatar: null, banner: null, accentColor: null,
+        avatarColor: null, bio: null, status: 'online' as const, customStatus: null, isAdmin: false, createdAt: 0,
+        homeUserId: 'b-1', homeInstance: null, replicatedInstances: [], _instanceOrigin: 'https://orbit.test',
+      };
+      const bobOnPage = { ...bobOnOrbit, id: 'nb', username: 'bob@orbit.test', homeInstance: 'orbit.test', _instanceOrigin: '' };
+
+      async function searchForBob() {
+        const user = userEvent.setup();
+        renderFriendsPage();
+        await user.click(screen.getByText('Add Friend'));
+        await user.type(screen.getByPlaceholderText(/Search or add by username/), 'bob');
+        return user;
+      }
+
+      it("shows a friend listed only by another instance's row as a friend", async () => {
+        useSocialStore.setState({
+          friends: [makeFriend({ ...bobOnPage, addedAt: 0 })],
+          searchUsers: vi.fn().mockResolvedValue([bobOnOrbit]),
+        });
+        await searchForBob();
+        expect(await screen.findByText('Message')).toBeInTheDocument();
+      });
+
+      it('accepts a request held on another instance with that instance\'s request id and row', async () => {
+        const mockUpdate = vi.fn().mockResolvedValue(undefined);
+        useSocialStore.setState({
+          requests: [makeRequest({ id: 'r-bob-page', fromId: 'nb', toId: 'me', _instanceOrigin: '', user: bobOnPage })],
+          searchUsers: vi.fn().mockResolvedValue([bobOnOrbit]),
+          updateFriendRequest: mockUpdate,
+        });
+        const user = await searchForBob();
+        await user.click(await screen.findByText('Accept'));
+        await waitFor(() => {
+          expect(mockUpdate).toHaveBeenCalledWith('r-bob-page', '', 'accepted', expect.objectContaining({ id: 'nb' }));
+        });
+      });
+
+      it('cancels a pending request from a search card through the store, with the card\'s row', async () => {
+        const mockCancel = vi.fn().mockResolvedValue(undefined);
+        useSocialStore.setState({
+          requests: [makeRequest({ id: 'r-bob-orbit', fromId: 'me-orbit', toId: 'b-1', _instanceOrigin: 'https://orbit.test', user: bobOnOrbit })],
+          searchUsers: vi.fn().mockResolvedValue([bobOnOrbit]),
+          cancelFriendRequest: mockCancel,
+        });
+        const user = await searchForBob();
+        await user.click(await screen.findByText('Request Pending'));
+        await waitFor(() => {
+          expect(mockCancel).toHaveBeenCalledWith('r-bob-orbit', 'https://orbit.test', expect.objectContaining({ id: 'b-1' }));
+        });
+        expect(mockedApi.social.cancelRequest).not.toHaveBeenCalled();
+      });
+    });
+
     it('calls searchUsers when typing a non-@ query', async () => {
       const user = userEvent.setup();
       const mockSearchUsers = vi.fn().mockResolvedValue([]);
