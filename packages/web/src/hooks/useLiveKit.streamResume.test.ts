@@ -431,6 +431,21 @@ describe('the sharer\'s own full reconnect', () => {
     expect(cuesPlayed().filter((c) => c === 'stream_user_left')).toHaveLength(1);
   });
 
+  it('drops a viewer that leaves during a signal resume, with its cue', async () => {
+    // livekit-client 2.22.3: the signal is live again (SignalResumed) before
+    // the room is Connected (Resumed, after the ICE restart), so a real leave
+    // can arrive while the room still reads SignalReconnecting.
+    const { room, viewers } = await sharingTo([ANN]);
+
+    setState(room, ConnectionState.SignalReconnecting);
+    (room.remoteParticipants as Map<string, unknown>).delete(ANN);
+    act(() => { room.emit(RoomEvent.ParticipantDisconnected, viewers[0] as never); });
+    setState(room, ConnectionState.Connected);
+
+    expect(useVoiceStore.getState().streamWatchers.get(ME)).toBeUndefined();
+    expect(cuesPlayed()).toContain('stream_user_left');
+  });
+
   it('still drops a viewer that leaves while the room is connected', async () => {
     const { room, viewers } = await sharingTo([ANN]);
 

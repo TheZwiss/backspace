@@ -855,10 +855,11 @@ export function useLiveKit() {
         // Left between a republish's two publications: its share ends with it.
         const bridgedShareEnded = republish.cancel(participant.identity);
         if (!isCurrent()) return;
-        // The server reports a leave only while the room is connected. One
-        // seen otherwise is this room's own full reconnect dropping every
-        // participant (Room.handleRestarting): a viewer stays in the watcher
-        // set, and is dropped at Connected if it is not back.
+        // While the room is not Connected the leave may be this room's own
+        // full reconnect dropping every participant (Room.handleRestarting),
+        // so a viewer stays in the watcher set. Every return to Connected
+        // keeps only the viewers present then (`retainWatchers` below), which
+        // also catches a viewer that really left in that window.
         if (newRoom.state === ConnectionState.Connected) {
           useVoiceStore.getState().evictWatcher(participant.identity);
         }
@@ -1047,10 +1048,13 @@ export function useLiveKit() {
             // A full reconnect republished every local track: the share goes
             // on if its publication came back, and ends here if not.
             settleScreenShareAfterReconnect(newRoom);
+            // Viewers kept while the room was not Connected stay only if they
+            // are here. A signal resume counts too: its signal is live again
+            // (SignalResumed) before the room is Connected (Resumed, after the
+            // ICE restart), so a viewer can really leave in between.
+            useVoiceStore.getState().retainWatchers(new Set(newRoom.remoteParticipants.keys()));
             if (fullReconnect) {
               fullReconnect = false;
-              // Viewers kept through the reconnect stay only if they are back.
-              useVoiceStore.getState().retainWatchers(new Set(newRoom.remoteParticipants.keys()));
               // The shares this viewer was watching come back as they are
               // published again (the rest through TrackPublished).
               for (const identity of resume.selfReconnected()) resumeIfPublished(newRoom, resume, identity);

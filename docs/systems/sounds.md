@@ -359,10 +359,12 @@ diff transitions and fires the streamer-only sounds.
 **Crash / drop cleanup.** `RoomEvent.ParticipantDisconnected` evicts the
 disconnecting participant identity from every watcher set
 (`voiceStore.evictWatcher`). The `stream_user_left` cue plays on the streamer
-side at that point. A disconnect seen while the room is not `Connected` is the
-room's own full reconnect dropping everyone, not a viewer leaving: nothing is
-evicted then, and at `Connected` `voiceStore.retainWatchers` drops the viewers
-that did not come back.
+side at that point. A disconnect seen while the room is not `Connected` may be
+the room's own full reconnect dropping everyone, so nothing is evicted then.
+Every return to `Connected` runs `voiceStore.retainWatchers`, which drops the
+viewers not in the room: those that did not come back after a full reconnect,
+and a viewer that really left during a signal resume (whose signal is live
+again before the room is `Connected`).
 
 **Self-stream-end suppression.** When the streamer themselves stops sharing
 (a real stop; a codec republish is not one, see above),
