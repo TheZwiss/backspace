@@ -449,6 +449,37 @@ describe('the REST routes answer from the same checks', () => {
     expect(body.details).toEqual({ max: MAX_MESSAGE_LENGTH });
   });
 
+  it.each<[string, (att: string) => Record<string, unknown>]>([
+    ['content that is not text', () => ({ content: 42 })],
+    ['content that is not text, with an attachment', (att) => ({ content: 42, attachments: [att] })],
+    ['attachments that are not a list of ids', () => ({ content: 'x', attachments: [7] })],
+    ['a reply target that is not an id', () => ({ content: 'x', replyToId: 7 })],
+  ])('answers 400 validation_failed to a create with %s', async (_label, build) => {
+    seedAttachment('att-own', 'alice');
+
+    const res = await app.inject({ method: 'POST', url: `/api/dm/${LIVE}/messages`, payload: build('att-own') });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('validation_failed');
+    expect(messagesIn(LIVE)).toHaveLength(0);
+    const att = testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'att-own')).get();
+    expect(att?.dmMessageId).toBeNull();
+  });
+
+  it('answers 400 content_required to a create or an edit whose body is null', async () => {
+    const id = seedMessage(LIVE, 'alice', 'before');
+    const headers = { 'content-type': 'application/json' };
+
+    const create = await app.inject({ method: 'POST', url: `/api/dm/${LIVE}/messages`, headers, payload: 'null' });
+    const edit = await app.inject({ method: 'PATCH', url: `/api/dm/messages/${id}`, headers, payload: 'null' });
+
+    for (const res of [create, edit]) {
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).code).toBe('content_required');
+    }
+    expect(messagesIn(LIVE).map((m) => m.content)).toEqual(['before']);
+  });
+
   it('creates in a live 1-on-1', async () => {
     const res = await app.inject({ method: 'POST', url: `/api/dm/${LIVE}/messages`, payload: { content: ' hi ' } });
     expect(res.statusCode).toBe(201);
