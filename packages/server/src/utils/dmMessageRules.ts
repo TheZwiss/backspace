@@ -19,6 +19,12 @@ import { dmMessageEditRefusal } from './dmSystemMessages.js';
  * row and the conversation's member rows live in the same table, so a
  * federated account acting here, or a replicated partner whose home deleted
  * them (tombstoned here by the identity delete), is judged by its own row.
+ *
+ * Membership: all three checks ask `isDmMember` against this instance's copy
+ * of the conversation. A member who left or was removed from a group no
+ * longer has a row there, so they can neither post nor edit or delete what
+ * they wrote before leaving. A member who closed a conversation keeps the
+ * row and keeps those rights.
  */
 
 export interface DmMessageRefusal {
@@ -113,9 +119,10 @@ export function checkDmMessageCreate(
 /**
  * May `editorId` replace the text of DM message `messageId` with `content`?
  *
- * Order: content, the message exists, `dmMessageEditRefusal` (a system
- * message cannot be edited, any other only by its author), then the
- * read-only rule. On success the value carries the row and the trimmed text.
+ * Order: content, the message exists, membership of the message's
+ * conversation (`not_dm_member`), `dmMessageEditRefusal` (a system message
+ * cannot be edited, any other only by its author), then the read-only rule.
+ * On success the value carries the row and the trimmed text.
  */
 export function checkDmMessageEdit(
   messageId: string,
@@ -127,6 +134,7 @@ export function checkDmMessageEdit(
 
   const message = getDb().select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!message) return refuse(404, 'message_not_found');
+  if (!isDmMember(message.dmChannelId, editorId)) return refuse(403, 'not_dm_member');
 
   const editRefusal = dmMessageEditRefusal(message, editorId);
   if (editRefusal) return refuse(403, editRefusal);
@@ -139,12 +147,14 @@ export function checkDmMessageEdit(
 /**
  * May `userId` delete DM message `messageId`?
  *
- * Order: the message exists, the user wrote it (there is no moderation
- * delete in DMs), then the read-only rule. On success the value is the row.
+ * Order: the message exists, membership of the message's conversation
+ * (`not_dm_member`), the user wrote it (there is no moderation delete in
+ * DMs), then the read-only rule. On success the value is the row.
  */
 export function checkDmMessageDelete(messageId: string, userId: string): DmMessageCheck<DmMessageRow> {
   const message = getDb().select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!message) return refuse(404, 'message_not_found');
+  if (!isDmMember(message.dmChannelId, userId)) return refuse(403, 'not_dm_member');
   if (message.userId !== userId) return refuse(403, 'not_message_author');
   if (isDeadOneOnOne(message.dmChannelId, userId)) return refuse(403, 'recipient_deleted');
   return { ok: true, value: message };

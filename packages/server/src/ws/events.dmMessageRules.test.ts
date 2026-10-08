@@ -205,6 +205,8 @@ const DEAD_REMOTE = 'dm-dead-remote';
 const DEAD_FOR_FEDERATED = 'dm-dead-federated';
 const LIVE = 'dm-live';
 const GROUP = 'dm-group';
+// A group alice and fed-carol wrote in and then left: only bob is still in it.
+const LEFT_GROUP = 'dm-left-group';
 
 beforeEach(() => {
   sqlite = new Database(':memory:');
@@ -222,6 +224,7 @@ beforeEach(() => {
   seedDm(DEAD_FOR_FEDERATED, ['fed-carol', 'gone']);
   seedDm(LIVE, ['alice', 'bob']);
   seedDm(GROUP, ['alice', 'bob', 'gone'], 'alice');
+  seedDm(LEFT_GROUP, ['bob'], 'bob');
 
   currentUserId = 'alice';
   sendToUser.mockClear();
@@ -359,6 +362,47 @@ describe('WS DM message writes where the rule does not apply', () => {
   });
 });
 
+describe('WS DM message edits and deletes by someone no longer in the conversation', () => {
+  it.each([
+    ['a user of this instance who left a group', 'alice'],
+    ['a federated account acting here that left a group', 'fed-carol'],
+  ])('refuses dm_message_edit from %s and keeps the text', async (_label, userId) => {
+    const id = seedMessage(LEFT_GROUP, userId, 'before');
+
+    await send({ type: 'dm_message_edit', messageId: id, content: 'after' }, userId);
+
+    expectOnlyRefusal('not_dm_member');
+    expect(messageRow(id)?.content).toBe('before');
+    expect(messageRow(id)?.editedAt).toBeNull();
+    expect(queueDmRelay).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a user of this instance who left a group', 'alice'],
+    ['a federated account acting here that left a group', 'fed-carol'],
+  ])('refuses dm_message_delete from %s and keeps the message', async (_label, userId) => {
+    const id = seedMessage(LEFT_GROUP, userId, 'keep me');
+
+    await send({ type: 'dm_message_delete', messageId: id }, userId);
+
+    expectOnlyRefusal('not_dm_member');
+    expect(messageRow(id)).toBeDefined();
+    expect(queueDmMessageDeleteRelay).not.toHaveBeenCalled();
+  });
+
+  it('refuses an edit and a delete in a 1-on-1 the user is not in', async () => {
+    const id = seedMessage(LIVE, 'bob', 'his');
+
+    await send({ type: 'dm_message_edit', messageId: id, content: 'x' }, 'fed-carol');
+    expectOnlyRefusal('not_dm_member');
+
+    sendToWs.mockClear();
+    await send({ type: 'dm_message_delete', messageId: id }, 'fed-carol');
+    expectOnlyRefusal('not_dm_member');
+    expect(messageRow(id)?.content).toBe('his');
+  });
+});
+
 describe('every other refusal on the WS DM message paths carries a code', () => {
   it.each<[string, Record<string, unknown>, string, Record<string, unknown>?]>([
     ['create without dmChannelId', { type: 'dm_message_create', content: 'x' }, 'validation_failed'],
@@ -435,6 +479,21 @@ describe('the REST routes answer from the same checks', () => {
     }
     expect(messagesIn(DEAD_REMOTE)).toHaveLength(1);
     expect(messageRow(id)?.content).toBe('before');
+  });
+
+  it('refuses an edit and a delete by a member who left the group', async () => {
+    const id = seedMessage(LEFT_GROUP, 'alice', 'before');
+
+    const edit = await app.inject({ method: 'PATCH', url: `/api/dm/messages/${id}`, payload: { content: 'after' } });
+    const del = await app.inject({ method: 'DELETE', url: `/api/dm/messages/${id}` });
+
+    for (const res of [edit, del]) {
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).code).toBe('not_dm_member');
+    }
+    expect(messageRow(id)?.content).toBe('before');
+    expect(queueDmRelay).not.toHaveBeenCalled();
+    expect(queueDmMessageDeleteRelay).not.toHaveBeenCalled();
   });
 
   it('sends the length limit with content_too_long', async () => {

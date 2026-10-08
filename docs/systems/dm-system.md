@@ -499,18 +499,20 @@ Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row d
 
 **Endpoint:** `PATCH /api/dm/messages/:id` -- `dm.ts:dmRoutes`
 
-Checks (`checkDmMessageEdit`, shared with WS `dm_message_edit`), in order: content present (`content_required`) and within `MAX_MESSAGE_LENGTH` (`content_too_long`), the message exists (`404 message_not_found`), `dmMessageEditRefusal` (`system_message_immutable`, then author-only `not_message_author`), then `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics"). Then:
+Checks (`checkDmMessageEdit`, shared with WS `dm_message_edit`), in order: content present (`content_required`) and within `MAX_MESSAGE_LENGTH` (`content_too_long`), the message exists (`404 message_not_found`), the caller is a member of the message's conversation (`isDmMember`, `403 not_dm_member`), `dmMessageEditRefusal` (`system_message_immutable`, then author-only `not_message_author`), then `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics"). Then:
 
 1. Update content and set `editedAt`
 2. Delete old embeds, re-resolve new embeds asynchronously
 3. Broadcast `dm_message_updated` to all members
 4. Queue federation relay via `queueDmRelay(updated, channelId, 'update')`
 
+A member who left or was removed from a group no longer has a `dm_members` row in it, so they cannot edit or delete the messages they wrote there before; the check reads this instance's copy of the conversation, so it holds on every instance that hosts one. A member who closed a conversation keeps the row.
+
 ### Delete Message
 
 **Endpoint:** `DELETE /api/dm/messages/:id` -- `dm.ts:dmRoutes`
 
-Checks (`checkDmMessageDelete`, shared with WS `dm_message_delete`), in order: the message exists (`404 message_not_found`), author-only (`403 not_message_author`), then `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics"). Then:
+Checks (`checkDmMessageDelete`, shared with WS `dm_message_delete`), in order: the message exists (`404 message_not_found`), the caller is a member of the message's conversation (`isDmMember`, `403 not_dm_member`), author-only (`403 not_message_author`), then `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics"). Then:
 
 1. Collect attachment filenames before deletion
 2. Delete attachments, reactions, and message atomically in a transaction
