@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Modal } from './Modal';
 import { useUIStore } from '../../stores/uiStore';
@@ -85,30 +86,26 @@ describe('Modal', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus();
   });
 
-  it('stacks a dialog opened from inside another dialog above it', () => {
-    render(
-      <Modal isOpen onClose={() => {}} title="Outer">
-        <Modal isOpen onClose={() => {}} title="Inner">
-          <p>Inner body</p>
+  it('appends a dialog opened from inside an open dialog after it', () => {
+    function Outer() {
+      const [innerOpen, setInnerOpen] = useState(false);
+      return (
+        <Modal isOpen onClose={() => {}} title="Outer">
+          <button type="button" onClick={() => setInnerOpen(true)}>Open inner</button>
+          <Modal isOpen={innerOpen} onClose={() => setInnerOpen(false)} title="Inner">
+            <p>Inner body</p>
+          </Modal>
         </Modal>
-      </Modal>,
-    );
+      );
+    }
+    render(<Outer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open inner' }));
     const outer = overlayOf(screen.getByRole('heading', { name: 'Outer' }));
     const inner = overlayOf(screen.getByRole('heading', { name: 'Inner' }));
     expect(outer).not.toContainElement(inner);
     expect(inner.parentElement).toBe(document.body);
-    // Both open in the same render, so the inner overlay is appended first;
-    // its z-index is what keeps it on top.
-    expect(Number(inner.style.zIndex)).toBeGreaterThan(Number(outer.style.zIndex));
-  });
-
-  it('keeps a top-level dialog at the base layer', () => {
-    render(
-      <Modal isOpen onClose={() => {}} title="Top">
-        <p>Body</p>
-      </Modal>,
-    );
-    expect(overlayOf(screen.getByRole('heading', { name: 'Top' })).style.zIndex).toBe('200');
+    // Both overlays share one z-index, so document order puts the inner on top.
+    expect(outer.compareDocumentPosition(inner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows the bottom sheet on mobile, also at the document body', () => {

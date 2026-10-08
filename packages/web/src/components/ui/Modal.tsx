@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -23,31 +23,16 @@ interface ModalProps {
  * the dialog is then sized and clipped to it (the 72px space strip is
  * `.glass-strip`, a dialog opened from its menu rendered inside the strip).
  * Callers mount a Modal wherever its state lives and do not portal it again.
- *
- * A Modal rendered inside another Modal's content stacks one level above it.
- * All overlays are siblings at the portal target, so document order alone
- * would decide, and a parent and child that open in the same render are
- * appended child first.
+ * Overlays stack by portal order: one opened from inside an open Modal is
+ * appended after it.
  */
 export function Modal(props: ModalProps) {
   const portalContainer = usePortalContainer();
-  const depth = useContext(ModalDepthContext);
   if (!props.isOpen) return null;
-  return createPortal(
-    <ModalDepthContext.Provider value={depth + 1}>
-      <ModalSurface {...props} zIndex={MODAL_BASE_Z_INDEX + depth} />
-    </ModalDepthContext.Provider>,
-    portalContainer,
-  );
+  return createPortal(<ModalSurface {...props} />, portalContainer);
 }
 
-/** The overlay z-index of a top-level Modal; nested ones add their depth. */
-const MODAL_BASE_Z_INDEX = 200;
-
-/** How many Modals enclose this point of the tree. */
-const ModalDepthContext = createContext(0);
-
-function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', zIndex }: ModalProps & { zIndex: number }) {
+function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default' }: ModalProps) {
   const { t } = useTranslation('common');
   const isMobile = useUIStore((s) => s.isMobile);
   const closeLabel = size === 'settings' ? t('chrome.closeSettings') : t('actions.close');
@@ -66,7 +51,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
-      <div className="fixed inset-0 flex flex-col bg-surface-base animate-fade-in" style={{ zIndex }}>
+      <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
             {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
@@ -91,7 +76,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile bottom sheet style
   if (isMobile && mobileStyle === 'sheet') {
     return (
-      <div className="fixed inset-0 flex items-end justify-center animate-fade-in" style={{ zIndex }}>
+      <div className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -122,7 +107,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Settings size variant — large glass overlay for settings screens
   if (size === 'settings') {
     return (
-      <div className="fixed inset-0 flex items-center justify-center animate-fade-in" style={{ zIndex }}>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -146,7 +131,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
 
   // Default centered dialog (desktop and mobile default)
   return (
-    <div className="fixed inset-0 flex items-center justify-center animate-fade-in" style={{ zIndex }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
