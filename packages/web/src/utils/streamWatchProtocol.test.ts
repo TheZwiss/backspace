@@ -3,8 +3,9 @@ import {
   encodeStreamWatch,
   parseStreamWatch,
   isStreamWatchPayload,
-  encodeStreamRepublish,
-  isStreamRepublish,
+  encodeShareSignal,
+  parseShareSignal,
+  type ShareSignal,
   streamWatchFor,
   streamWatchKey,
 } from './streamWatchProtocol';
@@ -40,26 +41,29 @@ describe('streamWatchProtocol', () => {
   });
 });
 
-describe('stream_republish', () => {
-  it('encodes the wire format the viewer checks', () => {
-    const encoded = encodeStreamRepublish();
+describe('share signals', () => {
+  const signals: ShareSignal[] = ['stream_republish', 'stream_resume', 'stream_stop'];
+
+  it.each(signals)('encodes %s in the wire format the viewer checks', (signal) => {
+    const encoded = encodeShareSignal(signal);
     expect(Object.prototype.toString.call(encoded)).toBe('[object Uint8Array]');
-    expect(JSON.parse(new TextDecoder().decode(encoded))).toEqual({ type: 'stream_republish' });
-    expect(isStreamRepublish(encoded)).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(encoded))).toEqual({ type: signal });
+    expect(parseShareSignal(encoded)).toBe(signal);
   });
 
-  it('is ignored by the receivers older clients run', () => {
+  it.each(signals)('%s is ignored by the receivers older clients run', (signal) => {
     // An older viewer tries stream_watch, then looks for `deafen`; neither may match.
-    const encoded = encodeStreamRepublish();
+    const encoded = encodeShareSignal(signal);
     expect(parseStreamWatch(encoded)).toBeNull();
     const msg = JSON.parse(new TextDecoder().decode(encoded)) as { type: string };
     expect(msg.type).not.toBe('deafen');
   });
 
   it('rejects other payloads', () => {
-    expect(isStreamRepublish(encodeStreamWatch({ type: 'stream_watch', target: 'u', watching: true }))).toBe(false);
-    expect(isStreamRepublish(new TextEncoder().encode('not json'))).toBe(false);
-    expect(isStreamRepublish(new TextEncoder().encode('null'))).toBe(false);
+    expect(parseShareSignal(encodeStreamWatch({ type: 'stream_watch', target: 'u', watching: true }))).toBeNull();
+    expect(parseShareSignal(new TextEncoder().encode(JSON.stringify({ type: 'deafen', deafened: true })))).toBeNull();
+    expect(parseShareSignal(new TextEncoder().encode('not json'))).toBeNull();
+    expect(parseShareSignal(new TextEncoder().encode('null'))).toBeNull();
   });
 });
 

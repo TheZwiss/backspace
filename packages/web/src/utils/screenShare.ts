@@ -4,7 +4,7 @@ import type { ScreenShareConfig, ScreenShareAudioState } from '../stores/voiceSt
 import { getStreamHostLimits } from './streamHostLimits';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
-import { encodeStreamRepublish } from './streamWatchProtocol';
+import { encodeShareSignal, type ShareSignal } from './streamWatchProtocol';
 import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
 import { useUIStore } from '../stores/uiStore';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
@@ -542,7 +542,7 @@ export async function republishScreenShare(room: Room): Promise<void> {
   // unpublish because that is the order viewers must see; if it cannot be sent
   // the swap still goes ahead and viewers see the share end, as before.
   try {
-    await room.localParticipant.publishData(encodeStreamRepublish(), { reliable: true });
+    await room.localParticipant.publishData(encodeShareSignal('stream_republish'), { reliable: true });
   } catch (err) {
     console.warn('[ScreenShare] Could not announce the republish to viewers:', err);
   }
@@ -565,6 +565,7 @@ export async function republishScreenShare(room: Room): Promise<void> {
     deactivateHwOverdrive();
     endScreenShareAudio(room);
     useVoiceStore.setState({ isScreenSharing: false });
+    announceShare(room, 'stream_stop');
     // The swap suppressed handleScreenShareUnpublished, and a video publish
     // that never landed emits no rollback unpublish either, so nothing else
     // will carry the stop to the clients outside the LiveKit room. Without
@@ -1045,6 +1046,9 @@ function scheduleEncoderDetection(
 // ---------------------------------------------------------------------------
 
 export async function stopScreenShare(room: Room): Promise<void> {
+  // Sent first and not awaited: a stop must not wait on the data channel.
+  // Viewers handle the message on either side of the removal.
+  announceShare(room, 'stream_stop');
   _stopping = true;
   try {
     for (const source of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
@@ -1133,11 +1137,30 @@ export function settleScreenShareAfterReconnect(room: Room): void {
   if (useVoiceStore.getState().screenShareAudio === 'published' && !audioBack) {
     setScreenShareAudioState(idleScreenShareAudioState());
   }
+  // The reconnect replaced this participant for everyone else, so viewers
+  // saw the share end. Those who were watching it watch again.
+  if (room.state === ConnectionState.Connected) announceShare(room, 'stream_resume');
+}
+
+/**
+ * Tell the room's viewers about this share (`ShareSignal`). Fire and forget:
+ * a viewer that misses it forgets the share when its window runs out, and a
+ * room that is gone has nobody to tell.
+ */
+function announceShare(room: Room, signal: ShareSignal): void {
+  if (room.state === ConnectionState.Disconnected) return;
+  const warn = (err: unknown) => console.warn('[ScreenShare] Could not send %s to viewers:', signal, err);
+  try {
+    room.localParticipant.publishData(encodeShareSignal(signal), { reliable: true }).catch(warn);
+  } catch (err) {
+    warn(err);
+  }
 }
 
 /** The share is over without stopScreenShare: the OS stop bar, a source that ended, a reconnect that lost it. */
 function endLocalShare(room: Room): void {
   _reconnectingRoom = null;
+  announceShare(room, 'stream_stop');
   deactivateHwOverdrive();
   endScreenShareAudio(room);
   _publishedScreenShareCodec = null;

@@ -148,6 +148,8 @@ export interface VoiceState {
   recordStreamWatch: (sharerIdentity: string, watcherIdentity: string, watching: boolean) => void;
   clearStreamWatchers: (sharerIdentity: string) => void;
   evictWatcher: (watcherIdentity: string) => void;
+  /** Drop every watcher not among `present` (the room's participants after a full reconnect). */
+  retainWatchers: (present: ReadonlySet<string>) => void;
   soundEffectVolume: number;                 // 0-200 (100 = default)
   setSoundEffectVolume: (volume: number) => void;
   messageSoundAllChannels: boolean;          // false (default) = DM + mention only; true = every channel
@@ -372,6 +374,18 @@ export const useVoiceStore = create<VoiceState>()(
               else newMap.set(streamerId, next);
               mutated = true;
             }
+          }
+          return mutated ? { streamWatchers: newMap } : state;
+        });
+      },
+      retainWatchers: (present) => {
+        set((state) => {
+          let mutated = false;
+          const newMap = new Map<string, Set<string>>();
+          for (const [streamerId, watchers] of state.streamWatchers) {
+            const next = new Set([...watchers].filter((w) => present.has(w)));
+            if (next.size !== watchers.size) mutated = true;
+            if (next.size > 0) newMap.set(streamerId, next);
           }
           return mutated ? { streamWatchers: newMap } : state;
         });
