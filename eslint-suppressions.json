@@ -73,11 +73,6 @@
       "count": 2
     }
   },
-  "packages/server/src/routes/federation/events/calls.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "packages/server/src/routes/federation/events/dispatch.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
