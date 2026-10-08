@@ -10,6 +10,8 @@ import {
   handleCameraAction,
   handleDisconnectAction,
   handleScreenShareAction,
+  toggleDeafenFromControl,
+  toggleMuteFromControl,
 } from '../../utils/voiceActions';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { deriveGridTiles } from '../../hooks/useLiveKit';
@@ -39,8 +41,6 @@ export function MobileVoiceFullScreen() {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-  const toggleMute = useVoiceStore((s) => s.toggleMic);
-  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
@@ -385,7 +385,7 @@ export function MobileVoiceFullScreen() {
       >
         {/* Mute */}
         <button
-          onClick={toggleMute}
+          onClick={toggleMuteFromControl}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
             isMuted
               ? 'bg-accent-rose/20 text-accent-rose'
@@ -417,7 +417,7 @@ export function MobileVoiceFullScreen() {
 
         {/* Deafen */}
         <button
-          onClick={toggleDeafen}
+          onClick={toggleDeafenFromControl}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
             isDeafened
               ? 'bg-accent-rose/20 text-accent-rose'

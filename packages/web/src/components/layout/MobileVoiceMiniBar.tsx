@@ -4,7 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useActiveDmCall } from '../../hooks/useActiveDmCall';
-import { handleDisconnectAction, reconnectVoice } from '../../utils/voiceActions';
+import { handleDisconnectAction, reconnectVoice, toggleDeafenFromControl, toggleMuteFromControl } from '../../utils/voiceActions';
 
 /**
  * The bar above the bottom navigation while the user is in voice: a voice
@@ -18,8 +18,6 @@ export function MobileVoiceMiniBar() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
-  const toggleMute = useVoiceStore((s) => s.toggleMic);
-  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const participants = useVoiceStore((s) => s.participants);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
@@ -95,7 +93,7 @@ export function MobileVoiceMiniBar() {
       {/* Quick controls */}
       <div className="flex items-center gap-1 shrink-0">
         <button
-          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+          onClick={(e) => { e.stopPropagation(); toggleMuteFromControl(); }}
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isMuted ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
           }`}
@@ -114,7 +112,7 @@ export function MobileVoiceMiniBar() {
         </button>
 
         <button
-          onClick={(e) => { e.stopPropagation(); toggleDeafen(); }}
+          onClick={(e) => { e.stopPropagation(); toggleDeafenFromControl(); }}
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isDeafened ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
           }`}

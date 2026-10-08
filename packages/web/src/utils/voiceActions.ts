@@ -3,7 +3,7 @@ import { useVoiceStore, type ActiveDmCall } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
 import { wsSend } from '../hooks/useWebSocket';
-import { getChannelOrigin } from '../stores/spaceStore';
+import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit, preArmMicrophone } from './voice';
 import { dmCallOrigin, dmCallRoomKey, sendDmCallEnd } from './dmCall';
 import { CAMERA_PRESET, stopScreenShare } from './screenShare';
@@ -50,6 +50,37 @@ export function handleDeafenAction(isSpaceDeafened: boolean): void {
   useVoiceStore.getState().toggleDeafen();
   broadcastVoiceStatus();
   broadcastDeafenViaLiveKit();
+}
+
+/**
+ * The space mute and deafen a moderator holds on the user in the voice
+ * channel they are in. Both false outside a voice channel (a DM call).
+ */
+export function getSpaceEnforcementState(): { isSpaceMuted: boolean; isSpaceDeafened: boolean } {
+  const { currentVoiceChannelId, spaceMutedUserIds, spaceDeafenedUserIds } = useVoiceStore.getState();
+  if (!currentVoiceChannelId) return { isSpaceMuted: false, isSpaceDeafened: false };
+  const myId = getMyUserIdForOrigin(getChannelOrigin(currentVoiceChannelId));
+  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
+  const spaceKey = spaceId && myId ? `${spaceId}:${myId}` : '';
+  return {
+    isSpaceMuted: spaceMutedUserIds.has(spaceKey),
+    isSpaceDeafened: spaceDeafenedUserIds.has(spaceKey),
+  };
+}
+
+/**
+ * Toggle mute from a control that does not track the space restrictions
+ * itself (the mobile call screens, the keybinds): the same path as the
+ * desktop control bar, broadcast included.
+ */
+export function toggleMuteFromControl(): void {
+  const { isSpaceMuted, isSpaceDeafened } = getSpaceEnforcementState();
+  handleMuteAction(isSpaceMuted, isSpaceDeafened);
+}
+
+/** Toggle deafen from a control that does not track the space restrictions itself. */
+export function toggleDeafenFromControl(): void {
+  handleDeafenAction(getSpaceEnforcementState().isSpaceDeafened);
 }
 
 /**

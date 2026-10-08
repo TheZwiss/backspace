@@ -56,6 +56,8 @@ vi.mock('../../utils/voiceActions', async () => ({
   handleCameraAction: vi.fn(),
   handleDisconnectAction: vi.fn(),
   handleScreenShareAction: vi.fn(),
+  toggleMuteFromControl: vi.fn(),
+  toggleDeafenFromControl: vi.fn(),
 }));
 
 function makeFakeMediaStreamTrack(
@@ -323,6 +325,19 @@ describe('MobileVoiceFullScreen', () => {
     expect(btn).toBeTruthy();
     btn?.click();
     expect(handleScreenShareAction).toHaveBeenCalled();
+  });
+});
+
+describe('MobileVoiceFullScreen mute and deafen', () => {
+  // The same path as the desktop controls, which broadcasts the change
+  // (voiceActions.toggleMuteFromControl and its tests in MobileVoiceMiniBar).
+  it('mutes and deafens through the shared voice actions', async () => {
+    const { toggleMuteFromControl, toggleDeafenFromControl } = await import('../../utils/voiceActions');
+    renderScreen();
+    screen.getByRole('button', { name: 'Mute' }).click();
+    screen.getByRole('button', { name: 'Deafen' }).click();
+    expect(toggleMuteFromControl).toHaveBeenCalledTimes(1);
+    expect(toggleDeafenFromControl).toHaveBeenCalledTimes(1);
   });
 });
 

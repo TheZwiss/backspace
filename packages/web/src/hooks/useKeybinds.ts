@@ -2,31 +2,13 @@ import { useEffect, useRef } from 'react';
 import { useKeybindStore, Keybind } from '../stores/keybindStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { isElectron } from '../platform/platform';
-import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../utils/voiceActions';
+import { toggleMuteFromControl, toggleDeafenFromControl, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../utils/voiceActions';
 import { broadcastVoiceStatus } from '../utils/voice';
-import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { useKeybindPortalStatus } from './useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Resolve space-mute/deafen state for the current voice session */
-function getSpaceEnforcementState(): { isSpaceMuted: boolean; isSpaceDeafened: boolean } {
-  const vs = useVoiceStore.getState();
-  const { currentVoiceChannelId, spaceMutedUserIds, spaceDeafenedUserIds } = vs;
-  if (!currentVoiceChannelId) return { isSpaceMuted: false, isSpaceDeafened: false };
-
-  const origin = getChannelOrigin(currentVoiceChannelId);
-  const myId = getMyUserIdForOrigin(origin);
-  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
-  const spaceKey = spaceId && myId ? `${spaceId}:${myId}` : '';
-
-  return {
-    isSpaceMuted: spaceMutedUserIds.has(spaceKey),
-    isSpaceDeafened: spaceDeafenedUserIds.has(spaceKey),
-  };
-}
 
 /** Dedup rapid duplicate dispatches (native hook + web fallback both fire when focused) */
 const lastDispatch: Record<string, number> = {};
@@ -41,14 +23,12 @@ function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate =
   const voice = useVoiceStore.getState();
   if (!voice.currentVoiceChannelId) return;
 
-  const { isSpaceMuted, isSpaceDeafened } = getSpaceEnforcementState();
-
   switch (actionId) {
     case 'toggleMute':
-      if (pressed) handleMuteAction(isSpaceMuted, isSpaceDeafened);
+      if (pressed) toggleMuteFromControl();
       break;
     case 'toggleDeafen':
-      if (pressed) handleDeafenAction(isSpaceDeafened);
+      if (pressed) toggleDeafenFromControl();
       break;
     case 'toggleCamera':
       if (pressed) handleCameraAction();

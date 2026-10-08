@@ -68,3 +68,35 @@ describe('MobileVoiceMiniBar during a DM call', () => {
     expect(screen.getByText(i18n.t('voice:status.voiceCall'))).toBeInTheDocument();
   });
 });
+
+describe('MobileVoiceMiniBar mute and deafen', () => {
+  // The other members learn of a mute or deafen from the voice_status this
+  // sends, as from the desktop controls.
+  it('tells the server when the user mutes', () => {
+    useVoiceStore.setState({ isMuted: false, isDeafened: false });
+    render(<MobileVoiceMiniBar />);
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('voice:controls.mute') }));
+    expect(useVoiceStore.getState().isMuted).toBe(true);
+    expect(wsSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'voice_status', isMuted: true }), '');
+  });
+
+  it('tells the server when the user deafens', () => {
+    useVoiceStore.setState({ isMuted: false, isDeafened: false });
+    render(<MobileVoiceMiniBar />);
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('voice:controls.deafen') }));
+    expect(wsSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'voice_status', isDeafened: true }), '');
+  });
+
+  it('leaves the mute alone while a moderator holds a space mute', () => {
+    useSpaceStore.setState({ channelToSpaceMap: new Map([['voice-1', 'space-1']]) });
+    useVoiceStore.setState({
+      activeDmCall: null, currentVoiceChannelId: 'voice-1', isMuted: false,
+      spaceMutedUserIds: new Set(['space-1:me']),
+    });
+    useAuthStore.setState({ user: { id: 'me', username: 'me' } as User, myRowIds: new Map([['', 'me']]) });
+    render(<MobileVoiceMiniBar />);
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('voice:controls.mute') }));
+    expect(useVoiceStore.getState().isMuted).toBe(false);
+    expect(wsSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'voice_status' }), expect.anything());
+  });
+});
