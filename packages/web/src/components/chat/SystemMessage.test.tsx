@@ -11,7 +11,12 @@ vi.mock('../../stores/spaceStore', () => ({
     selector({ joinByCode: vi.fn() }),
   getApiForOrigin: vi.fn(),
 }));
-vi.mock('../../api/client', () => ({
+vi.mock('../../utils/inviteJoinRequest', () => ({
+  sendInviteJoinRequest: vi.fn(),
+}));
+// HttpError stays real: utils/joinErrors extends it when the card loads.
+vi.mock('../../api/client', async (importOriginal) => ({
+  HttpError: (await importOriginal<typeof import('../../api/client')>()).HttpError,
   api: {},
   createApiClient: vi.fn(),
 }));
