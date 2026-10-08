@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
-import { wsSend } from '../../hooks/useWebSocket';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { handleCameraAction, handleScreenShareAction } from '../../utils/voiceActions';
+import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -38,8 +37,6 @@ export function VoiceControls() {
   const canSpeak = isDmCall || hasPermissionBit(channelPerms, PermissionBits.SPEAK);
   const canStream = isDmCall || hasPermissionBit(channelPerms, PermissionBits.STREAM);
 
-  const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
-
   // A share that ends outside the menu (OS "Stop sharing" bar, track loss,
   // keybind) must not leave a stale settings popover anchored to the button.
   useEffect(() => {
@@ -66,24 +63,8 @@ export function VoiceControls() {
     handleScreenShareAction();
   };
 
-  const handleDisconnect = () => {
-    const { activeDmCall, disconnectFn, federatedCallId, callOrigin } = useVoiceStore.getState();
-    if (activeDmCall) {
-      const origin = callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId, federatedCallId }, origin);
-      useVoiceStore.getState().setActiveDmCall(null);
-    } else {
-      wsSend({ type: 'voice_leave' }, voiceOrigin);
-      useVoiceStore.getState().leaveVoice();
-    }
-    if (disconnectFn) disconnectFn();
-  };
-
-  const handleRetry = () => {
-    const { connectFn, activeDmCall, currentVoiceChannelId } = useVoiceStore.getState();
-    const target = activeDmCall?.dmChannelId ?? currentVoiceChannelId;
-    if (connectFn && target) void connectFn(target, !!activeDmCall);
-  };
+  const handleDisconnect = handleDisconnectAction;
+  const handleRetry = reconnectVoice;
 
   const connectionDetail = connectionError === 'network_disconnect'
     ? t('voice:status.connectionLost')

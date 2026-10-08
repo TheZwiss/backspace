@@ -1,40 +1,36 @@
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
-import { wsSend } from '../../hooks/useWebSocket';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { parseFederatedUsername } from '../../utils/identity';
+import { sendDmCallReject } from '../../utils/dmCall';
+import { acceptIncomingDmCall } from '../../utils/voiceActions';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
 import type { User } from '@backspace/shared';
 
 /**
- * After a decline the ring's federated call data (`federatedCallId`,
- * `callOrigin`) names no call this client holds. It is cleared, unless the
- * client holds another call those fields belong to.
+ * Decline the call ringing in: the decline goes where the ring came from,
+ * with the ids it came with, and only the ring's slot clears. A call the
+ * client is in keeps its own ids and origin.
  */
-function forgetDeclinedRing(): void {
-  const { outgoingCall, activeDmCall, clearFederatedCallData } = useVoiceStore.getState();
-  if (!outgoingCall && !activeDmCall) clearFederatedCallData();
+function declineRing(): void {
+  const { incomingCall, setIncomingCall } = useVoiceStore.getState();
+  if (!incomingCall) return;
+  sendDmCallReject(incomingCall);
+  setIncomingCall(null);
 }
 
 export function IncomingCallModal() {
   const { t } = useTranslation(['voice', 'common']);
   const incomingCall = useVoiceStore((s) => s.incomingCall);
-  const setIncomingCall = useVoiceStore((s) => s.setIncomingCall);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-dismiss after 30 seconds
   useEffect(() => {
     if (incomingCall) {
-      timerRef.current = setTimeout(() => {
-        // Auto-reject after timeout
-        const { callOrigin, federatedCallId } = useVoiceStore.getState();
-        const origin = callOrigin || (incomingCall.dmChannelId ? getChannelOrigin(incomingCall.dmChannelId) : undefined);
-        wsSend({ type: 'dm_call_reject', dmChannelId: incomingCall.dmChannelId, federatedCallId }, origin);
-        setIncomingCall(null);
-        forgetDeclinedRing();
-      }, 30000);
+      // Auto-reject after timeout
+      timerRef.current = setTimeout(declineRing, 30000);
     }
     return () => {
       if (timerRef.current) {
@@ -42,7 +38,7 @@ export function IncomingCallModal() {
         timerRef.current = null;
       }
     };
-  }, [incomingCall, setIncomingCall]);
+  }, [incomingCall]);
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
 
@@ -62,32 +58,16 @@ export function IncomingCallModal() {
   const callerAvatarId = callerMember?.homeUserId ?? incomingCall.callerId;
   const { baseName: callerBaseName } = parseFederatedUsername(incomingCall.callerName);
 
+  // Accepting arms the microphone and connects inside this tap (iOS needs
+  // the gesture), and the call becomes active at once (`acceptIncomingDmCall`).
   const handleAccept = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    const dmChannelId = incomingCall.dmChannelId;
-    const { callOrigin, federatedCallId, setActiveDmCall, connectFn } = useVoiceStore.getState();
-    const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
-    const callDmId = dmChannelId || federatedCallId!;
-
-    // Immediately transition to active call state — don't wait for server response.
-    // The dm_call_accepted event races with connectFn's async AudioContext resume,
-    // causing isLiveKitConnected to be false when it arrives → activeDmCall never set.
-    setIncomingCall(null);
-    setActiveDmCall({ dmChannelId: callDmId });
-
-    wsSend({ type: 'dm_call_accept', dmChannelId, federatedCallId }, origin);
-    // Connect directly within gesture context (required for iOS audio permission)
-    if (connectFn) connectFn(callDmId, true);
+    acceptIncomingDmCall();
   };
 
   const handleDecline = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    const { callOrigin, federatedCallId } = useVoiceStore.getState();
-    const dmChannelId = incomingCall.dmChannelId;
-    const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
-    wsSend({ type: 'dm_call_reject', dmChannelId, federatedCallId }, origin);
-    setIncomingCall(null);
-    forgetDeclinedRing();
+    declineRing();
   };
 
   return (

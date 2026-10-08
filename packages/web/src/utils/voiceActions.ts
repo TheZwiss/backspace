@@ -1,10 +1,11 @@
 import type { VideoCaptureOptions } from 'livekit-client';
-import { useVoiceStore } from '../stores/voiceStore';
+import { useVoiceStore, type ActiveDmCall } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
 import { wsSend } from '../hooks/useWebSocket';
 import { getChannelOrigin } from '../stores/spaceStore';
-import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from './voice';
+import { broadcastVoiceStatus, broadcastDeafenViaLiveKit, preArmMicrophone } from './voice';
+import { dmCallOrigin, dmCallRoomKey, sendDmCallEnd } from './dmCall';
 import { CAMERA_PRESET, stopScreenShare } from './screenShare';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 
@@ -135,15 +136,23 @@ export function canStartDmCall(state: DmCallSlots): boolean {
   return state.outgoingCall === null && state.incomingCall === null && state.activeDmCall === null;
 }
 
+/** What a call button asks for besides the call itself. */
+export interface DmCallOptions {
+  /** A video call: the camera goes on once the call has connected. */
+  withCamera?: boolean;
+}
+
 /**
  * Ring the other members of `dmChannelId`. Routed to the instance that serves
  * the DM channel (`getChannelOrigin`). Returns false, sending nothing, when
- * `canStartDmCall` refuses.
+ * `canStartDmCall` refuses. The microphone is armed here, inside the tap, as
+ * `joinVoiceChannel` does (`preArmMicrophone`).
  */
-export function startDmCall(dmChannelId: string): boolean {
+export function startDmCall(dmChannelId: string, options: DmCallOptions = {}): boolean {
   const voice = useVoiceStore.getState();
   if (!canStartDmCall(voice)) return false;
-  voice.setOutgoingCall({ dmChannelId });
+  preArmMicrophone();
+  voice.setOutgoingCall({ dmChannelId, withCamera: options.withCamera === true });
   wsSend({ type: 'dm_call_start', dmChannelId }, getChannelOrigin(dmChannelId));
   return true;
 }
@@ -160,41 +169,100 @@ export function isDmCallRunning(state: Pick<ReturnType<typeof useVoiceStore.getS
 }
 
 /**
+ * Connect LiveKit to the call the client just entered, within the click (iOS
+ * needs the gesture for audio), and turn the camera on once connected when
+ * the call was asked for with it.
+ */
+function connectToDmCall(call: ActiveDmCall, withCamera: boolean): void {
+  const { connectFn } = useVoiceStore.getState();
+  if (!connectFn) return;
+  const roomKey = dmCallRoomKey(call);
+  connectFn(roomKey, true)
+    .then(() => {
+      if (withCamera) return turnCameraOnInDmCall(roomKey);
+      return undefined;
+    })
+    .catch((err: unknown) => {
+      console.error('[voiceActions] DM call connect failed:', err);
+    });
+}
+
+/**
  * Join the call already running in `dmChannelId`, the same way accepting its
  * ring does: the call becomes active here at once and LiveKit connects within
- * the click (iOS needs the gesture for audio). Returns false, sending
- * nothing, when `canStartDmCall` refuses.
+ * the click. Returns false, sending nothing, when `canStartDmCall` refuses.
  */
-export function joinDmCall(dmChannelId: string): boolean {
+export function joinDmCall(dmChannelId: string, options: DmCallOptions = {}): boolean {
   const voice = useVoiceStore.getState();
   if (!canStartDmCall(voice)) return false;
-  // This call is joined through the DM's own instance. Federated call data
-  // left by an earlier ring belongs to no call this client holds, and the
-  // hang-up must not follow its `callOrigin`.
-  voice.clearFederatedCallData();
-  voice.setActiveDmCall({ dmChannelId });
+  preArmMicrophone();
+  // Joined through the DM's own instance: the call is named by the DM's id
+  // and its hang-up goes there.
+  const call: ActiveDmCall = { dmChannelId, federatedCallId: null, callOrigin: null, livekit: null };
+  voice.setActiveDmCall(call);
   wsSend({ type: 'dm_call_accept', dmChannelId }, getChannelOrigin(dmChannelId));
-  if (voice.connectFn) {
-    voice.connectFn(dmChannelId, true).catch((err: unknown) => {
-      console.error('[voiceActions] DM call join failed:', err);
-    });
-  }
+  connectToDmCall(call, options.withCamera === true);
   return true;
 }
 
 /**
- * Stop ringing `dmChannelId` before anyone answered. A federated call is
- * ended where it was created (`callOrigin`, with its `federatedCallId`), a
- * local one on the DM channel's origin. Returns false, sending nothing, when
- * the outgoing call belongs to another DM or there is none.
+ * Answer the call ringing in. The call becomes active at once, without
+ * waiting for `dm_call_accepted` (that event races with the connect's async
+ * AudioContext resume), and keeps the ids and the origin the ring came with,
+ * so the hang-up goes where the ring came from. The microphone is armed and
+ * LiveKit connects within the tap. Returns false when nothing rings.
+ */
+export function acceptIncomingDmCall(): boolean {
+  const voice = useVoiceStore.getState();
+  const incoming = voice.incomingCall;
+  if (!incoming) return false;
+  preArmMicrophone();
+  const call: ActiveDmCall = incoming.dmChannelId !== null
+    ? { dmChannelId: incoming.dmChannelId, federatedCallId: incoming.federatedCallId, callOrigin: incoming.callOrigin, livekit: incoming.livekit }
+    : { dmChannelId: null, federatedCallId: incoming.federatedCallId, callOrigin: incoming.callOrigin, livekit: incoming.livekit };
+  voice.setIncomingCall(null);
+  voice.setActiveDmCall(call);
+  wsSend({ type: 'dm_call_accept', dmChannelId: call.dmChannelId, federatedCallId: call.federatedCallId }, dmCallOrigin(call));
+  connectToDmCall(call, false);
+  return true;
+}
+
+/**
+ * Turn the camera on in the DM call `roomKey` names, once it is connected.
+ * Does nothing when the client has left that call by then, or the camera is
+ * already on.
+ */
+export async function turnCameraOnInDmCall(roomKey: string): Promise<void> {
+  const { activeDmCall, isCameraOn } = useVoiceStore.getState();
+  if (!activeDmCall || dmCallRoomKey(activeDmCall) !== roomKey || isCameraOn) return;
+  if (!getActiveRoom()) return;
+  await handleCameraAction();
+}
+
+/**
+ * Stop ringing `dmChannelId` before anyone answered. A call this client
+ * placed is hosted on the DM's own instance, so the end goes there. Returns
+ * false, sending nothing, when the outgoing call belongs to another DM or
+ * there is none.
  */
 export function cancelOutgoingDmCall(dmChannelId: string): boolean {
   const voice = useVoiceStore.getState();
   if (voice.outgoingCall?.dmChannelId !== dmChannelId) return false;
-  const { federatedCallId, callOrigin } = voice;
   voice.setOutgoingCall(null);
-  wsSend({ type: 'dm_call_end', dmChannelId, federatedCallId }, callOrigin || getChannelOrigin(dmChannelId));
+  sendDmCallEnd({ dmChannelId, federatedCallId: null, callOrigin: null });
   return true;
+}
+
+/**
+ * Connect again to the voice the client kept after LiveKit gave up
+ * reconnecting: the DM call, or the voice channel. The Retry action of the
+ * sidebar and the mobile mini bar.
+ */
+export function reconnectVoice(): void {
+  const { connectFn, activeDmCall, currentVoiceChannelId } = useVoiceStore.getState();
+  if (!connectFn) return;
+  if (activeDmCall) void connectFn(dmCallRoomKey(activeDmCall), true);
+  else if (currentVoiceChannelId) void connectFn(currentVoiceChannelId, false);
 }
 
 /**
@@ -205,11 +273,7 @@ export function handleDisconnectAction(): void {
   const { activeDmCall, currentVoiceChannelId, disconnectFn } = voice;
 
   if (activeDmCall) {
-    const origin = voice.callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
-    wsSend(
-      { type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId, federatedCallId: voice.federatedCallId },
-      origin
-    );
+    sendDmCallEnd(activeDmCall);
     voice.setActiveDmCall(null);
   } else if (currentVoiceChannelId) {
     const origin = getChannelOrigin(currentVoiceChannelId);

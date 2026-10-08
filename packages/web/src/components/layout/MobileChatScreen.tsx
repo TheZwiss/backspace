@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import { useUIStore } from '../../stores/uiStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -24,7 +25,8 @@ interface MobileChatScreenProps {
 export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const { t } = useTranslation(['mobile', 'spaces', 'dm', 'common']);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
-  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  // The DM call's conversation as this client opens it (never the call's key).
+  const { dmChannelId: dmCallChannel } = useActiveDmCall();
   const canStartCall = useVoiceStore(canStartDmCall);
   const dmCallRunning = useVoiceStore((s) => !!params?.channelId && isDmCallRunning(s, params.channelId));
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
@@ -63,7 +65,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   // including one ringing in from this DM), join (this DM's call already has
   // people in it), and idle (starts a call).
   const callState: 'inCall' | 'ringing' | 'join' | 'idle' | 'busy' =
-    !!channelId && activeDmCall?.dmChannelId === channelId ? 'inCall'
+    !!channelId && dmCallChannel === channelId ? 'inCall'
       : !!channelId && outgoingCall?.dmChannelId === channelId ? 'ringing'
         : !canStartCall ? 'busy' : dmCallRunning ? 'join' : 'idle';
   const handleCall = () => {

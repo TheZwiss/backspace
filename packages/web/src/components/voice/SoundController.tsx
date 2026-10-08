@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { useVoiceStore } from '../../stores/voiceStore';
+import { isInVoiceRoom, useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore, addedRealtimeMessageEvents } from '../../stores/chatStore';
 import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { homeIdentityOf } from '../../utils/identity';
+import { voiceSessionOrigin } from '../../utils/dmCall';
 import { AudioManager } from '../../audio/AudioManager';
 import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
 import { getSfxVolume } from '../../utils/sfx';
@@ -53,10 +54,7 @@ export function SoundController() {
   // LiveKit identity's home user id. Both name the signed-in user when they
   // are the id that instance gave them or the id of their home identity.
   const isSelf = (id: string): boolean => {
-    const voice = useVoiceStore.getState();
-    const callChannelId = voice.currentVoiceChannelId ?? voice.activeDmCall?.dmChannelId ?? null;
-    const callOrigin = callChannelId ? getChannelOrigin(callChannelId) : '';
-    if (id === getMyUserIdForOrigin(callOrigin)) return true;
+    if (id === getMyUserIdForOrigin(voiceSessionOrigin(useVoiceStore.getState()))) return true;
     const user = useAuthStore.getState().user;
     return !!user && id === homeIdentityOf(user, '')?.userId;
   };
@@ -71,7 +69,8 @@ export function SoundController() {
     effectiveMuted: initialEff.muted,
     effectiveDeafened: initialEff.deafened,
     isCameraOn: initialState.isCameraOn,
-    isLiveKitConnected: initialState.isLiveKitConnected,
+    /** In the LiveKit room, a reconnect in progress included (`isInVoiceRoom`). */
+    inRoom: isInVoiceRoom(initialState),
     participantIds: new Set(initialState.participants.map((p) => p.userId)),
     screenShareUserIds: new Set(
       initialState.participants.filter((p) => p.isScreenSharing).map((p) => p.userId),
@@ -143,12 +142,21 @@ export function SoundController() {
 
       const sfxOpts = { volume: getSfxVolume() };
 
+      // A reconnect is not a leave: the user is in the room throughout, and
+      // only a reconnect that gives up (or a real leave) ends it. While it
+      // runs the room's participant list is not to be trusted (a full
+      // reconnect drops every remote participant until it is back), so the
+      // diffs below keep their baseline and compare against it once the room
+      // is connected again.
+      const inRoom = isInVoiceRoom(state);
+      const reconnecting = inRoom && !state.isLiveKitConnected;
+
       // -------- Effective mute / deafen --------
       // Only play on transitions where BOTH prev and current samples were taken
-      // while LK-connected. On the connect/disconnect boundary we snapshot the
+      // in the room. On the connect/disconnect boundary we snapshot the
       // current effective state without firing.
       const eff = computeEffectiveSelfState(state);
-      if (state.isLiveKitConnected && prev.current.isLiveKitConnected) {
+      if (inRoom && prev.current.inRoom) {
         // Deafen toggles mute as an atomic side effect (see
         // selectVoiceStateSound) — pick the single correct cue so deafening
         // doesn't play the mute sound on top of the deafen sound.
@@ -168,8 +176,8 @@ export function SoundController() {
       }
 
       // -------- Self connect / disconnect --------
-      const justDisconnected = prev.current.isLiveKitConnected && !state.isLiveKitConnected;
-      const justConnected = !prev.current.isLiveKitConnected && state.isLiveKitConnected;
+      const justDisconnected = prev.current.inRoom && !inRoom;
+      const justConnected = !prev.current.inRoom && inRoom;
 
       if (justDisconnected) {
         audioManager.playSound('disconnect', sfxOpts);
@@ -177,7 +185,7 @@ export function SoundController() {
       if (justConnected) {
         audioManager.playSound('user_join', sfxOpts);
       }
-      prev.current.isLiveKitConnected = state.isLiveKitConnected;
+      prev.current.inRoom = inRoom;
 
       // -------- Participant set diff --------
       const currentParticipantIds = new Set(state.participants.map((p) => p.userId));
@@ -228,8 +236,10 @@ export function SoundController() {
         });
       }
 
-      prev.current.participantIds = currentParticipantIds;
-      prev.current.screenShareUserIds = currentScreenShareUserIds;
+      if (!reconnecting) {
+        prev.current.participantIds = currentParticipantIds;
+        prev.current.screenShareUserIds = currentScreenShareUserIds;
+      }
 
       // -------- Viewer tracking — streamer-side only (§3.2) --------
       // The full diff is gated on `selfIsSharing`. When self isn't sharing,
@@ -243,7 +253,9 @@ export function SoundController() {
         useVoiceStore.getState().clearStreamWatchers(selfIdentity);
       }
 
-      if (selfIdentity && state.isLiveKitConnected && !justDisconnected && selfIsSharing) {
+      if (reconnecting) {
+        // Keep the watcher baseline until the room is back.
+      } else if (selfIdentity && state.isLiveKitConnected && !justDisconnected && selfIsSharing) {
         const live = new Set(state.streamWatchers.get(selfIdentity) ?? []);
         const past = prev.current.selfWatchers;
 

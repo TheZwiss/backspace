@@ -337,11 +337,25 @@ describe('the instance hosting the call', () => {
     expect(useVoiceStore.getState().livekitHostOrigin).toBe(REMOTE);
   });
 
-  it('records an unknown host for a token relayed from another instance', async () => {
-    useVoiceStore.setState({ federatedCallToken: 'relayed', federatedCallUrl: 'wss://host.example/livekit' });
+  it('records an unknown host for a token relayed from another instance, and uses it once', async () => {
+    useVoiceStore.setState({
+      activeDmCall: { dmChannelId: 'dm-1', federatedCallId: 'key-1', callOrigin: '', livekit: { token: 'relayed', url: 'wss://host.example/livekit' } },
+    });
     const { result } = renderHook(() => useLiveKit());
     await act(async () => { await result.current.connect('dm-1', true); });
     expect(useVoiceStore.getState().livekitHostOrigin).toBeNull();
+    expect(useVoiceStore.getState().activeDmCall?.livekit).toBeNull();
+  });
+
+  it('does not use the credentials of a call other than the one it connects', async () => {
+    mocks.channelOrigin.mockReturnValue(REMOTE);
+    vi.spyOn(useSettingsStore.getState(), 'fetchStreamingLimitsFor').mockResolvedValue(undefined);
+    useVoiceStore.setState({
+      activeDmCall: { dmChannelId: 'dm-other', federatedCallId: 'key-2', callOrigin: '', livekit: { token: 'relayed', url: 'wss://host.example/livekit' } },
+    });
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('dm-1', true); });
+    expect(useVoiceStore.getState().livekitHostOrigin).toBe(REMOTE);
   });
 
   it('re-applies the encoding when the host limits arrive after the share started', async () => {

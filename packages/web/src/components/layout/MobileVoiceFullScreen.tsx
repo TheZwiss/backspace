@@ -5,12 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useDmViewer } from '../../hooks/useDmViewer';
-import { isMine } from '../../utils/identity';
-import { wsSend } from '../../hooks/useWebSocket';
-import { getChannelOrigin } from '../../stores/spaceStore';
+import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import {
   handleCameraAction,
+  handleDisconnectAction,
   handleScreenShareAction,
 } from '../../utils/voiceActions';
 import { VoiceGrid } from '../voice/VoiceGrid';
@@ -43,18 +41,16 @@ export function MobileVoiceFullScreen() {
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleMute = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-  const leaveVoice = useVoiceStore((s) => s.leaveVoice);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
 
   const channels = useSpaceStore((s) => s.channels);
-  const dmChannels = useSpaceStore((s) => s.dmChannels);
   const spaces = useSpaceStore((s) => s.spaces);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
 
-  // A DM call's members are the rows of the instance the DM is pinned to.
-  const dmViewer = useDmViewer(currentVoiceChannelId?.startsWith('dm-') ? currentVoiceChannelId.slice(3) : null);
+  const { title: dmCallTitle } = useActiveDmCall();
 
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
@@ -248,22 +244,18 @@ export function MobileVoiceFullScreen() {
     };
   }, []);
 
-  if (!currentVoiceChannelId) {
+  if (!currentVoiceChannelId && !activeDmCall) {
     popMobileScreen();
     return null;
   }
 
-  const isDmCall = currentVoiceChannelId.startsWith('dm-');
+  // A DM call has no voice channel (the two are exclusive).
+  const isDmCall = !currentVoiceChannelId;
   let channelName = t('voice:status.voiceCall');
   let spaceName = '';
 
   if (isDmCall) {
-    const dmId = currentVoiceChannelId.replace('dm-', '');
-    const dm = dmChannels.find((d) => d.id === dmId);
-    if (dm) {
-      const others = dm.members.filter((m) => !isMine(m, dmViewer.origin, dmViewer.self));
-      channelName = others.map((m) => m.displayName ?? m.username).join(', ');
-    }
+    channelName = dmCallTitle ?? t('voice:status.dmCall');
   } else {
     const ch = channels.find((c) => c.id === currentVoiceChannelId);
     if (ch) {
@@ -275,24 +267,7 @@ export function MobileVoiceFullScreen() {
   }
 
   const handleDisconnect = () => {
-    const { activeDmCall, disconnectFn, federatedCallId, callOrigin } =
-      useVoiceStore.getState();
-    if (activeDmCall) {
-      const origin = callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
-      wsSend(
-        {
-          type: 'dm_call_end',
-          dmChannelId: activeDmCall.dmChannelId,
-          federatedCallId,
-        },
-        origin,
-      );
-      useVoiceStore.getState().setActiveDmCall(null);
-    } else if (currentVoiceChannelId) {
-      wsSend({ type: 'voice_leave' }, getChannelOrigin(currentVoiceChannelId));
-      leaveVoice();
-    }
-    if (disconnectFn) disconnectFn();
+    handleDisconnectAction();
     popMobileScreen();
   };
 

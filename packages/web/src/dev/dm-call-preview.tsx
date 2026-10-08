@@ -148,11 +148,12 @@ function seedStores(state: CallState, dm: DmChannel, partner: User): void {
   useUIStore.setState({ isMobile: mobile, showDms: true, mobileStack: [] });
   const ringing = state === 'ringing' || state === 'group-ringing' || state === 'long-name-ringing' || state === 'desktop-ringing';
   useVoiceStore.setState({
-    outgoingCall: ringing ? { dmChannelId: dm.id } : null,
-    incomingCall: state === 'incoming' ? { dmChannelId: dm.id, callerId: ALICE.id, callerName: 'Alice' } : null,
-    activeDmCall: state === 'in-call' ? { dmChannelId: dm.id } : state === 'busy' ? { dmChannelId: 'dm-other' } : null,
-    federatedCallId: null,
-    callOrigin: null,
+    outgoingCall: ringing ? { dmChannelId: dm.id, withCamera: false } : null,
+    incomingCall: state === 'incoming'
+      ? { dmChannelId: dm.id, federatedCallId: null, callOrigin: null, callerId: ALICE.id, callerName: 'Alice', livekit: null }
+      : null,
+    activeDmCall: state === 'in-call' ? { dmChannelId: dm.id, federatedCallId: null, callOrigin: null, livekit: null }
+      : state === 'busy' ? { dmChannelId: 'dm-other', federatedCallId: null, callOrigin: null, livekit: null } : null,
   });
 }
 

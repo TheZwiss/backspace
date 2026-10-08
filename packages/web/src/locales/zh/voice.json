@@ -259,5 +259,9 @@
     "stopSharingScreen": "停止共享屏幕",
     "disconnect": "断开通话"
   },
-  "connectLocked": "您没有连接到此频道的权限"
+  "connectLocked": "您没有连接到此频道的权限",
+  "micPrearm": {
+    "denied": "麦克风访问被拒绝。您已以收听者身份加入。点按“允许麦克风权限”以授予访问权限。",
+    "notFound": "未检测到麦克风。您已以收听者身份加入。"
+  }
 }

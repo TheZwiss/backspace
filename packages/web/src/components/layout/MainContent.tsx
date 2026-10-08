@@ -16,6 +16,7 @@ import { Avatar } from '../ui/Avatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { canStartDmCall, startDmCall, cancelOutgoingDmCall, isDmCallRunning, joinDmCall } from '../../utils/voiceActions';
+import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isMine, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
@@ -73,7 +74,8 @@ export function MainContent() {
   const location = useLocation();
   const isExplorePage = location.pathname === '/explore';
   const isProjectHubPage = location.pathname === '/backspace';
-  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  // The DM call's conversation as this client opens it (never the call's key).
+  const { dmChannelId: dmCallChannel } = useActiveDmCall();
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const canStartCall = useVoiceStore(canStartDmCall);
   const dmCallRunning = useVoiceStore((s) => !!currentChannelId && isDmCallRunning(s, currentChannelId));
@@ -225,15 +227,16 @@ export function MainContent() {
         : undefined;
     const dmPartnerDeleted = dmChannel ? isDeletedPartnerDm(dmChannel, dmViewer) : false;
 
-    const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
+    const isInDmCall = !!currentChannelId && dmCallChannel === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
 
     // A DM whose call already has people in it gets a join button; starting
     // a second call there is what the server would refuse.
-    const handleStartVoiceCall = () => {
+    // The video button does the same with the camera on once connected.
+    const handleStartCall = (withCamera: boolean) => {
       if (!currentChannelId) return;
-      if (dmCallRunning) joinDmCall(currentChannelId);
-      else startDmCall(currentChannelId);
+      if (dmCallRunning) joinDmCall(currentChannelId, { withCamera });
+      else startDmCall(currentChannelId, { withCamera });
     };
 
     const handleCancelCall = () => {
@@ -368,26 +371,31 @@ export function MainContent() {
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={handleStartVoiceCall}
-              disabled={!canStartCall}
-              className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed ${dmCallRunning ? 'text-accent-mint hover:text-accent-mint/80' : 'text-txt-tertiary hover:text-txt-primary'}`}
-              title={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-              </svg>
-            </button>
-            <button
-              onClick={handleStartVoiceCall}
-              disabled={!canStartCall}
-              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
-              title={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z" />
-              </svg>
-            </button>
+            {/* A 1-on-1 whose partner was deleted has nobody to ring, as on mobile. */}
+            {!dmPartnerDeleted && (
+              <>
+                <button
+                  onClick={() => handleStartCall(false)}
+                  disabled={!canStartCall}
+                  className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed ${dmCallRunning ? 'text-accent-mint hover:text-accent-mint/80' : 'text-txt-tertiary hover:text-txt-primary'}`}
+                  title={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => handleStartCall(true)}
+                  disabled={!canStartCall}
+                  className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed ${dmCallRunning ? 'text-accent-mint hover:text-accent-mint/80' : 'text-txt-tertiary hover:text-txt-primary'}`}
+                  title={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                  </svg>
+                </button>
+              </>
+            )}
             <button
               onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"

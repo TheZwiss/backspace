@@ -14,6 +14,8 @@ vi.mock('../stores/instanceStore', async () => {
 });
 
 import { clearSpaceVoiceForDmCall } from './voice';
+import { wsSend } from '../hooks/useWebSocket';
+import { useSpaceStore } from '../stores/spaceStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 
@@ -43,7 +45,7 @@ describe('clearSpaceVoiceForDmCall', () => {
   it('preserves activeDmCall (the caller/acceptor just set it)', () => {
     useVoiceStore.setState({
       currentVoiceChannelId: 'space-1',
-      activeDmCall: { dmChannelId: 'dm-9' },
+      activeDmCall: { dmChannelId: 'dm-9', federatedCallId: null, callOrigin: null, livekit: null },
       voiceUsers: new Map([['space-1', ['me']]]),
     });
 
@@ -51,15 +53,43 @@ describe('clearSpaceVoiceForDmCall', () => {
 
     const s = useVoiceStore.getState();
     expect(s.currentVoiceChannelId).toBeNull();
-    expect(s.activeDmCall).toEqual({ dmChannelId: 'dm-9' });
+    expect(s.activeDmCall).toEqual({ dmChannelId: 'dm-9', federatedCallId: null, callOrigin: null, livekit: null });
   });
 
   it('is a no-op when not in a space voice channel', () => {
-    useVoiceStore.setState({ currentVoiceChannelId: null, activeDmCall: { dmChannelId: 'dm-1' } });
+    useVoiceStore.setState({ currentVoiceChannelId: null, activeDmCall: { dmChannelId: 'dm-1', federatedCallId: null, callOrigin: null, livekit: null } });
 
     clearSpaceVoiceForDmCall();
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: 'dm-1' });
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: 'dm-1', federatedCallId: null, callOrigin: null, livekit: null });
     expect(useVoiceStore.getState().currentVoiceChannelId).toBeNull();
+  });
+
+  it('tells the channel\'s instance the user left when the call goes through another one', () => {
+    vi.mocked(wsSend).mockClear();
+    useSpaceStore.setState({ channelOriginMap: new Map([['space-1', 'https://orbit.example']]) });
+    useVoiceStore.setState({
+      currentVoiceChannelId: 'space-1',
+      activeDmCall: { dmChannelId: 'dm-9', federatedCallId: null, callOrigin: null, livekit: null },
+      voiceUsers: new Map([['space-1', ['me']]]),
+    });
+
+    clearSpaceVoiceForDmCall();
+
+    expect(wsSend).toHaveBeenCalledWith({ type: 'voice_leave' }, 'https://orbit.example');
+  });
+
+  it('leaves the channel to its instance when the call goes through the same one', () => {
+    vi.mocked(wsSend).mockClear();
+    useSpaceStore.setState({ channelOriginMap: new Map([['space-1', 'https://orbit.example'], ['dm-9', 'https://orbit.example']]) });
+    useVoiceStore.setState({
+      currentVoiceChannelId: 'space-1',
+      activeDmCall: { dmChannelId: 'dm-9', federatedCallId: null, callOrigin: null, livekit: null },
+      voiceUsers: new Map([['space-1', ['me']]]),
+    });
+
+    clearSpaceVoiceForDmCall();
+
+    expect(wsSend).not.toHaveBeenCalled();
   });
 });

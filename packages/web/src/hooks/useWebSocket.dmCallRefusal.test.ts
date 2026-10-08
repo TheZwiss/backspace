@@ -8,6 +8,9 @@ vi.mock('../audio/AudioManager', () => ({
       setOutputDevice: vi.fn(),
       setVolume: vi.fn(),
       playSound: vi.fn(() => Promise.resolve(null)),
+      clearInputDenial: vi.fn(),
+      resumeContext: vi.fn(() => Promise.resolve()),
+      setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),
   },
 }));
@@ -59,6 +62,16 @@ const i18n = (await import('../i18n')).default;
 const GROUP = 'dm-group';
 const OTHER = 'dm-other';
 
+/** A call the client is in, held by its DM id through the DM's own instance. */
+function active(dmChannelId: string) {
+  return { dmChannelId, federatedCallId: null, callOrigin: null, livekit: null };
+}
+
+/** A call this client is placing. */
+function outgoing(dmChannelId: string) {
+  return { dmChannelId, withCamera: false };
+}
+
 function dm(id: string, federatedId: string | null): DmChannel {
   return { id, federatedId, members: [], ownerId: 'owner' } as unknown as DmChannel;
 }
@@ -87,11 +100,8 @@ beforeEach(async () => {
     outgoingCall: null,
     incomingCall: null,
     activeDmCall: null,
-    federatedCallId: null,
-    federatedCallToken: null,
-    federatedCallUrl: null,
-    callOrigin: null,
     currentVoiceChannelId: null,
+    isLiveKitConnected: false,
     voiceUsers: new Map(),
     disconnectFn: null,
     connectFn: null,
@@ -107,7 +117,7 @@ describe('a refused dm_call_start', () => {
   it('clears the calling state and says why', () => {
     const ws = homeSocket();
     expect(startDmCall(GROUP)).toBe(true);
-    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().outgoingCall).toEqual(outgoing(GROUP));
 
     ws.deliver({ type: 'error', message: 'A call is already running in this conversation', code: 'dm_call_in_progress', dmChannelId: GROUP });
 
@@ -123,17 +133,17 @@ describe('a refused dm_call_start', () => {
 
     ws.deliver({ type: 'error', message: 'refused', code: 'dm_call_in_progress', dmChannelId: OTHER });
 
-    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().outgoingCall).toEqual(outgoing(GROUP));
   });
 
   it('ignores a refusal from an instance that does not serve the DM', () => {
     const ws = homeSocket();
     useSpaceStore.setState({ channelOriginMap: new Map([[GROUP, 'https://remote.example']]) });
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP } });
+    useVoiceStore.setState({ outgoingCall: outgoing(GROUP) });
 
     ws.deliver({ type: 'error', message: 'refused', code: 'dm_call_in_progress', dmChannelId: GROUP });
 
-    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().outgoingCall).toEqual(outgoing(GROUP));
   });
 });
 
@@ -141,7 +151,7 @@ describe('the end of a DM call', () => {
   it('tears down the call the client is in', () => {
     const ws = homeSocket();
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: GROUP }, disconnectFn });
+    useVoiceStore.setState({ activeDmCall: active(GROUP), disconnectFn });
 
     ws.deliver({ type: 'dm_call_ended', dmChannelId: GROUP });
 
@@ -152,12 +162,12 @@ describe('the end of a DM call', () => {
   it('leaves alone a call in a different DM', () => {
     const ws = homeSocket();
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: OTHER }, disconnectFn });
+    useVoiceStore.setState({ activeDmCall: active(OTHER), disconnectFn });
 
     ws.deliver({ type: 'dm_call_rejected', dmChannelId: GROUP });
     ws.deliver({ type: 'dm_call_ended', dmChannelId: GROUP });
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: OTHER });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(OTHER));
     expect(disconnectFn).not.toHaveBeenCalled();
   });
 
@@ -173,13 +183,13 @@ describe('the end of a DM call', () => {
 
 describe('dmCallEventIsOurs', () => {
   it('matches a call held by its conversation key', () => {
-    useVoiceStore.setState({ incomingCall: { dmChannelId: null, callerId: 'c', callerName: 'C' }, federatedCallId: 'key-group' });
+    useVoiceStore.setState({ incomingCall: { dmChannelId: null, federatedCallId: 'key-group', callOrigin: '', callerId: 'c', callerName: 'C', livekit: null } });
     expect(dmCallEventIsOurs({ dmChannelId: GROUP })).toBe(true);
     expect(dmCallEventIsOurs({ dmChannelId: null, federatedCallId: 'key-group' })).toBe(true);
   });
 
   it('matches an event naming the key of the DM the client is calling', () => {
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP } });
+    useVoiceStore.setState({ outgoingCall: outgoing(GROUP) });
     expect(dmCallEventIsOurs({ dmChannelId: 'copy-on-peer', federatedCallId: 'key-group' })).toBe(true);
   });
 
@@ -192,23 +202,23 @@ describe('an accept in a DM call', () => {
   it('connects the caller of that DM', () => {
     const ws = homeSocket();
     const connectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP }, connectFn });
+    useVoiceStore.setState({ outgoingCall: outgoing(GROUP), connectFn });
 
     ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
 
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(GROUP));
     expect(connectFn).toHaveBeenCalledWith(GROUP, true);
   });
 
   it('leaves alone a member calling a different DM', () => {
     const ws = homeSocket();
     const connectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: OTHER }, connectFn });
+    useVoiceStore.setState({ outgoingCall: outgoing(OTHER), connectFn });
 
     ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
 
-    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: OTHER });
+    expect(useVoiceStore.getState().outgoingCall).toEqual(outgoing(OTHER));
     expect(useVoiceStore.getState().activeDmCall).toBeNull();
     expect(connectFn).not.toHaveBeenCalled();
   });
@@ -233,40 +243,68 @@ describe('what a ring leaves behind', () => {
     ws.deliver({ type: 'dm_call_incoming', dmChannelId: null, federatedCallId: 'fed-f', callerId: 'c', callerName: 'C' });
     ws.deliver({ type: 'dm_call_accepted', dmChannelId: null, federatedCallId: 'fed-f' });
     expect(useVoiceStore.getState().incomingCall).toBeNull();
-    expect(useVoiceStore.getState().federatedCallId).toBeNull();
 
     // Later in a call in another DM, F ends.
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: OTHER } });
+    useVoiceStore.setState({ activeDmCall: active(OTHER) });
     ws.deliver({ type: 'dm_call_ended', dmChannelId: null, federatedCallId: 'fed-f' });
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: OTHER });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(OTHER));
     expect(disconnectFn).not.toHaveBeenCalled();
   });
 
-  it('matches nothing by a federated call id no slot holds', () => {
-    useVoiceStore.setState({ federatedCallId: 'fed-f' });
-    expect(dmCallEventIsOurs({ dmChannelId: null, federatedCallId: 'fed-f' })).toBe(false);
+  it('does not change the ids or the origin of the call the client is in', () => {
+    const ws = homeSocket();
+    const held = { dmChannelId: null, federatedCallId: 'fed-held', callOrigin: 'https://peer.example', livekit: null };
+    useVoiceStore.setState({ activeDmCall: held });
+
+    ws.deliver({
+      type: 'dm_call_incoming', dmChannelId: null, federatedCallId: 'fed-new', callerId: 'c', callerName: 'C',
+      livekitUrl: 'wss://host/lk', livekitToken: 'tok-new',
+    });
+
+    expect(useVoiceStore.getState().activeDmCall).toEqual(held);
+    expect(useVoiceStore.getState().incomingCall).toEqual({
+      dmChannelId: null, federatedCallId: 'fed-new', callOrigin: '', callerId: 'c', callerName: 'C',
+      livekit: { url: 'wss://host/lk', token: 'tok-new' },
+    });
+    expect(dmCallEventIsOurs({ dmChannelId: null, federatedCallId: 'fed-held' })).toBe(true);
+  });
+});
+
+describe('a ring answered on another device', () => {
+  it('does not put a client sitting in a voice channel into the call', () => {
+    const ws = homeSocket();
+    const connectFn = vi.fn().mockResolvedValue(undefined);
+    useVoiceStore.setState({ isLiveKitConnected: true, currentVoiceChannelId: 'voice-1', connectFn });
+    ws.deliver({ type: 'dm_call_incoming', dmChannelId: GROUP, callerId: 'c', callerName: 'C' });
+
+    ws.deliver({ type: 'dm_call_accepted', dmChannelId: GROUP });
+
+    expect(useVoiceStore.getState().incomingCall).toBeNull();
+    expect(useVoiceStore.getState().activeDmCall).toBeNull();
+    expect(useVoiceStore.getState().currentVoiceChannelId).toBe('voice-1');
+    expect(connectFn).not.toHaveBeenCalled();
   });
 });
 
 describe('an accept naming the held call by another id', () => {
   it('keeps the id a joined client holds the call by', () => {
     const ws = homeSocket();
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: GROUP }, isLiveKitConnected: true });
+    useVoiceStore.setState({ activeDmCall: active(GROUP), isLiveKitConnected: true });
 
     ws.deliver({ type: 'dm_call_accepted', dmChannelId: 'copy-on-peer', federatedCallId: 'key-group' });
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(GROUP));
   });
 
   it('connects the caller under the id it called', () => {
     const ws = homeSocket();
     const connectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: GROUP }, connectFn });
+    useVoiceStore.setState({ outgoingCall: outgoing(GROUP), connectFn });
 
     ws.deliver({ type: 'dm_call_accepted', dmChannelId: 'copy-on-peer', federatedCallId: 'key-group' });
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: GROUP });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(GROUP));
     expect(connectFn).toHaveBeenCalledWith(GROUP, true);
   });
 });
@@ -275,7 +313,7 @@ describe('a refused dm_call_accept', () => {
   it('takes the client out of the call it joined on its side', () => {
     const ws = homeSocket();
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: GROUP }, disconnectFn });
+    useVoiceStore.setState({ activeDmCall: active(GROUP), disconnectFn });
 
     ws.deliver({ type: 'error', message: 'This call has already ended', code: 'dm_call_not_found', dmChannelId: GROUP });
 
@@ -287,11 +325,11 @@ describe('a refused dm_call_accept', () => {
   it('leaves alone a call in another DM', () => {
     const ws = homeSocket();
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: OTHER }, disconnectFn });
+    useVoiceStore.setState({ activeDmCall: active(OTHER), disconnectFn });
 
     ws.deliver({ type: 'error', message: 'This call has already ended', code: 'dm_call_not_found', dmChannelId: GROUP });
 
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: OTHER });
+    expect(useVoiceStore.getState().activeDmCall).toEqual(active(OTHER));
     expect(disconnectFn).not.toHaveBeenCalled();
   });
 });

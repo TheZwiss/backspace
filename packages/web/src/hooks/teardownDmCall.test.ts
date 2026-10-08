@@ -20,10 +20,6 @@ describe('teardownDmCall', () => {
       activeDmCall: null,
       incomingCall: null,
       outgoingCall: null,
-      federatedCallToken: null,
-      federatedCallUrl: null,
-      federatedCallId: null,
-      callOrigin: null,
       disconnectFn: null,
     });
   });
@@ -51,7 +47,7 @@ describe('teardownDmCall', () => {
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
     useVoiceStore.setState({
       currentVoiceChannelId: null,
-      activeDmCall: { dmChannelId: 'dm-1' },
+      activeDmCall: { dmChannelId: 'dm-1', federatedCallId: null, callOrigin: null, livekit: null },
       disconnectFn,
     });
 
@@ -62,13 +58,12 @@ describe('teardownDmCall', () => {
     expect(useVoiceStore.getState().activeDmCall).toBeNull();
   });
 
-  it('clears residual incoming/outgoing/federated call state regardless', () => {
+  it('clears residual incoming and outgoing call state regardless', () => {
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
     useVoiceStore.setState({
       currentVoiceChannelId: 'space-voice-1',
-      incomingCall: { dmChannelId: 'dm-2', callerId: 'u9', callerName: 'Nine' },
-      outgoingCall: { dmChannelId: 'dm-3' },
-      federatedCallId: 'fed-1',
+      incomingCall: { dmChannelId: 'dm-2', federatedCallId: 'fed-1', callOrigin: '', callerId: 'u9', callerName: 'Nine', livekit: null },
+      outgoingCall: { dmChannelId: 'dm-3', withCamera: false },
       disconnectFn,
     });
 
@@ -77,7 +72,6 @@ describe('teardownDmCall', () => {
     const s = useVoiceStore.getState();
     expect(s.incomingCall).toBeNull();
     expect(s.outgoingCall).toBeNull();
-    expect(s.federatedCallId).toBeNull();
     expect(disconnectFn).not.toHaveBeenCalled();
   });
 });

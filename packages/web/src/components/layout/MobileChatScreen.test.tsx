@@ -10,7 +10,15 @@ import { wsSend } from '../../hooks/useWebSocket';
 import type { DmChannel, User } from '@backspace/shared';
 
 vi.mock('../../hooks/useWebSocket', () => ({ wsSend: vi.fn() }));
-vi.mock('../../audio/AudioManager', () => ({ AudioManager: { getInstance: vi.fn() } }));
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: {
+    getInstance: vi.fn(() => ({
+      clearInputDenial: vi.fn(),
+      resumeContext: vi.fn(() => Promise.resolve()),
+      setInputDevice: vi.fn(() => Promise.resolve(null)),
+    })),
+  },
+}));
 vi.mock('../chat/MessageList', () => ({ MessageList: () => null }));
 vi.mock('../chat/MessageInput', () => ({ MessageInput: () => null }));
 vi.mock('./TransferIndicator', () => ({ TransferIndicator: () => null }));
@@ -38,7 +46,7 @@ beforeEach(() => {
   useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, 'https://remote.example']]) });
   useChatStore.setState({ loadMessages: vi.fn() });
   useUIStore.setState({ mobileStack: [] });
-  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, federatedCallId: null, callOrigin: null, voiceUsers: new Map(), connectFn: null });
+  useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, voiceUsers: new Map(), connectFn: null });
 });
 
 describe('mobile DM calls', () => {
@@ -54,26 +62,30 @@ describe('mobile DM calls', () => {
     useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, origin]]) });
     render(<MobileChatScreen params={params} />);
     fireEvent.click(screen.getByRole('button', { name: START }));
-    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id });
+    expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id, withCamera: false });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_start', dmChannelId: dm.id }, origin);
     fireEvent.click(screen.getByRole('button', { name: CANCEL }));
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
     expect(wsSend).toHaveBeenLastCalledWith({ type: 'dm_call_end', dmChannelId: dm.id, federatedCallId: null }, origin);
   });
 
-  it('routes cancellation to the federated call origin', () => {
-    useVoiceStore.setState({ outgoingCall: { dmChannelId: dm.id }, federatedCallId: 'remote-call', callOrigin: 'https://call-host.example' });
+  it('routes cancellation to the DM origin, whatever a ring that arrived meanwhile names', () => {
+    useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, 'https://call-host.example']]) });
+    useVoiceStore.setState({
+      outgoingCall: { dmChannelId: dm.id, withCamera: false },
+      incomingCall: { dmChannelId: null, federatedCallId: 'remote-call', callOrigin: 'https://elsewhere.example', callerId: 'c', callerName: 'C', livekit: null },
+    });
     render(<MobileChatScreen params={params} />);
     fireEvent.click(screen.getByRole('button', { name: CANCEL }));
-    expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_end', dmChannelId: dm.id, federatedCallId: 'remote-call' }, 'https://call-host.example');
+    expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_end', dmChannelId: dm.id, federatedCallId: null }, 'https://call-host.example');
   });
 
   it('prevents another call while one is active, outgoing or incoming elsewhere', () => {
     render(<MobileChatScreen params={params} />);
     for (const state of [
-      { activeDmCall: { dmChannelId: 'other' } },
-      { outgoingCall: { dmChannelId: 'other' } },
-      { incomingCall: { dmChannelId: 'other', callerId: 'other', callerName: 'Other' } },
+      { activeDmCall: { dmChannelId: 'other', federatedCallId: null, callOrigin: null, livekit: null } },
+      { outgoingCall: { dmChannelId: 'other', withCamera: false } },
+      { incomingCall: { dmChannelId: 'other', federatedCallId: null, callOrigin: null, callerId: 'other', callerName: 'Other', livekit: null } },
     ]) {
       act(() => useVoiceStore.setState({ outgoingCall: null, activeDmCall: null, incomingCall: null, ...state }));
       const button = screen.getByRole('button', { name: START });
@@ -84,7 +96,7 @@ describe('mobile DM calls', () => {
   });
 
   it('cannot call back over a call ringing in from this DM', () => {
-    useVoiceStore.setState({ incomingCall: { dmChannelId: dm.id, callerId: partner.id, callerName: 'alice' } });
+    useVoiceStore.setState({ incomingCall: { dmChannelId: dm.id, federatedCallId: null, callOrigin: null, callerId: partner.id, callerName: 'alice', livekit: null } });
     render(<MobileChatScreen params={params} />);
     const button = screen.getByRole('button', { name: START });
     expect(button).toBeDisabled();
@@ -98,14 +110,14 @@ describe('mobile DM calls', () => {
     useVoiceStore.setState({ voiceUsers: new Map([[groupDm.id, ['partner', 'bob']]]), connectFn });
     render(<MobileChatScreen params={{ channelId: groupDm.id, spaceId: '@me' }} />);
     fireEvent.click(screen.getByRole('button', { name: JOIN }));
-    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: groupDm.id });
+    expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: groupDm.id, federatedCallId: null, callOrigin: null, livekit: null });
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: groupDm.id }, '');
     expect(connectFn).toHaveBeenCalledWith(groupDm.id, true);
   });
 
   it('opens the call screen while in a call with this DM', () => {
-    useVoiceStore.setState({ activeDmCall: { dmChannelId: dm.id } });
+    useVoiceStore.setState({ activeDmCall: { dmChannelId: dm.id, federatedCallId: null, callOrigin: null, livekit: null } });
     render(<MobileChatScreen params={params} />);
     expect(screen.queryByRole('button', { name: START })).toBeNull();
     const button = screen.getByRole('button', { name: OPEN });

@@ -3,6 +3,8 @@ import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores
 import { wsSend } from '../hooks/useWebSocket';
 import { AudioManager } from '../audio/AudioManager';
 import { useUIStore } from '../stores/uiStore';
+import i18n from '../i18n';
+import { dmCallOrigin, sendDmCallEnd, voiceSessionOrigin } from './dmCall';
 
 // ---------------------------------------------------------------------------
 // Effective-state helpers — single source of truth for broadcasts
@@ -19,12 +21,11 @@ export function broadcastVoiceStatus(overrideOrigin?: string): void {
   const vs = useVoiceStore.getState();
   const {
     isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId,
-    activeDmCall, callOrigin, spaceMutedUserIds, spaceDeafenedUserIds,
+    activeDmCall, spaceMutedUserIds, spaceDeafenedUserIds,
   } = vs;
-  const voiceTargetId = currentVoiceChannelId ?? activeDmCall?.dmChannelId;
-  if (!voiceTargetId) return;
+  if (!currentVoiceChannelId && !activeDmCall) return;
 
-  const origin = overrideOrigin ?? callOrigin ?? getChannelOrigin(voiceTargetId);
+  const origin = overrideOrigin ?? voiceSessionOrigin(vs);
   const myId = getMyUserIdForOrigin(origin);
   const spaceId = currentVoiceChannelId
     ? useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId)
@@ -82,6 +83,9 @@ export function broadcastDeafenViaLiveKit(): void {
  * still points at the old space channel, the DM call's participants get mapped
  * onto it and the local user appears to still be sitting in the space channel.
  *
+ * When the channel is on another instance than the call goes through, that
+ * instance is sent `voice_leave`: nothing else tells it the user left.
+ *
  * Clears `currentVoiceChannelId` directly (not via `setCurrentVoiceChannel`,
  * which would also wipe the `activeDmCall` the caller/acceptor just set) and
  * optimistically removes self from the old channel's `voiceUsers` so the
@@ -89,14 +93,65 @@ export function broadcastDeafenViaLiveKit(): void {
  * broadcast.
  */
 export function clearSpaceVoiceForDmCall(): void {
-  const { currentVoiceChannelId, removeVoiceUser } = useVoiceStore.getState();
+  const { currentVoiceChannelId, removeVoiceUser, activeDmCall } = useVoiceStore.getState();
   if (!currentVoiceChannelId) return;
 
   const origin = getChannelOrigin(currentVoiceChannelId);
+  // The instance the call goes through takes the user out of its own voice
+  // channel when it sees the call. The channel's instance hears nothing of a
+  // call that goes through another one, so it is told here, or it keeps the
+  // user in the channel until their socket to it closes.
+  if (activeDmCall && dmCallOrigin(activeDmCall) !== origin) wsSend({ type: 'voice_leave' }, origin);
   const myId = getMyUserIdForOrigin(origin);
   if (myId) removeVoiceUser(currentVoiceChannelId, myId);
 
   useVoiceStore.setState({ currentVoiceChannelId: null });
+}
+
+// ---------------------------------------------------------------------------
+// Microphone pre-arm
+// ---------------------------------------------------------------------------
+
+/**
+ * Acquire the microphone inside the user's tap, before anything awaits.
+ * Every way into voice calls it first: joining a voice channel, starting or
+ * joining a DM call, accepting a ring.
+ *
+ * iOS Safari surfaces the microphone prompt only when `getUserMedia` runs
+ * inside an active user gesture, and the installed web app is strictest. The
+ * connect reaches `useLiveKit`'s `syncMic` many awaits later (token fetch,
+ * signalling), past the gesture window, so without this the prompt can fail
+ * to appear and the user is in voice without a microphone.
+ *
+ * Resets the denial flag and AudioManager's cached denial so a new attempt
+ * actually prompts. Fire-and-forget: `setInputDevice` is serialized through
+ * `inputSwitchChain`, so `syncMic` later reuses the stream acquired here
+ * instead of prompting again. A refusal or a missing microphone sets
+ * `micPermissionDenied`, and the user is in voice as a listener.
+ */
+export function preArmMicrophone(): void {
+  const voiceState = useVoiceStore.getState();
+  voiceState.setMicPermissionDenied(false);
+  const audioManager = AudioManager.getInstance();
+  audioManager.clearInputDenial();
+  // iOS requires `AudioContext.resume()` from a user activation too.
+  // `useLiveKit.connect` also calls this and awaits the same context.
+  audioManager.resumeContext().catch((err: unknown) => {
+    console.warn('[voice] AudioContext resume failed:', err);
+  });
+  audioManager.setInputDevice(voiceState.inputDeviceId).catch((err: unknown) => {
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'NotAllowedError') {
+      useVoiceStore.getState().setMicPermissionDenied(true);
+      useUIStore.getState().addToast(i18n.t('voice:micPrearm.denied'), 'warning');
+    } else if (name === 'NotFoundError') {
+      // No mic hardware available. Proceed as listener.
+      useVoiceStore.getState().setMicPermissionDenied(true);
+      useUIStore.getState().addToast(i18n.t('voice:micPrearm.notFound'), 'info');
+    } else {
+      console.error('[voice] Mic pre-arm failed:', err);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +209,26 @@ export function joinVoiceChannel(
   // back into the channel the user never meant to leave.
   if (currentVoiceChannelId === channelId && voiceConnectionStatus !== 'disconnected') return;
 
+  const newOrigin = getChannelOrigin(channelId);
+
+  // A DM call held through another instance is left there: the channel's
+  // instance takes the user out of a call only when the call goes through
+  // it (its voice_join does). `voice_leave` leaves the call the way joining
+  // voice there would; a call still ringing is cancelled.
+  {
+    const { activeDmCall, outgoingCall, setOutgoingCall } = useVoiceStore.getState();
+    if (activeDmCall && dmCallOrigin(activeDmCall) !== newOrigin) {
+      wsSend({ type: 'voice_leave' }, dmCallOrigin(activeDmCall));
+    }
+    if (outgoingCall && getChannelOrigin(outgoingCall.dmChannelId) !== newOrigin) {
+      sendDmCallEnd({ dmChannelId: outgoingCall.dmChannelId, federatedCallId: null, callOrigin: null });
+      setOutgoingCall(null);
+    }
+  }
+
   // Leave old instance if switching cross-origin
   if (currentVoiceChannelId) {
     const oldOrigin = getChannelOrigin(currentVoiceChannelId);
-    const newOrigin = getChannelOrigin(channelId);
     if (oldOrigin !== newOrigin) {
       wsSend({ type: 'voice_leave' }, oldOrigin);
     }
@@ -168,51 +239,12 @@ export function joinVoiceChannel(
 
   setCurrentVoiceChannel(channelId);
   // Optimistic: immediately show self in new channel (using origin-aware ID)
-  const myNewId = getMyUserIdForOrigin(getChannelOrigin(channelId));
+  const myNewId = getMyUserIdForOrigin(newOrigin);
   if (myNewId) addVoiceUser(channelId, myNewId);
 
-  // Pre-arm the microphone INSIDE the user-gesture context. This must
-  // happen before `connectFn` so the call to `setInputDevice` (which is
-  // routed through `inputSwitchChain.then(...)` and ends in
-  // `getUserMedia`) is invoked while the activation window is still open.
-  // Reset the prior denial flag so a re-attempt isn't pre-vetoed by
-  // syncMic, and clear AudioManager's cached denial so the next
-  // `getUserMedia` actually fires (rather than re-throwing the cached
-  // error from a previous denial in this session).
-  const voiceState = useVoiceStore.getState();
-  voiceState.setMicPermissionDenied(false);
-  const audioManager = AudioManager.getInstance();
-  audioManager.clearInputDenial();
-  // Resume the AudioContext synchronously inside the gesture too — iOS
-  // requires `AudioContext.resume()` to be invoked from a user
-  // activation. Fire-and-forget; `useLiveKit.connect` also calls this
-  // and will await the same context.
-  audioManager.resumeContext().catch((err) => {
-    console.warn('[voice] AudioContext resume failed:', err);
-  });
-  // Fire-and-forget. `setInputDevice` is internally serialized via
-  // `inputSwitchChain` so the later syncMic call short-circuits to the
-  // already-acquired stream rather than re-prompting. On denial we
-  // record the flag — syncMic will then skip the publish branch.
-  audioManager.setInputDevice(voiceState.inputDeviceId).catch((err: unknown) => {
-    const name = err instanceof Error ? err.name : '';
-    if (name === 'NotAllowedError') {
-      useVoiceStore.getState().setMicPermissionDenied(true);
-      useUIStore.getState().addToast(
-        'Microphone access denied. You joined as a listener — tap "Allow microphone" to grant access.',
-        'warning',
-      );
-    } else if (name === 'NotFoundError') {
-      // No mic hardware available. Proceed as listener.
-      useVoiceStore.getState().setMicPermissionDenied(true);
-      useUIStore.getState().addToast(
-        'No microphone detected. You joined as a listener.',
-        'info',
-      );
-    } else {
-      console.error('[voice] Mic pre-arm failed:', err);
-    }
-  });
+  // Pre-arm the microphone INSIDE the user-gesture context, before
+  // `connectFn` (see `preArmMicrophone`).
+  preArmMicrophone();
 
   // Direct connection within gesture context
   if (connectFn) {

@@ -24,6 +24,7 @@ import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus, clearSpaceVoiceForDmCall } from '../utils/voice';
 import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/voiceActions';
+import { dmCallChannelId, dmCallOrigin, dmCallRoomKey, voiceSessionOrigin } from '../utils/dmCall';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
@@ -183,9 +184,10 @@ function resolveParticipantUserId(identity: string): string {
   const rawId = parseIdentity(identity).userId;
   const activeDmCall = useVoiceStore.getState().activeDmCall;
   if (!activeDmCall) return rawId;
-  const dmChannel = useSpaceStore.getState().dmChannels.find((d) => d.id === activeDmCall.dmChannelId);
+  const dmId = dmCallChannelId(activeDmCall);
+  const dmChannel = dmId ? useSpaceStore.getState().dmChannels.find((d) => d.id === dmId) : undefined;
   // The identity names the member by their row id here or by their home id.
-  const origin = getChannelOrigin(activeDmCall.dmChannelId);
+  const origin = dmId ? getChannelOrigin(dmId) : dmCallOrigin(activeDmCall);
   const match = dmChannel?.members.find((m) => m.id === rawId || homeIdentityOf(m, origin)?.userId === rawId);
   return match?.id ?? rawId;
 }
@@ -316,9 +318,7 @@ export function useLiveKit() {
       } else if (isLocal) {
         // Local user safety net: the user's row as the instance hosting the
         // call issues it, the origin `useVoiceParticipantMeta` reads it with.
-        const vs = useVoiceStore.getState();
-        const callChannelId = vs.currentVoiceChannelId ?? vs.activeDmCall?.dmChannelId ?? null;
-        cachedUser = myRowForOrigin(callChannelId ? getChannelOrigin(callChannelId) : '');
+        cachedUser = myRowForOrigin(voiceSessionOrigin(useVoiceStore.getState()));
         homeUserId = cachedUser?.homeUserId ?? null;
       } else {
         // Space switched — carry forward from previous cycle
@@ -729,13 +729,17 @@ export function useLiveKit() {
       // token was relayed from a host this client has no session with.
       let hostOrigin: string | null;
 
-      // For federated calls, use the stored token from S2S relay
-      const { federatedCallToken, federatedCallUrl, clearFederatedCallData } = useVoiceStore.getState();
-      if (isDm && federatedCallToken && federatedCallUrl) {
-        token = federatedCallToken;
-        url = federatedCallUrl;
+      // A call hosted on another instance connects with the credentials its
+      // ring brought, once, and only for the call they came with.
+      const { activeDmCall } = useVoiceStore.getState();
+      const credentials = isDm && activeDmCall && dmCallRoomKey(activeDmCall) === channelId
+        ? activeDmCall.livekit
+        : null;
+      if (activeDmCall && credentials) {
+        token = credentials.token;
+        url = credentials.url;
         hostOrigin = null;
-        clearFederatedCallData();
+        useVoiceStore.setState({ activeDmCall: { ...activeDmCall, livekit: null } });
       } else {
         hostOrigin = getChannelOrigin(channelId);
         const client = getApiForOrigin(hostOrigin);
@@ -945,10 +949,14 @@ export function useLiveKit() {
           setIsConnected(connected);
           setIsConnecting(connecting);
 
-          useVoiceStore.getState().setIsLiveKitConnected(connected);
-          useVoiceStore.getState().setVoiceConnectionStatus(
-            connected ? 'connected' : state === ConnectionState.Reconnecting ? 'reconnecting' : 'connecting',
-          );
+          // One update, so no subscriber sees the room disconnected but not
+          // yet reconnecting (SoundController would play a leave). Both kinds
+          // of reconnect count: a signal resume and a full reconnect.
+          const reconnecting = state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting;
+          useVoiceStore.setState({
+            isLiveKitConnected: connected,
+            voiceConnectionStatus: connected ? 'connected' : reconnecting ? 'reconnecting' : 'connecting',
+          });
 
           if (connected) {
             // A full reconnect republished every local track: the share goes

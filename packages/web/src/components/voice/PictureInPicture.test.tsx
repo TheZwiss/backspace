@@ -5,6 +5,8 @@ import { PictureInPicture } from './PictureInPicture';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useSpaceStore } from '../../stores/spaceStore';
+import type { DmChannel } from '@backspace/shared';
 
 // AudioManager loads an AudioWorklet module that jsdom cannot evaluate.
 vi.mock('../../audio/AudioManager', () => ({
@@ -54,7 +56,7 @@ describe('PictureInPicture and the floating window setting', () => {
   });
 
   it('follows the setting during a DM call viewed from elsewhere', () => {
-    useVoiceStore.setState({ currentVoiceChannelId: null, activeDmCall: { dmChannelId: 'dm-1' } });
+    useVoiceStore.setState({ currentVoiceChannelId: null, activeDmCall: { dmChannelId: 'dm-1', federatedCallId: null, callOrigin: null, livekit: null } });
     const shown = renderPip();
     expect(shown.container).not.toBeEmptyDOMElement();
     cleanup();
@@ -62,5 +64,22 @@ describe('PictureInPicture and the floating window setting', () => {
     useVoiceStore.setState({ pipEnabled: false });
     const hidden = renderPip();
     expect(hidden.container).toBeEmptyDOMElement();
+  });
+
+  it('reads a call held by its key as the conversation this client has, never as a DM id', () => {
+    useSpaceStore.setState({ dmChannels: [{ id: 'dm-copy', federatedId: 'key-1', members: [] } as unknown as DmChannel] });
+    useVoiceStore.setState({
+      currentVoiceChannelId: null,
+      activeDmCall: { dmChannelId: null, federatedCallId: 'key-1', callOrigin: 'https://peer.example', livekit: null },
+    });
+
+    // Viewing the call's conversation: no floating window.
+    useChatStore.setState({ currentChannelId: 'dm-copy' });
+    expect(renderPip().container).toBeEmptyDOMElement();
+    cleanup();
+
+    // Viewing the key as if it were a conversation is viewing something else.
+    useChatStore.setState({ currentChannelId: 'key-1' });
+    expect(renderPip().container).not.toBeEmptyDOMElement();
   });
 });

@@ -245,3 +245,59 @@ describe('SoundController own-action cues', () => {
     expect(soundsPlayed()).toEqual(['camera_on']);
   });
 });
+
+describe('SoundController across a LiveKit reconnect', () => {
+  const participant = (userId: string, isLocal = false) => ({ userId, identity: `${userId}:${userId}`, isLocal, isScreenSharing: false });
+
+  function inRoom(): void {
+    useVoiceStore.setState({
+      isLiveKitConnected: true,
+      voiceConnectionStatus: 'connected',
+      participants: [participant('me', true), participant('bob')] as never,
+    });
+  }
+
+  beforeEach(() => {
+    useVoiceStore.setState({
+      isLiveKitConnected: false,
+      voiceConnectionStatus: 'disconnected',
+      participants: [],
+      currentVoiceChannelId: 'voice-1',
+      activeDmCall: null,
+    });
+  });
+
+  it('plays nothing for a reconnect the user never left through', () => {
+    mountAs('online');
+    act(() => inRoom());
+    playSound.mockClear();
+
+    // LiveKit reconnects fully: the room drops every remote participant until it is back.
+    act(() => useVoiceStore.setState({ isLiveKitConnected: false, voiceConnectionStatus: 'reconnecting', participants: [participant('me', true)] as never }));
+    act(() => inRoom());
+
+    expect(soundsPlayed()).toEqual([]);
+  });
+
+  it('plays the leave of someone who really left while it reconnected', () => {
+    mountAs('online');
+    act(() => inRoom());
+    playSound.mockClear();
+
+    act(() => useVoiceStore.setState({ isLiveKitConnected: false, voiceConnectionStatus: 'reconnecting', participants: [participant('me', true)] as never }));
+    act(() => useVoiceStore.setState({ isLiveKitConnected: true, voiceConnectionStatus: 'connected', participants: [participant('me', true)] as never }));
+
+    expect(soundsPlayed()).toEqual(['user_leave']);
+  });
+
+  it('plays the disconnect once a reconnect gives up', () => {
+    mountAs('online');
+    act(() => inRoom());
+    playSound.mockClear();
+
+    act(() => useVoiceStore.setState({ isLiveKitConnected: false, voiceConnectionStatus: 'reconnecting' }));
+    act(() => useVoiceStore.setState({ participants: [], voiceConnectionStatus: 'disconnected' }));
+
+    expect(soundsPlayed()).toEqual(['disconnect']);
+  });
+});

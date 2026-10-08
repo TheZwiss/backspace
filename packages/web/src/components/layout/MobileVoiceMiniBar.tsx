@@ -2,9 +2,14 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
-import { wsSend } from '../../hooks/useWebSocket';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { useActiveDmCall } from '../../hooks/useActiveDmCall';
+import { handleDisconnectAction, reconnectVoice } from '../../utils/voiceActions';
 
+/**
+ * The bar above the bottom navigation while the user is in voice: a voice
+ * channel or a DM call. Tapping it opens the call screen.
+ */
 export function MobileVoiceMiniBar() {
   const { t } = useTranslation(['voice', 'spaces']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -16,33 +21,31 @@ export function MobileVoiceMiniBar() {
   const toggleMute = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
-  const leaveVoice = useVoiceStore((s) => s.leaveVoice);
+  const participants = useVoiceStore((s) => s.participants);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const voiceConnectionStatus = useVoiceStore((s) => s.voiceConnectionStatus);
   const connectionError = useVoiceStore((s) => s.connectionError);
 
   const channels = useSpaceStore((s) => s.channels);
-  const dmChannels = useSpaceStore((s) => s.dmChannels);
+  const { title: dmCallTitle } = useActiveDmCall();
 
-  if (!currentVoiceChannelId) return null;
+  if (!currentVoiceChannelId && !activeDmCall) return null;
 
   // Don't show mini-bar if voice full-screen is on top of the stack
   const topEntry = mobileStack.length > 0 ? mobileStack[mobileStack.length - 1] : undefined;
   const topScreen = topEntry?.screen ?? null;
   if (topScreen === 'voice-full') return null;
 
-  // Resolve channel name
-  const isDmCall = currentVoiceChannelId.startsWith('dm-');
-  let channelName = 'Voice Call';
-  if (isDmCall) {
-    const dmId = currentVoiceChannelId.replace('dm-', '');
-    const dm = dmChannels.find(d => d.id === dmId);
-    if (dm) channelName = 'DM Call';
-  } else {
-    const ch = channels.find(c => c.id === currentVoiceChannelId);
-    if (ch) channelName = ch.name;
-  }
-
-  const participantCount = voiceUsers.get(currentVoiceChannelId)?.length ?? 0;
+  // A DM call has no voice channel (the two are exclusive): it is named by
+  // its conversation, and counted from the LiveKit room, since a call hosted
+  // on another instance has no voice states here.
+  const channel = currentVoiceChannelId ? channels.find(c => c.id === currentVoiceChannelId) : undefined;
+  const channelName = currentVoiceChannelId
+    ? channel?.name ?? t('voice:status.voiceCall')
+    : dmCallTitle ?? t('voice:status.dmCall');
+  const participantCount = currentVoiceChannelId
+    ? voiceUsers.get(currentVoiceChannelId)?.length ?? 0
+    : participants.length;
 
   // The desktop sidebar carries this state in VoiceControls, which is not
   // mounted on mobile. Without it a dropped session looks identical to a live
@@ -53,11 +56,6 @@ export function MobileVoiceMiniBar() {
     ? 'text-accent-rose'
     : isReconnecting ? 'text-accent-amber' : 'text-accent-mint';
 
-  const handleRetry = () => {
-    const { connectFn, activeDmCall } = useVoiceStore.getState();
-    const target = activeDmCall?.dmChannelId ?? currentVoiceChannelId;
-    if (connectFn && target) void connectFn(target, !!activeDmCall);
-  };
 
   return (
     <div className="glass-bubble mx-2 mb-1 rounded-2xl flex items-center gap-2 px-3 py-2 shrink-0">
@@ -87,7 +85,7 @@ export function MobileVoiceMiniBar() {
 
       {isDropped && (
         <button
-          onClick={(e) => { e.stopPropagation(); handleRetry(); }}
+          onClick={(e) => { e.stopPropagation(); reconnectVoice(); }}
           className="px-2 h-8 rounded-full text-[11px] font-medium text-accent-primary hover:bg-interactive-hover transition-colors shrink-0"
         >
           {t('voice:status.retry')}
@@ -101,6 +99,7 @@ export function MobileVoiceMiniBar() {
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isMuted ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
           }`}
+          aria-label={isMuted ? t('voice:controls.unmute') : t('voice:controls.mute')}
         >
           {isMuted ? (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -119,6 +118,7 @@ export function MobileVoiceMiniBar() {
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isDeafened ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
           }`}
+          aria-label={isDeafened ? t('voice:controls.undeafen') : t('voice:controls.deafen')}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
@@ -129,18 +129,10 @@ export function MobileVoiceMiniBar() {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            const { activeDmCall, disconnectFn, federatedCallId, callOrigin } = useVoiceStore.getState();
-            if (activeDmCall) {
-              const origin = callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
-              wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId, federatedCallId }, origin);
-              useVoiceStore.getState().setActiveDmCall(null);
-            } else if (currentVoiceChannelId) {
-              wsSend({ type: 'voice_leave' }, getChannelOrigin(currentVoiceChannelId));
-              leaveVoice();
-            }
-            if (disconnectFn) disconnectFn();
+            handleDisconnectAction();
           }}
           className="w-8 h-8 rounded-full flex items-center justify-center bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors"
+          aria-label={t('voice:mobileCall.disconnect')}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />

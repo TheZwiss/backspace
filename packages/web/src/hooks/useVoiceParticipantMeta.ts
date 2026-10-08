@@ -3,6 +3,7 @@ import { useSpaceStore } from '../stores/spaceStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { parseFederatedUsername } from '../utils/identity';
 import { getCanonicalUserView } from '../utils/userViewLookup';
+import { voiceSessionOrigin } from '../utils/dmCall';
 import type { ParticipantInfo } from './useLiveKit';
 import type { User } from '@backspace/shared';
 
@@ -18,7 +19,7 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
   const spaces = useSpaceStore((s) => s.spaces);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const channelOriginMap = useSpaceStore((s) => s.channelOriginMap);
-  const callChannelId = useVoiceStore((s) => s.currentVoiceChannelId ?? s.activeDmCall?.dmChannelId ?? null);
+  const sessionOrigin = useVoiceStore(voiceSessionOrigin);
 
   return useMemo(() => {
     // 1. Try space members (primary — covers space voice channels)
@@ -56,7 +57,7 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
     // can be a stale stub view, and the cache may hold a fresher home view.
     // The row was issued by the instance hosting the call.
     if (participant.cachedUser) {
-      const callOrigin = callChannelId ? channelOriginMap.get(callChannelId) ?? '' : '';
+      const callOrigin = sessionOrigin;
       const canonical = getCanonicalUserView(participant.cachedUser, callOrigin);
       const { baseName } = parseFederatedUsername(canonical.username);
       return {
@@ -70,5 +71,5 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
     // 4. Final fallback — parse username from LiveKit identity
     const { baseName } = parseFederatedUsername(participant.username);
     return { displayName: baseName, avatar: null, user: null as User | null, origin: '' };
-  }, [members, spaces, dmChannels, channelOriginMap, callChannelId, participant.userId, participant.username, participant.cachedUser]);
+  }, [members, spaces, dmChannels, channelOriginMap, sessionOrigin, participant.userId, participant.username, participant.cachedUser]);
 }

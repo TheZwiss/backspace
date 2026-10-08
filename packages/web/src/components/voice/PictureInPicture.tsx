@@ -9,6 +9,8 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
+import { useActiveDmCall } from '../../hooks/useActiveDmCall';
+import { dmCallRoomKey } from '../../utils/dmCall';
 
 /** Stable fallback for useVoiceParticipantMeta when no participant exists */
 const EMPTY_PARTICIPANT: ParticipantInfo = {
@@ -125,6 +127,10 @@ export function PictureInPicture() {
   // Store state
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  // The conversation of the DM call, as this client can open it: never the
+  // call's key, which names no conversation here.
+  const { dmChannelId: dmCallChannel } = useActiveDmCall();
+  const dmCallKey = activeDmCall ? dmCallRoomKey(activeDmCall) : null;
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
@@ -146,20 +152,20 @@ export function PictureInPicture() {
 
   // Reset pipCollapsed when joining a new call
   const prevVoiceChannel = useRef(currentVoiceChannelId);
-  const prevDmCall = useRef(activeDmCall?.dmChannelId ?? null);
+  const prevDmCall = useRef(dmCallKey);
   useEffect(() => {
     const voiceChanged = currentVoiceChannelId !== prevVoiceChannel.current;
-    const dmChanged = (activeDmCall?.dmChannelId ?? null) !== prevDmCall.current;
+    const dmChanged = dmCallKey !== prevDmCall.current;
     prevVoiceChannel.current = currentVoiceChannelId;
-    prevDmCall.current = activeDmCall?.dmChannelId ?? null;
-    if ((voiceChanged && currentVoiceChannelId) || (dmChanged && activeDmCall)) {
+    prevDmCall.current = dmCallKey;
+    if ((voiceChanged && currentVoiceChannelId) || (dmChanged && dmCallKey)) {
       setPipCollapsed(false);
     }
-  }, [currentVoiceChannelId, activeDmCall, setPipCollapsed]);
+  }, [currentVoiceChannelId, dmCallKey, setPipCollapsed]);
 
   // Visibility — split into wouldShow (ignores collapsed) and shouldShow (full check)
   const isInServerVoice = currentVoiceChannelId !== null && currentChannelId !== currentVoiceChannelId;
-  const isInDmCall = activeDmCall !== null && currentChannelId !== activeDmCall.dmChannelId;
+  const isInDmCall = activeDmCall !== null && currentChannelId !== dmCallChannel;
   const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && pipEnabled;
   const shouldShow = wouldShow && !pipCollapsed;
 
@@ -356,7 +362,9 @@ export function PictureInPicture() {
     if (!hasMoved.current) {
       // Click — navigate back to voice channel
       if (activeDmCall) {
-        navigate(`/channels/@me/${activeDmCall.dmChannelId}`);
+        // A call whose conversation this client has no copy of has nowhere
+        // to return to.
+        if (dmCallChannel) navigate(`/channels/@me/${dmCallChannel}`);
       } else if (currentVoiceChannelId) {
         const spaceId = channelToSpaceMap.get(currentVoiceChannelId);
         if (spaceId) {
@@ -367,7 +375,7 @@ export function PictureInPicture() {
       // Drag ended — snap to edge
       snapToEdge(position.x, position.y);
     }
-  }, [isDragging, activeDmCall, currentVoiceChannelId, channelToSpaceMap, navigate, snapToEdge, position]);
+  }, [isDragging, activeDmCall, dmCallChannel, currentVoiceChannelId, channelToSpaceMap, navigate, snapToEdge, position]);
 
   const handleClose = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

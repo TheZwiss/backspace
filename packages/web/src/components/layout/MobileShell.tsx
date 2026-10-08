@@ -157,6 +157,7 @@ export function MobileShell() {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const mobileStack = useUIStore((s) => s.mobileStack);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const location = useLocation();
 
   // Edge swipe back gesture
@@ -206,8 +207,8 @@ export function MobileShell() {
         screenMap={mobileScreenMap}
       />
 
-      {/* Voice mini-bar — shown when in a voice call */}
-      {currentVoiceChannelId && <MobileVoiceMiniBar />}
+      {/* Voice mini-bar: shown in a voice channel or a DM call */}
+      {(currentVoiceChannelId || activeDmCall) && <MobileVoiceMiniBar />}
 
       {/* Bottom nav — MobileBottomNav hides itself when stack is non-empty */}
       <MobileBottomNav />

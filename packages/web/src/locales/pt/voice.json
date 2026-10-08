@@ -263,5 +263,9 @@
     "stopSharingScreen": "Parar de compartilhar a tela",
     "disconnect": "Desconectar da chamada"
   },
-  "connectLocked": "Você não tem permissão para se conectar a este canal"
+  "connectLocked": "Você não tem permissão para se conectar a este canal",
+  "micPrearm": {
+    "denied": "Acesso ao microfone negado. Você entrou como ouvinte. Toque em \"Permitir microfone\" para conceder acesso.",
+    "notFound": "Nenhum microfone encontrado. Você entrou como ouvinte."
+  }
 }
