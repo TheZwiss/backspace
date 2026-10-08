@@ -363,7 +363,7 @@ export function processDmCallAcceptEvent(
       });
     }
 
-    // Broadcast accepted locally — include federatedCallId so all clients can
+    // Broadcast accepted locally, with federatedCallId so all clients can
     // match, and who answered, so only that member's sessions stop ringing.
     const answeredBy = answererOf(event.call);
     connectionManager.sendToDmMembers(dmChannelId!, {

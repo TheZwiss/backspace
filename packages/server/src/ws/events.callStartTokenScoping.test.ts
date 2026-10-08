@@ -453,8 +453,9 @@ describe('sendFederatedCallStart: the name it gives the caller', () => {
     const { sendFederatedCallStartForTest } = await importSUT();
     await sendFederatedCallStartForTest('dm-grace-heidi', 'grace', 'Grace');
 
-    // Before, nova got the start under this instance's address, rang heidi,
-    // and then refused the end, which named grace by her home.
+    // Nova accepts no name for grace from here: her own identity is homed on
+    // a third instance, and this instance's address would be a made-up one.
+    // So nova is not sent the start, and grace is told why.
     expect(relayedOrigins()).toEqual([]);
     expect(cm.getRoom('dm-grace-heidi')).toBeUndefined();
     expect(sent).toHaveBeenCalledWith('grace', expect.objectContaining({
