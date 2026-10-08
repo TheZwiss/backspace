@@ -292,7 +292,7 @@ unsubscribe twin; there is no public `numSubscribers` API. Backspace uses a
 small data-channel ping instead, mirroring the existing `deafen` pattern in
 `useLiveKit.ts`.
 
-**Wire format** (`streamWatchProtocol.ts`), two message types:
+**Wire format** (`streamWatchProtocol.ts`), the watch ping and the sharer's share signals:
 ```ts
 interface StreamWatchPayload {
   type: 'stream_watch';
@@ -301,10 +301,19 @@ interface StreamWatchPayload {
   watching: boolean;
 }
 
-interface StreamRepublishPayload {
-  type: 'stream_republish';   // sender is the sharer; no other fields
+interface ShareSignalPayload {
+  // sender is the sharer; no other fields
+  type: 'stream_republish' | 'stream_resume' | 'stream_stop';
 }
 ```
+
+`stream_resume` (the sharer's full reconnect published its share again) and
+`stream_stop` (the share ended for good) let a viewer that was watching watch
+again after a full reconnect; they are described in `docs/systems/voice.md`
+(Screen Sharing, "Viewers across a full reconnect"). A viewer that resumes
+sends `stream_watch { watching: true }` without a cue of its own; on the
+sharer's side its own full reconnect keeps viewers that come back in the
+watcher set, so they play no `stream_user_left` / `stream_user_joined` pair.
 
 `stream_republish` is sent by a sharer right before a codec change unpublishes
 its screen share to publish the same capture again (`republishScreenShare`).
@@ -350,7 +359,10 @@ diff transitions and fires the streamer-only sounds.
 **Crash / drop cleanup.** `RoomEvent.ParticipantDisconnected` evicts the
 disconnecting participant identity from every watcher set
 (`voiceStore.evictWatcher`). The `stream_user_left` cue plays on the streamer
-side at that point.
+side at that point. A disconnect seen while the room is not `Connected` is the
+room's own full reconnect dropping everyone, not a viewer leaving: nothing is
+evicted then, and at `Connected` `voiceStore.retainWatchers` drops the viewers
+that did not come back.
 
 **Self-stream-end suppression.** When the streamer themselves stops sharing
 (a real stop; a codec republish is not one, see above),
