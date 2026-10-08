@@ -328,7 +328,7 @@ export function JoinPage() {
               palette="space"
             />
           </div>
-          <p className="text-xs text-txt-tertiary uppercase tracking-wide mb-1">{t('auth:join.invitedTo')}</p>
+          <p className="text-xs text-txt-tertiary uppercase tracking-wide mb-1">{action === 'request' ? t('auth:join.invitedToRequest') : t('auth:join.invitedTo')}</p>
           <h1 className="text-2xl font-bold text-txt-primary">{preview.spaceName}</h1>
           {preview.description && (
             <p className="text-txt-secondary text-sm mt-2">{preview.description}</p>
@@ -557,7 +557,7 @@ export function JoinPage() {
           <AlreadyMemberCard spaceName={preview.spaceName} spaceId={preview.spaceId} navigate={navigate} />
         )}
 
-        {/* Phase: request-sent — the join request is with the space's managers */}
+        {/* Phase: request-sent: the join request is with the space's managers */}
         {phase === 'request-sent' && preview && (
           <RequestSentCard
             spaceName={preview.spaceName}

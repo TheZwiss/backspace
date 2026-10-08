@@ -236,6 +236,65 @@ describe('JoinPage for a space joined by request', () => {
   });
 });
 
+describe('JoinPage heading for a space joined by request', () => {
+  const REQUEST_HEADING = "You've been invited to ask to join";
+  const JOIN_HEADING = "You've been invited to join";
+
+  it('never promises entry: preview, request sent', async () => {
+    const user = userEvent.setup();
+    mockLocalPreview.mockResolvedValue(preview());
+    renderAt('abc123');
+
+    expect(await screen.findByText(REQUEST_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_HEADING)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ask to join as Mira' }));
+    expect(await screen.findByText('Request sent to Quiet Harbor')).toBeInTheDocument();
+    expect(screen.getByText(REQUEST_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_HEADING)).not.toBeInTheDocument();
+  });
+
+  it('never promises entry: request already waiting', async () => {
+    const user = userEvent.setup();
+    mockLocalPreview.mockResolvedValue(preview());
+    requestJoinSpace.mockRejectedValue(new HttpError(409, 'pending', undefined, 'join_request_pending'));
+    renderAt('abc123');
+
+    await user.click(await screen.findByRole('button', { name: 'Ask to join as Mira' }));
+    expect(await screen.findByText('Your request to join Quiet Harbor is waiting')).toBeInTheDocument();
+    expect(screen.getByText(REQUEST_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_HEADING)).not.toBeInTheDocument();
+  });
+
+  it('never promises entry: signed out', async () => {
+    useAuthStore.setState({ token: null, user: null });
+    mockLocalPreview.mockResolvedValue(preview());
+    renderAt('abc123');
+
+    expect(await screen.findByText(REQUEST_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(JOIN_HEADING)).not.toBeInTheDocument();
+  });
+
+  it('switches the heading when a join is refused with join_request_required', async () => {
+    const user = userEvent.setup();
+    mockLocalPreview.mockResolvedValue(preview({ visibility: undefined }));
+    joinByCode.mockRejectedValue(joinRequestRequired('S-REQ', ''));
+    renderAt('abc123');
+
+    expect(await screen.findByText(JOIN_HEADING)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Join as Mira' }));
+    expect(await screen.findByText(REQUEST_HEADING)).toBeInTheDocument();
+  });
+
+  it('keeps the join heading for a public space', async () => {
+    mockLocalPreview.mockResolvedValue(preview({ visibility: 'public' }));
+    renderAt('abc123');
+
+    expect(await screen.findByText(JOIN_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(REQUEST_HEADING)).not.toBeInTheDocument();
+  });
+});
+
 describe('JoinPage for spaces not joined by request', () => {
   it.each(['public', 'private'] as const)('joins a %s space directly', async (visibility) => {
     const user = userEvent.setup();

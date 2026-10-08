@@ -38,7 +38,7 @@ vi.mock('./authStore', () => ({
   ),
 }));
 
-// Stub the api client — use vi.fn() inline (hoisting constraint). HttpError
+// Stub the api client; use vi.fn() inline (hoisting constraint). HttpError
 // stays real: joinByCode reads the refusal's code from it.
 vi.mock('../api/client', async (importOriginal) => ({
   HttpError: (await importOriginal<typeof import('../api/client')>()).HttpError,
@@ -97,7 +97,7 @@ describe('spaceStore.joinByCode — origin normalization', () => {
   });
 });
 
-describe('spaceStore.joinByCode — a code of a space joined by request', () => {
+describe('spaceStore.joinByCode: a code of a space joined by request', () => {
   const REMOTE = 'https://orbit.example';
 
   function refusal(details?: Record<string, string>): HttpError {

@@ -399,7 +399,7 @@ export function JoinSpaceModal() {
         </form>
       )}
 
-      {/* Phase: request — the code belongs to a space joined by request */}
+      {/* Phase: request: the code belongs to a space joined by request */}
       {phase === 'request' && (
         <form onSubmit={handleSendRequest}>
           <p className="text-txt-secondary text-sm mb-3">{t('spaces:join.request.notice')}</p>
@@ -448,7 +448,7 @@ export function JoinSpaceModal() {
         </form>
       )}
 
-      {/* Phase: request-sent — the request is with the space's managers */}
+      {/* Phase: request-sent: the request is with the space's managers */}
       {phase === 'request-sent' && (
         <div role="status">
           <p className="text-txt-secondary text-sm mb-4">

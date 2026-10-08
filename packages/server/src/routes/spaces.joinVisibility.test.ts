@@ -232,7 +232,7 @@ describe('POST /api/spaces/:id/invite — visibility guard', () => {
   });
 });
 
-describe('GET /api/spaces/invite/:code/preview — visibility', () => {
+describe('GET /api/spaces/invite/:code/preview: visibility', () => {
   it('reports the visibility of each kind of space', async () => {
     makeSpace('p-req', 'request', 'pv-req');
     makeSpace('p-pub', 'public', 'pv-pub');
