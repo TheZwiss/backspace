@@ -481,8 +481,15 @@ All list changes go through the same helpers in `socialStore.ts`: `mergeRows` (g
 
 Removals are of two kinds:
 
-- **A relationship ends** (`friend_removed`, a request cancelled, declined, accepted or its relay failed, and the user's own remove, accept, decline and cancel): the event or action names one row by id and origin, and the person's whole entry goes. The friendship or request is one relationship however many instances list it; the relay clears the other instances' rows, and their own events then find nothing.
+- **A relationship ends** (`friend_removed`, a request cancelled, declined, accepted or its relay failed, and the user's own remove, accept, decline and cancel): the event or action names one row by id and origin, and the person's whole entry goes. The friendship or request is one relationship however many instances list it, for one identity; the relay clears the other instances' rows, and their own events then find nothing. A detached connection (`federationHomeOrphaned`, before re-attach) is a second identity, and a friendship it holds merges with the home's friendship with the same person (as it did before entries kept `_rows`): a `friend_removed` from the detached instance drops the entry until the next reload, although the home friendship remains.
 - **A user row is deleted** (`user_updated` with `isDeleted`): only the rows the deletion reaches go (`updateIsAbout`, `client-federation.md` section 5). A deleted copy drops that instance's row and the person stays, shown by another instance's row.
+- **A connection is disconnected or removed** (`instanceStore.disconnectInstance`, `forceRemoveEntry`): `removeInstanceRows(origin)` drops every row that instance issued, next to `removeInstanceSpaces(origin)`. A person another instance also lists stays, shown by that instance's row, so actions on them go to an instance the client still holds. A socket that drops (`setInstanceStatus`) keeps the rows: the instance is still held and its HTTP client still answers.
+
+Crossed requests are one entry. When the user sends Bob a request from home while Bob sends one from orbit, each instance keeps its own pending row, so home lists an outgoing row and orbit an incoming one. They are one entry, shown by the row from Bob's home (the incoming one), and an accept drops both. This is intended: it is one relationship either way.
+
+Removals that match nothing return the same arrays (and the same state), so subscribers do not re-render for, say, the second `friend_removed` that follows a relay.
+
+Other modules never read `_rows`. They look rows up through the store's exports: `friendRowAt(friends, id, origin)` (any instance's friend row, used by `presenceSubject.ts` for a server that sends only its row id), `friendEntryOf(friends, row, origin)` (the friend entry of a person), and `pendingRequestWith(requests, row, origin)` (the pending request row with a person, the one `origin` holds when it holds one, else the entry's shown row; used by the Add Friend search cards).
 
 ### Cross-Instance Friend Loading (`loadFriends`)
 
@@ -499,31 +506,33 @@ Same `Promise.allSettled()` fan-out pattern as `loadFriends`, and one entry per 
 
 ### Sending Friend Requests
 
-`sendFriendRequest(username: string)` sends the trimmed handle verbatim to the home instance API (`POST /api/social/requests`). As of 2026-04-25, all routing, peering, and remote lookup happen server-side — the client no longer resolves the domain to a connected instance or throws `InstanceNotConnectedError`/`InstanceDisconnectedError`. The server returns a structured error code on any failure; the catch block in `socialStore` maps it via `mapServerErrorToMessage` from `packages/web/src/utils/friendErrors.ts` and surfaces it as a toast.
+`sendFriendRequest(target: SendFriendRequest)` posts to the user's home (`getFriendsHomeOrigin()` in `instanceStore.ts`), the only instance that accepts a request from them: any other instance refuses a federated account with `not_authoritative_for_sender`. That is the page's instance (`''`) for a native or detached account, and the home's connected origin otherwise (the same rule as group DM creation and space invites, #391).
+
+`target` is written as the page's instance reads it: a typed handle is `{ username }` (trimmed), and a user the client holds is named by `friendRequestTarget(user, origin)` (`utils/friendRequestTarget.ts`). `addressedTo(target, home)` readdresses it for the home: a bare username names a user on the page's instance, so it gets the page's host (`bob` becomes `bob@<page host>`, which is what the Add Friend box shows for it); an identity, or a username that names its host, is sent as it is. All lookup and peering happen server-side. A failure is an `HttpError` with a server error code, which the caller shows through `describeError`.
 
 After success, reloads requests via `loadRequests()`.
 
 ### Cross-Instance Search (`searchUsers`)
 
-1. Fires parallel searches to home + all connected instances
-2. **Deduplication by canonical identity:** Uses `Map<string, number>` keyed by `user.homeUserId ?? user.id`
-   - First occurrence wins, but **native profiles replace replicated stubs**: if a native profile (`homeInstance` is null) is found for a canonical ID that was previously seen as a replicated stub, it replaces the entry
-   - The "native" check is `!homeInstance`, **not** `!homeUserId`. Native users have `homeUserId` backfilled to their own id by the server so federation tier-1 lookups succeed (`federation.ts:backfillHomeUserId`). `homeInstance` is the only field that reliably distinguishes native users (null) from replicated stubs (set to domain).
-   - This ensures the user sees the "real" profile (including the correct `_instanceOrigin` tag) rather than a replicated stub whose origin would be the caller's home instance
+1. Fires parallel searches to the page's instance and every connected instance, normalizes remote assets, and upserts every row into the `userViews` cache.
+2. **One result per person** (`userKey`), grouped by the same helpers as the friends and requests lists (`groupByPerson`, `shownRow`): a person two instances return (their home's row and a replicated row of them) is one result, shown by their home's row (`isIssuedByHome`) when one was returned, else by the first. Two users native to different instances are two results whatever their ids (#353). Results are plain `TaggedUser` rows without `_rows`: events do not change them.
 
-### Instance API Resolution (`getApiForOrigin`)
+The Add Friend tab matches each result to the lists by person, not by the shown row: `friendEntryOf` for "already a friend", and `pendingRequestWith` for a pending request. A card with a request is shown by that request's row of the person (its user and origin), because the request id is valid only on the instance that holds it.
+
+### Instance API Resolution (`apiAt`)
 
 ```typescript
-function getApiForOrigin(origin: string) {
-  if (!origin) return api;  // Home instance
+function apiAt(origin: string): BackspaceApiClient {
+  if (!origin) return api;  // The page's own instance
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
-  return instance?.api ?? api;  // Fallback to home if not found
+  if (!instance) throw new SocialInstanceNotConnectedError(origin);
+  return instance.api;
 }
 ```
 
-Used by `updateFriendRequest`, `cancelFriendRequest`, and `removeFriend` to route mutations to the correct instance.
+Used by `sendFriendRequest`, `updateFriendRequest`, `cancelFriendRequest` and `removeFriend`. It is strict: an origin the client holds no entry for (a connection removed from Connections) throws `SocialInstanceNotConnectedError`, whose message is `social:instanceNotConnected` with the host, and nothing is sent. It never falls back to the page's instance, which would receive another instance's row ids and fail, or act on whichever of its own rows has the same id. The shared `getApiForOrigin` in `crossStoreResolvers.ts` keeps its fallback because other surfaces rely on it (asset URLs, for one); `apiAt` is local to `socialStore`. The callers show the error like any other failed social action (`describeError` in a toast, or the card's error line).
 
-- `updateFriendRequest(id, origin, status)` and `cancelFriendRequest(id, origin)` take the request's id and the origin of the instance that holds it (a request entry's `_instanceOrigin`, or a discover card's for its `requestId`), call that instance, and drop the person's request entry.
+- `updateFriendRequest(id, origin, status, other?)` and `cancelFriendRequest(id, origin, other?)` take the request's id and the origin of the instance that holds it (a request entry's `_instanceOrigin`, or a discover card's for its `requestId`), call that instance, and drop the person's request entry. `other` is the other party as `origin` issued them; a discover card passes its user, so the person's entry is found by `userKey` when the list does not hold the card's request row yet (for example a card loaded from orbit before the list reloaded). Every request action on a card goes through the store; none calls the API directly.
 - `removeFriend(row, origin)` takes any row of the person and its origin (a friend entry, or a group DM member row with the DM copy's origin), finds the friend entry by `userKey`, calls the instance the entry is shown by with that row's id, and drops the entry. It does nothing when the person is not a friend.
 
 ### WS Event Handlers
@@ -605,7 +614,7 @@ Follows the same `Promise.allSettled()` fan-out pattern:
 
 1. Computes `canonicalHomeId = targetHomeUserId ?? targetUserId`
 2. Fires `api.users.getMutuals(targetUserId, canonicalHomeId)` to home + all connected instances
-3. **Friend dedup:** By canonical identity `friend.homeUserId ?? friend.id` (prevents the same friend appearing from multiple instances)
+3. **Friend dedup:** By person (`userKey(friend, origin)`), so the same friend listed by several instances appears once, and two users native to different instances with the same id stay two
 4. **Space dedup:** By `${space.id}:${origin}` (spaces on different instances are distinct entities)
 5. **Asset normalization:** Remote-origin friend avatars and space icons are resolved to absolute URLs
 
