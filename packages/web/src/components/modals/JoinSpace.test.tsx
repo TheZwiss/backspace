@@ -18,6 +18,8 @@ import { JoinSpaceModal } from './JoinSpace';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useExploreStore } from '../../stores/exploreStore';
+import { HttpError } from '../../api/client';
+import { JoinRequestRequiredError } from '../../utils/joinErrors';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -203,5 +205,68 @@ describe('JoinSpaceModal', () => {
     expect(screen.queryByText('Browse all in Explore')).not.toBeInTheDocument();
     // invite path still available
     expect(screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123')).toBeInTheDocument();
+  });
+
+  describe('a code of a space joined by request', () => {
+    function requestRequired(): JoinRequestRequiredError {
+      return new JoinRequestRequiredError(
+        new HttpError(403, 'requests', undefined, 'join_request_required', { spaceId: 'S-REQ' }),
+        'S-REQ',
+        '',
+      );
+    }
+
+    async function submitCode(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123'), 'reqcode');
+      await user.click(screen.getByText('Join Space'));
+    }
+
+    it('moves to a request step and sends the request with the note', async () => {
+      const user = userEvent.setup();
+      const requestJoinSpace = vi.fn().mockResolvedValue({ id: 'jr-1', spaceId: 'S-REQ', status: 'pending' });
+      useSpaceStore.setState({ joinByCode: vi.fn().mockRejectedValue(requestRequired()) });
+      useExploreStore.setState({ requestJoinSpace });
+      useUIStore.setState({ activeModal: 'joinSpace' });
+      renderModal();
+
+      await submitCode(user);
+
+      expect(await screen.findByText('This space takes join requests. Send one and a manager will review it.')).toBeInTheDocument();
+      await user.type(screen.getByLabelText('Note with your request'), 'hello');
+      await user.click(screen.getByRole('button', { name: 'Send Request' }));
+
+      expect(requestJoinSpace).toHaveBeenCalledWith('S-REQ', '', 'hello');
+      expect(await screen.findByText('Request sent. A manager will review it, and the space appears in your list once they approve.')).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('says a request is already waiting', async () => {
+      const user = userEvent.setup();
+      useSpaceStore.setState({ joinByCode: vi.fn().mockRejectedValue(requestRequired()) });
+      useExploreStore.setState({
+        requestJoinSpace: vi.fn().mockRejectedValue(new HttpError(409, 'pending', undefined, 'join_request_pending')),
+      });
+      useUIStore.setState({ activeModal: 'joinSpace' });
+      renderModal();
+
+      await submitCode(user);
+      await user.click(await screen.findByRole('button', { name: 'Send Request' }));
+
+      expect(await screen.findByText('You already asked to join this space. Your request is waiting for a manager.')).toBeInTheDocument();
+    });
+
+    it('shows a request already waiting when the join itself answers join_request_pending', async () => {
+      const user = userEvent.setup();
+      useSpaceStore.setState({
+        joinByCode: vi.fn().mockRejectedValue(new HttpError(409, 'pending', undefined, 'join_request_pending')),
+      });
+      useUIStore.setState({ activeModal: 'joinSpace' });
+      renderModal();
+
+      await submitCode(user);
+
+      expect(await screen.findByText('You already asked to join this space. Your request is waiting for a manager.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Send Request' })).not.toBeInTheDocument();
+    });
   });
 });

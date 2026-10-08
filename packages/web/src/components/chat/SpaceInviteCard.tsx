@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { describeError } from '../../i18n/errors';
-import { isAlreadyMemberError, isNotRequestableError, JoinRequestRequiredError } from '../../utils/joinErrors';
+import { isAlreadyMemberError, isJoinRequestPendingError, isNotRequestableError, JoinRequestRequiredError } from '../../utils/joinErrors';
 import { sendInviteJoinRequest, type InviteRequestOutcome } from '../../utils/inviteJoinRequest';
 import { Avatar } from '../ui/Avatar';
 import { getApiForOrigin } from '../../stores/spaceStore';
@@ -89,6 +89,12 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
         // Look up the space in the store by id; if not found (rare race), stay
         // silent rather than block the user with a noisy error.
         landOnSpace(payload.spaceId);
+        return;
+      }
+      if (isJoinRequestPendingError(err)) {
+        setRefusedJoin(true);
+        setRequestOutcome('pending');
+        setJoining(false);
         return;
       }
       if (err instanceof JoinRequestRequiredError) {

@@ -5,7 +5,10 @@ import type { JoinRequest } from '@backspace/shared';
 // connected instance's client, so the test controls both through hoisted
 // mocks: `homeApi` is what `../api/client` exports and `instanceState` is
 // what the instanceStore mock hands back.
-const { homeApi, instanceState, subscribers } = vi.hoisted(() => ({
+const { homeApi, instanceState, subscribers, connectedJoinOrigin } = vi.hoisted(() => ({
+  // spaceStore's origin check, stubbed: '' or the origin itself, or a refusal
+  // a test sets. Its own behaviour is covered in spaceStore.joinByCode.test.ts.
+  connectedJoinOrigin: vi.fn(async (origin?: string) => origin ?? ''),
   homeApi: {
     explore: {
       myJoinRequests: vi.fn<(status?: string) => Promise<{ requests: JoinRequest[] }>>(),
@@ -65,6 +68,7 @@ vi.mock('./spaceStore', () => ({
   useSpaceStore: {
     getState: () => ({ addSpaceFromReady: vi.fn() }),
   },
+  connectedJoinOrigin,
 }));
 
 import { useExploreStore, type TaggedExploreSpace } from './exploreStore';
@@ -422,5 +426,44 @@ describe('exploreStore.fetchSpaces sequencing', () => {
     expect(useExploreStore.getState().spaces).toEqual([]);
     expect(useExploreStore.getState().isLoading).toBe(false);
     expect(useExploreStore.getState().resultsQuery).toBe('');
+  });
+});
+
+describe('exploreStore.requestJoinSpace', () => {
+  it('sends the request to the space\'s instance and tags it with that origin', async () => {
+    const remote = makeInstance('https://chat.example.org');
+    instanceState.instances = [remote];
+    remote.api.explore.requestJoin.mockResolvedValue(makeRequest({ id: 'r-remote', spaceId: 'R1' }));
+
+    const request = await useExploreStore.getState().requestJoinSpace('R1', 'https://chat.example.org', 'hi');
+
+    expect(connectedJoinOrigin).toHaveBeenCalledWith('https://chat.example.org');
+    expect(remote.api.explore.requestJoin).toHaveBeenCalledWith('R1', 'hi');
+    expect(homeApi.explore.requestJoin).not.toHaveBeenCalled();
+    expect(request.id).toBe('r-remote');
+    expect(useExploreStore.getState().myRequests).toEqual([
+      expect.objectContaining({ id: 'r-remote', _instanceOrigin: 'https://chat.example.org' }),
+    ]);
+  });
+
+  it('sends a request for a space on the page\'s instance to home', async () => {
+    homeApi.explore.requestJoin.mockResolvedValue(makeRequest({ id: 'r-home', spaceId: 'S1' }));
+
+    await useExploreStore.getState().requestJoinSpace('S1', '');
+
+    expect(homeApi.explore.requestJoin).toHaveBeenCalledWith('S1', undefined);
+    expect(useExploreStore.getState().myRequests).toEqual([
+      expect.objectContaining({ id: 'r-home', _instanceOrigin: '' }),
+    ]);
+  });
+
+  it('sends nothing when the origin has no session, and records nothing', async () => {
+    const refusal = new Error('not connected');
+    connectedJoinOrigin.mockRejectedValueOnce(refusal);
+
+    await expect(useExploreStore.getState().requestJoinSpace('R1', 'https://gone.example')).rejects.toBe(refusal);
+
+    expect(homeApi.explore.requestJoin).not.toHaveBeenCalled();
+    expect(useExploreStore.getState().myRequests).toEqual([]);
   });
 });

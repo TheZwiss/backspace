@@ -11,7 +11,7 @@ import { parseInviteInput } from '../../utils/inviteParser';
 import { ExploreSpacePreviewCard } from './ExploreSpacePreviewCard';
 import { describeError } from '../../i18n/errors';
 import { FallbackNotice } from './RemotePasswordStep';
-import { isNotRequestableError, JoinRequestRequiredError } from '../../utils/joinErrors';
+import { isJoinRequestPendingError, isNotRequestableError, JoinRequestRequiredError } from '../../utils/joinErrors';
 import { sendInviteJoinRequest, type InviteRequestOutcome } from '../../utils/inviteJoinRequest';
 
 /**
@@ -104,7 +104,8 @@ export function JoinSpaceModal() {
   /**
    * Join by the code and open the space, or, when the code belongs to a
    * space joined by request, move to the request phase for the user to send
-   * one. Other failures are thrown to the calling phase.
+   * one (or straight to its outcome when one is already waiting). Other
+   * failures are thrown to the calling phase.
    */
   const joinAndNavigate = async (code: string, origin?: string) => {
     try {
@@ -112,6 +113,12 @@ export function JoinSpaceModal() {
       closeModal();
       navigate(`/channels/${space.id}`);
     } catch (err) {
+      if (isJoinRequestPendingError(err)) {
+        setRequestOutcome('pending');
+        setPhase('request-sent');
+        setError('');
+        return;
+      }
       if (!(err instanceof JoinRequestRequiredError)) throw err;
       setRequestTarget({ spaceId: err.spaceId, origin: err.origin });
       setPhase('request');

@@ -9,7 +9,7 @@ import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 import { describeError } from '../i18n/errors';
-import { isAlreadyMemberError, isNotRequestableError, JoinRequestRequiredError } from '../utils/joinErrors';
+import { isAlreadyMemberError, isJoinRequestPendingError, isNotRequestableError, JoinRequestRequiredError } from '../utils/joinErrors';
 import { sendInviteJoinRequest, type InviteRequestOutcome } from '../utils/inviteJoinRequest';
 import { FallbackNotice } from './modals/RemotePasswordStep';
 
@@ -121,9 +121,10 @@ export function JoinPage() {
    * Run the page's action against the invite's instance: send the join
    * request, or join by the code. Throws what the caller handles
    * (`NotConnectedError`, `RemoteLoginRequiredError`, a refusal). A request
-   * to a space that no longer takes requests joins by the code instead, and
-   * a join the server answers with `join_request_required` switches the page
-   * to the request action for the user to send.
+   * to a space that no longer takes requests joins by the code instead, a
+   * join the server answers with `join_request_required` switches the page
+   * to the request action for the user to send, and one it answers with
+   * `join_request_pending` shows the request that is already waiting.
    */
   const proceed = async (): Promise<void> => {
     if (!parsed) return;
@@ -142,6 +143,12 @@ export function JoinPage() {
       const space = await joinByCode(parsed.code, parsed.origin || undefined);
       navigate(`/channels/${space.id}`);
     } catch (err) {
+      if (isJoinRequestPendingError(err)) {
+        setAction('request');
+        setRequestOutcome('pending');
+        setPhase('request-sent');
+        return;
+      }
       if (!(err instanceof JoinRequestRequiredError)) throw err;
       setAction('request');
       setRequestSpaceId(err.spaceId);

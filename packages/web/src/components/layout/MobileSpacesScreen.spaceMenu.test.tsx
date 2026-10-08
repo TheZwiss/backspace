@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe('MobileSpacesScreen space menu: Invite People', () => {
-  it('shows the server reason when the space is joined by request', async () => {
+  it('shows the reason an instance up to 1.9.0 gives for refusing a request space its link', async () => {
     useSpaceStore.setState({
       generateInvite: vi.fn().mockRejectedValue(
         new HttpError(403, 'This space uses join requests', undefined, 'space_uses_join_requests'),
@@ -94,6 +94,26 @@ describe('MobileSpacesScreen space menu: Invite People', () => {
     await waitFor(() => expect(lastToast()?.message).toBe('This space is joined by request, so it has no invite links.'));
     expect(lastToast()?.type).toBe('warning');
     expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('copies the link of a space joined by request and says where it leads', async () => {
+    useSpaceStore.setState({ generateInvite: vi.fn().mockResolvedValue('abc123') });
+    const { container } = renderScreen();
+    openSpaceMenu(container);
+    await act(async () => { menuAction('invite').onClick(); });
+    await waitFor(() => expect(lastToast()?.type).toBe('success'));
+    expect(lastToast()?.message).toBe('Invite link copied. People who open it can ask to join.');
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/join/abc123`);
+  });
+
+  it('copies the link of a public space with the plain confirmation', async () => {
+    useSpaceStore.setState({ spaces: [{ ...SPACE, visibility: 'public' }], generateInvite: vi.fn().mockResolvedValue('abc123') });
+    const { container } = renderScreen();
+    openSpaceMenu(container);
+    await act(async () => { menuAction('invite').onClick(); });
+    await waitFor(() => expect(lastToast()?.type).toBe('success'));
+    expect(lastToast()?.message).toBe('Invite link copied to clipboard');
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/join/abc123`);
   });
 
   it('keeps the generic text when the failure has no code', async () => {
