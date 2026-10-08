@@ -60,7 +60,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | notes |
 |------|--------|-------|
 | `voice_join` | channelId | one room per user enforced |
-| `voice_leave` | — | |
+| `voice_leave` | (none) | leaves the voice the user holds on this instance: a voice channel or DM call hosted here, or a call hosted on a peer that they joined through here (relayed to the host as their leave in a group call). A client joining voice on another instance sends it to the instance its DM call goes through (voice.md, "Client-Side Call Routing") |
 | `voice_status` | isMuted, isDeafened, isCameraOn, isScreenSharing | server enforces space/permission mute |
 
 ### Voice Moderation
