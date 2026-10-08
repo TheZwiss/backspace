@@ -853,6 +853,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       // Real deletion will arrive via WebSocket (already removed locally)
     } catch (error) {
+      // A 404 says the message is already gone on the server: deleted from
+      // another tab or device, or by a moderator, before this request got
+      // there. The local removal stands and there is nothing to report.
+      if (error instanceof HttpError && error.status === 404) return;
       // Rollback: re-add the message, and say why the delete was refused.
       if (savedMessage) {
         get().addMessage(channelId, savedMessage);

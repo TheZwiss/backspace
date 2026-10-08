@@ -112,4 +112,17 @@ describe('a refused DM delete', () => {
     expect(toasts).toHaveLength(1);
     expect(toasts[0]!.message).toBe(i18n.t('errors:recipient_deleted'));
   });
+
+  it('leaves the message removed and says nothing when the server no longer has it', async () => {
+    let reject: (err: unknown) => void = () => {};
+    deleteMessage.mockReturnValueOnce(new Promise((_, r) => { reject = r; }));
+
+    const deleting = useChatStore.getState().deleteMessage('m-1', DM);
+    expect(cached()).toHaveLength(0);
+    reject(new HttpError(404, 'Message not found', undefined, 'message_not_found'));
+    await deleting;
+
+    expect(cached()).toHaveLength(0);
+    expect(useUIStore.getState().toasts).toHaveLength(0);
+  });
 });
