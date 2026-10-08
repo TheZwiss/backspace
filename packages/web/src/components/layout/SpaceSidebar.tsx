@@ -20,6 +20,7 @@ import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 import { getSpaceGradient } from '../../utils/gradients';
 import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { describeCodedError } from '../../i18n/errors';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
@@ -652,8 +653,8 @@ export function SpaceSidebar() {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
             await navigator.clipboard.writeText(spaceInviteUrl((space as TaggedSpace)._instanceOrigin, code));
             useUIStore.getState().addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
-          } catch {
-            useUIStore.getState().addToast(t('spaces:sidebar.space.inviteFailed'), 'warning', 3000);
+          } catch (err) {
+            useUIStore.getState().addToast(describeCodedError(err, t('spaces:sidebar.space.inviteFailed')), 'warning', 3000);
           }
         },
       },

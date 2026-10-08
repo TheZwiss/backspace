@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createInstance, type i18n as I18n } from 'i18next';
 import { HttpError, RateLimitError } from '../api/client';
-import { describeError } from './errors';
+import { describeCodedError, describeError } from './errors';
 
 let i18n: I18n;
 
@@ -113,5 +113,22 @@ describe('HttpError.fromBody', () => {
     expect(describeError(err)).toBe(
       'Your account on that instance has a password of its own. Sign in with it to reconnect.',
     );
+  });
+});
+
+describe('describeCodedError', () => {
+  it('localizes a coded server refusal', () => {
+    const err = HttpError.fromBody(403, { error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+    expect(describeCodedError(err, 'Fallback', i18n)).toBe('Dieses Konto wurde gelöscht.');
+  });
+
+  it('uses the fallback for a server error without a code', () => {
+    const err = HttpError.fromBody(500, { error: 'Internal Server Error', statusCode: 500 });
+    expect(describeCodedError(err, 'Fallback', i18n)).toBe('Fallback');
+  });
+
+  it('uses the fallback for an error that did not come from the server', () => {
+    expect(describeCodedError(new TypeError('Failed to fetch'), 'Fallback', i18n)).toBe('Fallback');
+    expect(describeCodedError('not an error', 'Fallback', i18n)).toBe('Fallback');
   });
 });

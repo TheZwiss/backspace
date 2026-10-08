@@ -8,8 +8,7 @@ import {
   type NotificationMuteDuration,
   type UpdateNotificationSettingRequest,
 } from '@backspace/shared';
-import { HttpError } from '../../api/client';
-import { describeError } from '../../i18n/errors';
+import { describeCodedError } from '../../i18n/errors';
 import { useFormatters } from '../../i18n/formatters';
 import { useUIStore } from '../../stores/uiStore';
 import {
@@ -107,7 +106,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
       await update(origin, { spaceId, channelId }, change);
     } catch (err) {
       addToast(
-        err instanceof HttpError && err.code ? describeError(err) : t('spaces:notifications.saveFailed'),
+        describeCodedError(err, t('spaces:notifications.saveFailed')),
         'warning',
         4000,
       );

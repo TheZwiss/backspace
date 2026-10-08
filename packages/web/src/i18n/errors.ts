@@ -37,3 +37,17 @@ export function describeErrorCode(
   }
   return message.trim().length > 0 ? message : instance.t('errors:generic');
 }
+
+/**
+ * The server's coded reason when the request failed with one, else
+ * `fallback`. For surfaces whose own failure text says more than the
+ * server's bare English `error` or a browser exception message would (a
+ * failed clipboard write, a network drop), but which must still name a
+ * refusal the server explained, such as `space_uses_join_requests`.
+ */
+export function describeCodedError(err: unknown, fallback: string, instance: I18n = defaultI18n): string {
+  if (err instanceof HttpError && err.code) {
+    return describeError(err, instance);
+  }
+  return fallback;
+}

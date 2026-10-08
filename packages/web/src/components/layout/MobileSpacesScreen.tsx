@@ -26,6 +26,7 @@ import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { getSpaceChannelLocation } from '../../hooks/useNotificationSettings';
 import { ChannelMutedIndicator } from '../notifications/ChannelMutedIndicator';
 import { NotificationSettingsModal, type NotificationSettingsModalTarget } from '../notifications/NotificationSettingsModal';
+import { describeCodedError } from '../../i18n/errors';
 
 export function MobileSpacesScreen() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -351,8 +352,8 @@ export function MobileSpacesScreen() {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
             await navigator.clipboard.writeText(spaceInviteUrl((space as TaggedSpace)._instanceOrigin, code));
             addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
-          } catch {
-            addToast(t('spaces:sidebar.space.inviteFailed'), 'warning', 3000);
+          } catch (err) {
+            addToast(describeCodedError(err, t('spaces:sidebar.space.inviteFailed')), 'warning', 3000);
           }
         },
       },
