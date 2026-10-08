@@ -11,8 +11,17 @@ import { parseInviteInput } from '../../utils/inviteParser';
 import { ExploreSpacePreviewCard } from './ExploreSpacePreviewCard';
 import { describeError } from '../../i18n/errors';
 import { FallbackNotice } from './RemotePasswordStep';
+import { isNotRequestableError, JoinRequestRequiredError } from '../../utils/joinErrors';
+import { sendInviteJoinRequest, type InviteRequestOutcome } from '../../utils/inviteJoinRequest';
 
-type JoinPhase = 'input' | 'connect' | 'fallback';
+/**
+ * `request` offers a join request: the code belongs to a space joined by
+ * request, which a code never admits. `request-sent` says what became of it.
+ */
+type JoinPhase = 'input' | 'connect' | 'fallback' | 'request' | 'request-sent';
+
+/** The longest note a join request keeps; the server cuts anything longer. */
+const JOIN_REQUEST_MESSAGE_MAX = 500;
 
 export function JoinSpaceModal() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -26,6 +35,9 @@ export function JoinSpaceModal() {
   const [fallbackUsername, setFallbackUsername] = useState('');
   const [fallbackReason, setFallbackReason] = useState<RemoteLoginReason>('credential-refused');
   const [fallbackPassword, setFallbackPassword] = useState('');
+  const [requestTarget, setRequestTarget] = useState<{ spaceId: string; origin: string } | null>(null);
+  const [requestMessage, setRequestMessage] = useState('');
+  const [requestOutcome, setRequestOutcome] = useState<InviteRequestOutcome>('sent');
 
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -83,13 +95,55 @@ export function JoinSpaceModal() {
       setPassword('');
       setFallbackUsername('');
       setFallbackPassword('');
+      setRequestTarget(null);
+      setRequestMessage('');
+      setRequestOutcome('sent');
     }
   }, [isOpen]);
 
+  /**
+   * Join by the code and open the space, or, when the code belongs to a
+   * space joined by request, move to the request phase for the user to send
+   * one. Other failures are thrown to the calling phase.
+   */
   const joinAndNavigate = async (code: string, origin?: string) => {
-    const space = await joinByCode(code, origin || undefined);
-    closeModal();
-    navigate(`/channels/${space.id}`);
+    try {
+      const space = await joinByCode(code, origin || undefined);
+      closeModal();
+      navigate(`/channels/${space.id}`);
+    } catch (err) {
+      if (!(err instanceof JoinRequestRequiredError)) throw err;
+      setRequestTarget({ spaceId: err.spaceId, origin: err.origin });
+      setPhase('request');
+      setError('');
+    }
+  };
+
+  // Request phase: send the join request the code led to
+  const handleSendRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestTarget) return;
+    setError('');
+    setIsLoading(true);
+    try {
+      const outcome = await sendInviteJoinRequest(requestTarget.spaceId, requestTarget.origin, requestMessage.trim() || undefined);
+      setRequestOutcome(outcome);
+      setPhase('request-sent');
+    } catch (err) {
+      if (isNotRequestableError(err)) {
+        // The space stopped taking requests since the code was tried: the
+        // code follows its visibility now.
+        try {
+          await joinAndNavigate(parsedCode, parsedOrigin);
+        } catch (joinErr) {
+          setError(describeError(joinErr));
+        }
+      } else {
+        setError(describeError(err));
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Phase 1: Submit invite code/URL
@@ -336,6 +390,73 @@ export function JoinSpaceModal() {
             </div>
           </div>
         </form>
+      )}
+
+      {/* Phase: request — the code belongs to a space joined by request */}
+      {phase === 'request' && (
+        <form onSubmit={handleSendRequest}>
+          <p className="text-txt-secondary text-sm mb-3">{t('spaces:join.request.notice')}</p>
+          <textarea
+            value={requestMessage}
+            onChange={(e) => setRequestMessage(e.target.value)}
+            placeholder={t('spaces:explore.requestMessagePlaceholder')}
+            aria-label={t('spaces:join.request.messageLabel')}
+            maxLength={JOIN_REQUEST_MESSAGE_MAX}
+            rows={3}
+            disabled={isLoading}
+            className="input-standard w-full mb-4 resize-none"
+            autoFocus
+          />
+          <div className="sticky bottom-0 z-10 pointer-events-none">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => { setPhase('input'); setRequestTarget(null); setRequestMessage(''); setError(''); }}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  {t('common:actions.back')}
+                </button>
+                <div className="w-px h-5 bg-white/10" />
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  {t('common:actions.cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* Phase: request-sent — the request is with the space's managers */}
+      {phase === 'request-sent' && (
+        <div role="status">
+          <p className="text-txt-secondary text-sm mb-4">
+            {requestOutcome === 'sent' ? t('spaces:join.request.sent') : t('spaces:join.request.pending')}
+          </p>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={closeModal}
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors"
+            >
+              {t('common:actions.done')}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Phase: fallback — the account's own credentials on the remote instance */}

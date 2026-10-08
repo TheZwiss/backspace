@@ -351,7 +351,11 @@ export function MobileSpacesScreen() {
           try {
             const code = await useSpaceStore.getState().generateInvite(spaceId);
             await navigator.clipboard.writeText(spaceInviteUrl((space as TaggedSpace)._instanceOrigin, code));
-            addToast(t('spaces:sidebar.space.inviteCopied'), 'success', 3000);
+            addToast(
+              t(space.visibility === 'request' ? 'spaces:sidebar.space.inviteCopiedRequest' : 'spaces:sidebar.space.inviteCopied'),
+              'success',
+              3000,
+            );
           } catch (err) {
             addToast(describeCodedError(err, t('spaces:sidebar.space.inviteFailed')), 'warning', 3000);
           }

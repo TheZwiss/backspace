@@ -152,7 +152,13 @@
     "revoked": "Convite não é mais válido",
     "join": "Entrar",
     "joining": "Entrando…",
-    "joinFailed": "Falha ao entrar"
+    "joinFailed": "Falha ao entrar",
+    "askToJoin": "Pedir para entrar",
+    "sendingRequest": "Enviando…",
+    "requestSent": "Solicitação enviada",
+    "requestPending": "Solicitação pendente",
+    "requestNotice": "Este espaço aceita solicitações de entrada. Um gerente aprova cada uma.",
+    "requestReview": "Um gerente vai analisar sua solicitação."
   },
   "notification": {
     "unknownSender": "Alguém",

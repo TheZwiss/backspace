@@ -144,7 +144,13 @@
     "revoked": "邀请不再有效",
     "join": "加入",
     "joining": "正在加入…",
-    "joinFailed": "加入失败"
+    "joinFailed": "加入失败",
+    "askToJoin": "申请加入",
+    "sendingRequest": "正在发送…",
+    "requestSent": "申请已发送",
+    "requestPending": "申请待处理",
+    "requestNotice": "此空间采用申请加入模式，每个申请都由管理员批准。",
+    "requestReview": "管理员会审核您的申请。"
   },
   "notification": {
     "unknownSender": "有人",

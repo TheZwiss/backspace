@@ -108,10 +108,7 @@
   "invite": {
     "title": "Invite Friends",
     "intro": "Send to friends, or share a link.",
-    "requestOnly": {
-      "notice": "This space uses join requests. People join by requesting approval from a manager, so it has no invite link to share.",
-      "dismiss": "Got it"
-    },
+    "introRequest": "Send to friends, or share a link. People who open it ask to join, and a manager approves each request.",
     "searchPlaceholder": "Search friends...",
     "noMatches": "No friends match your search",
     "noFriends": "No friends yet",
@@ -167,6 +164,12 @@
       "passwordPlaceholder": "Password on the remote instance",
       "submit": "Login & Join",
       "submitting": "Logging in..."
+    },
+    "request": {
+      "notice": "This space takes join requests. Send one and a manager will review it.",
+      "messageLabel": "Note with your request",
+      "sent": "Request sent. A manager will review it, and the space appears in your list once they approve.",
+      "pending": "You already asked to join this space. Your request is waiting for a manager."
     }
   },
   "explore": {
@@ -507,6 +510,7 @@
     },
     "space": {
       "inviteCopied": "Invite link copied to clipboard",
+      "inviteCopiedRequest": "Invite link copied. People who open it can ask to join.",
       "inviteFailed": "Failed to generate invite",
       "transferOwnership": "Transfer Ownership",
       "settings": "Space Settings",

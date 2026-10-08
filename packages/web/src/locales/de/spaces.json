@@ -108,10 +108,7 @@
   "invite": {
     "title": "Freunde einladen",
     "intro": "Schick die Einladung an Freunde oder teile einen Link.",
-    "requestOnly": {
-      "notice": "Dieser Space nutzt Beitrittsanfragen. Wer beitreten will, bittet die Verwaltung um Freigabe, deshalb gibt es keinen Einladungslink zum Teilen.",
-      "dismiss": "Verstanden"
-    },
+    "introRequest": "Schick die Einladung an Freunde oder teile einen Link. Wer ihn öffnet, fragt den Beitritt an, und die Verwaltung gibt jede Anfrage frei.",
     "searchPlaceholder": "Freunde suchen…",
     "noMatches": "Keine Freunde passen zu deiner Suche",
     "noFriends": "Noch keine Freunde",
@@ -167,6 +164,12 @@
       "passwordPlaceholder": "Passwort auf der anderen Instanz",
       "submit": "Anmelden und beitreten",
       "submitting": "Anmeldung läuft…"
+    },
+    "request": {
+      "notice": "Dieser Space nimmt Beitrittsanfragen an. Sende eine, und die Verwaltung prüft sie.",
+      "messageLabel": "Notiz zu deiner Anfrage",
+      "sent": "Anfrage gesendet. Die Verwaltung prüft sie, und sobald sie zustimmt, erscheint der Space in deiner Liste.",
+      "pending": "Du hast für diesen Space schon angefragt. Deine Anfrage wartet auf die Verwaltung."
     }
   },
   "explore": {
@@ -507,6 +510,7 @@
     },
     "space": {
       "inviteCopied": "Einladungslink kopiert",
+      "inviteCopiedRequest": "Einladungslink kopiert. Wer ihn öffnet, kann den Beitritt anfragen.",
       "inviteFailed": "Einladung konnte nicht erstellt werden",
       "transferOwnership": "Besitz übertragen",
       "settings": "Space-Einstellungen",

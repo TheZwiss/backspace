@@ -148,7 +148,13 @@
     "revoked": "Invite no longer valid",
     "join": "Join",
     "joining": "Joining…",
-    "joinFailed": "Failed to join"
+    "joinFailed": "Failed to join",
+    "askToJoin": "Ask to join",
+    "sendingRequest": "Sending…",
+    "requestSent": "Request sent",
+    "requestPending": "Request pending",
+    "requestNotice": "This space takes join requests. A manager approves each one.",
+    "requestReview": "A manager will review your request."
   },
   "notification": {
     "unknownSender": "Someone",

@@ -108,10 +108,7 @@
   "invite": {
     "title": "邀请好友",
     "intro": "发送给好友，或分享邀请链接。",
-    "requestOnly": {
-      "notice": "此空间采用申请加入模式。成员需向管理员申请批准方可加入，因此没有可分享的邀请链接。",
-      "dismiss": "知道了"
-    },
+    "introRequest": "发送给好友，或分享邀请链接。打开链接的人会申请加入，由管理员批准每个申请。",
     "searchPlaceholder": "搜索好友…",
     "noMatches": "没有匹配您搜索的好友",
     "noFriends": "暂无好友",
@@ -166,6 +163,12 @@
       "passwordPlaceholder": "远端实例上的密码",
       "submit": "登录并加入",
       "submitting": "正在登录…"
+    },
+    "request": {
+      "notice": "此空间采用申请加入模式。发送申请后，管理员会进行审核。",
+      "messageLabel": "申请留言",
+      "sent": "申请已发送。管理员会进行审核，批准后该空间会出现在您的列表中。",
+      "pending": "您已申请加入此空间。您的申请正在等待管理员处理。"
     }
   },
   "explore": {
@@ -500,6 +503,7 @@
     },
     "space": {
       "inviteCopied": "邀请链接已复制到剪贴板",
+      "inviteCopiedRequest": "邀请链接已复制。打开链接的人可以申请加入。",
       "inviteFailed": "生成邀请失败",
       "transferOwnership": "转让所有权",
       "settings": "空间设置",

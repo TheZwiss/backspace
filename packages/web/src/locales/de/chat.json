@@ -148,7 +148,13 @@
     "revoked": "Einladung nicht mehr gültig",
     "join": "Beitreten",
     "joining": "Beitritt läuft…",
-    "joinFailed": "Beitritt fehlgeschlagen"
+    "joinFailed": "Beitritt fehlgeschlagen",
+    "askToJoin": "Beitritt anfragen",
+    "sendingRequest": "Wird gesendet…",
+    "requestSent": "Anfrage gesendet",
+    "requestPending": "Anfrage ausstehend",
+    "requestNotice": "Dieser Space nimmt Beitrittsanfragen an. Die Verwaltung gibt jede frei.",
+    "requestReview": "Die Verwaltung prüft deine Anfrage."
   },
   "notification": {
     "unknownSender": "Jemand",

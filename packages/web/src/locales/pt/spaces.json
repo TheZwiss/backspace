@@ -108,10 +108,7 @@
   "invite": {
     "title": "Convidar amigos",
     "intro": "Envie para amigos ou compartilhe um link.",
-    "requestOnly": {
-      "notice": "Este espaço usa solicitações de entrada. As pessoas entram pedindo aprovação a um gerente, então não há link de convite para compartilhar.",
-      "dismiss": "Entendi"
-    },
+    "introRequest": "Envie para amigos ou compartilhe um link. Quem abrir o link pede para entrar, e um gerente aprova cada solicitação.",
     "searchPlaceholder": "Pesquisar amigos...",
     "noMatches": "Nenhum amigo corresponde à sua pesquisa",
     "noFriends": "Nenhum amigo ainda",
@@ -168,6 +165,12 @@
       "passwordPlaceholder": "Senha na instância remota",
       "submit": "Entrar e participar",
       "submitting": "Entrando..."
+    },
+    "request": {
+      "notice": "Este espaço aceita solicitações de entrada. Envie uma e um gerente vai analisá-la.",
+      "messageLabel": "Nota da solicitação",
+      "sent": "Solicitação enviada. Um gerente vai analisá-la, e o espaço aparece na sua lista quando ela for aprovada.",
+      "pending": "Você já pediu para entrar neste espaço. Sua solicitação está aguardando um gerente."
     }
   },
   "explore": {
@@ -514,6 +517,7 @@
     },
     "space": {
       "inviteCopied": "Link de convite copiado para a área de transferência",
+      "inviteCopiedRequest": "Link de convite copiado. Quem abrir o link pode pedir para entrar.",
       "inviteFailed": "Falha ao gerar o convite",
       "transferOwnership": "Transferir propriedade",
       "settings": "Configurações do espaço",

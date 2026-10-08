@@ -165,7 +165,7 @@
   "space_uses_join_requests": "Neste espaço a entrada é por solicitação, então ele não tem links de convite.",
   "invite_code_required": "Digite um código de convite.",
   "invite_not_found": "Esse código de convite não é válido.",
-  "join_request_required": "Este espaço precisa de uma solicitação de entrada aprovada para você poder entrar.",
+  "join_request_required": "Este espaço aceita solicitações de entrada. Envie uma e um gerente vai analisá-la.",
   "cannot_change_own_roles": "Você não pode alterar seus próprios cargos.",
   "role_ids_invalid": "A lista de cargos não é válida.",
   "member_not_found": "Não foi possível encontrar esse membro.",

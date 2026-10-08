@@ -165,7 +165,7 @@
   "space_uses_join_requests": "该空间通过申请方式加入，因此没有邀请链接。",
   "invite_code_required": "请输入邀请码。",
   "invite_not_found": "该邀请码无效。",
-  "join_request_required": "此空间需要您的加入申请获得批准后方可进入。",
+  "join_request_required": "此空间采用申请加入模式。发送申请后，管理员会进行审核。",
   "cannot_change_own_roles": "您不能更改自己的身份组。",
   "role_ids_invalid": "身份组列表无效。",
   "member_not_found": "未找到该成员。",

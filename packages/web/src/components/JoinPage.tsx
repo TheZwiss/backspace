@@ -9,10 +9,20 @@ import { parseInviteInput, buildInstanceJoinUrl } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 import { describeError } from '../i18n/errors';
-import { isAlreadyMemberError } from '../utils/joinErrors';
+import { isAlreadyMemberError, isNotRequestableError, JoinRequestRequiredError } from '../utils/joinErrors';
+import { sendInviteJoinRequest, type InviteRequestOutcome } from '../utils/inviteJoinRequest';
 import { FallbackNotice } from './modals/RemotePasswordStep';
 
-type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member';
+type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member' | 'request-sent';
+
+/**
+ * What the page's action does. `request` sends a join request, for a space
+ * joined by request: its link admits no one, a manager approves each
+ * request. Read from the preview's visibility, and switched when the server
+ * answers otherwise (an instance whose preview has no visibility, or a space
+ * whose visibility changed after the page loaded).
+ */
+type JoinAction = 'join' | 'request';
 
 export function JoinPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -42,6 +52,12 @@ export function JoinPage() {
   const [phase, setPhase] = useState<JoinPhase>('preview');
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+
+  // Join request state, for a space joined by request
+  const [action, setAction] = useState<JoinAction>('join');
+  const [requestSpaceId, setRequestSpaceId] = useState('');
+  const [requestMessage, setRequestMessage] = useState('');
+  const [requestOutcome, setRequestOutcome] = useState<InviteRequestOutcome>('sent');
 
   // Federation connect state
   const [password, setPassword] = useState('');
@@ -89,6 +105,8 @@ export function JoinPage() {
         }
         const data = await client.spaces.invitePreview(parsed.code);
         setPreview(data);
+        setAction(data.visibility === 'request' ? 'request' : 'join');
+        setRequestSpaceId(data.spaceId);
       } catch (err) {
         setPreviewError(err instanceof Error ? describeError(err) : t('auth:join.errors.loadFailed'));
       } finally {
@@ -99,14 +117,45 @@ export function JoinPage() {
     fetchPreview();
   }, [rawInviteCode, parsed]);
 
-  // Join handler
+  /**
+   * Run the page's action against the invite's instance: send the join
+   * request, or join by the code. Throws what the caller handles
+   * (`NotConnectedError`, `RemoteLoginRequiredError`, a refusal). A request
+   * to a space that no longer takes requests joins by the code instead, and
+   * a join the server answers with `join_request_required` switches the page
+   * to the request action for the user to send.
+   */
+  const proceed = async (): Promise<void> => {
+    if (!parsed) return;
+    if (action === 'request' && requestSpaceId) {
+      try {
+        const outcome = await sendInviteJoinRequest(requestSpaceId, parsed.origin ?? '', requestMessage.trim() || undefined);
+        setRequestOutcome(outcome);
+        setPhase('request-sent');
+        return;
+      } catch (err) {
+        if (!isNotRequestableError(err)) throw err;
+        setAction('join');
+      }
+    }
+    try {
+      const space = await joinByCode(parsed.code, parsed.origin || undefined);
+      navigate(`/channels/${space.id}`);
+    } catch (err) {
+      if (!(err instanceof JoinRequestRequiredError)) throw err;
+      setAction('request');
+      setRequestSpaceId(err.spaceId);
+      setPhase('preview');
+    }
+  };
+
+  // Join (or request) handler
   const handleJoin = async () => {
     if (!parsed) return;
     setError('');
     setIsJoining(true);
     try {
-      const space = await joinByCode(parsed.code, parsed.origin || undefined);
-      navigate(`/channels/${space.id}`);
+      await proceed();
     } catch (err) {
       if (err instanceof NotConnectedError) {
         setPhase('connect');
@@ -132,8 +181,7 @@ export function JoinPage() {
     setIsJoining(true);
     try {
       await connectToRemote(parsed.origin, password, user?.displayName || undefined);
-      const space = await joinByCode(parsed.code, parsed.origin);
-      navigate(`/channels/${space.id}`);
+      await proceed();
     } catch (err) {
       if (err instanceof RemoteLoginRequiredError) {
         setPhase('fallback');
@@ -162,8 +210,7 @@ export function JoinPage() {
     setIsJoining(true);
     try {
       await loginToRemote(parsed.origin, fallbackUsername, fallbackPassword);
-      const space = await joinByCode(parsed.code, parsed.origin);
-      navigate(`/channels/${space.id}`);
+      await proceed();
     } catch (err) {
       if (isAlreadyMemberError(err)) {
         setPhase('already-member');
@@ -297,6 +344,9 @@ export function JoinPage() {
         {/* Phase: preview — main join UI */}
         {phase === 'preview' && (
           <>
+            {action === 'request' && (
+              <p className="mb-3 text-center text-txt-secondary text-sm">{t('auth:join.request.notice')}</p>
+            )}
             {token && user ? (
               /* Authenticated user — show identity card + join */
               <div className="space-y-3">
@@ -312,12 +362,26 @@ export function JoinPage() {
                     <p className="text-txt-tertiary text-xs truncate">@{user.username}</p>
                   </div>
                 </div>
+                {action === 'request' && (
+                  <textarea
+                    value={requestMessage}
+                    onChange={(e) => setRequestMessage(e.target.value)}
+                    placeholder={t('auth:join.request.messagePlaceholder')}
+                    aria-label={t('auth:join.request.messageLabel')}
+                    maxLength={JOIN_REQUEST_MESSAGE_MAX}
+                    rows={2}
+                    disabled={isJoining}
+                    className="input-standard w-full py-2 text-sm resize-none"
+                  />
+                )}
                 <button
                   onClick={handleJoin}
                   disabled={isJoining}
                   className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isJoining ? t('auth:join.joining') : t('auth:join.joinAs', { name: user.displayName || user.username })}
+                  {action === 'request'
+                    ? (isJoining ? t('auth:join.request.sending') : t('auth:join.request.askAs', { name: user.displayName || user.username }))
+                    : (isJoining ? t('auth:join.joining') : t('auth:join.joinAs', { name: user.displayName || user.username }))}
                 </button>
                 <p className="text-center text-xs text-txt-tertiary">
                   {t('auth:join.notYou')}{' '}
@@ -353,7 +417,7 @@ export function JoinPage() {
                   to={`/login${redirectParam}`}
                   className="block w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors text-center"
                 >
-                  {t('auth:join.loginToJoin')}
+                  {action === 'request' ? t('auth:join.request.loginToAsk') : t('auth:join.loginToJoin')}
                 </Link>
                 <Link
                   to={`/register${redirectParam}`}
@@ -473,7 +537,9 @@ export function JoinPage() {
                 disabled={isJoining || !password}
                 className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isJoining ? t('auth:join.connect.submitting') : t('auth:join.connect.submit')}
+                {isJoining
+                  ? t('auth:join.connect.submitting')
+                  : action === 'request' ? t('auth:join.connect.submitRequest') : t('auth:join.connect.submit')}
               </button>
             </div>
           </form>
@@ -482,6 +548,15 @@ export function JoinPage() {
         {/* Phase: already-member — green success with auto-redirect */}
         {phase === 'already-member' && preview && (
           <AlreadyMemberCard spaceName={preview.spaceName} spaceId={preview.spaceId} navigate={navigate} />
+        )}
+
+        {/* Phase: request-sent — the join request is with the space's managers */}
+        {phase === 'request-sent' && preview && (
+          <RequestSentCard
+            spaceName={preview.spaceName}
+            outcome={requestOutcome}
+            onDone={() => navigate('/channels/@me')}
+          />
         )}
 
         {/* Phase: fallback — the account's own credentials on the remote */}
@@ -528,12 +603,42 @@ export function JoinPage() {
                 disabled={isJoining || !fallbackUsername || !fallbackPassword}
                 className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isJoining ? t('auth:join.fallback.submitting') : t('auth:join.fallback.submit')}
+                {isJoining
+                  ? t('auth:join.fallback.submitting')
+                  : action === 'request' ? t('auth:join.fallback.submitRequest') : t('auth:join.fallback.submit')}
               </button>
             </div>
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The longest note a join request keeps; the server cuts anything longer. */
+const JOIN_REQUEST_MESSAGE_MAX = 500;
+
+function RequestSentCard({ spaceName, outcome, onDone }: { spaceName: string; outcome: InviteRequestOutcome; onDone: () => void }) {
+  const { t } = useTranslation(['auth']);
+  return (
+    <div className="text-center" role="status">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-accent-mint/10 flex items-center justify-center">
+        <svg className="w-6 h-6 text-accent-mint" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <p className="text-txt-primary font-medium mb-1">
+        {outcome === 'sent'
+          ? t('auth:join.requestSent.title', { space: spaceName })
+          : t('auth:join.requestSent.pendingTitle', { space: spaceName })}
+      </p>
+      <p className="text-txt-tertiary text-xs mb-4">{t('auth:join.requestSent.body')}</p>
+      <button
+        onClick={onDone}
+        className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+      >
+        {t('auth:join.invalid.backToApp')}
+      </button>
     </div>
   );
 }

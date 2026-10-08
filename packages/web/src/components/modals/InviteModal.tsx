@@ -198,10 +198,10 @@ export function InviteModal() {
   const isOpen = activeModal === 'invite';
   const currentSpace = spaces.find((s) => s.id === currentSpaceId);
   const instanceOrigin = currentSpace?._instanceOrigin ?? '';
-  // Request-only spaces are approval-gated: they have no usable invite link and
-  // the /invite endpoint 403s. Show an explanatory notice instead of the invite
-  // affordances, and skip the invite-code fetch entirely.
-  const isRequestOnly = currentSpace?.visibility === 'request';
+  // A space joined by request is invited to like any other. Its link and its
+  // cards lead to a join request that a manager approves, which the intro
+  // says.
+  const joinsByRequest = currentSpace?.visibility === 'request';
 
   const [inviteCode, setInviteCode] = useState('');
   const [codeError, setCodeError] = useState('');
@@ -220,7 +220,7 @@ export function InviteModal() {
 
   // Fetch / generate the per-space invite code on open.
   useEffect(() => {
-    if (!isOpen || !currentSpaceId || isRequestOnly) return;
+    if (!isOpen || !currentSpaceId) return;
     setCodeLoading(true);
     setCodeError('');
     generateInvite(currentSpaceId).then(
@@ -233,7 +233,7 @@ export function InviteModal() {
         setCodeLoading(false);
       },
     );
-  }, [isOpen, currentSpaceId, generateInvite, isRequestOnly]);
+  }, [isOpen, currentSpaceId, generateInvite]);
 
   // Reset modal state on open.
   useEffect(() => {
@@ -391,22 +391,9 @@ export function InviteModal() {
       title={t('spaces:invite.title')}
       mobileStyle="sheet"
     >
-      {isRequestOnly ? (
-        <div className="space-y-3">
-          <p className="text-[13px] text-txt-tertiary">
-            {t('spaces:invite.requestOnly.notice')}
-          </p>
-          <button
-            onClick={closeModal}
-            className="w-full py-2 rounded-md text-[13px] font-semibold glass-pill text-txt-primary"
-          >
-            {t('spaces:invite.requestOnly.dismiss')}
-          </button>
-        </div>
-      ) : (
       <div className="space-y-3">
         <p className="text-[13px] text-txt-tertiary">
-          {t('spaces:invite.intro')}
+          {joinsByRequest ? t('spaces:invite.introRequest') : t('spaces:invite.intro')}
         </p>
 
         {/* Selected chips — hidden in results view */}
@@ -531,7 +518,6 @@ export function InviteModal() {
           </div>
         </div>
       </div>
-      )}
     </Modal>
   );
 }

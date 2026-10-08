@@ -430,8 +430,10 @@ describe('InviteModal', () => {
     expect(screen.getByText('Sam')).toBeInTheDocument();
   });
 
-  it('shows an approval-required notice and hides invite affordances for request-only spaces', async () => {
-    const generateInvite = vi.fn().mockResolvedValue('should-not-be-used');
+  it('offers the link and the friend list for a space joined by request, and says where the link leads', async () => {
+    const user = userEvent.setup();
+    const generateInvite = vi.fn().mockResolvedValue('req-code');
+    mockSpaceInvite.mockResolvedValue({});
     useUIStore.setState({ activeModal: 'invite', modalData: {} });
     useSpaceStore.setState({
       currentSpaceId: 'space-1',
@@ -446,14 +448,25 @@ describe('InviteModal', () => {
 
     render(<InviteModal />);
 
-    // Explanatory copy replaces the invite UI.
-    expect(screen.getByText(/join request/i)).toBeInTheDocument();
-    // None of the invite affordances render.
-    expect(screen.queryByPlaceholderText('Search friends...')).not.toBeInTheDocument();
-    expect(screen.queryByText('Or share a link')).not.toBeInTheDocument();
-    expect(screen.queryByText('Alex')).not.toBeInTheDocument();
-    // No invite code is requested for a request-only space (the endpoint 403s).
-    expect(generateInvite).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('Send to friends, or share a link. People who open it ask to join, and a manager approves each request.'),
+    ).toBeInTheDocument();
+    expect(generateInvite).toHaveBeenCalledWith('space-1');
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(`${window.location.origin}/join/req-code`)).toBeInTheDocument();
+    });
+    expect(screen.getByPlaceholderText('Search friends...')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Alex'));
+    await user.click(screen.getByRole('button', { name: /send 1 invite/i }));
+    await waitFor(() => expect(mockSpaceInvite).toHaveBeenCalledTimes(1));
+    expect(mockSpaceInvite.mock.calls[0][0]).toMatchObject({ spaceId: 'space-1', inviteCode: 'req-code' });
+  });
+
+  it('keeps the plain intro for a space that is not joined by request', () => {
+    setUpStore();
+    render(<InviteModal />);
+    expect(screen.getByText('Send to friends, or share a link.')).toBeInTheDocument();
   });
 
   it('passes federated target shape for remote friends', async () => {

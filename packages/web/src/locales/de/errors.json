@@ -165,7 +165,7 @@
   "space_uses_join_requests": "Dieser Space nutzt Beitrittsanfragen, deshalb gibt es keine Einladungslinks.",
   "invite_code_required": "Gib einen Einladungscode ein.",
   "invite_not_found": "Dieser Einladungscode ist ungültig.",
-  "join_request_required": "Für diesen Space brauchst du eine genehmigte Beitrittsanfrage.",
+  "join_request_required": "Dieser Space nimmt Beitrittsanfragen an. Sende eine, und die Verwaltung prüft sie.",
   "cannot_change_own_roles": "Du kannst deine eigenen Rollen nicht ändern.",
   "role_ids_invalid": "Die Rollenliste ist ungültig.",
   "member_not_found": "Dieses Mitglied wurde nicht gefunden.",

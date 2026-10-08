@@ -4,16 +4,20 @@ import { MemoryRouter } from 'react-router-dom';
 import { SpaceInviteCard } from './SpaceInviteCard';
 import { HttpError } from '../../api/client';
 
-const { mockJoinByCode, mockGetApiForOrigin, mockNavigate } = vi.hoisted(() => ({
+const { mockJoinByCode, mockGetApiForOrigin, mockNavigate, mockSendRequest } = vi.hoisted(() => ({
   mockJoinByCode: vi.fn(),
   mockGetApiForOrigin: vi.fn(() => ({
     spaces: { invitePreview: vi.fn() },
   })),
   mockNavigate: vi.fn(),
+  mockSendRequest: vi.fn(),
 }));
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: any) => selector({ joinByCode: mockJoinByCode }),
   getApiForOrigin: mockGetApiForOrigin,
+}));
+vi.mock('../../utils/inviteJoinRequest', () => ({
+  sendInviteJoinRequest: mockSendRequest,
 }));
 // Keep the real exports: HttpError is what the join-error helper inspects.
 vi.mock('../../api/client', async (importOriginal) => ({

@@ -5,7 +5,7 @@ import i18n from '../i18n';
 import { resolveAssetUrl } from '../utils/assetUrls';
 import { hostOf } from '../utils/identity';
 import { useInstanceStore, waitForAutoConnect } from './instanceStore';
-import { useSpaceStore } from './spaceStore';
+import { useSpaceStore, connectedJoinOrigin } from './spaceStore';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +87,14 @@ interface ExploreState {
   fetchMyRequests: () => Promise<void>;
   publicJoin: (space: TaggedExploreSpace) => Promise<SpaceWithChannelsAndMembers>;
   requestJoin: (space: TaggedExploreSpace, message?: string) => Promise<JoinRequest>;
+  /**
+   * Send a join request for a space known by id and origin rather than from
+   * the Explore list: the invite page, the Join Space dialog and an invite
+   * card in a DM, once a code turned out to belong to a space joined by
+   * request. A remote origin must hold a connected session
+   * (`NotConnectedError` otherwise, so the caller can connect first).
+   */
+  requestJoinSpace: (spaceId: string, origin: string, message?: string) => Promise<JoinRequest>;
   setSearchQuery: (q: string) => void;
   reset: () => void;
 }
@@ -304,6 +312,17 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
     set((state) => ({
       myRequests: [...state.myRequests, { ...request, _instanceOrigin: space._instanceOrigin }],
+    }));
+
+    return request;
+  },
+
+  requestJoinSpace: async (spaceId: string, origin: string, message?: string) => {
+    const target = await connectedJoinOrigin(origin);
+    const request = await getApiForOrigin(target).explore.requestJoin(spaceId, message);
+
+    set((state) => ({
+      myRequests: [...state.myRequests, { ...request, _instanceOrigin: target }],
     }));
 
     return request;
