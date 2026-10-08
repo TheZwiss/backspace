@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.1/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.1/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.9.1/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.9.1" date="2026-10-09">
+      <description>
+        <p>Dialogs opened from the space sidebar, such as the notification settings, show at full size again. A space that people join by request now has an invite link, which leads to a join request. Calls in direct messages are more reliable: a ring that arrives during a call no longer takes over your hang-up, a screen share comes back after a reconnect, and answering on one device stops the ring only on your own devices.</p>
+      </description>
+    </release>
     <release version="1.9.0" date="2026-10-08">
       <description>
         <p>Backspace is now available in Brazilian Portuguese. Spaces and channels have notification settings: every message, mentions only or nothing, with a mute for a set time, and the bell in the channel header opens them. In a group conversation, a call keeps running when one member hangs up, and a member who calls while a call is running joins it. Channel topics can be edited and read in full, a reaction counts once per person, and a reply no longer follows you into another conversation.</p>
