@@ -172,5 +172,10 @@
     "playNamed": "Reproduzir {{title}}",
     "playUnnamed": "Reproduzir vídeo",
     "videoTitle": "Vídeo"
+  },
+  "poke": {
+    "action": "Cutucar",
+    "received": "{{actor}} cutucou {{target}}",
+    "disconnected": "Não foi possível cutucar: sem conexão com o servidor"
   }
 }

@@ -1,3 +1,4 @@
+import { handleChannelPoke } from './channelPoke.js';
 import type { WebSocket } from 'ws';
 import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
@@ -151,6 +152,9 @@ export function handleClientEvent(
       break;
     case 'message_delete':
       handleMessageDelete(event, userId);
+      break;
+    case 'channel_poke':
+      handleChannelPoke({ event, userId, ws });
       break;
     case 'typing_start':
       handleTypingStart(event, userId, username);
@@ -325,7 +329,8 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
     return;
   }
 
-  if (message.userId !== userId) {
+  // The actor cannot rewrite a server-authored system event.
+  if (message.type === 'system' || message.userId !== userId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'You can only edit your own messages' });
     return;
   }

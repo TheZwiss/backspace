@@ -150,3 +150,18 @@ describe('SystemMessage: content it does not know', () => {
     expect(container.textContent).not.toContain('Heidi is now the group owner');
   });
 });
+
+
+describe('persistent channel poke history', () => {
+  it('renders the server name snapshots after remount without replaying an animation', () => {
+    const message = buildMessage({ event: 'channel_poke', username: 'Saved actor', targetUsername: 'Saved target', targetUserId: 'U2' });
+    const view = render(<SystemMessage message={message} />);
+    expect(view.container.textContent).toContain('Saved actor');
+    expect(view.container.textContent).toContain('Saved target');
+    const firstText = view.container.textContent;
+    view.unmount();
+    const reloaded = render(<SystemMessage message={JSON.parse(JSON.stringify(message))} />);
+    expect(reloaded.container.textContent).toBe(firstText);
+    expect(reloaded.container.querySelector('[data-poke-user]')).toBeNull();
+  });
+});

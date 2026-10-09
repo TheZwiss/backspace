@@ -168,5 +168,10 @@
     "playNamed": "{{title}} abspielen",
     "playUnnamed": "Video abspielen",
     "videoTitle": "Video"
+  },
+  "poke": {
+    "action": "Anstupsen",
+    "received": "{{actor}} hat {{target}} angestupst",
+    "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
   }
 }

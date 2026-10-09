@@ -176,5 +176,10 @@
     "playNamed": "Воспроизвести: {{title}}",
     "playUnnamed": "Воспроизвести видео",
     "videoTitle": "Видео"
+  },
+  "poke": {
+    "action": "Толкнуть",
+    "received": "{{actor}} толкнул(а) {{target}}",
+    "disconnected": "Соединение разорвано. Действие не отправлено."
   }
 }

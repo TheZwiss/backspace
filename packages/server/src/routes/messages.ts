@@ -125,6 +125,7 @@ export function fetchReplyToMessages(
       userId: rm.userId,
       replyToId: rm.replyToId,
       content: rm.content,
+      type: rm.type,
       editedAt: rm.editedAt,
       createdAt: rm.createdAt,
       user: sanitizeUser(user),
@@ -185,6 +186,7 @@ export function buildMessageWithUser(
     userId: message.userId,
     replyToId: message.replyToId,
     content: message.content,
+    type: message.type,
     editedAt: message.editedAt,
     createdAt: message.createdAt,
     user: sanitizeUser(user),
@@ -439,7 +441,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'message_not_found');
     }
 
-    if (message.userId !== request.userId) {
+    // System payloads are authored by the host, not editable by the actor.
+    if (message.type === 'system' || message.userId !== request.userId) {
       return sendError(reply, 403, 'message_edit_not_author');
     }
 

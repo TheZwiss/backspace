@@ -164,5 +164,10 @@
     "playNamed": "播放 {{title}}",
     "playUnnamed": "播放视频",
     "videoTitle": "视频"
+  },
+  "poke": {
+    "action": "戳一戳",
+    "received": "{{actor}} 戳了戳 {{target}}",
+    "disconnected": "连接已断开，戳一戳未发送"
   }
 }

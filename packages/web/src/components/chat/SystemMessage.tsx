@@ -25,7 +25,19 @@ interface SystemMessageProps {
 export function SystemMessage({ message, dm }: SystemMessageProps) {
   // Subscribes the row to language changes; the text itself comes from
   // `dmSystemText`, which reads the same i18n instance.
-  useTranslation(['dm']);
+  const { t } = useTranslation(['dm', 'chat']);
+  // Poke names are snapshots resolved by the host. History never replays live cues.
+  if (!dm && !('dmChannelId' in message)) {
+    let payload: unknown;
+    try { payload = JSON.parse(message.content ?? '{}'); } catch { payload = null; }
+    if (payload && typeof payload === 'object' && 'event' in payload && payload.event === 'channel_poke'
+      && 'username' in payload && typeof payload.username === 'string'
+      && 'targetUsername' in payload && typeof payload.targetUsername === 'string') {
+      return <div className="flex items-center justify-center py-1 px-4 select-none">
+        <span className="text-xs text-txt-tertiary">{t('chat:poke.received', { actor: payload.username, target: payload.targetUsername })}</span>
+      </div>;
+    }
+  }
   const event = parseDmSystemEvent(message.content);
   const actorName = dmSystemActorName(dmSystemActor(message, dm?.members));
 

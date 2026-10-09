@@ -112,6 +112,7 @@ export const channels = sqliteTable('channels', {
 }));
 
 export const messages = sqliteTable('messages', {
+  type: text('type', { enum: ['user', 'system'] }).notNull().default('user'),
   id: text('id').primaryKey(),
   channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id),

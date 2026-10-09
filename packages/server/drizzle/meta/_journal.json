@@ -190,6 +190,13 @@
       "when": 1791414124908,
       "tag": "0026_notification_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1791525237289,
+      "tag": "0027_persistent_channel_pokes",
+      "breakpoints": true
     }
   ]
 }

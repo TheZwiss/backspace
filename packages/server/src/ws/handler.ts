@@ -1515,6 +1515,7 @@ export function buildReadyPayload(userId: string): {
   voiceChannelElapsedSeconds: Record<string, number>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
+  supportsPoke: boolean;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
   userActivities: Record<string, Activity[]>;
@@ -1628,7 +1629,7 @@ export function buildReadyPayload(userId: string): {
         ids => db.select({
           channelId: schema.messages.channelId,
           lastId: sql<string>`max(${schema.messages.id})`,
-        }).from(schema.messages).where(inArray(schema.messages.channelId, ids)).groupBy(schema.messages.channelId).all(),
+        }).from(schema.messages).where(and(inArray(schema.messages.channelId, ids), eq(schema.messages.type, 'user'))).groupBy(schema.messages.channelId).all(),
       );
       for (const row of lastMsgRows) {
         if (row.lastId) lastMsgMap.set(row.channelId, row.lastId);
@@ -1986,7 +1987,7 @@ export function buildReadyPayload(userId: string): {
     pendingApprovalCount = countResult?.count ?? 0;
   }
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, userActivityIdentities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
+  return { supportsPoke: true, user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, userActivityIdentities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

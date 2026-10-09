@@ -1,3 +1,5 @@
+import { receiveChannelPoke } from '../components/chat/channelPoke';
+import { useChannelPokeStore } from '../components/chat/channelPokeStore';
 import React, { useEffect, useRef } from 'react';
 import { isMyIdentity, useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
@@ -256,7 +258,14 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
   const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceChannelElapsedSeconds, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
+    case 'channel_poke_failed':
+      useUIStore.getState().addToast(event.message, 'warning');
+      break;
+    case 'channel_poke':
+      receiveChannelPoke(origin, event);
+      break;
     case 'ready':
+      useChannelPokeStore.getState().setHost(origin, event.supportsPoke === true);
       // This instance names the signed-in user's row there (the home's is the
       // session row itself, set below). The one record of "my ids".
       if (!isHome) useAuthStore.getState().recordMyRow(origin, event.user.id);
@@ -648,7 +657,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         const { voiceChannelIds } = useSpaceStore.getState();
         const myId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
         // Skip voice channels — they have no text reading/acking UI
-        if (event.message.channelId !== currentChannelId && event.message.userId !== myId && !voiceChannelIds.has(event.message.channelId)) {
+        if (event.message.type !== 'system' && event.message.channelId !== currentChannelId && event.message.userId !== myId && !voiceChannelIds.has(event.message.channelId)) {
           markChannelUnread(event.message.channelId);
         }
       }

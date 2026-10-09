@@ -941,6 +941,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         newMessages.set(channelId, updated);
       }
+      // Channel system history is passive; DM system-event behavior is unchanged.
+      if (normalizedMessage.type === 'system' && !('dmChannelId' in normalizedMessage)) {
+        return { messages: newMessages, detachedChannels };
+      }
       // Append to realtimeMessageEvents (capped; see addedRealtimeMessageEvents)
       const newEvents = [...state.realtimeMessageEvents, { channelId, message: normalizedMessage }];
       if (newEvents.length > REALTIME_MESSAGE_EVENT_CAP) {
