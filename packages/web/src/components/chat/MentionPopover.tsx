@@ -128,6 +128,7 @@ function DesktopMention({
 
   const { style } = useFloatingPosition(anchorRef, floatingRef, {
     placement: 'top',
+    align: 'start',
     offset: 4,
     enabled: candidates.length > 0,
   });

@@ -56,7 +56,7 @@ beforeEach(() => {
   useAuthStore.setState({ user: me });
   // dm-1 is a DM because the listing says so; the URL decides nothing.
   useSpaceStore.getState().reset();
-  useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me] }]);
+  useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me], ownerId: null, ownerHomeUserId: null, ownerHomeInstance: null, lastMessage: null, name: null, icon: null, metadataUpdatedAt: 1 }]);
   useComposerStore.setState({ states: new Map() });
   useChatStore.setState({
     messages: new Map([['dm-1', [ownMessage]]]),
@@ -150,5 +150,42 @@ describe('MessageInput slow sends', () => {
     await act(async () => { fail(new Error('Offline')); await sending.catch(() => {}); });
     expect(input).toHaveValue('failed text\nnew text');
     expect(useUIStore.getState().toasts).toEqual([expect.objectContaining({ message: 'Offline', type: 'warning' })]);
+  });
+});
+
+
+describe('MessageInput mention display', () => {
+  it('renders a readable label but submits the stored wire ID', async () => {
+    const send = vi.spyOn(useChatStore.getState(), 'sendMessage').mockResolvedValue(undefined);
+    useComposerStore.getState().setDraft('dm-1', 'Hi <@me>');
+    render(<MessageInput channelId="dm-1" channelName="@Alice" />);
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveValue('Hi @Alice');
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+    expect(send).toHaveBeenCalledWith('dm-1', 'Hi <@me>');
+  });
+
+  it('edits after a mention without replacing its wire ID with a label', () => {
+    useComposerStore.getState().setDraft('dm-1', '<@me> hello');
+    render(<MessageInput channelId="dm-1" channelName="@Alice" />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '@Alice hello!', selectionStart: 13 } });
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('<@me> hello!');
+  });
+
+  it('removes the complete mention when an edit touches its displayed name', () => {
+    useComposerStore.getState().setDraft('dm-1', '<@me> ');
+    render(<MessageInput channelId="dm-1" channelName="@Alice" />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '@Alic ', selectionStart: 5 } });
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe(' ');
+    expect(screen.getByRole('textbox')).toHaveValue(' ');
+  });
+
+  it('does not send a draft when Enter confirms an IME composition', () => {
+    const send = vi.spyOn(useChatStore.getState(), 'sendMessage').mockResolvedValue(undefined);
+    useComposerStore.getState().setDraft('dm-1', '<@me> 你好');
+    render(<MessageInput channelId="dm-1" channelName="@Alice" />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', isComposing: true });
+    expect(send).not.toHaveBeenCalled();
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('<@me> 你好');
   });
 });
