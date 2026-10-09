@@ -1,4 +1,9 @@
 {
+  "nav": {
+    "spaces": "空间",
+    "dms": "私信",
+    "you": "我"
+  },
   "you": {
     "editProfile": "编辑个人资料",
     "homeInstance": "主实例：{{domain}}",

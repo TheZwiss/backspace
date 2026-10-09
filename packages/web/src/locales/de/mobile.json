@@ -1,4 +1,9 @@
 {
+  "nav": {
+    "spaces": "Räume",
+    "dms": "Direktnachrichten",
+    "you": "Du"
+  },
   "you": {
     "editProfile": "Profil bearbeiten",
     "homeInstance": "Heimatinstanz: {{domain}}",

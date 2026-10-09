@@ -1,4 +1,9 @@
 {
+  "nav": {
+    "spaces": "Spaces",
+    "dms": "DMs",
+    "you": "You"
+  },
   "you": {
     "editProfile": "Edit Profile",
     "homeInstance": "Home instance: {{domain}}",
