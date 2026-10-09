@@ -71,6 +71,7 @@ export const spaces = sqliteTable('spaces', {
   banner: text('banner'),
   avatarColor: text('avatar_color'),
   ownerId: text('owner_id').notNull().references(() => users.id),
+  ownerTitle: text('owner_title'),
   inviteCode: text('invite_code').unique(),
   visibility: text('visibility').default('private'),
   directoryListed: integer('directory_listed').notNull().default(0),

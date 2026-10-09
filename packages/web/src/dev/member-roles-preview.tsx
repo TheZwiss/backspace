@@ -49,7 +49,7 @@ const SCENES: readonly Scene[] = [
 const SPACE_ID = 'space-1';
 const SPACE: TaggedSpace = {
   id: SPACE_ID, name: 'Aether Drift', icon: null, banner: null, avatarColor: 'lavender',
-  ownerId: 'u-owner', inviteCode: null, visibility: 'public', directoryListed: false,
+  ownerTitle: null, ownerId: 'u-owner', inviteCode: null, visibility: 'public', directoryListed: false,
   description: '', createdAt: 1, _instanceOrigin: '',
 };
 

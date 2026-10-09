@@ -585,6 +585,12 @@
     "loading": "Mitglieder werden geladen",
     "groups": {
       "owner": "Besitzer"
+    },
+    "ownerTitle": {
+      "edit": "Inhabertitel bearbeiten",
+      "label": "Inhabertitel",
+      "hint": "Für alle Mitglieder dieses Spaces sichtbar. 1–{{max}} Zeichen; Berechtigungen bleiben unverändert.",
+      "reset": "Standard wiederherstellen"
     }
   },
   "mobile": {

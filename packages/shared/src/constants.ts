@@ -96,3 +96,6 @@ export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
  * and the server's never disagree.
  */
 export const PASSWORD_MIN_LENGTH = 8;
+
+/** Owner headings stay short enough to identify the owner at a glance. */
+export const MAX_OWNER_TITLE_LENGTH = 32;

@@ -38,7 +38,7 @@ const SCENES: readonly Scene[] = ['space-settings', 'create-space', 'join-space'
 
 const SPACE_ID = 'space-1';
 const SPACE: TaggedSpace = {
-  id: SPACE_ID, name: 'Aether Drift', icon: null, banner: null, avatarColor: 'lavender', ownerId: 'owner',
+  id: SPACE_ID, name: 'Aether Drift', icon: null, banner: null, avatarColor: 'lavender', ownerTitle: null, ownerId: 'owner',
   inviteCode: 'aether', visibility: 'public', directoryListed: false,
   description: 'A calm place for night owls, synth music and long conversations.', createdAt: 1, _instanceOrigin: '',
 };

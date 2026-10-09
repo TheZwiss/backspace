@@ -1713,6 +1713,7 @@ export function buildReadyPayload(userId: string): {
         banner: spaceRow.banner ?? null,
         avatarColor: (spaceRow.avatarColor as Space['avatarColor']) ?? null,
         ownerId: spaceRow.ownerId,
+        ownerTitle: spaceRow.ownerTitle,
         inviteCode: spaceRow.inviteCode,
         visibility: (spaceRow.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
         directoryListed: spaceRow.directoryListed === 1,

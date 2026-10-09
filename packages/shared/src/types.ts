@@ -130,6 +130,7 @@ export interface Space {
   banner: string | null;
   avatarColor: AvatarColor | null;
   ownerId: string;
+  ownerTitle: string | null;
   inviteCode: string | null;
   visibility: SpaceVisibility;
   directoryListed: boolean;
@@ -854,6 +855,7 @@ export interface UpdateChannelRequest {
 }
 
 export interface UpdateSpaceRequest {
+  ownerTitle?: string | null;
   name?: string;
   icon?: string;
   banner?: string;

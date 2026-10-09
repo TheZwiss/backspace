@@ -183,6 +183,7 @@ export const ERROR_CODES = [
   'join_request_not_found',
   'join_request_decided',
   // spaces
+  'space_owner_title_invalid',
   'space_name_required',
   'space_name_length',
   'space_create_failed',

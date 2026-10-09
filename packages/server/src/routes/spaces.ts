@@ -1,3 +1,4 @@
+import { MAX_OWNER_TITLE_LENGTH } from '@backspace/shared/src/constants.js';
 import path from 'path';
 import type { FastifyInstance } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
@@ -43,6 +44,7 @@ function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
     banner: row.banner ?? null,
     avatarColor: (row.avatarColor as Space['avatarColor']) ?? null,
     ownerId: row.ownerId,
+    ownerTitle: row.ownerTitle,
     inviteCode: row.inviteCode,
     visibility: (row.visibility ?? 'private') as Space['visibility'],
     directoryListed: row.directoryListed === 1,
@@ -525,7 +527,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, icon, banner, avatarColor, visibility, description, directoryListed } = request.body;
+    const { name, icon, banner, avatarColor, visibility, description, directoryListed, ownerTitle } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
@@ -533,11 +535,24 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 404, 'space_not_found');
     }
 
+    // The title belongs to the owner, not to anyone granted MANAGE_SPACE.
+    if (ownerTitle !== undefined && server.ownerId !== request.userId) {
+      return sendError(reply, 403, 'space_owner_only');
+    }
+
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
       return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_SPACE' });
     }
 
     const updates: Partial<typeof schema.spaces.$inferInsert> = {};
+
+    if (ownerTitle !== undefined) {
+      if (ownerTitle !== null && (typeof ownerTitle !== 'string' || !ownerTitle.trim()
+        || ownerTitle.trim().length > MAX_OWNER_TITLE_LENGTH || /[\r\n]/.test(ownerTitle))) {
+        return sendError(reply, 400, 'space_owner_title_invalid', { max: MAX_OWNER_TITLE_LENGTH });
+      }
+      updates.ownerTitle = ownerTitle === null ? null : ownerTitle.trim();
+    }
 
     if (name !== undefined) {
       const trimmedName = name.trim();
@@ -1456,7 +1471,8 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'new_owner_not_member');
     }
 
-    db.update(schema.spaces).set({ ownerId: newOwnerId }).where(eq(schema.spaces.id, id)).run();
+    // Do not transfer the previous owner's personal title to the new owner.
+    db.update(schema.spaces).set({ ownerId: newOwnerId, ownerTitle: null }).where(eq(schema.spaces.id, id)).run();
 
     const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!updated) {

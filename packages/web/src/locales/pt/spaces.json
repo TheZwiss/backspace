@@ -593,6 +593,12 @@
     "loading": "Carregando membros",
     "groups": {
       "owner": "Dono"
+    },
+    "ownerTitle": {
+      "edit": "Editar título do proprietário",
+      "label": "Título do proprietário",
+      "hint": "Use de 1 a {{max}} caracteres em uma única linha.",
+      "reset": "Restaurar título padrão"
     }
   },
   "mobile": {
