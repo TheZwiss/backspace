@@ -523,7 +523,8 @@
         "description": "Willst du diesen Space wirklich verlassen? Zum erneuten Beitreten brauchst du eine neue Einladung."
       },
       "left": "Du hast den Space verlassen",
-      "leaveFailed": "Space konnte nicht verlassen werden"
+      "leaveFailed": "Space konnte nicht verlassen werden",
+      "unreadMessages": "Ungelesene Nachrichten: {{quantity}}"
     },
     "dmList": {
       "explore": "Entdecken",
@@ -554,7 +555,8 @@
       "spaceMuted": "Im Space stummgeschaltet",
       "spaceDeafened": "Ton im Space ausgeschaltet",
       "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
-    }
+    },
+    "dmUnreadMessages": "{{quantity}} ungelesene Direktnachrichten"
   },
   "channels": {
     "loading": "Kanäle werden geladen",

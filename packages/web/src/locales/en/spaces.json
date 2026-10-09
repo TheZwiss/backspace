@@ -523,7 +523,8 @@
         "description": "Are you sure you want to leave this space? You'll need a new invite to rejoin."
       },
       "left": "Left space",
-      "leaveFailed": "Failed to leave space"
+      "leaveFailed": "Failed to leave space",
+      "unreadMessages": "Unread messages: {{quantity}}"
     },
     "dmList": {
       "explore": "Explore",
@@ -554,7 +555,8 @@
       "spaceMuted": "Space Muted",
       "spaceDeafened": "Space Deafened",
       "permissionMuted": "Muted (No Speak Permission)"
-    }
+    },
+    "dmUnreadMessages": "{{quantity}} unread direct messages"
   },
   "channels": {
     "loading": "Loading channels",

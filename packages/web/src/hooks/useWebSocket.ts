@@ -1,3 +1,4 @@
+import { useChannelActivityStore } from '../stores/channelActivityStore';
 import React, { useEffect, useRef } from 'react';
 import { isMyIdentity, useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
@@ -256,6 +257,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
   const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceChannelElapsedSeconds, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
+    case 'channel_unread_count':
+      useChannelActivityStore.getState().updateCounts(origin, event.counts);
+      break;
     case 'ready':
       // This instance names the signed-in user's row there (the home's is the
       // session row itself, set below). The one record of "my ids".
@@ -367,6 +371,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         }
       }
 
+      useChannelActivityStore.getState().hydrate(origin, { counts: event.unreadCounts });
       // Initialize/update unread tracking for this origin (home or remote)
       if (event.readStates) {
         const { channelLastMessageIds, channelOriginMap } = useSpaceStore.getState();

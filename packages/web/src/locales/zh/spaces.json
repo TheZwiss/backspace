@@ -516,7 +516,8 @@
         "description": "确定要退出此空间吗？重新加入需要新的邀请链接。"
       },
       "left": "已退出空间",
-      "leaveFailed": "退出空间失败"
+      "leaveFailed": "退出空间失败",
+      "unreadMessages": "{{quantity}} 条未读消息"
     },
     "dmList": {
       "explore": "探索",
@@ -547,7 +548,8 @@
       "spaceMuted": "已被空间静音",
       "spaceDeafened": "已被空间拒听",
       "permissionMuted": "已静音（无发言权限）"
-    }
+    },
+    "dmUnreadMessages": "{{quantity}} 条未读私信"
   },
   "channels": {
     "loading": "正在加载频道",
