@@ -1,7 +1,7 @@
 import type { ChosenUserStatus } from '@backspace/shared';
 import { getMyUserIdForOrigin, isMe, selectMyChosenStatus, useAuthStore } from '../stores/authStore';
 import type { RealtimeMessageEvent } from '../stores/chatStore';
-import { getChannelOrigin, isDmChannel } from '../stores/spaceStore';
+import { getChannelOrigin, isDmChannel, useSpaceStore } from '../stores/spaceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { sendNotification, type NotificationOptions } from '../platform/notifications';
 import { isAlertAllowed, isMessageAlert, type AlertKind } from './notificationFilters';
@@ -68,10 +68,14 @@ export function messageAlertsUser(
   if (!event.channelId) return false;
   const origin = getChannelOrigin(event.channelId);
   const isDm = isDmChannel(event.channelId);
+  const state = useSpaceStore.getState();
+  const spaceId = state.channelToSpaceMap.get(event.channelId);
+  const myRoleIds = state.spaces.find(s => s.id === spaceId && s._instanceOrigin === origin)?.myRoleIds;
   return isMessageAlert({
     authoredBySelf: isMe(event.message.user ?? { id: event.message.userId }, origin),
     myId: getMyUserIdForOrigin(origin),
     isDmChannel: isDm,
+    myRoleIds,
     content: event.message.content,
     allChannels: options.everyMessage === true,
     notification: isDm ? DM_POLICY : getChannelNotificationPolicy(event.channelId),

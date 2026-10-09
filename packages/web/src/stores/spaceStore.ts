@@ -49,7 +49,7 @@ import { useNotificationSettingsStore } from './notificationSettingsStore';
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
 /** Server augmented with instance origin tracking (client-only, not in shared types). */
-export type TaggedSpace = Space & { _instanceOrigin: string };
+export type TaggedSpace = Space & { _instanceOrigin: string; myRoleIds?: string[] };
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -813,6 +813,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
             ...channelTableFields(state, replaced.tables),
             categoryOriginMap: withCategoryOrigins(state.categoryOriginMap, categories, origin),
             spacePermissions,
+            spaces: state.spaces.map(s => s.id === spaceId && s._instanceOrigin === origin
+              ? { ...s, myRoleIds: detail.members.find(m => m.userId === getMyUserIdForOrigin(origin))?.roles.map(r => r.id) ?? [] } : s),
             loadingSpaceId: endLoading(state),
           };
           if (state.currentSpaceId !== spaceId) return fields;
@@ -1233,6 +1235,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       description: s.description ?? null,
       createdAt: s.createdAt,
       _instanceOrigin: origin,
+      // Cache our membership for every space, not only the currently open roster.
+      myRoleIds: s.members?.find(m => m.userId === getMyUserIdForOrigin(origin))?.roles.map(r => r.id) ?? [],
     }));
 
     // Merge by origin: keep servers from other origins, replace all from this origin

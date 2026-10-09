@@ -7,6 +7,8 @@ vi.mock('../audio/AudioManager', () => ({
   },
 }));
 
+import { useAuthStore } from './authStore';
+import { messageAlertsUser } from '../utils/alerts';
 import { useSpaceStore } from './spaceStore';
 import { api } from '../api/client';
 import { PermissionBits, hasPermissionBit, permissionsToString } from '../utils/permissions';
@@ -132,5 +134,27 @@ describe('a member who receives roles without bits', () => {
     await useSpaceStore.getState().loadSpaceDetail(SPACE_ID, { quiet: true });
     for (const r of useSpaceStore.getState().roles) expect(r.permissions).toBeUndefined();
     expect(hasPermissionBit(useSpaceStore.getState().spacePermissions.get(SPACE_ID), PermissionBits.MANAGE_ROLES)).toBe(false);
+  });
+});
+
+
+describe('role mention audiences without permission-bit disclosure', () => {
+  it('caches the current user role IDs for an unopened space on its hosting instance', () => {
+    useAuthStore.setState({ user: user('home-me'), myRowIds: new Map() });
+    useAuthStore.getState().recordMyRow('https://remote.example', 'u-me');
+    useSpaceStore.getState().populateFromReady('https://remote.example', [space([EVERYONE, VIP, MODS])]);
+    expect(useSpaceStore.getState().currentSpaceId).toBeNull();
+    expect(useSpaceStore.getState().spaces[0]?.myRoleIds).toEqual(['r-vip']);
+    const event = { channelId: GENERAL.id, message: { userId: 'u-owner', content: '<@&r-vip>' } } as Parameters<typeof messageAlertsUser>[0];
+    expect(messageAlertsUser(event)).toBe(true);
+    expect(messageAlertsUser({ ...event, message: { ...event.message, content: '<@&r-mod>' } })).toBe(false);
+  });
+  it('refreshes the audience after permission changes even when the space is not open', async () => {
+    useAuthStore.setState({ user: user('u-me'), myRowIds: new Map() });
+    useSpaceStore.getState().populateFromReady('', [space([EVERYONE, VIP, MODS])]);
+    vi.spyOn(api.spaces, 'get').mockResolvedValueOnce(space([EVERYONE, VIP, MODS], { members: [member('u-me', [MODS])] }));
+    await useSpaceStore.getState().loadSpaceDetail(SPACE_ID, { quiet: true });
+    expect(useSpaceStore.getState().spaces[0]?.myRoleIds).toEqual(['r-mod']);
+    expect(useSpaceStore.getState().currentSpaceId).toBeNull();
   });
 });

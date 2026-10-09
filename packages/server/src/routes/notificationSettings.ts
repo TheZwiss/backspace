@@ -34,6 +34,8 @@ type SettingRow = typeof schema.notificationSettings.$inferSelect;
 
 /** What a PATCH leaves the row as, before it is stored or deleted. */
 interface SettingState {
+  suppressEveryone: boolean;
+  suppressRoles: boolean;
   level: NotificationLevel | null;
   muted: boolean;
   mutedUntil: number | null;
@@ -41,6 +43,8 @@ interface SettingState {
 
 export function rowToNotificationSetting(row: SettingRow): NotificationSetting {
   return {
+    suppressEveryone: row.suppressEveryone === 1,
+    suppressRoles: row.suppressRoles === 1,
     spaceId: row.spaceId,
     channelId: row.channelId ?? null,
     level: isNotificationLevel(row.level) ? row.level : null,
@@ -50,33 +54,42 @@ export function rowToNotificationSetting(row: SettingRow): NotificationSetting {
   };
 }
 
+type SettingChange = {
+  level: NotificationLevel | null | undefined;
+  mute: NotificationMuteDuration | null | undefined;
+  suppressEveryone?: boolean;
+  suppressRoles?: boolean;
+};
+
 type ParsedBody =
-  | { ok: true; level: NotificationLevel | null | undefined; mute: NotificationMuteDuration | null | undefined }
+  | ({ ok: true } & SettingChange)
   | { ok: false };
 
 /** Validates a PATCH body. At least one known field, each of the right shape. */
-export function parseUpdateBody(body: unknown): ParsedBody {
+export function parseUpdateBody(body: unknown, isChannel = false): ParsedBody {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false };
   const input = body as Record<string, unknown>;
-  const hasLevel = Object.prototype.hasOwnProperty.call(input, 'level');
-  const hasMute = Object.prototype.hasOwnProperty.call(input, 'mute');
-  if (!hasLevel && !hasMute) return { ok: false };
-
-  let level: NotificationLevel | null | undefined;
-  if (hasLevel) {
-    if (input.level === null) level = null;
-    else if (isNotificationLevel(input.level)) level = input.level;
-    else return { ok: false };
+  const validators = {
+    level: (value: unknown) => value === null || isNotificationLevel(value),
+    mute: (value: unknown) => value === null || isNotificationMuteDuration(value),
+    suppressEveryone: (value: unknown) => typeof value === 'boolean',
+    suppressRoles: (value: unknown) => typeof value === 'boolean',
+  };
+  const fields = (Object.keys(validators) as (keyof typeof validators)[])
+    .filter(field => Object.prototype.hasOwnProperty.call(input, field));
+  if (fields.length === 0) return { ok: false };
+  for (const field of fields) {
+    // Suppression belongs to the space and cannot be bypassed by a channel override.
+    if (isChannel && field.startsWith('suppress')) return { ok: false };
+    if (!validators[field](input[field])) return { ok: false };
   }
-
-  let mute: NotificationMuteDuration | null | undefined;
-  if (hasMute) {
-    if (input.mute === null) mute = null;
-    else if (isNotificationMuteDuration(input.mute)) mute = input.mute;
-    else return { ok: false };
-  }
-
-  return { ok: true, level, mute };
+  return {
+    ok: true,
+    level: input.level as NotificationLevel | null | undefined,
+    mute: input.mute as NotificationMuteDuration | null | undefined,
+    suppressEveryone: input.suppressEveryone as boolean | undefined,
+    suppressRoles: input.suppressRoles as boolean | undefined,
+  };
 }
 
 /**
@@ -85,7 +98,7 @@ export function parseUpdateBody(body: unknown): ParsedBody {
  */
 export function applyUpdate(
   existing: SettingRow | undefined,
-  change: { level: NotificationLevel | null | undefined; mute: NotificationMuteDuration | null | undefined },
+  change: SettingChange,
   now: number,
 ): SettingState {
   const stored = existing ? rowToNotificationSetting(existing) : null;
@@ -101,7 +114,11 @@ export function applyUpdate(
     mutedUntil = change.mute === 'indefinite' ? null : now + NOTIFICATION_MUTE_DURATION_MS[change.mute];
   }
 
-  return { level, muted, mutedUntil };
+  return {
+    level, muted, mutedUntil,
+    suppressEveryone: change.suppressEveryone ?? stored?.suppressEveryone ?? false,
+    suppressRoles: change.suppressRoles ?? stored?.suppressRoles ?? false,
+  };
 }
 
 function findRow(userId: string, spaceId: string, channelId: string | null): SettingRow | undefined {
@@ -117,14 +134,14 @@ function findRow(userId: string, spaceId: string, channelId: string | null): Set
 /**
  * Writes the new state for one target and returns what the client is sent.
  * A state with nothing chosen deletes the row; the returned setting then
- * carries level null and not muted, which is how other sessions learn to
+ * carries level null, not muted and no suppression, so other sessions learn to
  * drop theirs.
  */
 function storeSetting(
   userId: string,
   spaceId: string,
   channelId: string | null,
-  change: { level: NotificationLevel | null | undefined; mute: NotificationMuteDuration | null | undefined },
+  change: SettingChange,
 ): NotificationSetting {
   const db = getDb();
   const t = schema.notificationSettings;
@@ -136,7 +153,7 @@ function storeSetting(
     // never ties two different states on one timestamp.
     const updatedAt = Math.max(now, (existing?.updatedAt ?? 0) + 1);
 
-    if (next.level === null && !next.muted) {
+    if (next.level === null && !next.muted && !next.suppressEveryone && !next.suppressRoles) {
       if (existing) {
         db.delete(t)
           .where(channelId === null
@@ -144,10 +161,12 @@ function storeSetting(
             : and(eq(t.userId, userId), eq(t.channelId, channelId)))
           .run();
       }
-      return { spaceId, channelId, level: null, muted: false, mutedUntil: null, updatedAt };
+      return { spaceId, channelId, ...next, updatedAt };
     }
 
     const values = {
+      suppressEveryone: next.suppressEveryone ? 1 : 0,
+      suppressRoles: next.suppressRoles ? 1 : 0,
       level: next.level,
       muted: next.muted ? 1 : 0,
       mutedUntil: next.mutedUntil,
@@ -163,7 +182,7 @@ function storeSetting(
     } else {
       db.insert(t).values({ userId, spaceId, channelId, ...values }).run();
     }
-    return { spaceId, channelId, level: next.level, muted: next.muted, mutedUntil: next.mutedUntil, updatedAt };
+    return { spaceId, channelId, ...next, updatedAt };
   });
 }
 
@@ -230,7 +249,7 @@ export async function notificationSettingsRoutes(app: FastifyInstance): Promise<
     { preHandler: authenticate },
     async (request, reply) => {
       const { channelId } = request.params;
-      const parsed = parseUpdateBody(request.body);
+      const parsed = parseUpdateBody(request.body, true);
       if (!parsed.ok) return sendError(reply, 400, 'validation_failed');
 
       const db = getDb();

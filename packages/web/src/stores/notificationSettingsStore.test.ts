@@ -211,7 +211,7 @@ describe('resolveChannelNotificationPolicy', () => {
 
   it('defaults to mentions, not muted', () => {
     expect(resolveChannelNotificationPolicy(undefined, undefined, NOW)).toEqual({
-      level: 'mentions', levelSource: 'default', muted: false, mutedUntil: null, channelMuted: false, spaceMuted: false,
+      level: 'mentions', levelSource: 'default', muted: false, mutedUntil: null, channelMuted: false, spaceMuted: false, suppressEveryone: false, suppressRoles: false,
     });
   });
 
@@ -253,4 +253,11 @@ describe('selectChannelNotificationPolicy', () => {
   it('resolves an unknown space to the defaults', () => {
     expect(selectChannelNotificationPolicy(store(), '', undefined, 'c', Date.now()).level).toBe('mentions');
   });
+});
+
+
+it('inherits mass-mention suppression only from the space, independently of level overrides', () => {
+  const space: NotificationSetting = { spaceId: 'space', channelId: null, level: 'mentions', muted: false, mutedUntil: null, updatedAt: 1, suppressEveryone: true, suppressRoles: true };
+  const channel: NotificationSetting = { ...space, channelId: 'channel', level: 'all', suppressEveryone: false, suppressRoles: false };
+  expect(resolveChannelNotificationPolicy(space, channel, 2)).toMatchObject({ level: 'all', suppressEveryone: true, suppressRoles: true });
 });

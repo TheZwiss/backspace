@@ -206,6 +206,18 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
         )}
       </div>
 
+      {!isChannel && (
+        <div className="flex flex-col gap-2 px-1">
+          {(['suppressEveryone', 'suppressRoles'] as const).map(field => (
+            <label key={field} className="flex items-center gap-2 text-[13px] text-txt-secondary">
+              <input type="checkbox" checked={own?.[field] === true} disabled={saving}
+                onChange={e => void save({ [field]: e.target.checked })} />
+              {t(`spaces:notifications.${field}`)}
+            </label>
+          ))}
+        </div>
+      )}
+
       <p className="px-1 text-[12px] text-txt-tertiary">{t('spaces:notifications.dmNote')}</p>
     </div>
   );

@@ -36,9 +36,9 @@ vi.mock('../ws/handler.js', () => ({
   },
 }));
 
-function applyMigrations(db: Database.Database): void {
+function applyMigrations(db: Database.Database, through?: string): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
-  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql') && (!through || f <= through)).sort();
   for (const f of files) {
     const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
     for (const stmt of sqlText.split(/-->\s*statement-breakpoint/)) {
@@ -132,7 +132,7 @@ describe('PATCH /api/spaces/:spaceId/notification-settings', () => {
     const res = await app.inject({ method: 'PATCH', url: `/api/spaces/${SPACE_ID}/notification-settings`, payload: { level: 'all' } });
     expect(res.statusCode).toBe(200);
     const setting = res.json<NotificationSetting>();
-    expect(setting).toEqual({ spaceId: SPACE_ID, channelId: null, level: 'all', muted: false, mutedUntil: null, updatedAt: NOW });
+    expect(setting).toEqual({ suppressEveryone: false, suppressRoles: false, spaceId: SPACE_ID, channelId: null, level: 'all', muted: false, mutedUntil: null, updatedAt: NOW });
     expect(rows()).toHaveLength(1);
     expect(sendToUser).toHaveBeenCalledWith('member', { type: 'notification_settings_updated', setting });
   });
@@ -283,5 +283,77 @@ describe('notification_settings uniqueness', () => {
     insert(CHANNEL_ID);
     expect(() => insert(null)).toThrow(/UNIQUE/);
     expect(() => insert(CHANNEL_ID)).toThrow(/UNIQUE/);
+  });
+});
+
+
+describe('space-wide mass mention preferences', () => {
+  const url = '/api/spaces/' + SPACE_ID + '/notification-settings';
+
+  it('persists a suppression-only row, pushes it, and returns it on reload', async () => {
+    const res = await app.inject({ method: 'PATCH', url, payload: { suppressEveryone: true, suppressRoles: true } });
+    expect(res.statusCode).toBe(200);
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ suppressEveryone: 1, suppressRoles: 1, level: null });
+    expect(sendToUser).toHaveBeenCalledWith('member', { type: 'notification_settings_updated', setting: res.json() });
+    const reload = await app.inject({ method: 'GET', url: '/api/users/@me/notification-settings' });
+    expect(reload.json().settings).toEqual([res.json()]);
+  });
+
+  it('preserves suppression across level/mute changes and deletes only when everything resets', async () => {
+    await app.inject({ method: 'PATCH', url, payload: { suppressEveryone: true, mute: '1h' } });
+    const changed = await app.inject({ method: 'PATCH', url, payload: { level: 'all', mute: null } });
+    expect(changed.json()).toMatchObject({ suppressEveryone: true, suppressRoles: false, level: 'all', muted: false });
+    await app.inject({ method: 'PATCH', url, payload: { level: null } });
+    expect(rows()).toHaveLength(1);
+    const cleared = await app.inject({ method: 'PATCH', url, payload: { suppressEveryone: false } });
+    expect(cleared.json()).toMatchObject({ suppressEveryone: false, suppressRoles: false, level: null });
+    expect(rows()).toHaveLength(0);
+  });
+
+  it.each([{ suppressEveryone: null }, { suppressRoles: 1 }, { suppressEveryone: 'true' }])('rejects malformed suppression atomically: %j', async (payload) => {
+    const res = await app.inject({ method: 'PATCH', url, payload: { level: 'all', ...payload } });
+    expect(res.statusCode).toBe(400);
+    expect(rows()).toHaveLength(0);
+    expect(sendToUser).not.toHaveBeenCalled();
+  });
+
+  it.each(['suppressEveryone', 'suppressRoles'])('rejects channel overrides of %s', async (field) => {
+    const res = await app.inject({ method: 'PATCH', url: '/api/channels/' + CHANNEL_ID + '/notification-settings', payload: { level: 'all', [field]: false } });
+    expect(res.statusCode).toBe(400);
+    expect(rows()).toHaveLength(0);
+  });
+
+  it('does not allow non-members to set suppression', async () => {
+    currentUserId = 'outsider';
+    const res = await app.inject({ method: 'PATCH', url, payload: { suppressRoles: true } });
+    expect(res.statusCode).toBe(403);
+    expect(rows()).toHaveLength(0);
+  });
+});
+
+
+describe('mass-mention preference migration', () => {
+  it('upgrades upstream rows without changing level or mute choices', () => {
+    const upgrade = new Database(':memory:');
+    const migrationsDir = path.resolve(__dirname, '../../drizzle');
+    try {
+      // Exercise the exact pre-feature schema, rather than a hand-written approximation.
+      applyMigrations(upgrade, '0026_notification_settings.sql');
+      const previousDb = drizzle(upgrade, { schema });
+      previousDb.insert(schema.users).values({ id: 'member', username: 'member', passwordHash: 'x', createdAt: NOW }).run();
+      previousDb.insert(schema.spaces).values({ id: 'space', name: 'space', ownerId: 'member', createdAt: NOW }).run();
+      previousDb.insert(schema.channels).values({ id: 'channel', spaceId: 'space', name: 'channel', type: 'text', createdAt: NOW }).run();
+      upgrade.prepare('INSERT INTO notification_settings (user_id, space_id, channel_id, level, muted, muted_until, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('member', 'space', null, 'mentions', 1, NOW + HOUR, NOW);
+      upgrade.prepare('INSERT INTO notification_settings (user_id, space_id, channel_id, level, muted, muted_until, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('member', 'space', 'channel', 'nothing', 0, null, NOW);
+      const previous = upgrade.prepare('SELECT * FROM notification_settings ORDER BY channel_id').all();
+      upgrade.exec(fs.readFileSync(path.join(migrationsDir, '0027_mass_mention_preferences.sql'), 'utf8'));
+      const upgraded = upgrade.prepare('SELECT * FROM notification_settings ORDER BY channel_id').all();
+      expect(upgraded).toEqual(previous.map(row => ({ ...(row as Record<string, unknown>), suppress_everyone: 0, suppress_roles: 0 })));
+    } finally {
+      upgrade.close();
+    }
   });
 });

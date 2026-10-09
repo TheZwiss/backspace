@@ -674,6 +674,9 @@
     "mutedIndefinitely": "Silenciado até você reativar",
     "spaceMuted": "Este espaço está silenciado, então os canais dele também estão.",
     "mutedIndicator": "Silenciado",
-    "saveFailed": "Não foi possível salvar as configurações de notificação"
+    "saveFailed": "Não foi possível salvar as configurações de notificação",
+    "suppressEveryone": "Suprimir @everyone e @here",
+    "suppressRoles": "Suprimir menções a cargos",
+    "permission": "Mencionar @everyone, @here e cargos"
   }
 }

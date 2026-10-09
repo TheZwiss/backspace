@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import { hasMassMention } from '@backspace/shared/src/mentions.js';
 import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -265,6 +266,11 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
+  if (hasMassMention(content) && !hasPermission(userId, spaceId, PermissionBits.MENTION_EVERYONE, channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing MENTION_EVERYONE permission' });
+    return;
+  }
+
   // A reply may only target a message in the channel it is posted into.
   if (replyToId && !isReplyTargetInChannel(channelId, replyToId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid reply target' });
@@ -327,6 +333,13 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
 
   if (message.userId !== userId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'You can only edit your own messages' });
+    return;
+  }
+
+  // The transport and edit path must enforce the same permission as REST creation.
+  const mentionSpaceId = getChannelSpaceId(message.channelId);
+  if (hasMassMention(content) && (!mentionSpaceId || !hasPermission(userId, mentionSpaceId, PermissionBits.MENTION_EVERYONE, message.channelId))) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing MENTION_EVERYONE permission' });
     return;
   }
 

@@ -33,6 +33,7 @@ export function usePermissionNames(): Record<PermissionKey, string> {
     SEND_MESSAGES: t('spaces:permissions.names.sendMessages'),
     MANAGE_MESSAGES: t('spaces:permissions.names.manageMessages'),
     ATTACH_FILES: t('spaces:permissions.names.attachFiles'),
+    MENTION_EVERYONE: t('spaces:notifications.permission'),
     READ_MESSAGE_HISTORY: t('spaces:permissions.names.readMessageHistory'),
     ADD_REACTIONS: t('spaces:permissions.names.addReactions'),
     CONNECT: t('spaces:permissions.names.connect'),

@@ -663,6 +663,9 @@
     "mutedIndefinitely": "Muted until you unmute",
     "spaceMuted": "This space is muted, so its channels are too.",
     "mutedIndicator": "Muted",
-    "saveFailed": "Could not save notification settings"
+    "saveFailed": "Could not save notification settings",
+    "suppressEveryone": "Suppress @everyone and @here",
+    "suppressRoles": "Suppress role mentions",
+    "permission": "Mention @everyone, @here and roles"
   }
 }

@@ -685,6 +685,9 @@
     "mutedIndefinitely": "Заглушено, пока вы не отмените",
     "spaceMuted": "Это пространство заглушено, поэтому заглушены и его каналы.",
     "mutedIndicator": "Заглушено",
-    "saveFailed": "Не удалось сохранить настройки уведомлений"
+    "saveFailed": "Не удалось сохранить настройки уведомлений",
+    "suppressEveryone": "Подавлять @everyone и @here",
+    "suppressRoles": "Подавлять упоминания ролей",
+    "permission": "Упоминать @everyone, @here и роли"
   }
 }

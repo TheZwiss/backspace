@@ -663,6 +663,9 @@
     "mutedIndefinitely": "Stummgeschaltet, bis du es aufhebst",
     "spaceMuted": "Dieser Space ist stummgeschaltet, damit auch seine Kanäle.",
     "mutedIndicator": "Stummgeschaltet",
-    "saveFailed": "Benachrichtigungseinstellungen konnten nicht gespeichert werden"
+    "saveFailed": "Benachrichtigungseinstellungen konnten nicht gespeichert werden",
+    "suppressEveryone": "@everyone und @here unterdrücken",
+    "suppressRoles": "Rollenerwähnungen unterdrücken",
+    "permission": "@everyone, @here und Rollen erwähnen"
   }
 }

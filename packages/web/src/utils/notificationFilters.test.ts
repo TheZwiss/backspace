@@ -239,3 +239,28 @@ describe('isAlertAllowed (Do Not Disturb gate)', () => {
     expect(isAlertAllowed('message', undefined)).toBe(true);
   });
 });
+
+
+describe('mass mentions', () => {
+  const input: MessageAlertInput = { authoredBySelf: false, myId: 'me', myRoleIds: ['role'], isDmChannel: false,
+    content: null, allChannels: false, notification: DEFAULT_POLICY };
+  it.each(['@everyone', '@here', '<@&role>'])('alerts for %s', content => {
+    expect(isMessageAlert({ ...input, content })).toBe(true);
+  });
+  it.each(['hello', '<@&other>', 'email@everyone', '@everyone-else', '\x60@everyone\x60', '\x60\x60\x60<@&role>\x60\x60\x60'])('does not alert for %s', content => {
+    expect(isMessageAlert({ ...input, content })).toBe(false);
+  });
+  it('suppresses only the selected mass mention kinds, never direct mentions', () => {
+    const notification = { ...DEFAULT_POLICY, suppressEveryone: true, suppressRoles: true };
+    expect(isMessageAlert({ ...input, notification, content: '@everyone <@&role>' })).toBe(false);
+    expect(isMessageAlert({ ...input, notification, content: '@everyone <@me>' })).toBe(true);
+    expect(isMessageAlert({ ...input, notification: { ...notification, suppressRoles: false }, content: '<@&role>' })).toBe(true);
+  });
+  it('keeps mute, nothing, self, DM and all-message policies unchanged', () => {
+    expect(isMessageAlert({ ...input, content: '@everyone', notification: { level: 'nothing', muted: false } })).toBe(false);
+    expect(isMessageAlert({ ...input, content: '@everyone', notification: { level: 'mentions', muted: true } })).toBe(false);
+    expect(isMessageAlert({ ...input, content: '@everyone', authoredBySelf: true })).toBe(false);
+    expect(isMessageAlert({ ...input, content: '@everyone', isDmChannel: true, notification: { level: 'nothing', muted: true } })).toBe(true);
+    expect(isMessageAlert({ ...input, content: '@everyone', notification: { level: 'all', muted: false, suppressEveryone: true } })).toBe(true);
+  });
+});

@@ -1,5 +1,5 @@
 import type { ChannelNotificationPolicy, UserStatus } from '@backspace/shared';
-import { contentMentionsAny } from './mentionTokens';
+import { parseMentions } from '@backspace/shared/src/mentions';
 
 /**
  * The rule that decides whether a freshly-arrived chat message alerts the user.
@@ -17,9 +17,10 @@ import { contentMentionsAny } from './mentionTokens';
  *     - muted (its own mute or its space's): never, mentions included;
  *     - `nothing`: never, mentions included;
  *     - `all`: every message;
- *     - `mentions`: content with a `<@${myId}>` mention outside code (the
- *       shared scan in utils/mentionTokens.ts), where `myId` is the user's id
- *       on the instance that issued the channel. With `allChannels`, every
+ *     - `mentions`: direct mentions, unsuppressed @everyone/@here, or an
+ *       unsuppressed role the recipient holds; tokens inside code do not
+ *       count. User and role ids belong to the channel's instance. Direct
+ *       mentions are never suppressed by the group switches. With `allChannels`, every
  *       message: only the in-app cue passes it, since the "Play sound for
  *       every message" preference is a sound setting and does not widen the
  *       OS notification. It widens `mentions` only, so it never overrides a
@@ -28,11 +29,12 @@ import { contentMentionsAny } from './mentionTokens';
 export interface MessageAlertInput {
   authoredBySelf: boolean;
   myId: string | undefined;
+  myRoleIds?: readonly string[];
   isDmChannel: boolean;
   content: string | null;
   allChannels: boolean;
   /** The channel's resolved settings (`resolveChannelNotificationPolicy`); not read for a DM. */
-  notification: Pick<ChannelNotificationPolicy, 'level' | 'muted'>;
+  notification: Pick<ChannelNotificationPolicy, 'level' | 'muted'> & Partial<Pick<ChannelNotificationPolicy, 'suppressEveryone' | 'suppressRoles'>>;
 }
 
 export function isMessageAlert(input: MessageAlertInput): boolean {
@@ -47,8 +49,16 @@ export function isMessageAlert(input: MessageAlertInput): boolean {
     case 'mentions':
       if (input.allChannels) return true;
       if (!input.content || !input.myId) return false;
-      return contentMentionsAny(input.content, new Set([input.myId]));
+      return mentionsRecipient(input);
   }
+}
+
+/** Direct mentions still alert when the recipient suppresses group mentions. */
+function mentionsRecipient(input: MessageAlertInput): boolean {
+  const mentions = parseMentions(input.content);
+  if (input.myId && mentions.userIds.has(input.myId)) return true;
+  if (mentions.everyone && !input.notification.suppressEveryone) return true;
+  return !input.notification.suppressRoles && (input.myRoleIds ?? []).some(id => mentions.roleIds.has(id));
 }
 
 /**

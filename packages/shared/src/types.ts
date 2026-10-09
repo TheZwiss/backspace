@@ -362,10 +362,14 @@ export function isNotificationMuteDuration(value: unknown): value is Notificatio
  * (epoch ms, the server's clock). A mute that has ended reads as not muted.
  *
  * `updatedAt` is the server's write time. A setting with no choice left
- * (`level` null and not muted) is not stored, and is sent as such so other
+ * (`level` null, not muted and no mass-mention suppression) is not stored,
+ * and is sent as such so other
  * sessions drop theirs.
  */
 export interface NotificationSetting {
+  /** Space-wide suppression of mass mentions; omitted means false. Direct mentions are unaffected. */
+  suppressEveryone?: boolean;
+  suppressRoles?: boolean;
   spaceId: string;
   channelId: string | null;
   level: NotificationLevel | null;
@@ -381,6 +385,9 @@ export interface NotificationSetting {
  * `mute: null` lifts the mute.
  */
 export interface UpdateNotificationSettingRequest {
+  /** Only accepted for space settings, not channel overrides. */
+  suppressEveryone?: boolean;
+  suppressRoles?: boolean;
   level?: NotificationLevel | null;
   mute?: NotificationMuteDuration | null;
 }
@@ -405,6 +412,8 @@ export type NotificationLevelSource = 'channel' | 'space' | 'default';
  * the channel and the space muted it is the later of the two ends.
  */
 export interface ChannelNotificationPolicy {
+  suppressEveryone: boolean;
+  suppressRoles: boolean;
   level: NotificationLevel;
   levelSource: NotificationLevelSource;
   muted: boolean;
@@ -443,7 +452,11 @@ export function resolveChannelNotificationPolicy(
   if (ends.length > 0 && !ends.includes(null)) {
     mutedUntil = Math.max(...ends.filter((end): end is number => end !== null));
   }
-  return { level, levelSource, muted: channelMuted || spaceMuted, mutedUntil, channelMuted, spaceMuted };
+  return {
+    level, levelSource, muted: channelMuted || spaceMuted, mutedUntil, channelMuted, spaceMuted,
+    suppressEveryone: spaceSetting?.suppressEveryone === true,
+    suppressRoles: spaceSetting?.suppressRoles === true,
+  };
 }
 
 // ─── Message Types ──────────────────────────────────────────────────────────

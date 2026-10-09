@@ -345,6 +345,8 @@ export const notificationSettings = sqliteTable('notification_settings', {
   level: text('level'),
   muted: integer('muted').notNull().default(0),
   mutedUntil: integer('muted_until'),
+  suppressEveryone: integer('suppress_everyone').notNull().default(0),
+  suppressRoles: integer('suppress_roles').notNull().default(0),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => ({
   // One space-wide row and one row per channel, per user. Two partial

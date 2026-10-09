@@ -652,6 +652,9 @@
     "mutedIndefinitely": "已静音，直到你取消",
     "spaceMuted": "此空间已静音，其频道也随之静音。",
     "mutedIndicator": "已静音",
-    "saveFailed": "无法保存通知设置"
+    "saveFailed": "无法保存通知设置",
+    "suppressEveryone": "屏蔽 @everyone 和 @here 提醒",
+    "suppressRoles": "屏蔽 @身份组 提醒",
+    "permission": "提及 @everyone、@here 和身份组"
   }
 }
