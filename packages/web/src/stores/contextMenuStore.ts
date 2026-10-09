@@ -23,6 +23,8 @@ export interface ContextMenuCheckbox extends ContextMenuItemBase {
   label: string;
   subscribe: (onStoreChange: () => void) => () => void;
   getChecked: () => boolean;
+  /** Uses the same subscription as checked state so in-flight writes disable immediately. */
+  getDisabled?: () => boolean;
   onChange: (checked: boolean) => void;
 }
 

@@ -585,6 +585,17 @@
     "loading": "Mitglieder werden geladen",
     "groups": {
       "owner": "Besitzer"
+    },
+    "menu": {
+      "profile": "Profil anzeigen",
+      "nickname": "Space-Spitznamen ändern…",
+      "roles": "Rollen / Berechtigungsgruppen"
+    },
+    "nickname": {
+      "title": "Space-Spitznamen ändern",
+      "label": "Space-Spitzname",
+      "description": "Gilt nur in diesem Space. Dein Kontoname und Spitznamen in anderen Spaces bleiben unverändert.",
+      "reset": "Auf Standard zurücksetzen"
     }
   },
   "mobile": {

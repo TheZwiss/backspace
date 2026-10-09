@@ -219,5 +219,6 @@
   "directory_disabled": "此实例未连接到任何目录。",
   "directory_unreachable": "外部空间目前无法访问。内部空间仍可正常使用。",
   "directory_private_space": "请先将空间设为公开或需申请，再将其列入目录。",
-  "directory_requires_discovery": "请先开启空间发现功能。"
+  "directory_requires_discovery": "请先开启空间发现功能。",
+  "member_nickname_invalid": "昵称须为单行的 1–32 个字符；恢复默认请使用重置操作。"
 }

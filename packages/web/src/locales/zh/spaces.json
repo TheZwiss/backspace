@@ -577,6 +577,17 @@
     "loading": "正在加载成员",
     "groups": {
       "owner": "拥有者"
+    },
+    "menu": {
+      "profile": "查看个人资料",
+      "nickname": "修改空间昵称…",
+      "roles": "角色 / 权限组"
+    },
+    "nickname": {
+      "title": "修改空间昵称",
+      "label": "空间昵称",
+      "description": "仅在当前空间生效，不会修改账号昵称或其他空间的昵称。",
+      "reset": "恢复默认"
     }
   },
   "mobile": {

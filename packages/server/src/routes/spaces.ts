@@ -1,3 +1,4 @@
+import { updateSpaceMemberRoutes, roleGrantRefusal } from './spaceMemberUpdate.js';
 import path from 'path';
 import type { FastifyInstance } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
@@ -16,7 +17,6 @@ import type {
   CreateSpaceRequest,
   UpdateSpaceRequest,
   JoinSpaceRequest,
-  UpdateMemberRequest,
   Space,
   Channel,
   ChannelCategory,
@@ -106,15 +106,6 @@ type RoleChangeRefusal = {
   code: 'missing_permission' | 'cannot_change_own_roles' | 'space_owner_only' | 'member_not_found' | 'role_not_in_space' | 'everyone_role_not_assignable' | 'role_hierarchy' | HeldBitsRefusal;
   details?: Record<string, string>;
 };
-
-/**
- * Held-bits rule for handing out a role (permissions.md, "Held-bits rule"):
- * giving a member a role gives them its bits, so the actor must hold every
- * one of them. Taking a role away is governed by the hierarchy alone.
- */
-function roleGrantRefusal(spaceId: string, actorId: string, rolePermissions: string | null): HeldBitsRefusal | null {
-  return roleBitsChangeRefusal(computePermissions(actorId, spaceId), 0n, stringToPermissions(rolePermissions));
-}
 
 /**
  * The checks shared by the two single-role routes (add one role to a member,
@@ -875,165 +866,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(members);
   });
 
-  // PATCH /api/spaces/:id/members/:uid - Update member roles
-  app.patch<{ Params: { id: string; uid: string }; Body: UpdateMemberRequest }>('/api/spaces/:id/members/:uid', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
-    const { id, uid } = request.params;
-    const { roleIds } = request.body;
-    const db = getDb();
-
-    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
-    if (!server) {
-      return sendError(reply, 404, 'space_not_found');
-    }
-
-    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
-      return sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
-    }
-
-    if (uid === request.userId) {
-      return sendError(reply, 400, 'cannot_change_own_roles');
-    }
-
-    // A set of role ids: each a string, none twice. The whole list replaces
-    // the member's roles, and the table holds each role once per member.
-    if (!Array.isArray(roleIds)
-      || !roleIds.every((roleId): roleId is string => typeof roleId === 'string')
-      || new Set(roleIds).size !== roleIds.length) {
-      return sendError(reply, 400, 'role_ids_invalid');
-    }
-
-    // Cannot modify the server owner's roles unless you are the owner
-    if (isSpaceOwner(id, uid) && !isSpaceOwner(id, request.userId)) {
-      return sendError(reply, 403, 'space_owner_only');
-    }
-
-    const member = db.select()
-      .from(schema.spaceMembers)
-      .where(and(
-        eq(schema.spaceMembers.spaceId, id),
-        eq(schema.spaceMembers.userId, uid),
-      ))
-      .get();
-
-    if (!member) {
-      return sendError(reply, 404, 'member_not_found');
-    }
-
-    // Validate all roleIds belong to this server and are not @everyone
-    const spaceRoles = db.select()
-      .from(schema.roles)
-      .where(eq(schema.roles.spaceId, id))
-      .all();
-    const spaceRolePositions = new Map(spaceRoles.map(r => [r.id, r.position ?? 0]));
-
-    for (const roleId of roleIds) {
-      if (!spaceRolePositions.has(roleId)) {
-        return sendError(reply, 400, 'role_not_in_space', { roleId });
-      }
-      if (roleId === id) {
-        return sendError(reply, 400, 'everyone_role_not_assignable');
-      }
-    }
-
-    // Role hierarchy: the member must rank below the actor, and every role
-    // this request adds or removes must sit below the actor's top role.
-    const actorStanding = getHierarchyStanding(id, request.userId);
-    if (!canActOnMember(actorStanding, getHierarchyStanding(id, uid))) {
-      return sendError(reply, 403, 'role_hierarchy');
-    }
-    const currentRoleIds = new Set(
-      db.select({ roleId: schema.memberRoles.roleId })
-        .from(schema.memberRoles)
-        .where(and(eq(schema.memberRoles.spaceId, id), eq(schema.memberRoles.userId, uid)))
-        .all()
-        .map(r => r.roleId),
-    );
-    const requestedRoleIds = new Set(roleIds);
-    const changedRoleIds = [
-      ...roleIds.filter(r => !currentRoleIds.has(r)),
-      ...[...currentRoleIds].filter(r => !requestedRoleIds.has(r)),
-    ];
-    for (const roleId of changedRoleIds) {
-      if (!canManageRoleAt(actorStanding, spaceRolePositions.get(roleId) ?? 0)) {
-        return sendError(reply, 403, 'role_hierarchy');
-      }
-    }
-    // Held-bits rule: a role this request adds must carry only bits the actor holds.
-    for (const roleId of roleIds.filter(r => !currentRoleIds.has(r))) {
-      const refusal = roleGrantRefusal(id, request.userId, spaceRoles.find(r => r.id === roleId)?.permissions ?? null);
-      if (refusal) {
-        return sendError(reply, 403, refusal);
-      }
-    }
-
-    // Atomically replace member's role assignments
-    db.transaction((tx) => {
-      // Remove all existing role assignments for this member in this server
-      tx.delete(schema.memberRoles)
-        .where(and(
-          eq(schema.memberRoles.spaceId, id),
-          eq(schema.memberRoles.userId, uid),
-        ))
-        .run();
-
-      // Insert new role assignments
-      for (const roleId of roleIds) {
-        tx.insert(schema.memberRoles).values({
-          spaceId: id,
-          userId: uid,
-          roleId,
-        }).run();
-      }
-    });
-
-    announceAccessChange(id, [uid]);
-
-    // Build response with populated roles
-    const updatedMember = db.select()
-      .from(schema.spaceMembers)
-      .where(and(
-        eq(schema.spaceMembers.spaceId, id),
-        eq(schema.spaceMembers.userId, uid),
-      ))
-      .get();
-
-    if (!updatedMember) {
-      return sendError(reply, 500, 'member_update_failed');
-    }
-
-    const user = db.select().from(schema.users).where(eq(schema.users.id, uid)).get();
-    if (!user) {
-      return sendError(reply, 500, 'user_not_found');
-    }
-
-    const updatedRoleRows = db.select()
-      .from(schema.memberRoles)
-      .where(and(
-        eq(schema.memberRoles.spaceId, id),
-        eq(schema.memberRoles.userId, uid),
-      ))
-      .all();
-
-    const updatedRoleIds = new Set(updatedRoleRows.map(r => r.roleId));
-    const allRoles = db.select()
-      .from(schema.roles)
-      .where(eq(schema.roles.spaceId, id))
-      .orderBy(schema.roles.position)
-      .all();
-
-    const result: MemberWithUser = {
-      spaceId: updatedMember.spaceId,
-      userId: updatedMember.userId,
-      nickname: updatedMember.nickname,
-      joinedAt: updatedMember.joinedAt,
-      user: sanitizeUser(user),
-      roles: memberRolesView(allRoles, updatedRoleIds),
-    };
-
-    return reply.code(200).send(result);
-  });
+  updateSpaceMemberRoutes(app);
 
   // DELETE /api/spaces/:id/members/:uid - Kick member (owner) or leave (self)
   app.delete<{ Params: { id: string; uid: string } }>('/api/spaces/:id/members/:uid', {

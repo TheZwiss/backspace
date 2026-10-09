@@ -219,5 +219,6 @@
   "directory_disabled": "Esta instância não está conectada a um diretório.",
   "directory_unreachable": "O Espaço Externo não está acessível no momento. O Espaço Interno continua funcionando.",
   "directory_private_space": "Defina o espaço como público ou por solicitação antes de listá-lo.",
-  "directory_requires_discovery": "Ative primeiro a descoberta de espaços."
+  "directory_requires_discovery": "Ative primeiro a descoberta de espaços.",
+  "member_nickname_invalid": "O apelido deve ter de 1 a 32 caracteres em uma única linha, ou null para restaurar."
 }

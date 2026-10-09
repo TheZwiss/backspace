@@ -96,3 +96,6 @@ export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
  * and the server's never disagree.
  */
 export const PASSWORD_MIN_LENGTH = 8;
+
+/** Space-local member labels, independent of account names. */
+export const MAX_MEMBER_NICKNAME_LENGTH = 32;

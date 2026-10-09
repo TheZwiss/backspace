@@ -52,17 +52,23 @@ interface ReactiveCheckboxItemProps {
   isMobile?: boolean;
 }
 
+const checkboxEnabled = () => false;
+
 function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
   const checked = useSyncExternalStore(item.subscribe, item.getChecked);
+  const disabled = useSyncExternalStore(item.subscribe, item.getDisabled ?? checkboxEnabled);
 
   const className = isMobile
-    ? `${MOBILE_ITEM_CLASS} text-txt-primary`
-    : ITEM_CLASS;
+    ? `${MOBILE_ITEM_CLASS} text-txt-primary disabled:opacity-50`
+    : disabled ? ITEM_DISABLED_CLASS : ITEM_CLASS;
 
   return (
     <button
       className={className}
       style={isMobile ? undefined : ITEM_STYLE}
+      role="menuitemcheckbox"
+      aria-checked={checked}
+      disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();
         item.onChange(!checked);
@@ -72,6 +78,27 @@ function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
       <CheckboxIndicator checked={checked} />
     </button>
   );
+}
+
+// Flyouts are portals: handle activation here instead of letting it bubble to
+// the parent menu, whose DOM does not contain the focused checkbox.
+function handleMenuNavigation(event: React.KeyboardEvent, container: HTMLElement | null): void {
+  if (!container) return;
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    event.stopPropagation();
+    const focused = document.activeElement;
+    if (focused instanceof HTMLButtonElement && container.contains(focused)) focused.click();
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button:not([disabled])'));
+  const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  const delta = event.key === 'ArrowDown' ? 1 : -1;
+  const next = index < 0 && delta > 0 ? 0 : (Math.max(index, 0) + delta + buttons.length) % buttons.length;
+  buttons[next]?.focus();
 }
 
 // ── Desktop submenu flyout ───────────────────────────────────────────────────
@@ -114,11 +141,33 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
     flyout.style.top = `${top}px`;
   }, [triggerRef]);
 
+  useEffect(() => {
+    // Keyboard-opened flyouts receive focus; hovering must not steal it.
+    if (document.activeElement === triggerRef.current) {
+      flyoutRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+    }
+  }, [triggerRef]);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (['Escape', 'ArrowLeft'].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      useContextMenuStore.getState().setOpenSubmenu(null);
+      triggerRef.current?.focus();
+      return;
+    }
+    handleMenuNavigation(event, flyoutRef.current);
+
+  };
+
   if (filteredChildren.length === 0) return null;
 
   return createPortal(
     <div
       ref={flyoutRef}
+      role="menu"
+      aria-label={submenu.label}
+      onKeyDown={handleKeyDown}
       className="fixed z-[210] glass rounded-md py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: -9999, top: -9999 }}
       onMouseEnter={onMouseEnter}
@@ -238,6 +287,15 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
     <>
       <button
         ref={triggerRef}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={() => setOpenSubmenu(isOpen ? null : item.key)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpenSubmenu(item.key);
+        }}
         className={ITEM_CLASS}
         style={ITEM_STYLE}
         onMouseEnter={handleTriggerEnter}
@@ -318,72 +376,18 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
     };
   }, [close]);
 
-  // Keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      const container = menuRef.current;
-      if (!container) return;
-
-      const focusableSelector = 'button:not([disabled])';
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        // Close submenu first if open, otherwise close the whole menu
-        const openSubmenuKey = useContextMenuStore.getState().openSubmenuKey;
-        if (openSubmenuKey) {
-          useContextMenuStore.getState().setOpenSubmenu(null);
-        } else {
-          close();
-        }
-        return;
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      if (useContextMenuStore.getState().openSubmenuKey) {
+        useContextMenuStore.getState().setOpenSubmenu(null);
+      } else if (event.key === 'Escape') {
+        close();
       }
-
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const buttons = Array.from(container.querySelectorAll<HTMLElement>(focusableSelector));
-        if (buttons.length === 0) return;
-        const currentIndex = buttons.indexOf(document.activeElement as HTMLElement);
-        let nextIndex: number;
-        if (e.key === 'ArrowDown') {
-          nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % buttons.length;
-        } else {
-          nextIndex = currentIndex <= 0 ? buttons.length - 1 : currentIndex - 1;
-        }
-        buttons[nextIndex]?.focus();
-        return;
-      }
-
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        const focused = document.activeElement;
-        if (focused instanceof HTMLButtonElement && container.contains(focused)) {
-          focused.click();
-        }
-        return;
-      }
-
-      if (e.key === 'ArrowRight') {
-        // Open submenu if focused item is a submenu trigger
-        e.preventDefault();
-        const focused = document.activeElement;
-        if (focused instanceof HTMLButtonElement) {
-          // Simulate mouse enter to open the submenu
-          focused.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-        }
-        return;
-      }
-
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        const openSubmenuKey = useContextMenuStore.getState().openSubmenuKey;
-        if (openSubmenuKey) {
-          useContextMenuStore.getState().setOpenSubmenu(null);
-        }
-        return;
-      }
-    },
-    [close],
-  );
+      return;
+    }
+    handleMenuNavigation(event, menuRef.current);
+  }, [close]);
 
   return createPortal(
     <>
@@ -405,6 +409,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
       {/* Menu panel */}
       <div
         ref={menuRef}
+        role="menu"
         tabIndex={-1}
         className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
         style={{ left: position.x, top: position.y }}

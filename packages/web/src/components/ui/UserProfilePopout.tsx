@@ -22,6 +22,7 @@ import { useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { viewerCanEditMemberRoles } from '../../utils/roleHierarchy';
 import { ProfileRoles } from './ProfileRoles';
+import { ProfileSpaceNickname } from './ProfileSpaceNickname';
 
 /** Gap between the card and the element it was opened from. */
 const ANCHOR_OFFSET = 8;
@@ -189,6 +190,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
         {/* Name & info */}
         <div>
+          <ProfileSpaceNickname member={member} />
           <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
           <div className="text-[13px] text-txt-tertiary">
             <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />

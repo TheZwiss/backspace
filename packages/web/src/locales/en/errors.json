@@ -219,5 +219,6 @@
   "directory_disabled": "This instance is not connected to a directory.",
   "directory_unreachable": "Outer Space is not reachable right now. Inner Space still works.",
   "directory_private_space": "Set the space to public or request to join before listing it.",
-  "directory_requires_discovery": "Turn on space discovery first."
+  "directory_requires_discovery": "Turn on space discovery first.",
+  "member_nickname_invalid": "Nickname must contain 1–32 characters on a single line. Use reset to restore the default."
 }

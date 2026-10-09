@@ -713,6 +713,7 @@ export type ServerEvent =
   | ({ type: 'presence_update'; userId: string; status: string; activities?: Activity[] } & Partial<PresenceIdentity>)
   | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave'; channelElapsedSeconds?: number }
   | { type: 'member_joined'; spaceId: string; member: MemberWithUser }
+  | { type: 'member_updated'; spaceId: string; member: MemberWithUser }
   | { type: 'member_left'; spaceId: string; userId: string }
   | { type: 'dm_message_created'; message: DmMessageWithUser }
   | { type: 'dm_message_updated'; message: DmMessageWithUser }
@@ -880,7 +881,9 @@ export interface UpdateUserRequest {
 }
 
 export interface UpdateMemberRequest {
-  roleIds: string[];
+  roleIds?: string[];
+  /** Space-local name; null explicitly restores the account display name. */
+  nickname?: string | null;
 }
 
 export interface CreateMessageRequest {

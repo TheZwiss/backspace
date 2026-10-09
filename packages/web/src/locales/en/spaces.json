@@ -585,6 +585,17 @@
     "loading": "Loading members",
     "groups": {
       "owner": "Owner"
+    },
+    "menu": {
+      "profile": "View profile",
+      "nickname": "Change space nickname…",
+      "roles": "Roles / permission groups"
+    },
+    "nickname": {
+      "title": "Change space nickname",
+      "label": "Space nickname",
+      "description": "Only applies to this space. Your account name and nicknames in other spaces stay unchanged.",
+      "reset": "Reset to default"
     }
   },
   "mobile": {

@@ -180,7 +180,7 @@ describe("#340: a federated friend's activity in the friends views", () => {
     showSpace('', stubRow);
     const home = socketFor('');
     const friendsView = panel();
-    const membersView = render(<MemberSidebar />).container;
+    const membersView = render(<MemoryRouter><MemberSidebar /></MemoryRouter>).container;
 
     home.deliver({
       type: 'presence_update', userId: 'stub-a', status: 'online', activities: playing,
@@ -202,7 +202,7 @@ describe("#340: a federated friend's activity in the friends views", () => {
     showSpace('', carol);
     useSocialStore.setState({ friends: [{ ...bobStubFriend, ...carol, addedAt: 0, _instanceOrigin: '' }] });
     const nova = socketFor(NOVA);
-    const membersView = render(<MemberSidebar />).container;
+    const membersView = render(<MemoryRouter><MemberSidebar /></MemoryRouter>).container;
     const friendsView = panel();
 
     nova.deliver({
@@ -248,7 +248,7 @@ describe('#340: a server that predates the identity fields', () => {
     showSpace(NOVA, bobOnNova);
     const nova = socketFor(NOVA);
     const friendsView = panel();
-    const membersView = render(<MemberSidebar />).container;
+    const membersView = render(<MemoryRouter><MemberSidebar /></MemoryRouter>).container;
 
     nova.deliver({ type: 'presence_update', userId: 'bob-on-nova', status: 'online', activities: playing });
 

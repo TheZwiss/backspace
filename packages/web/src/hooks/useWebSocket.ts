@@ -1,3 +1,4 @@
+import { applySpaceMemberUpdate } from '../stores/spaceMemberUpdates';
 import React, { useEffect, useRef } from 'react';
 import { isMyIdentity, useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
@@ -828,6 +829,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       if (isLoadedRosterSpace(event.spaceId, origin)) addMember(event.spaceId, event.member);
       break;
 
+    case 'member_updated':
+      if (event.spaceId === event.member.spaceId) applySpaceMemberUpdate(origin, event.member);
+      break;
     case 'member_left':
       if (isLoadedRosterSpace(event.spaceId, origin)) removeMember(event.spaceId, event.userId);
       break;

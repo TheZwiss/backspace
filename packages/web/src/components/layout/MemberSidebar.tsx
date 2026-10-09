@@ -1,3 +1,5 @@
+import { useMemberContextMenu } from './memberMenu/useMemberContextMenu';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MemberWithUser, Activity } from '@backspace/shared';
@@ -22,6 +24,7 @@ function MemberSidebarRow({
   isRichActivity,
   accentClass,
   onClickMember,
+  onContextMenuMember,
 }: {
   member: MemberWithUser;
   isOffline: boolean;
@@ -30,10 +33,11 @@ function MemberSidebarRow({
   isRichActivity: boolean;
   accentClass: string;
   onClickMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
+  onContextMenuMember: (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => void;
 }) {
   const origin = useSpaceOrigin(member.spaceId);
   const canonical = useCanonicalUserView(member.user, origin);
-  const displayName = userDisplayName(canonical);
+  const displayName = member.nickname ?? userDisplayName(canonical);
 
   const rowClass = isRichActivity
     ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
@@ -43,6 +47,8 @@ function MemberSidebarRow({
     <div
       key={member.userId}
       onClick={(e) => onClickMember(e, member, canonical)}
+      onContextMenu={(e) => onContextMenuMember(e, member, canonical)}
+      data-context-menu
       className={rowClass}
     >
       <Avatar
@@ -87,6 +93,7 @@ export function MemberSidebar() {
 
   const space = spaces.find(s => s.id === currentSpaceId);
   const ownerId = space?.ownerId;
+  const memberMenu = useMemberContextMenu(space);
   const spaceOrigin = space?._instanceOrigin ?? '';
 
   const { groups: roleGroups, offline: offlineMembers } = useMemo(() => groupMembers(members, ownerId), [members, ownerId]);
@@ -103,6 +110,8 @@ export function MemberSidebar() {
 
   const handleMemberClick = (e: React.MouseEvent, member: MemberWithUser, user: MemberWithUser['user']) => {
     e.stopPropagation();
+    // Left-click remains profile-only, even for moderators.
+    useContextMenuStore.getState().close();
     const origin = useSpaceStore.getState().spaces.find(s => s.id === member.spaceId)?._instanceOrigin ?? '';
     openUserProfile(user, origin, e.currentTarget.getBoundingClientRect(), 'left', { spaceId: member.spaceId, userId: member.userId });
   };
@@ -131,11 +140,14 @@ export function MemberSidebar() {
         isRichActivity={isRichActivity}
         accentClass={accentClass}
         onClickMember={handleMemberClick}
+        onContextMenuMember={memberMenu.open}
       />
     );
   };
 
   return (
+    <>
+    {memberMenu.dialogs}
     <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
       {showMemberSkeleton ? (
         <div className="px-3 pt-4" role="status" aria-label={t('spaces:members.loading')}>
@@ -180,5 +192,6 @@ export function MemberSidebar() {
       </div>
       )}
     </div>
+    </>
   );
 }

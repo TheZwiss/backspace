@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -69,7 +70,7 @@ beforeEach(() => {
 });
 
 async function clickMember(name: string): Promise<void> {
-  render(<MemberSidebar />);
+  render(<MemoryRouter><MemberSidebar /></MemoryRouter>);
   await userEvent.click(screen.getByText(name));
 }
 

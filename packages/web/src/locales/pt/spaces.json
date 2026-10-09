@@ -593,6 +593,17 @@
     "loading": "Carregando membros",
     "groups": {
       "owner": "Dono"
+    },
+    "menu": {
+      "profile": "Ver perfil",
+      "nickname": "Alterar apelido no espaço…",
+      "roles": "Cargos / grupos de permissões"
+    },
+    "nickname": {
+      "title": "Alterar apelido",
+      "label": "Apelido",
+      "description": "Este nome é usado apenas neste espaço.",
+      "reset": "Restaurar nome da conta"
     }
   },
   "mobile": {
