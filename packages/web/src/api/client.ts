@@ -1,3 +1,4 @@
+import type { PersonalSticker } from '@backspace/shared/src/stickers';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   NotificationSetting,
@@ -438,6 +439,13 @@ export class BackspaceApiClient {
     };
   };
 
+  stickers: {
+    list: () => Promise<PersonalSticker[]>;
+    upload: (data: { name: string; image: string }) => Promise<PersonalSticker>;
+    collect: (data: { id: string; token: string }) => Promise<PersonalSticker>;
+    remove: (id: string) => Promise<{ success: boolean }>;
+  };
+
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     /** Send a request and return the successful response; a failure throws. */
     async function send(
@@ -520,6 +528,12 @@ export class BackspaceApiClient {
       const messages = await response.json() as T[];
       return { messages, forward };
     }
+    this.stickers = {
+      list: () => request('GET', '/stickers'),
+      upload: (data) => request('POST', '/stickers', data),
+      collect: ({ id, token }) => request('POST', `/stickers/${encodeURIComponent(id)}/collect`, { token }),
+      remove: (id) => request('DELETE', `/stickers/${encodeURIComponent(id)}`),
+    };
 
     this.auth = {
       register: (data: RegisterRequest) =>

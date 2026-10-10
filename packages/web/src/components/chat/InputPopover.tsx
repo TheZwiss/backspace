@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { StickerPicker } from './StickerPicker';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -6,13 +8,14 @@ import { GifPicker } from './GifPicker';
 import { useUIStore } from '../../stores/uiStore';
 import { MobilePickerSheet } from './MobilePickerSheet';
 
-export type InputPopoverTab = 'emoji' | 'gif';
+export type InputPopoverTab = 'emoji' | 'gif' | 'sticker';
 
 interface InputPopoverProps {
   activeTab: InputPopoverTab;
   onClose: () => void;
   onEmojiSelect: (emoji: { native: string }) => void;
-  onGifSelect: (url: string) => void;
+  /** Sends already-hosted media content: a GIF URL or a sticker token. */
+  onGifSelect: (content: string) => void;
   anchorRef: React.RefObject<HTMLElement | null>;
   gifEnabled: boolean;
   onTabChange: (tab: InputPopoverTab) => void;
@@ -24,23 +27,39 @@ interface SharedTabProps {
   onTabChange: (tab: InputPopoverTab) => void;
 }
 
+function HeartIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+    </svg>
+  );
+}
+
 function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
   if (availableTabs.length <= 1) return null;
   return (
     <div className="flex items-center gap-0.5 px-2 pt-2 pb-1">
-      {availableTabs.map((t) => (
-        <button
-          key={t.key}
-          onClick={() => onTabChange(t.key)}
-          className={`px-3 py-1 rounded-md text-[13px] font-medium transition-colors ${
-            activeTab === t.key
-              ? 'bg-interactive-selected text-txt-primary'
-              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
+      {availableTabs.map((t) => {
+        const isSticker = t.key === 'sticker';
+        return (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onTabChange(t.key)}
+            title={t.label}
+            aria-label={t.label}
+            className={`flex items-center justify-center rounded-md font-medium transition-colors ${
+              isSticker ? 'px-2.5 py-1' : 'px-3 py-1 text-[13px]'
+            } ${
+              activeTab === t.key
+                ? 'bg-interactive-selected text-txt-primary'
+                : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+            }`}
+          >
+            {isSticker ? <HeartIcon className="w-4 h-4" /> : t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -70,6 +89,7 @@ function DesktopPopover({
     const anchorRect = layoutRect(anchor.getBoundingClientRect());
     const floatingRect = layoutRect(floating.getBoundingClientRect());
     const vw = layoutPixels(window.innerWidth);
+    const vh = layoutPixels(window.innerHeight);
 
     let left = anchorRect.right - floatingRect.width;
     let top = anchorRect.top - floatingRect.height - 8;
@@ -79,6 +99,8 @@ function DesktopPopover({
       top = anchorRect.bottom + 8;
     }
 
+    // A short viewport must keep the confirmation footer reachable after flipping.
+    top = Math.max(8, Math.min(top, vh - floatingRect.height - 8));
     // Clamp horizontal
     left = Math.max(8, Math.min(left, vw - floatingRect.width - 8));
 
@@ -134,11 +156,12 @@ function DesktopPopover({
       className="fixed z-[300] animate-slide-up"
       style={{ top: -9999, left: -9999 }}
     >
-      <div className="glass rounded-xl overflow-hidden flex flex-col w-fit max-h-[435px]">
+      <div className={`glass rounded-xl overflow-hidden flex flex-col w-fit ${activeTab === 'sticker' ? 'max-h-[min(500px,calc(100*var(--app-dvh)-24px))]' : 'max-h-[435px]'}`}>
         <TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />
         {/* Content */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} />}
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} />}
+          {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} />}
           {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
         </div>
       </div>
@@ -165,17 +188,20 @@ function MobileSheet({
       onClose={onClose}
       header={<TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />}
     >
-      {activeTab === 'emoji' && <EmojiPicker onEmojiSelect={onEmojiSelect} mobile />}
+      {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} mobile />}
+      {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} mobile />}
       {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
     </MobilePickerSheet>
   );
 }
 
 export function InputPopover(props: InputPopoverProps) {
+  const { t } = useTranslation('chat');
   const isMobile = useUIStore((s) => s.isMobile);
 
   const availableTabs: { key: InputPopoverTab; label: string }[] = [
     { key: 'emoji', label: 'Emoji' },
+    { key: 'sticker', label: t('stickers.title') },
   ];
   if (props.gifEnabled) {
     availableTabs.splice(0, 0, { key: 'gif', label: 'GIF' });

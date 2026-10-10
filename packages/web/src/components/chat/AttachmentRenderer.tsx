@@ -243,6 +243,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
         >
           <img
             src={thumbUrl ?? attUrl}
+            data-sticker-source={attUrl}
             alt={originalName}
             className="w-full h-full max-w-[400px] max-h-[300px] object-contain cursor-pointer hover:brightness-95 transition-all"
             onClick={() => openImagePreview(attUrl)}

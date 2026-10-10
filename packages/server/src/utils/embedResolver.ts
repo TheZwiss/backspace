@@ -1,3 +1,4 @@
+import { stickerUrl } from '@backspace/shared/src/stickers.js';
 import { eq, inArray } from 'drizzle-orm';
 import sharp from 'sharp';
 import type { Embed } from '@backspace/shared';
@@ -71,6 +72,8 @@ export async function probeRemoteImageDimensions(
 export function extractUrls(content: string | null): string[] {
   if (!content) return [];
 
+  // A sticker already has its own renderer; do not also unfurl its asset URL.
+  if (stickerUrl(content)) return [];
   const matches = content.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/g);
   if (!matches) return [];
 

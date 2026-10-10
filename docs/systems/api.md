@@ -327,6 +327,18 @@ GET  /uploads/:filename  (public, supports Range) → file stream
 ```
 Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's name is the snowflake it was given at upload and its bytes are never rewritten, so the name identifies one immutable file for good. The sandboxing headers on the same response (`default-src 'none'` CSP, `nosniff`, `X-Frame-Options: DENY`, `Content-Disposition: attachment` for SVG and non-media) are in [uploads.md](uploads.md) and [web-security.md](web-security.md).
 
+## Personal stickers (`routes/stickers.ts`)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/stickers` | JWT | Current user’s collection: `{id, name, token}[]` |
+| POST | `/api/stickers` | JWT | `{name, image}`; canonical base64 image bytes. Creates/reuses an asset and collects it |
+| POST | `/api/stickers/:id/collect` | JWT | `{token}`; collects an existing local asset |
+| DELETE | `/api/stickers/:id` | JWT | Removes only the current user’s favorite |
+| GET | `/api/stickers/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it |
+
+Upload and collect return `{id, name, token}`. The id is the SHA-256 of re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names are trimmed, nonblank, and at most 100 characters. Uploads accept PNG/JPEG/WebP/GIF up to 5 MiB with a 16,777,216 decoded-pixel cap across frames; the JSON body limit allows base64 expansion. SVG, malformed images and noncanonical base64 are rejected. Collection requires the exact token for this instance’s canonical origin; remote URLs are never fetched server-side. Collection is idempotent, and removal never deletes a shared asset. See [personal stickers](../features/personal-stickers.md) for retention and cross-instance boundaries.
+
 ## GIF (`routes/gif.ts`) — auth required
 ```
 GET /gif/enabled                         → { enabled }

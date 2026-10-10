@@ -781,3 +781,16 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
 }));
+
+// Assets outlive personal collections so removing a favorite cannot break message history.
+export const stickerAssets = sqliteTable('sticker_assets', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const personalStickers = sqliteTable('personal_stickers', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  stickerId: text('sticker_id').notNull().references(() => stickerAssets.id),
+  name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));

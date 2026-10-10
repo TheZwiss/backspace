@@ -1,4 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { api } from '../../api/client';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageWithUser, User } from '@backspace/shared';
 import { useAuthStore } from '../../stores/authStore';
@@ -56,7 +58,10 @@ beforeEach(() => {
   useAuthStore.setState({ user: me });
   // dm-1 is a DM because the listing says so; the URL decides nothing.
   useSpaceStore.getState().reset();
-  useSpaceStore.getState().populateFromReady('', [], [], [{ id: 'dm-1', federatedId: null, createdAt: 1, members: [me] }]);
+  useSpaceStore.getState().populateFromReady('', [], [], [{
+    id: 'dm-1', federatedId: null, ownerId: null, ownerHomeUserId: null, ownerHomeInstance: null,
+    createdAt: 1, members: [me], lastMessage: null, name: null, icon: null, metadataUpdatedAt: 1,
+  }]);
   useComposerStore.setState({ states: new Map() });
   useChatStore.setState({
     messages: new Map([['dm-1', [ownMessage]]]),
@@ -66,6 +71,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  useContextMenuStore.getState().close();
   vi.restoreAllMocks();
   useUIStore.setState({ toasts: [] });
   useChatStore.getState().clearAllMessages();
@@ -151,4 +158,33 @@ describe('MessageInput slow sends', () => {
     expect(input).toHaveValue('failed text\nnew text');
     expect(useUIStore.getState().toasts).toEqual([expect.objectContaining({ message: 'Offline', type: 'warning' })]);
   });
+});
+
+it('sends a personal sticker without discarding the current text draft', async () => {
+  const token = `sticker:https://chat.test/api/stickers/assets/${'a'.repeat(64)}.webp`;
+  vi.spyOn(api.stickers, 'list').mockResolvedValue([{ id: 'a'.repeat(64), name: 'Happy', token }]);
+  const send = vi.spyOn(useChatStore.getState(), 'sendMessage').mockResolvedValue(undefined);
+  useComposerStore.getState().setDraft('dm-1', 'unfinished draft');
+  render(<MessageInput channelId="dm-1" channelName="general" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Emoji picker' }));
+  fireEvent.click(screen.getByRole('button', { name: 'My stickers' }));
+  const stickerButton = await screen.findByRole('button', { name: 'Happy' });
+  await act(async () => { fireEvent.click(stickerButton); });
+  expect(send).toHaveBeenCalledWith('dm-1', token);
+  expect(screen.getByRole('textbox')).toHaveValue('unfinished draft');
+});
+
+it('offers collection only in the sticker context menu and keeps existing message actions', async () => {
+  const token = `sticker:https://chat.test/api/stickers/assets/${'a'.repeat(64)}.webp`;
+  const collect = vi.spyOn(api.stickers, 'collect').mockResolvedValue({ id: 'a'.repeat(64), name: 'Happy', token });
+  // DM wire messages carry dmChannelId, not a guild channelId.
+  const stickerMessage = { ...ownMessage, channelId: '', dmChannelId: 'dm-1', content: token };
+  render(<Message message={stickerMessage} isCompact={false} isFirstInGroup previousMessageId={null} />);
+  expect(screen.queryByRole('button', { name: 'Add to my stickers' })).not.toBeInTheDocument();
+  fireEvent.contextMenu(screen.getByAltText('My stickers'));
+  const items = useContextMenuStore.getState().menu!.items;
+  expect(items.map(item => item.key)).toEqual(expect.arrayContaining(['collect-sticker', 'save-image', 'copy-image', 'reply', 'delete']));
+  const item = items.find(item => item.key === 'collect-sticker');
+  await act(async () => { if (item?.type === 'action') await item.onClick(); });
+  expect(collect).toHaveBeenCalledWith({ id: 'a'.repeat(64), token });
 });

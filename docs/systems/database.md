@@ -127,6 +127,21 @@ PK: (spaceId, userId)
 | createdAt | integer NOT NULL | | |
 CHECK: exactly one of messageId/dmMessageId is set
 
+### sticker_assets and personal_stickers
+
+Migration `0027_personal_stickers` adds only these two tables; existing message and reaction columns are unchanged.
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| sticker_assets | id | text PK NOT NULL | SHA-256 of the encoded WebP bytes |
+| sticker_assets | created_at | integer NOT NULL | Epoch ms |
+| personal_stickers | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE |
+| personal_stickers | sticker_id | text NOT NULL | FK → sticker_assets.id |
+| personal_stickers | name | text NOT NULL | User’s collection label |
+| personal_stickers | created_at | integer NOT NULL | Epoch ms |
+
+The composite primary key (user_id, sticker_id) makes collection idempotent. Removing a favorite or deleting its user removes only the association; immutable assets remain available to historical messages and reactions. Files live under `UPLOAD_DIR/stickers`, outside attachment cleanup/statistics. See [personal stickers](../features/personal-stickers.md) for access and retention boundaries.
+
 ### embeds
 | Column | Type | Notes |
 |--------|------|-------|

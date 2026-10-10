@@ -1,6 +1,6 @@
-import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
+import { stickerUrl } from '@backspace/shared/src/stickers';
+import { StickerMessage } from './StickerMessage';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { Trans, useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { formatters, useFormatters } from '../../i18n/formatters';
@@ -22,6 +22,7 @@ import { FederationGlobeIcon } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { EmojiPicker } from './EmojiPicker';
 import { MobilePickerSheet } from './MobilePickerSheet';
+import { ReactionPickerPopover } from './ReactionPickerPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isFederationGlobeApplicable, isMine, userDisplayName } from '../../utils/identity';
@@ -157,7 +158,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
-  const reactionPickerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
@@ -308,29 +308,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
   const closeReactionPicker = useCallback(() => setReactionPicker(null), []);
 
-  // Close the desktop reaction picker on outside click. The mobile sheet
-  // closes on a tap on its own backdrop.
-  useEffect(() => {
-    if (!showReactionPicker || isMobile) return;
-    const handler = (e: MouseEvent) => {
-      if (reactionPickerRef.current?.contains(e.target as Node)) return;
-      if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
-      setReactionPicker(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showReactionPicker, isMobile]);
-
-  // Close the desktop reaction picker on Escape (the mobile sheet has its own).
-  useEffect(() => {
-    if (!showReactionPicker || isMobile) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setReactionPicker(null);
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [showReactionPicker, isMobile]);
-
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
     addReaction(message.id, emoji.native);
     setReactionPicker(null);
@@ -350,6 +327,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     const imgEl = (e.target as HTMLElement).closest('img') as HTMLImageElement | null;
     const isContentImage = imgEl && !imgEl.closest('[data-avatar]') && !imgEl.closest('[data-embed-thumbnail]');
     const imageUrl = isContentImage ? imgEl.src : null;
+    // Attachment previews may be thumbnails; collection always uses the original source.
+    const stickerSource = isContentImage ? imgEl.dataset.stickerSource : null;
+    const stickerName = isContentImage ? imgEl.alt : undefined;
 
     // Detect right-click on a video/audio element and resolve its underlying attachment.
     // `message` is the persisted form here — pending messages return early above.
@@ -378,6 +358,8 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       selectedText,
       previousMessageId,
       imageUrl,
+      stickerSource,
+      stickerName,
       sourceUrl,
       videoUrl: videoAtt ? attUrlOf(videoAtt.filename) : null,
       videoFilename: videoAtt ? videoAtt.originalName : null,
@@ -621,7 +603,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <>
                 {message.content && (
                   <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
-                    <MarkdownRenderer content={message.content} channelId={mentionChannelId} />
+                    {stickerUrl(message.content)
+                      ? <StickerMessage token={message.content} />
+                      : <MarkdownRenderer content={message.content} channelId={mentionChannelId} />}
                     {message.editedAt && (
                       <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
                     )}
@@ -727,43 +711,19 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         )}
       </div>
 
-      {/* Reaction emoji picker: a bottom sheet on mobile */}
+      {/* Reactions retain the upstream mobile sheet and row/button anchor semantics. */}
       {showInteractions && reactionPicker && canAddReactions && isMobile && (
         <MobilePickerSheet onClose={closeReactionPicker} label={t('common:actions.addReaction')}>
           <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} mobile />
         </MobilePickerSheet>
       )}
-      {/* and on desktop a popover under the "+" or the message row */}
-      {showInteractions && reactionPicker && canAddReactions && !isMobile && (() => {
-        const anchor = reactionPicker === 'button' ? reactionPickerBtnRef.current : rowRef.current;
-        if (!anchor) return null;
-        const PICKER_HEIGHT = 400;
-        const PICKER_WIDTH = 360;
-        const MARGIN = 8;
-        const btnRect = layoutRect(anchor.getBoundingClientRect());
-        const spaceBelow = layoutPixels(window.innerHeight) - btnRect.bottom;
-        const spaceAbove = btnRect.top;
-        const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
-        const top = flipAbove
-          ? Math.max(MARGIN, btnRect.top - PICKER_HEIGHT - MARGIN)
-          : btnRect.bottom + MARGIN;
-        const left = Math.min(
-          Math.max(MARGIN, btnRect.left),
-          layoutPixels(window.innerWidth) - PICKER_WIDTH - MARGIN,
-        );
-        return createPortal(
-          <div
-            ref={reactionPickerRef}
-            className={`fixed z-[300] ${flipAbove ? 'animate-slide-down' : 'animate-slide-up'}`}
-            style={{ top, left }}
-          >
-            <div className="glass rounded-xl overflow-hidden">
-              <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} />
-            </div>
-          </div>,
-          document.body,
-        );
-      })()}
+      {showInteractions && reactionPicker && canAddReactions && !isMobile && (
+        <ReactionPickerPopover
+          anchorEl={reactionPicker === 'button' ? reactionPickerBtnRef.current : rowRef.current}
+          onEmojiSelect={handleReactionEmojiSelect}
+          onClose={closeReactionPicker}
+        />
+      )}
 
       {/* Action buttons on hover */}
       {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (

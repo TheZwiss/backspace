@@ -158,3 +158,20 @@ describe('ReactionPill', () => {
     expect(pill).toHaveAccessibleDescription('Mira reacted');
   });
 });
+
+it('shows a sticker preview with reactors and preserves toggle behavior', () => {
+  const token = `sticker:https://chat.test/api/stickers/assets/${'a'.repeat(64)}.webp`;
+  const toggle = vi.fn();
+  render(<ReactionPill emoji={token} origin="" reactions={[{ ...reaction(MIRA, 1), emoji: token }]} onToggle={toggle} />);
+  expect(screen.getByRole('img')).toHaveAttribute('src', token.slice('sticker:'.length));
+  fireEvent.mouseEnter(screen.getByRole('button'));
+  act(() => { vi.advanceTimersByTime(400); });
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Mira reacted');
+  expect(screen.getByRole('tooltip')).toHaveClass('flex-col');
+  const tooltip = screen.getByRole('tooltip');
+  expect(tooltip.firstElementChild).toContainElement(screen.getByAltText('Preview sticker'));
+  expect(tooltip.lastElementChild).toHaveTextContent('Mira reacted');
+  expect(screen.getAllByRole('img')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('button'));
+  expect(toggle).toHaveBeenCalledOnce();
+});

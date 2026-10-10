@@ -18,7 +18,9 @@
     "./src/errors": "./src/errors.ts",
     "./src/errors.js": "./src/errors.ts",
     "./src/dmSystemEvents": "./src/dmSystemEvents.ts",
-    "./src/dmSystemEvents.js": "./src/dmSystemEvents.ts"
+    "./src/dmSystemEvents.js": "./src/dmSystemEvents.ts",
+    "./src/stickers": "./src/stickers.ts",
+    "./src/stickers.js": "./src/stickers.ts"
   },
   "scripts": {
     "build": "tsc",

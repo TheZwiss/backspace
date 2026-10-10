@@ -22,6 +22,8 @@ DB tables: `attachments`, `instance_settings` (maxUploadSizeBytes). See `docs/sy
 
 **Out of scope:** Federation file replication/download queue (see `docs/systems/federation.md`), admin storage stats UI, admin user management.
 
+**Personal stickers:** `routes/stickers.ts` uses a separate authenticated base64-JSON upload, not tus, for small images. It re-encodes to immutable WebP in `UPLOAD_DIR/stickers/<sha256>.webp`. These assets are retained independently of collection membership and ordinary attachment cleanup/statistics. Back up the subdirectory with the rest of the uploads. The existing tus and attachment lifecycle are unchanged; see [personal stickers](../features/personal-stickers.md) for size, public-link access, and collection boundaries.
+
 ### Capability Matrix
 
 | Browser | Picker (`showOpenFilePicker`) | Drag-drop FS handle | Save destination handle | Reload survival |

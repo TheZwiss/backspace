@@ -252,7 +252,8 @@ describe('the picker the desktop context menu opens', () => {
     openMenu();
     const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
     fireEvent.click(plus!);
-    expect(screen.queryByRole('dialog', { name: 'Add reaction' })).toBeNull();
+    // The desktop popover is now labelled too, but is not a modal sheet.
+    expect(screen.getByRole('dialog', { name: 'Add reaction' })).not.toHaveAttribute('aria-modal', 'true');
     expect(screen.queryByTestId('picker-sheet-backdrop')).toBeNull();
     expect(screen.getByTestId('emoji-picker').dataset.mobile).toBe('false');
   });
