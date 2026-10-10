@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, blob, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
@@ -780,4 +780,19 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
 }, (table) => ({
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
+}));
+
+// Provider credentials and cached results never appear in public user settings or federation payloads.
+export const aiTranslationSettings = sqliteTable('ai_translation_settings', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  encrypted: blob('encrypted', { mode: 'buffer' }).notNull(),
+});
+export const aiTranslationResults = sqliteTable('ai_translation_results', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  resultKey: text('result_key').notNull(),
+  encrypted: blob('encrypted', { mode: 'buffer' }).notNull(),
+  usedAt: integer('used_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.resultKey] }),
+  lru: index('idx_ai_translation_results_lru').on(table.userId, table.usedAt),
 }));

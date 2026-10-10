@@ -12,16 +12,17 @@
   "main": "dist/main.js",
   "desktopName": "io.github.TheZwiss.backspace.desktop",
   "scripts": {
-    "build:ts": "tsc",
-    "dev": "tsc && electron .",
-    "build": "tsc && electron-builder",
-    "build:all": "tsc && electron-builder --mac --win --linux --arm64 --x64",
+    "build:ts": "pnpm --filter @backspace/translation build && tsc",
+    "dev": "pnpm --filter @backspace/translation build && tsc && electron .",
+    "build": "pnpm --filter @backspace/translation build && tsc && electron-builder",
+    "build:all": "pnpm --filter @backspace/translation build && tsc && electron-builder --mac --win --linux --arm64 --x64",
     "clean": "rm -rf dist dist-electron",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "electron-rebuild -f -w uiohook-napi || node -e \"console.warn('[desktop] uiohook-napi native rebuild skipped - needs build tools (make, g++, python3). Only required to RUN the desktop app; the server, web client, and Docker image are unaffected.')\""
   },
   "dependencies": {
+    "@backspace/translation": "workspace:*",
     "dbus-next": "0.10.2",
     "electron-updater": "^6.8.9",
     "uiohook-napi": "^1.5.5"
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@electron/fuses": "^2.1.3",
     "@electron/rebuild": "^4.2.0",
+    "@types/node": "24.13.6",
     "electron": "^43.7.5",
     "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",

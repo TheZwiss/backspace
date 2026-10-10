@@ -7,6 +7,7 @@
  * the English one here, and add it to `en`. The consistency check keeps the
  * other languages honest.
  */
+import translation from '../locales/en/translation.json';
 import admin from '../locales/en/admin.json';
 import auth from '../locales/en/auth.json';
 import chat from '../locales/en/chat.json';
@@ -29,6 +30,7 @@ export const defaultNS = 'common';
 
 export const resources = {
   en: {
+    translation,
     admin,
     auth,
     chat,

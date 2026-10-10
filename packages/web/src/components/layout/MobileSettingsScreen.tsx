@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
 import {
+  TranslationPanel,
   AccountPanel,
   AppearancePanel,
   VoicePanel,
@@ -24,6 +25,7 @@ interface MobileSettingsScreenProps {
 }
 
 type PanelTitleKey =
+  | 'translation:title'
   | 'settings:nav.tabs.account'
   | 'settings:nav.tabs.appearance'
   | 'settings:nav.tabs.voice'
@@ -44,6 +46,7 @@ const panelConfig: Record<
   string,
   { titleKey: PanelTitleKey; body: (instanceVersion: string | null) => React.ReactNode }
 > = {
+  translation: { titleKey: 'translation:title', body: () => <TranslationPanel /> },
   account: { titleKey: 'settings:nav.tabs.account', body: () => <AccountPanel /> },
   appearance: { titleKey: 'settings:nav.tabs.appearance', body: () => <AppearancePanel /> },
   voice: { titleKey: 'settings:nav.tabs.voice', body: () => <VoicePanel /> },
@@ -58,6 +61,11 @@ const panelConfig: Record<
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
+  translation: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m4 0c-1 6-4 9-9 11m2-8c1 4 4 7 8 9m0 4 4-10 4 10m-6.8-3h5.6" />
+    </svg>
+  ),
   account: (
     <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -101,7 +109,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
-  const { t } = useTranslation(['mobile', 'settings', 'common']);
+  const { t } = useTranslation(['mobile', 'settings', 'common', 'translation']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
   const updateBadge = useInstanceUpdateBadge();
@@ -150,6 +158,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
     { id: 'appearance', label: t('settings:nav.tabs.appearance') },
     { id: 'voice', label: t('settings:nav.tabs.voice') },
     { id: 'privacy', label: t('settings:nav.tabs.privacy') },
+    { id: 'translation', label: t('translation:title') },
     { id: 'connections', label: t('settings:nav.tabs.connections') },
     ...(isElectron() ? [{ id: 'keybinds', label: t('settings:nav.tabs.keybinds') }] : []),
     { id: 'desktop', label: t('settings:nav.tabs.desktop') },

@@ -8,6 +8,7 @@ import type { InstanceInfoResponse } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import {
+  TranslationPanel,
   AccountPanel,
   AppearancePanel,
   VoicePanel,
@@ -35,6 +36,7 @@ const USER_SETTINGS_TABS = [
   { id: 'appearance', group: 'user', label: 'settings:nav.tabs.appearance' },
   { id: 'voice', group: 'user', label: 'settings:nav.tabs.voice' },
   { id: 'privacy', group: 'user', label: 'settings:nav.tabs.privacy' },
+  { id: 'translation', group: 'app', label: 'translation:title' },
   { id: 'connections', group: 'app', label: 'settings:nav.tabs.connections' },
   { id: 'keybinds', group: 'app', label: 'settings:nav.tabs.keybinds' },
   { id: 'desktop', group: 'app', label: 'settings:nav.tabs.desktop' },
@@ -109,7 +111,7 @@ function SettingsScrollContainer({ children }: { children: React.ReactNode }) {
 }
 
 export function UserSettingsModal() {
-  const { t } = useTranslation(['settings', 'common']);
+  const { t } = useTranslation(['settings', 'common', 'translation']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -196,6 +198,7 @@ export function UserSettingsModal() {
     ));
 
   const panels: Record<UserSettingsTab, () => ReactNode> = {
+    translation: () => <TranslationPanel />,
     account: () => <AccountPanel />,
     appearance: () => <AppearancePanel />,
     voice: () => <VoicePanel />,

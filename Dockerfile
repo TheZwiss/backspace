@@ -26,6 +26,7 @@ COPY tsconfig.base.json ./
 
 # Copy package.json files for all workspace packages
 COPY packages/shared/package.json packages/shared/
+COPY packages/translation/package.json packages/translation/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
@@ -55,6 +56,7 @@ COPY tsconfig.base.json ./
 
 # Copy package.json files for all workspace packages
 COPY packages/shared/package.json packages/shared/
+COPY packages/translation/package.json packages/translation/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
@@ -110,19 +112,22 @@ COPY tsconfig.base.json ./
 
 # Copy package.json files
 COPY packages/shared/package.json packages/shared/
+COPY packages/translation/package.json packages/translation/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
 # Copy shared source (needed at runtime since server imports types directly)
 COPY packages/shared/ packages/shared/
 
-# Copy server source
+# Copy server and shared Node-only translation engine source
 COPY packages/server/ packages/server/
+COPY packages/translation/src/ packages/translation/src/
 
 # Production dependencies, built in the `deps` stage. All of pnpm's symlinks are
 # relative to /app, so the tree works unchanged after the copy.
 COPY --from=deps /app/node_modules node_modules
 COPY --from=deps /app/packages/server/node_modules packages/server/node_modules
+COPY --from=deps /app/packages/translation/node_modules packages/translation/node_modules
 
 # Copy built frontend from builder stage
 COPY --from=builder /app/packages/web/dist packages/web/dist

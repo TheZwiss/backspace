@@ -12,12 +12,6 @@
   "packages/desktop/src/main.ts": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 5
-    },
-    "@typescript-eslint/no-require-imports": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "packages/desktop/src/recovery.ts": {
