@@ -1,4 +1,9 @@
 {
+  "soundboard_disabled": "Die Klangtafel ist in diesem Raum deaktiviert.",
+  "soundboard_invalid_audio": "Das Audio ist ungültig oder überschreitet die Dateigrößenbegrenzung.",
+  "soundboard_duration_limit": "Das Audio darf höchstens {{max}} Sekunden lang sein.",
+  "soundboard_full": "Diese Klangtafel kann höchstens {{max}} Klänge enthalten.",
+  "soundboard_not_found": "Dieser Klang existiert nicht mehr.",
   "generic": "Etwas ist schiefgelaufen.",
   "not_found": "Das wurde nicht gefunden.",
   "forbidden": "Dazu bist du nicht berechtigt.",

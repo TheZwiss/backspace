@@ -27,6 +27,10 @@ Cross-references: [database.md](database.md) (table schemas), [permissions.md](p
 
 ## Space Lifecycle
 
+Space Settings includes a MANAGE_SPACE-only [Soundboard](soundboard.md) panel
+for activation, member uploads, duration (including unlimited) and capacity.
+Each space hosts its own shared catalog and settings.
+
 ### Creation
 
 **Endpoint:** `POST /api/spaces` (`spaces.ts:spaceRoutes`)

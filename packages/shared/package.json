@@ -21,6 +21,8 @@
     "./src/dmSystemEvents.js": "./src/dmSystemEvents.ts",
     "./src/stickers": "./src/stickers.ts",
     "./src/stickers.js": "./src/stickers.ts",
+    "./src/soundboard": "./src/soundboard.ts",
+    "./src/soundboard.js": "./src/soundboard.ts",
     "./src/channelSystemEvents": "./src/channelSystemEvents.ts",
     "./src/channelSystemEvents.js": "./src/channelSystemEvents.ts",
     "./src/mentions": "./src/mentions.ts",

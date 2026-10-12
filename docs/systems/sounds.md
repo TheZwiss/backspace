@@ -32,6 +32,10 @@ Source files:
 
 ## Inventory & Trigger Map
 
+User-uploaded space clips are separate from system cues: see
+[soundboard.md](soundboard.md). They share AudioManager's output bus/device and
+limiter, but have an independent panel volume and voice-scoped lifecycle.
+
 | File | Event | Audience | Trigger |
 |---|---|---|---|
 | `mute.ogg` | "I am now muted" (any cause) | self | `effectiveMuted` flips true while LK-connected. Effective = self toggle ∪ space-mute ∪ permission-mute. Suppressed when the deafen state also flipped this tick (see Mute/deafen cue selection). |

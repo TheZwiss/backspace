@@ -14,6 +14,7 @@ import {
   toggleMuteFromControl,
 } from '../../utils/voiceActions';
 import { VoiceGrid } from '../voice/VoiceGrid';
+import { SoundboardButton } from '../voice/SoundboardButton';
 import { deriveGridTiles } from '../../hooks/useLiveKit';
 import { requestMicPermission } from '../../utils/voice';
 
@@ -380,7 +381,7 @@ export function MobileVoiceFullScreen() {
 
       {/* Control bar */}
       <div
-        className="glass-bubble mx-2 mb-2 rounded-2xl flex items-center justify-center gap-4 px-4 py-3 shrink-0"
+        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-2 px-4 py-3 shrink-0"
         style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
         {/* Mute */}
@@ -541,6 +542,7 @@ export function MobileVoiceFullScreen() {
         </button>
 
         {/* Disconnect */}
+        <SoundboardButton className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-elevated text-txt-primary shrink-0" />
         <button
           onClick={handleDisconnect}
           className="w-12 h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"

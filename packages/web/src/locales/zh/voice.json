@@ -1,4 +1,18 @@
 {
+  "soundboard": {
+    "title": "音效面板", "description": "向语音频道中的所有人播放音效。试听只有你能听到。",
+    "manageDescription": "管理此空间的共享音效。成员可以删除自己上传的音效。",
+    "add": "添加音效", "chooseFile": "选择音频", "uploadHint": "上传前裁剪。支持浏览器可解码的音频，最大 {{max}}。确认之前不会发送文件。",
+    "fileTooLarge": "请选择小于 {{max}} 的文件。", "decodeFailed": "此音频无法在这里解码或过大。请尝试更短的 MP3、WAV 或 Ogg 文件。",
+    "name": "名称", "emoji": "图标", "start": "开始（秒）", "end": "结束（秒）", "selection": "{{duration}} 秒", "limit": "最多 {{max}} 秒", "unlimited": "不限时长",
+    "preview": "试听", "stop": "停止", "playFailed": "无法播放此音效。请检查音频输出并重试。",
+    "search": "搜索音效", "disabled": "此空间已禁用音效面板。", "cannotPlay": "播放音效需要发言权限，且不能被服务器静音或关闭收听。",
+    "playNamed": "播放 {{name}}", "overLimit": "超过当前时长限制", "shortcut": "设置快捷键", "shortcutNamed": "{{name}} 的快捷键", "pressKey": "请按键…",
+    "shortcutConflict": "此快捷键已被其他音效或语音控制使用。", "clearShortcut": "清除快捷键", "shortcutHint": "快捷键仅属于此账户和设备，在应用获得焦点时生效，输入文字时不会触发。退格键可清除快捷键。",
+    "deleteConfirm": "为所有人删除此音效？", "noResults": "没有匹配的音效。", "empty": "还没有音效。添加第一个吧！", "volume": "音效音量",
+    "enabled": "启用音效面板", "memberUploads": "允许成员上传音效", "maxDuration": "最长时长（秒）", "maxSounds": "音效数量上限",
+    "policyHint": "不限时长仍受文件大小限制。缩短时长上限会保留现有音效，但禁止播放超长音效。上传需要附件权限，播放需要发言权限。"
+  },
   "chatPanel": {
     "title": "聊天",
     "close": "关闭聊天"

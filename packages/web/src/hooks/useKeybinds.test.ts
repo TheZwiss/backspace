@@ -46,6 +46,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.backspace; });
 
 describe('global shortcut renderer bridge', () => {
+  it('suppresses native presses while capturing a sound shortcut, but preserves releases', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(70000);
+    const input = document.createElement('input');
+    input.setAttribute('data-keybind-capture', ''); document.body.append(input); input.focus();
+    renderHook(() => useKeybinds()); mock.voice.setMuted.mockClear();
+    act(() => actionListener({ actionId: 'pushToTalk', pressed: true }));
+    expect(mock.voice.setMuted).not.toHaveBeenCalled();
+    act(() => actionListener({ actionId: 'pushToTalk', pressed: false }));
+    expect(mock.voice.setMuted).toHaveBeenLastCalledWith(true);
+    input.remove(); now.mockRestore();
+  });
   it('supports an older preload returning void and releases local PTT on blur', async () => {
     sync.mockReturnValue(undefined);
     const now = vi.spyOn(Date, 'now').mockReturnValue(5000);

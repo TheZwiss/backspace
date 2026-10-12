@@ -1,4 +1,18 @@
 {
+  "soundboard": {
+    "title": "Painel de áudios", "description": "Reproduza um áudio para todos no seu canal de voz. A prévia toca só para você.",
+    "manageDescription": "Gerencie os áudios compartilhados deste espaço. Membros podem excluir os próprios envios.",
+    "add": "Adicionar áudio", "chooseFile": "Escolher áudio", "uploadHint": "Recorte antes de enviar. Áudios que seu navegador consegue abrir, até {{max}}. Nada é enviado antes da confirmação.",
+    "fileTooLarge": "Escolha um arquivo menor que {{max}}.", "decodeFailed": "Não foi possível abrir este áudio aqui ou ele é grande demais. Tente um MP3, WAV ou Ogg mais curto.",
+    "name": "Nome", "emoji": "Ícone", "start": "Início (segundos)", "end": "Fim (segundos)", "selection": "{{duration}} segundos", "limit": "Até {{max}} segundos", "unlimited": "Sem limite de duração",
+    "preview": "Ouvir prévia", "stop": "Parar", "playFailed": "Não foi possível reproduzir este áudio. Verifique a saída de som e tente novamente.",
+    "search": "Buscar áudios", "disabled": "O painel de áudios está desativado neste espaço.", "cannotPlay": "Você precisa de permissão para falar e não pode estar silenciado pelo servidor ou com o áudio desativado.",
+    "playNamed": "Reproduzir {{name}}", "overLimit": "Excede o limite atual de duração", "shortcut": "Definir atalho", "shortcutNamed": "Atalho para {{name}}", "pressKey": "Pressione uma tecla…",
+    "shortcutConflict": "Este atalho já está em uso por outro áudio ou controle de voz.", "clearShortcut": "Remover atalho", "shortcutHint": "Os atalhos são pessoais desta conta e dispositivo, funcionam com o aplicativo em foco e não disparam enquanto você digita. Backspace remove o atalho.",
+    "deleteConfirm": "Excluir este áudio para todos?", "noResults": "Nenhum áudio corresponde à busca.", "empty": "Ainda não há áudios. Adicione o primeiro!", "volume": "Volume dos áudios",
+    "enabled": "Ativar painel de áudios", "memberUploads": "Permitir envio de áudios por membros", "maxDuration": "Duração máxima (segundos)", "maxSounds": "Quantidade máxima de áudios",
+    "policyHint": "Sem limite de duração ainda respeita o limite de tamanho dos arquivos. Reduzir a duração mantém os áudios existentes, mas impede a reprodução dos que excedem o novo limite. Enviar exige Anexar arquivos; reproduzir exige Falar."
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Fechar chat"

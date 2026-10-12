@@ -11,7 +11,7 @@ import { Toggle } from '../ui/Toggle';
 import { api } from '../../api/client';
 import { getApiForOrigin } from '../../utils/crossStoreResolvers';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SettingsPanelSuspense } from './lazySettingsPanels';
+import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SoundboardPanel, SettingsPanelSuspense } from './lazySettingsPanels';
 import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
 import { ListInDirectoryConfirm } from './DirectoryConfirmations';
 import type { SpaceVisibility, JoinRequest, InstanceStreamingLimits } from '@backspace/shared';
@@ -597,9 +597,9 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   );
 }
 
-type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans';
+type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans' | 'soundboard';
 
-const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans'];
+const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans', 'soundboard'];
 
 function isSpaceSettingsTab(value: unknown): value is SpaceSettingsTab {
   return typeof value === 'string' && (SPACE_SETTINGS_TABS as readonly string[]).includes(value);
@@ -635,6 +635,7 @@ export function SpaceSettingsModal() {
     const allowed: Record<SpaceSettingsTab, boolean> = {
       overview: true,
       discovery: canManageSpace,
+      soundboard: canManageSpace,
       members: true,
       roles: canManageRoles,
       bans: canBanMembers,
@@ -687,6 +688,8 @@ export function SpaceSettingsModal() {
               <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
 
+            {canManageSpace && <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('spaces:soundboardTab')}</button>}
+
             <div className="border-t border-white/[0.04] my-2 mx-2" />
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
             <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
@@ -724,6 +727,8 @@ export function SpaceSettingsModal() {
                 <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
 
+              {canManageSpace && <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('spaces:soundboardTab')}</button>}
+
               <div className="border-t border-white/[0.04] my-2 mx-2" />
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
               <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
@@ -757,6 +762,7 @@ export function SpaceSettingsModal() {
               <SettingsPanelSuspense key={tab}>
                 {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
                 {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
+                {tab === 'soundboard' && canManageSpace && <SoundboardPanel spaceId={currentSpaceId} />}
                 {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
                 {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
                 {tab === 'bans' && canBanMembers && <BansPanel spaceId={currentSpaceId} />}

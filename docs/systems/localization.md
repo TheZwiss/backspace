@@ -287,6 +287,10 @@ a user's language is a property of the machine in front of them.
 
 ## Server errors
 
+The soundboard uses the `voice:soundboard.*` surface and five error codes:
+`soundboard_disabled`, `soundboard_invalid_audio`, `soundboard_duration_limit`,
+`soundboard_full` and `soundboard_not_found`, translated in every shipped locale.
+
 The server never localizes. It sends a stable machine-readable code, and the
 client owns the words.
 

@@ -1,4 +1,9 @@
 {
+  "soundboard_disabled": "此空间已禁用音效面板。",
+  "soundboard_invalid_audio": "音频无效或超过文件大小限制。",
+  "soundboard_duration_limit": "音频时长不得超过 {{max}} 秒。",
+  "soundboard_full": "此面板最多可保存 {{max}} 个音效。",
+  "soundboard_not_found": "此音效已不存在。",
   "generic": "出了点问题。",
   "not_found": "未找到请求的内容。",
   "forbidden": "您无权执行此操作。",

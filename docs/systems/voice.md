@@ -10,6 +10,10 @@ Source files:
 
 ## Voice Channel Join Flow
 
+Space voice channels also support a shared [soundboard](soundboard.md). The host
+authorizes playback and signals only participants' voice-owning sockets; clients
+play through the existing master output bus, independently of microphone capture.
+
 1. Client sends `voice_join { channelId }` via WS
 2. Server checks CONNECT permission, enforces one-room-per-user
 3. Server loads voice restrictions from DB (space mute/deafen)

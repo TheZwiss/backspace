@@ -15,6 +15,9 @@ const lastDispatch: Record<string, number> = {};
 
 /** Dispatch a keybind action to the appropriate voice handler */
 function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate = true): void {
+  // Shortcut editors must not fire native/global actions while recording a chord.
+  // Releases still run, so a held push-to-talk action cannot remain stuck.
+  if (pressed && document.activeElement?.closest('[data-keybind-capture]')) return;
   const now = Date.now();
   const key = `${actionId}:${pressed}`;
   if (deduplicate && now - (lastDispatch[key] || 0) < 100) return;

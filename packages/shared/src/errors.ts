@@ -17,6 +17,11 @@
  * fails when a code has no catalog entry.
  */
 export const ERROR_CODES = [
+  'soundboard_disabled',
+  'soundboard_invalid_audio',
+  'soundboard_duration_limit',
+  'soundboard_full',
+  'soundboard_not_found',
   // Generic
   'not_found',
   'forbidden',

@@ -119,6 +119,22 @@ afterEach(() => {
   try { testRawDb.close(); } catch { /* noop */ }
 });
 
+describe('cleanupStorage — soundboard lifecycle', () => {
+  it('protects shared audio without attachment rows and reclaims it after deletion', async () => {
+    const { cleanupStorage } = await import('./storageJanitor.js');
+    for (const id of ['owner-1', 'user-1']) testDb.insert(schema.users).values({ id, username: id, passwordHash: 'test', createdAt: 1 }).run();
+    testDb.insert(schema.spaces).values({ id: 'sound-space', name: 'Sounds', ownerId: 'owner-1', createdAt: 1 }).run();
+    const filename = 'soundboard-clip.wav';
+    writeFile(filename);
+    testDb.insert(schema.soundboardSounds).values({ id: 'clip', spaceId: 'sound-space', uploaderId: 'user-1', name: 'Clip', emoji: '🔊', filename, durationSeconds: 1, createdAt: 1 }).run();
+    expect(cleanupStorage(false).deletedFiles).toBe(0);
+    expect(fs.existsSync(path.join(tmpUploadDir, filename))).toBe(true);
+    testRawDb.prepare('DELETE FROM soundboard_sounds WHERE id = ?').run('clip');
+    expect(cleanupStorage(false).deletedFiles).toBe(1);
+    expect(fs.existsSync(path.join(tmpUploadDir, filename))).toBe(false);
+  });
+});
+
 describe('cleanupStorage — dm_channels.icon protection', () => {
   it('preserves a receiver-side dm_channels.icon file (no attachment row)', async () => {
     // Receiver-instance scenario: a federated icon was downloaded directly to

@@ -1,4 +1,6 @@
 import { receiveChannelPoke } from '../components/chat/channelPoke';
+import { receiveSoundboardPlay } from '../audio/soundboardPlayback';
+import { soundboardKey, useSoundboardStore } from '../stores/soundboardStore';
 import { useChannelPokeStore } from '../stores/channelPokeStore';
 import { applySpaceMemberUpdate } from '../stores/spaceMemberUpdates';
 import { useUnreadCountStore } from '../stores/unreadCountStore';
@@ -753,6 +755,14 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       break;
     }
 
+    case 'soundboard_updated': {
+      const store = useSoundboardStore.getState();
+      if (store.entries[soundboardKey(origin, event.spaceId)]) void store.load(origin, event.spaceId);
+      break;
+    }
+    case 'soundboard_play':
+      void receiveSoundboardPlay(origin, event.channelId, event.spaceId, event.sound);
+      break;
     case 'voice_state_update':
       if (event.action === 'join') {
         addVoiceUser(event.channelId, event.userId);

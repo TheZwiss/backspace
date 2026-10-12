@@ -1,4 +1,5 @@
 import { useChannelPokeStore } from './channelPokeStore';
+import { useSoundboardStore } from './soundboardStore';
 import { useUnreadCountStore } from './unreadCountStore';
 import { useMemo } from 'react';
 import { create } from 'zustand';
@@ -79,6 +80,7 @@ function resetUserStores() {
   useChatStore.getState().clearAllMessages();
   useSpaceStore.getState().reset();
   useChannelPokeStore.getState().reset();
+  useSoundboardStore.getState().reset();
   useUnreadCountStore.getState().reset();
   useSocialStore.getState().reset();
   useVoiceStore.getState().resetSession();
