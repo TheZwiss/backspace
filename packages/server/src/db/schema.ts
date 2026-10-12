@@ -79,6 +79,25 @@ export const spaces = sqliteTable('spaces', {
   createdAt: integer('created_at').notNull(),
 });
 
+export const soundboardSettings = sqliteTable('soundboard_settings', {
+  spaceId: text('space_id').primaryKey().references(() => spaces.id, { onDelete: 'cascade' }),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  allowMemberUploads: integer('allow_member_uploads', { mode: 'boolean' }).notNull().default(true),
+  maxDurationSeconds: real('max_duration_seconds').default(10),
+  maxSounds: integer('max_sounds').notNull().default(50),
+});
+
+export const soundboardSounds = sqliteTable('soundboard_sounds', {
+  id: text('id').primaryKey(),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  uploaderId: text('uploader_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  emoji: text('emoji').notNull(),
+  filename: text('filename').notNull(),
+  durationSeconds: real('duration_seconds').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, table => ({ spaceIdx: index('idx_soundboard_sounds_space_id').on(table.spaceId) }));
+
 export const spaceMembers = sqliteTable('space_members', {
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

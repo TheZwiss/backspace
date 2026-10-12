@@ -1,4 +1,9 @@
 {
+  "soundboard_disabled": "O painel de áudios está desativado neste espaço.",
+  "soundboard_invalid_audio": "O áudio é inválido ou excede o limite de tamanho do arquivo.",
+  "soundboard_duration_limit": "O áudio deve ter no máximo {{max}} segundos.",
+  "soundboard_full": "Este painel comporta no máximo {{max}} áudios.",
+  "soundboard_not_found": "Este áudio não existe mais.",
   "generic": "Algo deu errado.",
   "not_found": "Não foi possível encontrar isso.",
   "forbidden": "Você não tem permissão para fazer isso.",

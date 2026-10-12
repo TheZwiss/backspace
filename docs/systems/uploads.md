@@ -42,6 +42,12 @@ Paste-from-clipboard yields a `File`, not a handle, on every browser -- never re
 
 ## 1. Upload Pipeline (tus)
 
+Soundboard clips have a separate validated PCM WAV/base64 path (see
+[soundboard.md](soundboard.md)). Their filenames live at the upload root, are
+served by the existing upload endpoint and are included in the janitor's
+referenced-file set. They have no attachment rows. Deleted clips are reclaimed
+as orphans, including space/account deletion cascades.
+
 The server speaks the [tus resumable upload protocol](https://tus.io/protocols/resumable-upload) on `/api/files/*` (see `routes/files.ts`). Uploads are chunked, resumable across tab reload and network drop, and authenticated on every request.
 
 ### Endpoint Group: `/api/files/*`

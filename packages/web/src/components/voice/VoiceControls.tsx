@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
+import { SoundboardButton } from './SoundboardButton';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
@@ -210,6 +211,7 @@ export function VoiceControls() {
         )}
 
         {/* AI Noise Suppression (RNNoise) */}
+        <SoundboardButton />
         <button
           onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
           className={`${btnBase} ${

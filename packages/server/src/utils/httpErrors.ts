@@ -11,6 +11,11 @@ import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
  * details a route passes.
  */
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
+  soundboard_disabled: 'The soundboard is disabled in this space',
+  soundboard_invalid_audio: 'Invalid audio or file size exceeds the upload limit',
+  soundboard_duration_limit: 'Audio must be at most {{max}} seconds long',
+  soundboard_full: 'The soundboard can hold at most {{max}} sounds',
+  soundboard_not_found: 'Sound not found',
   not_found: 'Not found',
   forbidden: 'Forbidden',
   unauthorized: 'Unauthorized',

@@ -1,4 +1,5 @@
 import type { PersonalSticker } from '@backspace/shared/src/stickers';
+import type { SoundboardDocument, SoundboardSettings, SoundboardSound } from '@backspace/shared/src/soundboard';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   NotificationSetting,
@@ -446,6 +447,14 @@ export class BackspaceApiClient {
     remove: (id: string) => Promise<{ success: boolean }>;
   };
 
+  soundboard: {
+    list: (spaceId: string) => Promise<SoundboardDocument>;
+    settings: (spaceId: string, data: SoundboardSettings) => Promise<SoundboardSettings>;
+    upload: (spaceId: string, data: { name: string; emoji: string; audio: string }) => Promise<SoundboardSound>;
+    remove: (spaceId: string, soundId: string) => Promise<{ success: boolean }>;
+    play: (spaceId: string, soundId: string, channelId: string) => Promise<{ success: boolean }>;
+  };
+
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     /** Send a request and return the successful response; a failure throws. */
     async function send(
@@ -528,6 +537,14 @@ export class BackspaceApiClient {
       const messages = await response.json() as T[];
       return { messages, forward };
     }
+    this.soundboard = {
+      list: (spaceId) => request<SoundboardDocument>('GET', `/spaces/${encodeURIComponent(spaceId)}/soundboard`),
+      settings: (spaceId, data) => request<SoundboardSettings>('PATCH', `/spaces/${encodeURIComponent(spaceId)}/soundboard/settings`, data),
+      upload: (spaceId, data) => request<SoundboardSound>('POST', `/spaces/${encodeURIComponent(spaceId)}/soundboard`, data),
+      remove: (spaceId, soundId) => request<{ success: boolean }>('DELETE', `/spaces/${encodeURIComponent(spaceId)}/soundboard/${encodeURIComponent(soundId)}`),
+      play: (spaceId, soundId, channelId) => request<{ success: boolean }>('POST', `/spaces/${encodeURIComponent(spaceId)}/soundboard/${encodeURIComponent(soundId)}/play`, { channelId }),
+    };
+
     this.stickers = {
       list: () => request('GET', '/stickers'),
       upload: (data) => request('POST', '/stickers', data),

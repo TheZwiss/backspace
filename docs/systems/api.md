@@ -7,6 +7,10 @@ Source files: `packages/server/src/routes/*.ts`
 
 ## Rate limiting
 
+The space soundboard REST endpoints, permission gates and account/room budgets
+are documented in [soundboard.md](soundboard.md). The upload accepts only
+validated PCM WAV in base64 JSON, not the chat attachment/tus pipeline.
+
 Every request passes a limit: the global **200 per minute** registered in
 `packages/server/src/index.ts`, or the route's own where it declares one. A
 route with `config.rateLimit` **replaces** the global limit for itself rather

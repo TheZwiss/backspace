@@ -20,6 +20,10 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 
 ## Client → Server
 
+Soundboard commands use REST. Server events: `soundboard_updated {spaceId}` to
+space members and `soundboard_play {channelId, spaceId, sound}` only to eligible
+participants' voice-owning sockets. See [soundboard.md](soundboard.md).
+
 ### Messages
 | type | fields | notes |
 |------|--------|-------|

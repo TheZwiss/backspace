@@ -1,4 +1,9 @@
 {
+  "soundboard_disabled": "The soundboard is disabled in this space.",
+  "soundboard_invalid_audio": "The audio is invalid or exceeds the file size limit.",
+  "soundboard_duration_limit": "The audio must be at most {{max}} seconds long.",
+  "soundboard_full": "This soundboard can hold at most {{max}} sounds.",
+  "soundboard_not_found": "This sound no longer exists.",
   "generic": "Something went wrong.",
   "not_found": "That could not be found.",
   "forbidden": "You are not allowed to do that.",

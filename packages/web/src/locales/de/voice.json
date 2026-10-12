@@ -1,4 +1,18 @@
 {
+  "soundboard": {
+    "title": "Klangtafel", "description": "Spiele einen Klang für alle in deinem Sprachkanal. Die Vorschau hörst nur du.",
+    "manageDescription": "Verwalte die gemeinsamen Klänge dieses Raums. Mitglieder können eigene Uploads entfernen.",
+    "add": "Klang hinzufügen", "chooseFile": "Audio auswählen", "uploadHint": "Vor dem Hochladen zuschneiden. Im Browser abspielbares Audio bis {{max}}. Erst die Bestätigung sendet die Datei.",
+    "fileTooLarge": "Wähle eine Datei unter {{max}}.", "decodeFailed": "Dieses Audio lässt sich hier nicht öffnen oder ist zu groß. Versuche eine kürzere MP3-, WAV- oder Ogg-Datei.",
+    "name": "Bezeichnung", "emoji": "Symbol", "start": "Anfang (Sekunden)", "end": "Ende (Sekunden)", "selection": "{{duration}} Sek.", "limit": "Bis {{max}} Sek.", "unlimited": "Keine Zeitbegrenzung",
+    "preview": "Vorhören", "stop": "Anhalten", "playFailed": "Dieser Klang konnte nicht abgespielt werden. Prüfe die Audioausgabe und versuche es erneut.",
+    "search": "Klänge suchen", "disabled": "Die Klangtafel ist in diesem Raum deaktiviert.", "cannotPlay": "Du brauchst Sprechrechte und darfst nicht vom Server stummgeschaltet oder taubgeschaltet sein.",
+    "playNamed": "{{name}} abspielen", "overLimit": "Überschreitet die aktuelle Zeitbegrenzung", "shortcut": "Tastenkürzel festlegen", "shortcutNamed": "Tastenkürzel für {{name}}", "pressKey": "Taste drücken…",
+    "shortcutConflict": "Dieses Tastenkürzel wird bereits von einem Klang oder einer Sprachsteuerung verwendet.", "clearShortcut": "Tastenkürzel löschen", "shortcutHint": "Tastenkürzel gelten für dieses Konto und Gerät, nur bei fokussierter App und nicht beim Tippen. Die Rücktaste löscht ein Kürzel.",
+    "deleteConfirm": "Diesen Klang für alle entfernen?", "noResults": "Keine passenden Klänge gefunden.", "empty": "Noch keine Klänge. Füge den ersten hinzu!", "volume": "Klanglautstärke",
+    "enabled": "Klangtafel aktivieren", "memberUploads": "Mitgliedern Audio-Uploads erlauben", "maxDuration": "Maximale Dauer (Sekunden)", "maxSounds": "Maximale Anzahl der Klänge",
+    "policyHint": "Ohne Zeitbegrenzung gelten weiterhin Dateigrößenlimits. Eine kürzere Begrenzung behält bestehende Klänge, sperrt aber zu lange Clips. Uploads benötigen Dateien anhängen; Wiedergabe benötigt Sprechen."
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Chat schließen"

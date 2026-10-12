@@ -127,6 +127,10 @@ function getReferencedFilenames(): Set<string> {
   const db = getDb();
   const referenced = getProfileReferencedFilenames();
 
+  for (const row of db.select({ filename: schema.soundboardSounds.filename }).from(schema.soundboardSounds).all()) {
+    referenced.add(path.basename(row.filename));
+  }
+
   // Attachment filenames
   const attachmentRows = db.select({ filename: schema.attachments.filename })
     .from(schema.attachments).all();

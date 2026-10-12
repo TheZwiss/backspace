@@ -1,4 +1,18 @@
 {
+  "soundboard": {
+    "title": "Soundboard", "description": "Play a sound for everyone in your voice channel. Preview is only for you.",
+    "manageDescription": "Manage this space's shared sounds. Members can remove their own uploads.",
+    "add": "Add sound", "chooseFile": "Choose audio", "uploadHint": "Trim before uploading. Audio your browser can decode, up to {{max}}. Nothing is sent until you confirm.",
+    "fileTooLarge": "Choose a file smaller than {{max}}.", "decodeFailed": "This audio cannot be decoded here, or is too large. Try a shorter MP3, WAV or Ogg file.",
+    "name": "Name", "emoji": "Icon", "start": "Start (seconds)", "end": "End (seconds)", "selection": "{{duration}} s", "limit": "Up to {{max}} s", "unlimited": "No duration limit",
+    "preview": "Preview", "stop": "Stop", "playFailed": "Could not play this sound. Check your audio output and try again.",
+    "search": "Search sounds", "disabled": "The soundboard is disabled in this space.", "cannotPlay": "You need permission to speak and must not be server-muted or deafened to play sounds.",
+    "playNamed": "Play {{name}}", "overLimit": "Exceeds the current duration limit", "shortcut": "Set shortcut", "shortcutNamed": "Shortcut for {{name}}", "pressKey": "Press a key…",
+    "shortcutConflict": "That shortcut is already used by another sound or voice control.", "clearShortcut": "Clear shortcut", "shortcutHint": "Shortcuts are personal to this account and device, work while the app is focused, and do not trigger while typing. Backspace clears a shortcut.",
+    "deleteConfirm": "Remove this sound for everyone?", "noResults": "No sounds match your search.", "empty": "No sounds yet. Add the first one!", "volume": "Sound volume",
+    "enabled": "Enable soundboard", "memberUploads": "Allow members to upload sounds", "maxDuration": "Maximum duration (seconds)", "maxSounds": "Maximum number of sounds",
+    "policyHint": "Unlimited duration still respects file size limits. Lowering the duration cap keeps existing sounds, but prevents playing clips above it. Uploads require Attach Files; playback requires Speak."
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Close Chat"
