@@ -110,7 +110,7 @@ describe('Message author context menu', () => {
 
     rightClickAvatar(container, bob.id);
     expect(menuLabels()).toEqual(['@Bob']);
-    fireEvent.click(screen.getByRole('button', { name: '@Bob' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '@Bob' }));
     await nextFrame();
 
     expect(useComposerStore.getState().get(dm.id).draftText).toBe('hey <@bob-host> ');
@@ -128,7 +128,7 @@ describe('Message author context menu', () => {
 
     fireEvent.contextMenu(screen.getAllByText('Bobby')[0]!, { clientX: 20, clientY: 30 });
     expect(menuLabels()).toEqual(['@Bobby', 'Poke']);
-    fireEvent.click(screen.getByRole('button', { name: '@Bobby' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '@Bobby' }));
     await nextFrame();
 
     expect(useComposerStore.getState().get('space-ch-1').draftText).toBe('<@bob-host> ');

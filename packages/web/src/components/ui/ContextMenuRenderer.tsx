@@ -64,6 +64,7 @@ function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
 
   return (
     <button
+      type="button"
       className={className}
       style={isMobile ? undefined : ITEM_STYLE}
       role="menuitemcheckbox"
@@ -192,10 +193,10 @@ interface DesktopLeafItemProps {
 function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="separator" className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="group">{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} />;
@@ -208,6 +209,8 @@ function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
           : ITEM_CLASS;
       return (
         <button
+          type="button"
+          role="menuitem"
           className={className}
           style={ITEM_STYLE}
           disabled={item.disabled}
@@ -287,6 +290,8 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
     <>
       <button
         ref={triggerRef}
+        type="button"
+        role="menuitem"
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onClick={() => setOpenSubmenu(isOpen ? null : item.key)}
@@ -445,10 +450,10 @@ interface MobileLeafItemProps {
 function MobileLeafItem({ item, close }: MobileLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="separator" className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
-      return <div>{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="group">{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'checkbox':
       return <ReactiveCheckboxItem item={item} isMobile />;
@@ -457,6 +462,8 @@ function MobileLeafItem({ item, close }: MobileLeafItemProps) {
       const colorClass = item.danger ? 'text-txt-danger' : 'text-txt-primary';
       return (
         <button
+          type="button"
+          role="menuitem"
           className={`${MOBILE_ITEM_CLASS} ${colorClass} ${item.disabled ? 'opacity-50' : ''}`}
           disabled={item.disabled}
           onClick={(e) => {
@@ -508,13 +515,17 @@ function MobileMenu({ items, close }: MobileMenuProps) {
       <div className="fixed inset-0 z-[300] bg-black/50" onClick={close} />
       {/* Bottom sheet */}
       <div
+        role="menu"
+        aria-label={submenuStack?.label}
         className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
         style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
-        <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
+        <div aria-hidden="true" className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
         {/* Back button for submenu */}
         {submenuStack && (
           <button
+            type="button"
+            role="menuitem"
             className={`${MOBILE_ITEM_CLASS} text-txt-secondary`}
             onClick={() => setSubmenuStack(null)}
           >
@@ -524,7 +535,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
             <span>{t('actions.back')}</span>
           </button>
         )}
-        <div className="py-1">
+        <div role="none" className="py-1">
           {currentItems.map((item) => {
             if (item.type === 'submenu') {
               // Render submenu trigger as a button that switches sheet content
@@ -532,6 +543,9 @@ function MobileMenu({ items, close }: MobileMenuProps) {
               return (
                 <button
                   key={item.key}
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="menu"
                   className={`${MOBILE_ITEM_CLASS} ${colorClass}`}
                   onClick={(e) => {
                     e.stopPropagation();
