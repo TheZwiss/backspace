@@ -71,3 +71,17 @@ describe('the desktop context menu from the keyboard', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 });
+
+describe('the desktop context menu and the browser menu', () => {
+  it('keeps the browser menu shut for a contextmenu event on the panel or the submenu, as the Menu key fires on keyup', () => {
+    const menu = open(false);
+    expect(fireEvent.contextMenu(menu)).toBe(false);
+
+    const trigger = screen.getByRole('menuitem', { name: /Roles/ });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' });
+    const flyout = screen.getByRole('menu', { name: 'Roles' });
+    expect(fireEvent.contextMenu(within(flyout).getByRole('menuitem', { name: 'Pilot' }))).toBe(false);
+    expect(screen.getByRole('menu', { name: 'Roles' })).toBeInTheDocument();
+  });
+});

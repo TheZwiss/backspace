@@ -105,6 +105,16 @@ function handleMenuNavigation(event: React.KeyboardEvent, container: HTMLElement
 
 // ── Desktop submenu flyout ───────────────────────────────────────────────────
 
+/**
+ * Keeps the browser's own menu from opening over ours. Chromium fires a
+ * `contextmenu` event on keyup of the Menu key, after our keydown has already
+ * opened the menu and moved focus into it, so that event lands on the panel.
+ * A right-click on the panel lands here too.
+ */
+function suppressNativeMenu(event: React.MouseEvent): void {
+  event.preventDefault();
+}
+
 interface SubmenuFlyoutProps {
   submenu: ContextMenuSubmenu;
   triggerRef: React.RefObject<HTMLButtonElement | null>;
@@ -170,6 +180,7 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
       role="menu"
       aria-label={submenu.label}
       onKeyDown={handleKeyDown}
+      onContextMenu={suppressNativeMenu}
       className="fixed z-[210] glass rounded-md py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: -9999, top: -9999 }}
       onMouseEnter={onMouseEnter}
@@ -430,6 +441,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
         className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
         style={{ left: position.x, top: position.y }}
         onKeyDown={handleKeyDown}
+        onContextMenu={suppressNativeMenu}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {items.map((item) => (
