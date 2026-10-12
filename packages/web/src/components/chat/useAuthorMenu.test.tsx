@@ -4,7 +4,10 @@ import type { MouseEvent } from 'react';
 import type { DmChannel, MemberWithUser, User } from '@backspace/shared';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
 const mocks = vi.hoisted(() => ({ open: vi.fn(), send: vi.fn(), toast: vi.fn() }));
-vi.mock('../../stores/contextMenuStore', () => ({ useContextMenuStore: { getState: () => ({ open: mocks.open }) } }));
+vi.mock('../../stores/contextMenuStore', async importOriginal => ({
+  ...await importOriginal<typeof import('../../stores/contextMenuStore')>(),
+  useContextMenuStore: { getState: () => ({ open: mocks.open }) },
+}));
 vi.mock('../../stores/uiStore', () => ({ useUIStore: { getState: () => ({ addToast: mocks.toast }) } }));
 vi.mock('../../hooks/useWebSocket', () => ({ wsSend: mocks.send }));
 vi.mock('../../audio/AudioManager', () => ({ AudioManager: { getInstance: vi.fn() } }));

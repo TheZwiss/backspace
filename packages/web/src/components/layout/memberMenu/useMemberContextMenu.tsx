@@ -2,7 +2,7 @@ import { useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { MemberWithUser, User } from '@backspace/shared';
-import { useContextMenuStore, type ContextMenuItem, type ContextMenuCheckbox } from '../../../stores/contextMenuStore';
+import { menuPositionFor, useContextMenuStore, type ContextMenuItem, type ContextMenuCheckbox } from '../../../stores/contextMenuStore';
 import { getMyUserIdForOrigin, useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { PermissionBits, hasPermissionBit } from '../../../utils/permissions';
@@ -73,12 +73,7 @@ export function useMemberContextMenu(space: TaggedSpace | undefined) {
     if (!space) return;
     useUIStore.getState().closeUserProfile();
     const anchor = event.currentTarget.getBoundingClientRect();
-    // A right click opens the menu at the pointer. The keyboard (the menu key
-    // or Shift+F10, which some browsers report as a contextmenu event at 0,0)
-    // opens it under the row.
-    const pointer = 'clientX' in event && (event.clientX !== 0 || event.clientY !== 0)
-      ? { x: event.clientX, y: event.clientY }
-      : { x: anchor.left + 16, y: anchor.bottom };
+    const pointer = menuPositionFor(event);
     const target = { origin: space._instanceOrigin, spaceId: space.id, userId: member.userId };
     const allowed = memberMenuPermissions(space, member);
     const showDialog = (action: MemberDialog['action']) => setDialog({

@@ -1,6 +1,6 @@
 // packages/web/src/stores/contextMenuStore.ts
 import { create } from 'zustand';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 
 // ── Item types ────────────────────────────────────────────────────────────
 
@@ -117,4 +117,20 @@ export function filterMenuItems<T extends ContextMenuItemBase & { type: string }
     result.pop();
   }
   return result;
+}
+
+// ── Utility: where a menu opens ───────────────────────────────────────────
+
+/**
+ * Where the menu `event` opens appears: at the pointer for a right click, and
+ * under the element for the keyboard (the menu key or Shift+F10, which some
+ * browsers report as a contextmenu event at 0,0). Visual pixels, like
+ * `clientX`; the renderer converts them.
+ */
+export function menuPositionFor(event: MouseEvent | KeyboardEvent): { x: number; y: number } {
+  if ('clientX' in event && (event.clientX !== 0 || event.clientY !== 0)) {
+    return { x: event.clientX, y: event.clientY };
+  }
+  const anchor = event.currentTarget.getBoundingClientRect();
+  return { x: anchor.left + 16, y: anchor.bottom };
 }

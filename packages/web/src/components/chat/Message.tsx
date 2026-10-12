@@ -10,7 +10,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { InlineMessageText } from './InlineMessageText';
 import { Avatar } from '../ui/Avatar';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
-import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { menuPositionFor, useContextMenuStore } from '../../stores/contextMenuStore';
 import { buildMessageMenuItems } from './messageMenuItems';
 import { useAuthStore, useSelfIdentity } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
@@ -392,7 +392,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     });
 
     if (items.length === 0) return;
-    useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, items);
+    useContextMenuStore.getState().open(menuPositionFor(e), items);
   };
 
   const handleEditSubmit = async (e: React.KeyboardEvent) => {
@@ -450,10 +450,24 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     isAuthor,
   });
 
-  const handleUsernameClick = (e: React.MouseEvent) => {
+  const handleUsernameClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     if (!message.user) return;
     e.stopPropagation();
     openUserProfile(message.user, messageOrigin, e.currentTarget.getBoundingClientRect(), undefined, authorMember);
+  };
+
+  // The name is the author's keyboard stop (the avatar beside it opens the
+  // same card and menu, so it stays out of the tab order): Enter and Space
+  // open the profile card like a click, and the menu key or Shift+F10 open
+  // the author menu like a right click.
+  const handleUsernameKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleUsernameClick(e);
+    } else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+      handleAuthorMenu(e);
+    }
   };
 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
@@ -559,7 +573,14 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
         {(isFirstInGroup || message.replyTo) && (
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span onClick={handleUsernameClick} onContextMenu={handleAuthorMenu}>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={handleUsernameClick}
+              onContextMenu={handleAuthorMenu}
+              onKeyDown={handleUsernameKeyDown}
+              className="rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60"
+            >
               <PersonName
                 name={displayName}
                 person={displayIdentity}
