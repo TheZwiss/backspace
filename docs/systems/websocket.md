@@ -127,11 +127,11 @@ to a peer, and DMs have none.
 **Capability.** `ready.supportsPoke` is `true` from an instance that handles
 `channel_poke`. The client keeps it per origin (`stores/channelPokeStore.ts`)
 and offers Poke only for messages from an origin that said so. A 1.10.0 or
-older instance sends no flag; there, in DMs, without SEND_MESSAGES and on a
-message still sending, the author menu has no Poke. It may still offer
-Mention, which only writes into the composer and sends nothing; with neither
-item, right-clicking the author opens the message menu (permissions.md, the
-author right-click row).
+older instance sends no flag; there, in DMs, without SEND_MESSAGES, on a
+message still sending and on the viewer's own message, the author menu has no
+Poke. It may still offer Mention, which only writes into the composer and
+sends nothing; with neither item, right-clicking the author opens the message
+menu (permissions.md, the author right-click row).
 
 **Checks**, in order, each refused with an `error` and its code on the
 sending socket only, storing and sending nothing:

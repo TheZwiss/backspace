@@ -155,4 +155,15 @@ describe('Message author context menu', () => {
     expect(labels.length).toBeGreaterThan(0);
     expect(labels).not.toContain('@Alice');
   });
+
+  it("opens the message menu on the viewer's own space message, even where the host offers pokes", () => {
+    useChannelPokeStore.getState().setHost(HOST, true);
+    const { container } = renderChannel('space-ch-1', makeMessage('space-ch-1', false, meOnHost));
+
+    rightClickAvatar(container, meOnHost.id);
+    const labels = menuLabels();
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels).not.toContain('Poke');
+    expect(labels).not.toContain('@Alice');
+  });
 });

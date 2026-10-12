@@ -102,14 +102,14 @@ describe('the author menu', () => {
     expect(mocks.open).not.toHaveBeenCalled();
   });
 
-  it("offers no Mention on the viewer's own message, and leaves a DM's to the message menu", () => {
-    const event = rightClick({ ...inDm, isAuthor: true });
-    expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(mocks.open).not.toHaveBeenCalled();
-
+  it("offers neither Mention nor Poke on the viewer's own message and leaves it to the message menu", () => {
     useChannelPokeStore.getState().setHost(HOST, true);
-    rightClick({ ...space, isAuthor: true });
-    expect(openedItems().map((i) => i.key)).toEqual(['poke-author']);
+    for (const options of [{ ...inDm, isAuthor: true }, { ...space, isAuthor: true }]) {
+      const event = rightClick(options);
+      expect(event.preventDefault).not.toHaveBeenCalled();
+      expect(event.stopPropagation).not.toHaveBeenCalled();
+    }
+    expect(mocks.open).not.toHaveBeenCalled();
   });
 
   it('offers no Mention for an author who is not one of the channel people', () => {
