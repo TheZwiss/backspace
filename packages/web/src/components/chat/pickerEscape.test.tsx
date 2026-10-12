@@ -130,3 +130,59 @@ describe('Escape typed in the emoji search', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+describe('an Escape the picker leaves alone', () => {
+  it.each(hosts)('one that ends an IME composition in the rename field of $name', async host => {
+    const onClose = vi.fn();
+    await openStickers(host, onClose);
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Happy' }));
+
+    fireEvent.keyDown(screen.getByLabelText('Sticker name'), { key: 'Escape', isComposing: true });
+    expect(screen.getByRole('form', { name: 'Rename sticker' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each(emojiHosts)('one that ends an IME composition in the emoji search of $name', host => {
+    const onClose = vi.fn();
+    useUIStore.setState({ isMobile: host.mobile });
+    render(host.render(onClose));
+    fireEvent.keyDown(screen.getByLabelText('Search emoji'), { key: 'Escape', isComposing: true });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  /** Builds emoji-mart's shadow root next to the mocked search: its skin tone menu and a category button. */
+  function emojiMartShadow(): { skinRadio: HTMLInputElement; categoryButton: HTMLButtonElement } {
+    const host = document.createElement('em-emoji-picker');
+    screen.getByLabelText('Search emoji').after(host);
+    const root = host.attachShadow({ mode: 'open' });
+    const menu = document.createElement('div');
+    menu.className = 'menu';
+    menu.setAttribute('role', 'radiogroup');
+    const skinRadio = document.createElement('input');
+    skinRadio.type = 'radio';
+    menu.append(skinRadio);
+    const categoryButton = document.createElement('button');
+    root.append(menu, categoryButton);
+    return { skinRadio, categoryButton };
+  }
+
+  function escapeFrom(target: Element): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  it.each(emojiHosts)('one typed in emoji-mart\'s skin tone menu in $name, which emoji-mart closes itself', host => {
+    const onClose = vi.fn();
+    useUIStore.setState({ isMobile: host.mobile });
+    render(host.render(onClose));
+    const { skinRadio, categoryButton } = emojiMartShadow();
+
+    expect(escapeFrom(skinRadio).defaultPrevented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+
+    expect(escapeFrom(categoryButton).defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});

@@ -8,6 +8,23 @@ interface PickerEscape {
 const PickerEscapeContext = createContext<PickerEscape | null>(null);
 
 /**
+ * An Escape the picker host leaves alone. One that ends an IME composition
+ * (Chinese, Japanese) only cancels the composition. One typed in emoji-mart's
+ * skin tone menu goes on to emoji-mart, which closes that menu and keeps the
+ * picker open.
+ */
+function leaveToTarget(event: KeyboardEvent): boolean {
+  if (event.isComposing) return true;
+  const origin = event.composedPath()[0];
+  return origin instanceof Element && isInEmojiMartSkinMenu(origin);
+}
+
+/** emoji-mart 5 renders its skin tone menu as `div.menu[role=radiogroup]` in its open shadow root. */
+function isInEmojiMartSkinMenu(origin: Element): boolean {
+  return origin.getRootNode() instanceof ShadowRoot && origin.closest('.menu[role="radiogroup"]') !== null;
+}
+
+/**
  * Escape for a picker host: the composer's popover, the reaction popover and
  * the mobile picker sheet. One Escape undoes one layer. A form that took the
  * picker's place (sticker rename, sticker upload) claims Escape with
@@ -30,7 +47,7 @@ export function PickerEscapeScope({ onClose, children }: { onClose: () => void; 
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || leaveToTarget(event)) return;
       event.preventDefault();
       event.stopPropagation();
       const claimed = claims.current[claims.current.length - 1];
