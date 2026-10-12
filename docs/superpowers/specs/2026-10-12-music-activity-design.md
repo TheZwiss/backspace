@@ -176,7 +176,20 @@ Music is more personal than a game title, and with no connect step the feature w
 
 ## 9. Federation
 
-Nothing changes. Activities already relay between instances as self-contained payloads, `validateActivities` runs on both ends with the same rules, and remote clients build links from the payload themselves. No instance ever looks up a track. Covers load from the music service's image host directly in the viewer's browser, the same way link embeds load their images today.
+Nothing in the protocol changes. Music activities take the paths game activities take today:
+
+- **Through the home instance.** `handleActivityUpdate` relays the full `Activity[]` to peers with `queuePresenceRelay`. The receiver runs the same `validateActivities` in `processPresenceUpdateEvent`, so a payload the home accepts is one every peer accepts, and keeps it on the replicated row for its own clients.
+- **Directly from the client.** `wsSendAll` sends `activity_update` to every instance the client is connected to, so an instance where the listener is signed in gets the update first-hand as well.
+- **On the viewer's side.** `activityStore` keys activities by home identity (`userKey`), so the same person seen through two instances shows one activity. Links are built from the payload on the viewer's client. No instance ever looks up a track.
+
+Things that matter more for music than for games, none of which needs a change:
+
+- **Volume.** Tracks change every few minutes where games change every few hours. Presence is a `state` queue in the outbox (`federationOutboxQueue.ts`): a newer update replaces the queued one, so a slow or unreachable peer receives the latest state, never a backlog of tracks.
+- **Older peers.** A peer on an older version accepts the payload (the `listening` type and every field used here have been in `validateActivities` since rich presence shipped). Its clients show the track title as a plain activity, without the music card.
+- **Progress bar.** `timestamps` are absolute times from the listener's clock, so relay delay does not shift the bar, but a viewer whose clock is off by some seconds sees the bar off by the same amount.
+- **Who receives it.** `queuePresenceRelay` sends to every active peer, not only peers where the listener has friends or shared spaces. A peer with no row for the listener drops the update, but the update does leave the home instance. That is how status and game activities work today. Narrowing it is a separate change to presence relay, not part of this proposal, and the toggle being off by default (section 8) is what keeps music from leaving at all unless the user turns it on.
+
+Covers load from the music service's image host directly in the viewer's browser, the same way link embeds load their images today.
 
 ## 10. Dependencies
 
