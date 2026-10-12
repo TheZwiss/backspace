@@ -7,6 +7,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
 import { useUIStore } from '../../stores/uiStore';
 import { MobilePickerSheet } from './MobilePickerSheet';
+import { PickerEscapeScope } from './pickerEscape';
 
 export type InputPopoverTab = 'emoji' | 'gif' | 'sticker';
 
@@ -138,18 +139,6 @@ function DesktopPopover({
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose, anchorRef]);
 
-  // Escape to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
   return createPortal(
     <div
       ref={floatingRef}
@@ -160,9 +149,11 @@ function DesktopPopover({
         <TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} />}
-          {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} />}
-          {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
+          <PickerEscapeScope onClose={onClose}>
+            {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} />}
+            {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} />}
+            {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
+          </PickerEscapeScope>
         </div>
       </div>
     </div>,

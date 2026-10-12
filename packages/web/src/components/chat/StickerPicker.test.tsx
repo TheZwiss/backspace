@@ -6,6 +6,7 @@ import { api, HttpError } from '../../api/client';
 import { uploadSticker } from './stickerUpload';
 import { MAX_PERSONAL_STICKERS } from '@backspace/shared/src/stickers';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { PickerEscapeScope } from './pickerEscape';
 
 vi.mock('../../api/client', async importOriginal => ({
   ...await importOriginal<typeof import('../../api/client')>(),
@@ -168,7 +169,8 @@ describe('sticker controls', () => {
   });
 
   it('leaves the form unchanged on Escape or Cancel, and offers no right-click menu on a tile', async () => {
-    render(<StickerPicker onSelect={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<PickerEscapeScope onClose={onClose}><StickerPicker onSelect={vi.fn()} /></PickerEscapeScope>);
     const tile = await screen.findByRole('button', { name: 'Happy' });
     fireEvent.contextMenu(tile);
     expect(useContextMenuStore.getState().menu).toBeNull();
@@ -178,11 +180,48 @@ describe('sticker controls', () => {
     fireEvent.keyDown(screen.getByLabelText('Sticker name'), { key: 'Escape' });
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Rename Happy' })).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Rename Happy' }));
     fireEvent.click(screen.getByText('Cancel', { selector: 'button' }));
     expect(screen.queryByRole('form')).not.toBeInTheDocument();
     expect(api.stickers.rename).not.toHaveBeenCalled();
+  });
+
+  it('leaves the upload form on Escape and gives focus back to the upload button', async () => {
+    const onClose = vi.fn();
+    render(<PickerEscapeScope onClose={onClose}><StickerPicker onSelect={vi.fn()} /></PickerEscapeScope>);
+    await screen.findByRole('button', { name: 'Happy' });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload image' }));
+    expect(screen.getByLabelText('Choose image', { selector: 'input' })).toBeInTheDocument();
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(screen.queryByLabelText('Choose image', { selector: 'input' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload image' })).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a form open on Escape while it is sending', async () => {
+    const onClose = vi.fn();
+    let finish: (value: typeof sticker) => void = () => undefined;
+    vi.mocked(api.stickers.rename).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<PickerEscapeScope onClose={onClose}><StickerPicker onSelect={vi.fn()} /></PickerEscapeScope>);
+    await screen.findByRole('button', { name: 'Happy' });
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Happy' }));
+    fireEvent.change(screen.getByLabelText('Sticker name'), { target: { value: 'Glad' } });
+    fireEvent.submit(screen.getByRole('form'));
+
+    fireEvent.keyDown(screen.getByLabelText('Sticker name'), { key: 'Escape' });
+    expect(screen.getByRole('form')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    finish({ ...sticker, name: 'Glad' });
+    await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Rename Glad' })).toHaveFocus();
   });
 
   it('checks the name before sending and keeps a refusal visible', async () => {

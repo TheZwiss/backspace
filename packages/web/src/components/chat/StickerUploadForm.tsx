@@ -5,6 +5,7 @@ import { MAX_STICKER_BATCH, MAX_STICKER_BYTES, MAX_STICKER_NAME_LENGTH, type Per
 import { uploadSticker } from './stickerUpload';
 import { describeError } from '../../i18n/errors';
 import { HttpError } from '../../api/client';
+import { usePickerEscapeClaim } from './pickerEscape';
 
 interface StickerUploadFormProps {
   /**
@@ -50,7 +51,9 @@ function createUploadItem(file: File): UploadItem {
  * Supports single and batch sticker uploads.
  * Original files stay local until explicit confirmation; animated previews are never flattened.
  * A batch is sent one image at a time: what the server accepted leaves the
- * form, what it refused stays with its reason.
+ * form, what it refused stays with its reason. Escape cancels the form,
+ * except while a batch is being sent, and only the next Escape closes the
+ * picker.
  */
 export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUploadFormProps) {
   const { t } = useTranslation('chat');
@@ -68,6 +71,10 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
   itemsRef.current = items;
   const active = useRef(true);
   const submitting = useRef(false);
+
+  usePickerEscapeClaim(() => {
+    if (!submitting.current) onCancel();
+  });
 
   // Revoke blob URLs for any items removed from state to prevent memory leaks.
   const updateItems = (updater: (prev: UploadItem[]) => UploadItem[]) => {

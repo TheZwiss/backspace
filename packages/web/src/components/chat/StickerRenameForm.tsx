@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { MAX_STICKER_NAME_LENGTH, normalizeStickerName, stickerUrl, type PersonalSticker } from '@backspace/shared/src/stickers';
 import { api } from '../../api/client';
 import { describeError } from '../../i18n/errors';
+import { usePickerEscapeClaim } from './pickerEscape';
 
 interface StickerRenameFormProps {
   sticker: PersonalSticker;
@@ -16,7 +17,9 @@ interface StickerRenameFormProps {
  * form, instead of floating over it: the picker already sits in a popover or
  * a sheet that closes on an outside click, so a portaled dialog would close
  * the picker that owns it. The name is checked with the server's own rule
- * (`normalizeStickerName`) before it is sent.
+ * (`normalizeStickerName`) before it is sent. Escape cancels it, except
+ * while the new name is being saved, and only the next Escape closes the
+ * picker.
  */
 export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenameFormProps) {
   const { t } = useTranslation(['chat', 'errors']);
@@ -26,6 +29,10 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const writing = useRef(false);
+
+  usePickerEscapeClaim(() => {
+    if (!writing.current) onCancel();
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

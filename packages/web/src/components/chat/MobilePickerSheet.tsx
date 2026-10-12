@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import { useDragToClose } from '../../hooks/useDragToClose';
+import { PickerEscapeScope } from './pickerEscape';
 
 interface MobilePickerSheetProps {
   onClose: () => void;
@@ -16,21 +17,11 @@ interface MobilePickerSheetProps {
  * A picker on a phone: a bottom sheet over a dimmed backdrop. It spans the
  * viewport's width and at most 60% of its height, sits above the soft
  * keyboard and the home indicator, and closes on a tap on the backdrop, on
- * Escape, or on a drag down from its handle. Used by the composer's emoji
- * and GIF picker and by the reaction picker the message menu opens.
+ * Escape (after any form open inside the picker, see `pickerEscape.tsx`), or
+ * on a drag down from its handle. Used by the composer's emoji and GIF picker
+ * and by the reaction picker the message menu opens.
  */
 export function MobilePickerSheet({ onClose, header, label, children }: MobilePickerSheetProps) {
-  // Escape to close (parity with desktop)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
 
   // Drag-down-to-close. Only the handle + header area receives the touch;
   // the picker grids manage their own scrolling and keep their touches.
@@ -83,7 +74,7 @@ export function MobilePickerSheet({ onClose, header, label, children }: MobilePi
 
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {children}
+          <PickerEscapeScope onClose={onClose}>{children}</PickerEscapeScope>
         </div>
       </div>
     </>,

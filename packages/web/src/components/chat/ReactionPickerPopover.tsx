@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { EmojiPicker } from './EmojiPicker';
+import { PickerEscapeScope } from './pickerEscape';
 import { layoutPixels, layoutRect } from '../../platform/interfaceScale';
 
 export interface ReactionPickerPopoverProps {
@@ -101,15 +102,6 @@ export function ReactionPickerPopover({
     return () => document.removeEventListener('mousedown', handler);
   }, [anchorEl, onClose]);
 
-  // Capture Escape before the emoji search input stops keyboard-event bubbling.
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler, true);
-    return () => document.removeEventListener('keydown', handler, true);
-  }, [onClose]);
-
   if (!anchorEl) return null;
 
   return createPortal(
@@ -125,7 +117,9 @@ export function ReactionPickerPopover({
       }}
     >
       <div className="glass rounded-xl overflow-hidden max-h-[calc(100*var(--app-dvh)-16px)] flex flex-col">
-        <EmojiPicker onEmojiSelect={onEmojiSelect} />
+        <PickerEscapeScope onClose={onClose}>
+          <EmojiPicker onEmojiSelect={onEmojiSelect} />
+        </PickerEscapeScope>
       </div>
     </div>,
     document.body,

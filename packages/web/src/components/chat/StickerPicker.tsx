@@ -28,8 +28,12 @@ export function StickerPicker({ onSelect, mobile = false }: { onSelect: (token: 
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
-  /** The tile whose rename just closed; focus goes back to it once the grid is drawn again. */
-  const focusAfterRename = useRef<string | null>(null);
+  /**
+   * Where focus goes once a form closed and the grid is drawn again, the
+   * first of these that is there and enabled: the tile whose rename closed,
+   * or the upload button.
+   */
+  const focusAfterForm = useRef<string[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -48,14 +52,18 @@ export function StickerPicker({ onSelect, mobile = false }: { onSelect: (token: 
   }, [userId]);
 
   useEffect(() => {
-    const id = focusAfterRename.current;
-    if (renaming || !id) return;
-    focusAfterRename.current = null;
+    const targets = focusAfterForm.current;
+    if (renaming || uploading || !targets) return;
+    focusAfterForm.current = null;
     const root = rootRef.current;
-    const target = root?.querySelector<HTMLElement>(`[data-sticker-rename="${id}"]`)
-      ?? root?.querySelector<HTMLElement>(`[data-sticker-id="${id}"]`);
-    target?.focus();
-  }, [renaming]);
+    for (const selector of targets) {
+      const target = root?.querySelector<HTMLElement>(`${selector}:not(:disabled)`);
+      if (target) {
+        target.focus();
+        return;
+      }
+    }
+  }, [renaming, uploading]);
 
   const remove = async (id: string) => {
     setRemoving(id);
@@ -83,8 +91,13 @@ export function StickerPicker({ onSelect, mobile = false }: { onSelect: (token: 
     setRenaming(sticker);
   };
 
+  const closeUpload = () => {
+    focusAfterForm.current = ['[data-sticker-upload]', '[data-sticker-id]'];
+    setUploading(false);
+  };
+
   const closeRename = () => {
-    if (renaming) focusAfterRename.current = renaming.id;
+    if (renaming) focusAfterForm.current = [`[data-sticker-rename="${renaming.id}"]`, `[data-sticker-id="${renaming.id}"]`];
     setRenaming(null);
   };
 
@@ -93,23 +106,21 @@ export function StickerPicker({ onSelect, mobile = false }: { onSelect: (token: 
       ref={rootRef}
       className={`flex flex-col min-h-0 text-txt-primary ${mobile ? 'w-full flex-1' : 'w-[352px] max-w-[calc(100*var(--app-vw)-24px)] h-[456px]'}`}
       onKeyDown={event => {
-        // Escape leaves the rename form; anywhere else it reaches the popover and closes the picker.
+        // Keys stay in the picker, so Enter never reaches the composer. Escape
+        // belongs to the picker's host (pickerEscape.tsx), which gives it to
+        // an open form first.
         if (event.key !== 'Escape') event.stopPropagation();
-        else if (renaming) {
-          event.stopPropagation();
-          closeRename();
-        }
       }}
     >
       {uploading ? <StickerUploadForm key={userId} capacity={Math.max(0, MAX_PERSONAL_STICKERS - items.length)}
-        onCancel={() => setUploading(false)} onAdded={(added, complete) => {
+        onCancel={closeUpload} onAdded={(added, complete) => {
           // Newest first, the order the server lists the collection in.
           setItems(rows => {
             const ids = new Set(added.map(item => item.id));
             return [...[...added].reverse(), ...rows.filter(row => !ids.has(row.id))];
           });
           if (!complete) return;
-          setUploading(false);
+          closeUpload();
           setManaging(false);
           setNotice(t('stickers.saved'));
         }} /> : renaming ? <StickerRenameForm key={renaming.id} sticker={renaming} onCancel={closeRename}
@@ -122,7 +133,7 @@ export function StickerPicker({ onSelect, mobile = false }: { onSelect: (token: 
           <div className="flex items-center gap-1">
             {items.length > 0 && <button type="button" disabled={!!removing} aria-pressed={managing}
               className="sticker-secondary-button" onClick={() => setManaging(!managing)}>{t(managing ? 'stickers.done' : 'stickers.manage')}</button>}
-            <button type="button" disabled={loading || !!removing || full} onClick={startUpload} className="sticker-primary-button">
+            <button type="button" data-sticker-upload disabled={loading || !!removing || full} onClick={startUpload} className="sticker-primary-button">
               <span aria-hidden="true" className="text-lg leading-none">+</span>{t('stickers.upload')}
             </button>
           </div>
