@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.10.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.10.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.10.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.11.0" date="2026-10-12">
+      <description>
+        <p>Everyone now has a personal sticker collection: upload your own images, send them in channels and direct messages, and react with them. Members can poke each other in a channel, and a space owner can give the owner group in the member list its own title. On Linux, a screen share with system audio no longer carries the voices Backspace plays.</p>
+      </description>
+    </release>
     <release version="1.10.0" date="2026-10-12">
       <description>
         <p>Mentioning @everyone, @here or a role now needs a new permission, Mention @everyone, @here and Roles, which space owners grant per role. These mentions now notify the people they reach, and each space's notification settings can switch them off. The space sidebar shows how many messages are unread in each space and in your direct messages. Members can set a nickname for each space, and a right click on a member in the member list opens a menu with their profile, messages, friend actions, roles, kick and ban. A mention in the message box shows the person's name instead of a code.</p>
