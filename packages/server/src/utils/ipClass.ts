@@ -73,7 +73,7 @@ function classifyIpv4(octets: [number, number, number, number]): AddressClass {
   if (a === 100 && b >= 64 && b <= 127) return 'cgnat';
   if (a === 192 && b === 0 && octets[2] === 0) return 'reserved';    // IETF protocol assignments
   if (a === 192 && b === 0 && octets[2] === 2) return 'reserved';    // TEST-NET-1
-  if (a === 198 && (b === 18 || b === 19)) return 'reserved';        // benchmarking
+  if (a === 198 && (b === 18 || b === 19)) return 'public';         // RFC 2544 benchmark / transparent proxy fake-ip range
   if (a === 198 && b === 51 && octets[2] === 100) return 'reserved'; // TEST-NET-2
   if (a === 203 && b === 0 && octets[2] === 113) return 'reserved';  // TEST-NET-3
   if (a >= 224 && a <= 239) return 'multicast';

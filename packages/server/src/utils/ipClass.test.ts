@@ -23,6 +23,7 @@ const CASES: Array<[string, AddressClass, string]> = [
   ['224.0.0.1', 'multicast', 'RFC5771'],
   ['255.255.255.255', 'reserved', 'broadcast'],
   ['8.8.8.8', 'public', 'the control: a real public address'],
+  ['198.18.0.1', 'public', 'fake-ip proxy address allowed for outbound calls'],
 
   // --- IPv6 ---
   ['::1', 'loopback', 'the obvious one'],

@@ -32,6 +32,8 @@ import { ChannelNotificationButton } from '../notifications/ChannelNotificationB
 import { ChannelHeaderTopic } from './ChannelHeaderTopic';
 import { isDmChannel } from '../../stores/spaceStore';
 import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
+import { useTranslationSettings } from '../../features/translation/useMessageTranslation';
+import { ChatSummaryModal } from '../../features/translation/ChatSummaryModal';
 
 /**
  * Voice channel header, in both of its shapes.
@@ -59,7 +61,7 @@ function voiceHeaderClassName(fullscreen: boolean, revealed: boolean): string {
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'translation']);
   const channels = useSpaceStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -90,6 +92,9 @@ export function MainContent() {
   const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const { settings: translationSettings } = useTranslationSettings();
+  const summarizerEnabled = !!translationSettings?.preferences.summarizerEnabled;
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
   const clearJumpRequest = useCallback(() => setJumpToMessageId(null), []);
 
@@ -102,9 +107,10 @@ export function MainContent() {
   const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
   const _canonicalFirstOther = useCanonicalUserView(_rawFirstOther ?? _FALLBACK_USER, dmViewer.origin);
 
-  // Reset search when channel changes
+  // Reset search and summary when channel changes
   useEffect(() => {
     setSearchOpen(false);
+    setSummaryOpen(false);
   }, [currentChannelId]);
 
   // Handle actual browser fullscreen API.
@@ -405,6 +411,17 @@ export function MainContent() {
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>
             </button>
+            {summarizerEnabled && (
+              <button
+                onClick={() => setSummaryOpen(true)}
+                className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
+                title={t('translation:chatSummary')}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                </svg>
+              </button>
+            )}
             <button
               ref={searchButtonRef}
               onClick={() => setSearchOpen(!searchOpen)}
@@ -432,6 +449,14 @@ export function MainContent() {
           isDm={true}
           onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
         />
+        {summarizerEnabled && summaryOpen && (
+          <ChatSummaryModal
+            isOpen={summaryOpen}
+            onClose={() => setSummaryOpen(false)}
+            channelId={currentChannelId}
+            channelName={dmName}
+          />
+        )}
       </div>
     );
   }
@@ -545,6 +570,17 @@ export function MainContent() {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ChannelNotificationButton channelId={currentChannelId} channelName={channel.name} />
+          {summarizerEnabled && (
+            <button
+              onClick={() => setSummaryOpen(true)}
+              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
+              title={t('translation:chatSummary')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+              </svg>
+            </button>
+          )}
           <button
             ref={searchButtonRef}
             onClick={() => setSearchOpen(!searchOpen)}
@@ -570,6 +606,14 @@ export function MainContent() {
         isDm={false}
         onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
       />
+      {summarizerEnabled && summaryOpen && (
+        <ChatSummaryModal
+          isOpen={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          channelId={currentChannelId}
+          channelName={channel.name}
+        />
+      )}
     </div>
   );
 }

@@ -79,6 +79,7 @@ interface DesktopUpdateSnapshot {
 }
 
 interface BackspaceElectronAPI {
+  translation?: import('@backspace/shared/translation').TranslationBridge;
   // Platform info
   platform: NodeJS.Platform;
   // Window controls

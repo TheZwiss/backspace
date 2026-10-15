@@ -1,6 +1,8 @@
+import type { TranslationCommand } from '../../shared/src/translation';
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('backspace', {
+  translation: { command: (command: TranslationCommand) => ipcRenderer.invoke('translation:command', command) },
   // Platform info
   platform: process.platform,
   // Window controls

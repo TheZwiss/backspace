@@ -39,6 +39,10 @@ export interface Formatters {
   formatDuration: (elapsedSeconds: number) => string;
   /** `You, Mira, and 3 others` / `Du, Mira und 3 weitere`: an "and" list with the language's separators. */
   formatList: (items: readonly string[]) => string;
+  /** `October 2026` / `2026年10月` */
+  formatMonthYear: (year: number, month: number) => string;
+  /** Single letter or short weekday for calendars: `日`, `一` or `Sun`, `Mon` */
+  formatWeekdayShort: (dayOfWeek: number) => string;
 }
 
 type DateTimeOptions = Intl.DateTimeFormatOptions;
@@ -177,6 +181,20 @@ export function createFormatters(getLocale: () => string): Formatters {
     },
 
     formatList: (items) => listFormat().format(items),
+    formatMonthYear: (year, month) => {
+      if (getLocale().startsWith('zh')) {
+        return `${year}年${month + 1}月`;
+      }
+      return dateFormat({ year: 'numeric', month: 'long' }).format(new Date(year, month, 1));
+    },
+    formatWeekdayShort: (dayOfWeek) => {
+      const idx = ((dayOfWeek % 7) + 7) % 7;
+      if (getLocale().startsWith('zh')) {
+        return ['日', '一', '二', '三', '四', '五', '六'][idx]!;
+      }
+      // 2023-01-01 was a Sunday
+      return dateFormat({ weekday: 'short' }).format(new Date(2023, 0, 1 + idx));
+    },
   };
 }
 
@@ -189,6 +207,6 @@ export const formatters: Formatters = createFormatters(() => i18n.resolvedLangua
  */
 export function useFormatters(): Formatters {
   const { i18n: instance } = useTranslation();
-  const language = instance.resolvedLanguage ?? instance.language;
+  const language = instance?.resolvedLanguage ?? instance?.language ?? 'en';
   return useMemo(() => formatters, [language]);
 }

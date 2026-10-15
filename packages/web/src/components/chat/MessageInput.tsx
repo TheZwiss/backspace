@@ -24,6 +24,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
 import { describeError } from '../../i18n/errors';
+import { useTranslationSettings } from '../../features/translation/useMessageTranslation';
+import { ComposerAssistantPopover } from '../../features/translation/ComposerAssistantPopover';
 
 interface MessageInputProps {
   channelId: string;
@@ -47,7 +49,7 @@ function makeFileHandleKey(): string {
 }
 
 export function MessageInput({ channelId, channelName, placeholder }: MessageInputProps) {
-  const { t } = useTranslation(['chat', 'common']);
+  const { t } = useTranslation(['chat', 'common', 'translation']);
   // Composer state lives in composerStore (per-channel, persisted)
   const composerState = useComposerStore((s) => s.states.get(channelId)) ?? {
     draftText: '',
@@ -67,6 +69,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // UI-only state stays local
   const [activePopover, setActivePopover] = useState<InputPopoverTab | null>(null);
+  const { settings: translationSettings } = useTranslationSettings();
+  const composerEnabled = !!translationSettings?.preferences.composerEnabled;
+  const [composerAssistantOpen, setComposerAssistantOpen] = useState(false);
+  const composerAssistantButtonRef = useRef<HTMLButtonElement>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -761,6 +767,18 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         />
       )}
 
+      {composerEnabled && (
+        <ComposerAssistantPopover
+          open={composerAssistantOpen}
+          onClose={() => setComposerAssistantOpen(false)}
+          draftText={draftText}
+          onApply={(newText) => {
+            setDraft(channelId, newText);
+          }}
+          anchorRef={composerAssistantButtonRef}
+        />
+      )}
+
       {chatReplyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
@@ -890,6 +908,21 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
               </svg>
+            </button>
+          )}
+
+          {/* AI Composer Assistant button */}
+          {composerEnabled && (
+            <button
+              ref={composerAssistantButtonRef}
+              onClick={() => setComposerAssistantOpen((prev) => !prev)}
+              className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+                composerAssistantOpen ? 'text-accent-primary bg-white/[0.08]' : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+              title={t('translation:composerAssistant')}
+              aria-label={t('translation:composerAssistant')}
+            >
+              <span className="text-base select-none leading-none">✨</span>
             </button>
           )}
 

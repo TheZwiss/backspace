@@ -24,7 +24,10 @@
     "./src/channelSystemEvents": "./src/channelSystemEvents.ts",
     "./src/channelSystemEvents.js": "./src/channelSystemEvents.ts",
     "./src/mentions": "./src/mentions.ts",
-    "./src/mentions.js": "./src/mentions.ts"
+    "./src/mentions.js": "./src/mentions.ts",
+    "./translation": {
+      "types": "./src/translation.d.ts"
+    }
   },
   "scripts": {
     "build": "tsc",
