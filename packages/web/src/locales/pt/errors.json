@@ -224,8 +224,14 @@
   "space_owner_title_invalid": "O título do dono pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle.",
   "member_nickname_invalid": "Apelidos podem ter no máximo {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle.",
   "sticker_invalid_image": "Envie uma imagem PNG, JPEG, WebP ou GIF de no máximo {{max}} MB.",
-  "sticker_not_local": "Esta figurinha está guardada em outro servidor, por isso não foi adicionada à sua coleção.",
+  "sticker_pixel_limit_exceeded": "A imagem tem muitos quadros de animação ou resolução muito alta.",
+  "sticker_not_local": "Ainda não é possível adicionar à sua coleção figurinhas de outro servidor.",
   "sticker_not_found": "Essa figurinha não existe mais.",
   "sticker_collection_full": "Sua coleção está cheia com {{max}} figurinhas. Remova uma para adicionar outra.",
-  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle."
+  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle.",
+  "sticker_pack_not_found": "Esse pacote de figurinhas não existe mais.",
+  "sticker_pack_invalid_state": "Esse pacote de figurinhas não está em um estado válido para esta ação.",
+  "sticker_peer_blocked": "A sincronização de figurinhas está bloqueada para esta instância.",
+  "sticker_pack_limit_exceeded": "O pacote de figurinhas atingiu o limite de figurinhas.",
+  "sticker_limit_out_of_range": "O limite de tamanho da figurinha deve estar entre {{min}} e {{max}} MB."
 }

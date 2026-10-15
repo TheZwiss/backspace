@@ -412,6 +412,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   allowCustomBitrate: integer('allow_custom_bitrate').notNull().default(1),
   maxUploadSizeBytes: integer('max_upload_size_bytes'),
+  maxStickerSizeBytes: integer('max_sticker_size_bytes'),
   federationRelayEnabled: integer('federation_relay_enabled').notNull().default(1),
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   defaultAutoRotateIntervalDays: integer('default_auto_rotate_interval_days').notNull().default(90),
@@ -807,3 +808,78 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+export const stickerPacks = sqliteTable('sticker_packs', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  creatorId: text('creator_id').references(() => users.id, { onDelete: 'set null' }),
+  creatorName: text('creator_name'),
+  coverAssetId: text('cover_asset_id').references(() => stickerAssets.id, { onDelete: 'set null' }),
+  originType: text('origin_type').notNull().default('source'),
+  sourceInstance: text('source_instance'),
+  sourcePackId: text('source_pack_id'),
+  currentVersion: integer('current_version').notNull().default(1),
+  status: text('status').notNull().default('draft'),
+  reviewNotes: text('review_notes'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: integer('reviewed_at'),
+  syncedAt: integer('synced_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  statusIdx: index('idx_sticker_packs_status').on(table.status),
+  creatorIdx: index('idx_sticker_packs_creator').on(table.creatorId),
+  sourceIdx: index('idx_sticker_packs_source').on(table.sourceInstance, table.sourcePackId),
+}));
+
+export const stickerPackVersions = sqliteTable('sticker_pack_versions', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  coverAssetId: text('cover_asset_id').references(() => stickerAssets.id, { onDelete: 'set null' }),
+  status: text('status').notNull().default('draft'),
+  reviewNotes: text('review_notes'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: integer('reviewed_at'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  packVersionIdx: uniqueIndex('idx_pack_versions_unique').on(table.packId, table.version),
+}));
+
+export const stickerPackItems = sqliteTable('sticker_pack_items', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  versionId: text('version_id').notNull().references(() => stickerPackVersions.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => stickerAssets.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  packIdx: index('idx_sticker_pack_items_pack').on(table.packId),
+  versionIdx: index('idx_sticker_pack_items_version').on(table.versionId),
+  assetIdx: index('idx_sticker_pack_items_asset').on(table.assetId),
+}));
+
+export const userInstalledPacks = sqliteTable('user_installed_packs', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  installedAt: integer('installed_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.packId] }),
+  userIdx: index('idx_user_installed_packs_user').on(table.userId),
+}));
+
+export const stickerPeerPolicies = sqliteTable('sticker_peer_policies', {
+  id: text('id').primaryKey(),
+  peerOrigin: text('peer_origin').notNull().unique(),
+  policy: text('policy').notNull().default('allow'),
+  autoSync: integer('auto_sync').notNull().default(0),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  peerOriginIdx: index('idx_sticker_peer_policies_peer').on(table.peerOrigin),
+}));

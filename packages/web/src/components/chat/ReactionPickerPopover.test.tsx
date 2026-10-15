@@ -5,12 +5,16 @@ import React from 'react';
 import { ReactionPickerPopover } from './ReactionPickerPopover';
 
 // Mock EmojiPicker to keep test light and focused on positioning/interactions
+const mockEmojiPicker = vi.fn();
 vi.mock('./EmojiPicker', () => ({
-  EmojiPicker: ({ onEmojiSelect }: { onEmojiSelect: (emoji: { native: string }) => void }) => (
-    <div data-testid="mock-emoji-picker" onKeyDown={(event) => event.stopPropagation()} style={{ height: 440, width: 350 }}>
-      <button onClick={() => onEmojiSelect({ native: '🎉' })}>Select Emoji</button>
-    </div>
-  ),
+  EmojiPicker: (props: { onEmojiSelect: (emoji: { native: string }) => void; stickers?: boolean; manageable?: boolean }) => {
+    mockEmojiPicker(props);
+    return (
+      <div data-testid="mock-emoji-picker" onKeyDown={(event) => event.stopPropagation()} style={{ height: 440, width: 350 }}>
+        <button onClick={() => props.onEmojiSelect({ native: '🎉' })}>Select Emoji</button>
+      </div>
+    );
+  },
 }));
 
 describe('ReactionPickerPopover', () => {
@@ -174,5 +178,4 @@ describe('ReactionPickerPopover', () => {
     act(() => { pickerHeight = 500; resized(); });
     expect(screen.getByRole('dialog').style.top).toBe('8px');
   });
-
 });

@@ -35,7 +35,7 @@ it('previews locally, edits the name, and only uploads after explicit confirmati
   fireEvent.change(screen.getByRole('textbox'), { target: { value: '  My favorite  ' } });
   fireEvent.click(confirm());
   await waitFor(() => expect(added).toHaveBeenCalledWith([sticker], true));
-  expect(uploadSticker).toHaveBeenCalledWith(file, 'My favorite');
+  expect(uploadSticker).toHaveBeenCalledWith(file, 'My favorite', MAX_STICKER_BYTES);
 });
 
 it('cancels without uploading and releases its local preview', () => {
@@ -95,8 +95,8 @@ it('supports multi-file drops and batch uploading', async () => {
   fireEvent.click(confirm());
 
   await waitFor(() => expect(uploadSticker).toHaveBeenCalledTimes(2));
-  expect(uploadSticker).toHaveBeenCalledWith(file1, 'First');
-  expect(uploadSticker).toHaveBeenCalledWith(file2, 'Second');
+  expect(uploadSticker).toHaveBeenCalledWith(file1, 'First', MAX_STICKER_BYTES);
+  expect(uploadSticker).toHaveBeenCalledWith(file2, 'Second', MAX_STICKER_BYTES);
   await waitFor(() => expect(added).toHaveBeenCalledWith([sticker, sticker], true));
 });
 

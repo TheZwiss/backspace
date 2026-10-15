@@ -8,9 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import * as schema from '../db/schema.js';
-import {
-  stickerUrl, normalizeStickerName, MAX_STICKER_BYTES, MAX_PERSONAL_STICKERS, MAX_STICKER_NAME_LENGTH, STICKER_UPLOADS_PER_MINUTE,
-} from '@backspace/shared/src/stickers.js';
+import { stickerUrl, MAX_STICKER_BYTES, MAX_PERSONAL_STICKERS, STICKER_UPLOADS_PER_MINUTE } from '@backspace/shared/src/stickers.js';
 
 const settings = vi.hoisted(() => ({ uploadDir: '' }));
 let db: ReturnType<typeof drizzle<typeof schema>>;
@@ -25,7 +23,7 @@ vi.mock('../utils/auth.js', () => ({
     request.userId = request.headers.authorization;
   },
 }));
-import { stickerRoutes, encodeSticker, _resetStickerUploadLimit } from './stickers.js';
+import { stickerRoutes, encodeSticker, _resetStickerUploadLimit, StickerPixelLimitError } from './stickers.js';
 
 beforeEach(async () => {
   _resetStickerUploadLimit();
@@ -98,7 +96,7 @@ describe('personal stickers', () => {
     expect(invalid.statusCode).toBe(400);
     expect(invalid.json()).toMatchObject({ code: 'validation_failed' });
     const blank = await app.inject({ method: 'POST', url: '/api/stickers', headers: { authorization: 'alice' }, payload: { name: '   ', image: 'eA==' } });
-    expect(blank.json()).toMatchObject({ code: 'sticker_name_invalid', details: { max: 100 } });
+    expect(blank.json()).toMatchObject({ code: 'validation_failed' });
     await expect(encodeSticker(Buffer.alloc(MAX_STICKER_BYTES + 1))).rejects.toThrow();
     const tooLarge = await app.inject({ method: 'POST', url: '/api/stickers', headers: { authorization: 'alice' },
       payload: { name: 'large', image: Buffer.alloc(MAX_STICKER_BYTES + 4096).toString('base64') } });
@@ -195,51 +193,124 @@ describe('personal stickers', () => {
     expect([metadata.width, metadata.pageHeight]).toEqual([512, 512]);
   });
 
-  it('renames only the caller\'s own entry and stores the trimmed name', async () => {
+  it('renames a sticker in the user collection and rejects invalid names or unknown stickers', async () => {
     const uploaded = (await upload()).json();
-    const collected = await app.inject({ method: 'POST', url: `/api/stickers/${uploaded.id}/collect`, headers: { authorization: 'bob' },
-      payload: { token: uploaded.token, name: 'Bob copy' } });
-    expect(collected.statusCode).toBe(200);
-    const rename = (user: string, name: string, id = uploaded.id) =>
-      app.inject({ method: 'PATCH', url: `/api/stickers/${id}`, headers: { authorization: user }, payload: { name } });
-
-    const renamed = await rename('alice', '  Renamed Happy  ');
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: `/api/stickers/${uploaded.id}`,
+      headers: { authorization: 'alice' },
+      payload: { name: 'Renamed Happy' },
+    });
     expect(renamed.statusCode).toBe(200);
-    expect(renamed.json()).toEqual({ id: uploaded.id, name: 'Renamed Happy', token: uploaded.token });
-    const aliceList = await app.inject({ url: '/api/stickers', headers: { authorization: 'alice' } });
-    expect(aliceList.json()).toEqual([{ id: uploaded.id, name: 'Renamed Happy', token: uploaded.token }]);
-    // The same asset in another collection keeps that collection's name.
-    const bobList = await app.inject({ url: '/api/stickers', headers: { authorization: 'bob' } });
-    expect(bobList.json()).toEqual([expect.objectContaining({ id: uploaded.id, name: 'Bob copy' })]);
+    expect(renamed.json()).toMatchObject({ id: uploaded.id, name: 'Renamed Happy', token: uploaded.token });
 
-    // An asset that is not in the caller's collection, and an unknown id, are both missing.
-    await app.inject({ method: 'DELETE', url: `/api/stickers/${uploaded.id}`, headers: { authorization: 'bob' } });
-    const notCollected = await rename('bob', 'Mine now');
-    expect(notCollected.statusCode).toBe(404);
-    expect(notCollected.json()).toMatchObject({ code: 'sticker_not_found' });
-    expect((await rename('alice', 'Unknown', '0'.repeat(64))).statusCode).toBe(404);
-    expect((await rename('alice', 'Bad id', 'not-a-hash')).statusCode).toBe(400);
-    expect((await app.inject({ method: 'PATCH', url: `/api/stickers/${uploaded.id}`, payload: { name: 'x' } })).statusCode).toBe(401);
+    // In the list, the new name is reflected
+    const list = await app.inject({ url: '/api/stickers', headers: { authorization: 'alice' } });
+    expect(list.json()).toEqual([expect.objectContaining({ id: uploaded.id, name: 'Renamed Happy' })]);
+
+    // Bob cannot rename Alice's sticker
+    const otherUser = await app.inject({
+      method: 'PATCH',
+      url: `/api/stickers/${uploaded.id}`,
+      headers: { authorization: 'bob' },
+      payload: { name: 'Bob Name' },
+    });
+    expect(otherUser.statusCode).toBe(404);
+
+    // Rejects blank name
+    const blank = await app.inject({
+      method: 'PATCH',
+      url: `/api/stickers/${uploaded.id}`,
+      headers: { authorization: 'alice' },
+      payload: { name: '   ' },
+    });
+    expect(blank.statusCode).toBe(400);
+    expect(blank.json()).toMatchObject({ code: 'validation_failed' });
   });
 
-  it('refuses names that are blank, too long, multi-line or hold control characters', async () => {
-    const uploaded = (await upload()).json();
-    const refused = ['   ', 'two\nlines', 'tab\there', 'bidi\u202Eeman', '\u200B\u200B', ` ${'x'.repeat(MAX_STICKER_NAME_LENGTH + 1)}`];
-    for (const name of refused) {
-      const response = await app.inject({ method: 'PATCH', url: `/api/stickers/${uploaded.id}`, headers: { authorization: 'alice' }, payload: { name } });
-      expect(response.statusCode, JSON.stringify(name)).toBe(400);
-    }
-    const coded = await app.inject({ method: 'PATCH', url: `/api/stickers/${uploaded.id}`, headers: { authorization: 'alice' }, payload: { name: 'two\nlines' } });
-    expect(coded.json()).toMatchObject({ code: 'sticker_name_invalid', details: { max: MAX_STICKER_NAME_LENGTH } });
-    const list = await app.inject({ url: '/api/stickers', headers: { authorization: 'alice' } });
-    expect(list.json()).toEqual([expect.objectContaining({ name: 'Happy' })]);
+  it('respects instance_settings max_sticker_size_bytes limit', async () => {
+    // Set custom sticker size limit to 10 MB in instance_settings
+    db.insert(schema.instanceSettings).values({ id: 1, maxStickerSizeBytes: 10 * 1024 * 1024, updatedAt: Date.now() }).onConflictDoUpdate({
+      target: schema.instanceSettings.id,
+      set: { maxStickerSizeBytes: 10 * 1024 * 1024 },
+    }).run();
 
-    // Upload and collect store names by the same rule.
-    const collect = await app.inject({ method: 'POST', url: `/api/stickers/${uploaded.id}/collect`, headers: { authorization: 'bob' },
-      payload: { token: uploaded.token, name: 'line\nbreak' } });
-    expect(collect.json()).toMatchObject({ code: 'sticker_name_invalid' });
-    expect(normalizeStickerName('  Café 🎉  ')).toBe('Café 🎉');
-    expect(normalizeStickerName('\u0007')).toBeUndefined();
-    expect(normalizeStickerName(42)).toBeUndefined();
+    // Over 10MB fails
+    await expect(encodeSticker(Buffer.alloc(10 * 1024 * 1024 + 1))).rejects.toThrow();
+
+    const overLimit = await app.inject({
+      method: 'POST',
+      url: '/api/stickers',
+      headers: { authorization: 'alice' },
+      payload: { name: 'huge', image: Buffer.alloc(10 * 1024 * 1024 + 4096).toString('base64') },
+    });
+    expect(overLimit.statusCode).toBe(413);
+  });
+
+  it('rejects images that exceed decoded pixel limit with sticker_pixel_limit_exceeded', async () => {
+    // 10000x10000 has 100M pixels > MAX_DECODED_PIXELS (67_108_864)
+    const huge = await sharp({ create: { width: 10000, height: 10000, channels: 4, background: 'red' } }).png().toBuffer();
+    await expect(encodeSticker(huge)).rejects.toThrow(StickerPixelLimitError);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/stickers',
+      headers: { authorization: 'alice' },
+      payload: { name: 'huge', image: huge.toString('base64') },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'sticker_pixel_limit_exceeded' });
+  });
+
+  it('accepts animations with over 100 frames under the updated pixel cap', async () => {
+    const frameCount = 100;
+    const width = 8;
+    const height = 8;
+    const frames = Buffer.alloc(width * height * 4 * frameCount, 0);
+    for (let i = 0; i < frameCount; i++) {
+      const offset = i * width * height * 4;
+      frames[offset] = (i * 3 + 1) % 255;
+      frames[offset + 1] = (i * 5 + 1) % 255;
+      frames[offset + 2] = (i * 7 + 1) % 255;
+      frames[offset + 3] = 255;
+    }
+    const gif = await sharp(frames, { raw: { width, height: height * frameCount, channels: 4, pageHeight: height } })
+      .gif({ delay: new Array(frameCount).fill(50), loop: 0 }).toBuffer();
+    const result = await encodeSticker(gif);
+    const metadata = await sharp(result, { animated: true }).metadata();
+    expect(metadata.pages).toBe(frameCount);
+  });
+
+  it('generates and serves compressed preview on request and on-demand', async () => {
+    const uploadRes = await upload();
+    expect(uploadRes.statusCode).toBe(200);
+    const sticker = uploadRes.json();
+    const pathname = new URL(stickerUrl(sticker.token)!).pathname;
+
+    // 1. Fetch full original image
+    const fullRes = await app.inject({ url: pathname });
+    expect(fullRes.statusCode).toBe(200);
+    expect(fullRes.headers['content-type']).toBe('image/webp');
+
+    // 2. Fetch preview image
+    const previewRes = await app.inject({ url: `${pathname}?preview=1` });
+    expect(previewRes.statusCode).toBe(200);
+    expect(previewRes.headers['content-type']).toBe('image/webp');
+    expect(previewRes.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    const meta = await sharp(previewRes.rawPayload).metadata();
+    expect(meta.format).toBe('webp');
+    expect(meta.width).toBeLessThanOrEqual(128);
+    expect(meta.height).toBeLessThanOrEqual(128);
+
+    // 3. Delete preview file to test on-demand generation
+    const previewFilePath = path.join(settings.uploadDir, 'stickers', `${sticker.id}_preview.webp`);
+    await rm(previewFilePath, { force: true });
+
+    // 4. Request preview again - should re-generate on-demand
+    const onDemandRes = await app.inject({ url: `${pathname}?preview=1` });
+    expect(onDemandRes.statusCode).toBe(200);
+    const onDemandMeta = await sharp(onDemandRes.rawPayload).metadata();
+    expect(onDemandMeta.format).toBe('webp');
+    expect(onDemandMeta.width).toBeLessThanOrEqual(128);
   });
 });

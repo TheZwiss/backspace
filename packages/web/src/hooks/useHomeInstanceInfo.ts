@@ -44,6 +44,7 @@ function emit(): void {
 
 function fetchIfNeeded(): void {
   if (inFlight || (cached !== null && !stale)) return;
+  if (!api.instance?.info) return;
   const startedIn = generation;
   inFlight = true;
   api.instance.info().then(

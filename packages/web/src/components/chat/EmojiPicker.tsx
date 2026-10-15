@@ -14,6 +14,7 @@ interface EmojiPickerProps {
    */
   mobile?: boolean;
   stickers?: boolean;
+  manageable?: boolean;
 }
 
 function HeartIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -24,7 +25,12 @@ function HeartIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-export function EmojiPicker({ onEmojiSelect, mobile = false, stickers = true }: EmojiPickerProps) {
+export function EmojiPicker({
+  onEmojiSelect,
+  mobile = false,
+  stickers = true,
+  manageable = true,
+}: EmojiPickerProps) {
   const { t } = useTranslation('chat');
   const [showStickers, setShowStickers] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,7 +92,7 @@ export function EmojiPicker({ onEmojiSelect, mobile = false, stickers = true }: 
           </button>
         </div>
       )}
-      {stickers && showStickers ? <StickerPicker mobile={mobile} onSelect={token => onEmojiSelect({ native: token })} /> : <Picker
+      {stickers && showStickers ? <StickerPicker mobile={mobile} manageable={manageable} onSelect={token => onEmojiSelect({ native: token })} /> : <Picker
         data={loadEmojiData}
         onEmojiSelect={onEmojiSelect}
         theme="dark"

@@ -224,8 +224,14 @@
   "space_owner_title_invalid": "Besitzertitel dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen.",
   "member_nickname_invalid": "Spitznamen dürfen höchstens {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen.",
   "sticker_invalid_image": "Lade ein PNG-, JPEG-, WebP- oder GIF-Bild mit höchstens {{max}} MB hoch.",
-  "sticker_not_local": "Dieser Sticker liegt auf einem anderen Server und wurde deshalb nicht zu deiner Sammlung hinzugefügt.",
+  "sticker_pixel_limit_exceeded": "Das Bild hat zu viele Animationsframes oder eine zu hohe Auflösung.",
+  "sticker_not_local": "Sticker von einem anderen Server können noch nicht zu deiner Sammlung hinzugefügt werden.",
   "sticker_not_found": "Diesen Sticker gibt es nicht mehr.",
   "sticker_collection_full": "Deine Sammlung ist mit {{max}} Stickern voll. Entferne einen, um einen neuen hinzuzufügen.",
-  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen."
+  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen.",
+  "sticker_pack_not_found": "Dieses Stickerpaket gibt es nicht mehr.",
+  "sticker_pack_invalid_state": "Dieses Stickerpaket befindet sich nicht in einem gültigen Zustand für diese Aktion.",
+  "sticker_peer_blocked": "Die Stickersynchronisierung ist für diese Instanz blockiert.",
+  "sticker_pack_limit_exceeded": "Das Stickerpaket hat die maximale Stickeranzahl erreicht.",
+  "sticker_limit_out_of_range": "Das Sticker-Größenlimit muss zwischen {{min}} und {{max}} MB liegen."
 }

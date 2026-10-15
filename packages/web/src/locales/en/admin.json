@@ -254,8 +254,11 @@
     "uploadLimit": {
       "label": "Upload Limit",
       "maxFileSize": "Max file size",
+      "maxStickerSize": "Max sticker size",
       "saved": "Upload limit set to {{limit}}",
-      "saveFailed": "Failed to update upload limit"
+      "saveFailed": "Failed to update upload limit",
+      "stickerSaved": "Sticker size limit set to {{limit}}",
+      "stickerSaveFailed": "Failed to update sticker size limit"
     },
     "cleanup": {
       "label": "Cleanup",
