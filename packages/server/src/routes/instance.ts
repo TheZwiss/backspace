@@ -18,6 +18,9 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       ? settings.registrationOpen === 1
       : config.registrationOpen;
 
+    const maxStickerBytes = settings?.maxStickerSizeBytes ?? config.maxStickerSize;
+    const maxStickerSizeMb = Math.round(maxStickerBytes / (1024 * 1024));
+
     const response: InstanceInfoResponse = {
       name: instanceName,
       version: config.version,
@@ -44,6 +47,7 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       // Read by the web client alone, to hide the Support card. A missing row
       // falls back to the column default.
       supportCardEnabled: settings?.supportCardEnabled ?? true,
+      maxStickerSizeMb,
     };
 
     return reply.code(200).send(response);

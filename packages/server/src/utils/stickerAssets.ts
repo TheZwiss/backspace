@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { inArray, like, lt } from 'drizzle-orm';
+import { inArray, isNotNull, like, lt } from 'drizzle-orm';
 import { stickerIdOf } from '@backspace/shared/src/stickers.js';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
@@ -19,6 +19,10 @@ export function stickerAssetPath(id: string): string {
   return path.join(stickerAssetDir(), `${id}.webp`);
 }
 
+export function stickerPreviewPath(id: string): string {
+  return path.join(stickerAssetDir(), `${id}_preview.webp`);
+}
+
 /**
  * An asset younger than this is never removed. `sticker_assets.created_at` is
  * set again by every upload of the same bytes before the file is written, so
@@ -31,15 +35,25 @@ const STICKER_TEMP_FILE_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Asset ids that something stored on this instance still names: a collection
- * entry, a channel or DM message whose content is a sticker token, or a
- * channel or DM reaction that is one. A token from another instance that
- * happens to carry the same hash counts too, which only ever keeps a file.
+ * entry, a sticker pack item, a sticker pack cover, a channel or DM message
+ * whose content is a sticker token, or a channel or DM reaction that is one.
+ * A token from another instance that happens to carry the same hash counts too,
+ * which only ever keeps a file.
  */
 export function getReferencedStickerIds(): Set<string> {
   const db = getDb();
   const ids = new Set<string>();
   for (const row of db.select({ id: schema.personalStickers.stickerId }).from(schema.personalStickers).all()) {
     ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems).all()) {
+    ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPacks.coverAssetId }).from(schema.stickerPacks).where(isNotNull(schema.stickerPacks.coverAssetId)).all()) {
+    if (row.id) ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId }).from(schema.stickerPackVersions).where(isNotNull(schema.stickerPackVersions.coverAssetId)).all()) {
+    if (row.id) ids.add(row.id);
   }
   const values = [
     ...db.select({ value: schema.messages.content }).from(schema.messages)
@@ -97,13 +111,19 @@ export function cleanupUnusedStickerAssets(dryRun: boolean, now: number = Date.n
 
   for (const id of candidates) {
     const filePath = stickerAssetPath(id);
-    const size = fileSize(filePath);
+    const pPath = stickerPreviewPath(id);
+    const size = fileSize(filePath) + fileSize(pPath);
     if (!dryRun) {
       try {
         fs.rmSync(filePath, { force: true });
       } catch (err) {
         result.errors.push(`Failed to delete sticker ${id}: ${(err as Error).message}`);
         continue;
+      }
+      try {
+        fs.rmSync(pPath, { force: true });
+      } catch {
+        // Preview file might not exist
       }
     }
     if (size > 0) result.deletedFiles += 1;

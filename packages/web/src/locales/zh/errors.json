@@ -224,8 +224,14 @@
   "space_owner_title_invalid": "拥有者头衔须为 1 到 {{max}} 个字符的单行文本，至少包含一个可见字符，且不能包含控制字符。",
   "member_nickname_invalid": "昵称最多 {{max}} 个字符，须为单行，至少包含一个可见字符，且不能包含控制字符。",
   "sticker_invalid_image": "请上传不超过 {{max}} MB 的 PNG、JPEG、WebP 或 GIF 图片。",
-  "sticker_not_local": "此表情存储在其他服务器上，因此未添加到“我的表情”。",
+  "sticker_pixel_limit_exceeded": "图片分辨率过高或动图帧数过多，无法处理。",
+  "sticker_not_local": "暂时无法将其他服务器的表情添加到“我的表情”。",
   "sticker_not_found": "该表情已不存在。",
   "sticker_collection_full": "“我的表情”最多可保存 {{max}} 个。请先移除一个再添加。",
-  "sticker_name_invalid": "表情名称须为 1 到 {{max}} 个字符的单行文本，至少包含一个可见字符，且不能包含控制字符。"
+  "sticker_name_invalid": "表情名称须为 1 到 {{max}} 个字符的单行文本，至少包含一个可见字符，且不能包含控制字符。",
+  "sticker_pack_not_found": "该表情包已不存在。",
+  "sticker_pack_invalid_state": "该表情包当前状态不允许此操作。",
+  "sticker_peer_blocked": "来自该实例的表情同步已被屏蔽。",
+  "sticker_pack_limit_exceeded": "该表情包已达到最大表情数量上限。",
+  "sticker_limit_out_of_range": "表情大小限制必须介于 {{min}} 到 {{max}} MB 之间。"
 }

@@ -5,6 +5,7 @@ import { describeError } from '../i18n/errors';
 import { EMPTY_ACK, readUpdateAck, writeUpdateAck, pendingUpdateVersion, type UpdateAck } from '../utils/updateAck';
 import { clearDismissal } from '../utils/telemetryAsk';
 import { getApiForOrigin } from '../utils/crossStoreResolvers';
+import { invalidateHomeInstanceInfo } from '../hooks/useHomeInstanceInfo';
 
 interface SettingsState {
   /** Home's streaming document. Also carries home's discovery flags. */
@@ -158,6 +159,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateInstanceSettings: async (data: Partial<InstanceAdminSettings>) => {
     const updated = await api.settings.updateInstance(data);
     set({ instanceSettings: updated });
+    invalidateHomeInstanceInfo();
     // The space settings DiscoveryPanel reads both flags from streamingLimits,
     // the document any signed-in user may fetch. Mirror them from the server's
     // answer rather than from the request: turning discovery off clears the

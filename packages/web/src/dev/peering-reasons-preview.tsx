@@ -165,6 +165,7 @@ const ADMIN_SETTINGS: InstanceAdminSettings = {
   discoveryEnabled: true,
   gifEnabled: false,
   maxUploadSizeMb: 100,
+  maxStickerSizeMb: 5,
   federationRelayEnabled: true,
   federationRelayTtlDays: 30,
   defaultAutoRotateIntervalDays: 90,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stickerUrl } from '@backspace/shared/src/stickers';
+import { stickerUrl, stickerPreviewUrl, resolveStickerPreviewUrl } from '@backspace/shared/src/stickers';
 
 describe('sticker protocol', () => {
   const asset = `https://chat.test/api/stickers/assets/${'a'.repeat(64)}.webp`;
@@ -14,5 +14,13 @@ describe('sticker protocol', () => {
       asset.replace('chat.test', 'user:pass@chat.test'), asset.replace('/assets/', '/x/../assets/')]) {
       expect(stickerUrl(`sticker:${url}`)).toBeNull();
     }
+  });
+  it('generates preview URLs correctly from token or asset URL', () => {
+    expect(stickerPreviewUrl(`sticker:${asset}`)).toBe(`${asset}?preview=1`);
+    expect(stickerPreviewUrl(asset)).toBe(`${asset}?preview=1`);
+    expect(stickerPreviewUrl(null)).toBeNull();
+    expect(stickerPreviewUrl('invalid')).toBeNull();
+
+    expect(resolveStickerPreviewUrl(`sticker:${asset}`, 'https://local.test')).toBe(`https://local.test/api/stickers/assets/${'a'.repeat(64)}.webp?preview=1`);
   });
 });
