@@ -165,6 +165,11 @@
     "unknownSender": "Alguém",
     "attachmentOnly": "Enviou um anexo"
   },
+  "ephemeral": {
+    "onlyYou": "Só você pode ver isto",
+    "dismiss": "Dispensar",
+    "rowLabel": "Resposta de {{author}} que só você vê, {{time}}"
+  },
   "embed": {
     "loadAction": "Clique para carregar",
     "loadNamed": "Carregar {{name}}",
@@ -229,5 +234,17 @@
     "action": "Cutucar",
     "received": "{{actor}} cutucou {{target}}",
     "disconnected": "Não foi possível cutucar: sem conexão com o servidor"
+  },
+  "commands": {
+    "title": "Comandos",
+    "failed": "Não foi possível enviar o comando",
+    "extraText": "Este comando não aceita texto livre, mas sobrou \"{{text}}\". Coloque as opções primeiro e o texto por último",
+    "invalidOption": "O valor de {{option}} não serve para este comando.",
+    "optionsTitle": "Parâmetros",
+    "required": "obrigatório",
+    "subcommandsTitle": "Subcomandos",
+    "group": "grupo",
+    "chooseSubcommand": "Escolha um subcomando: {{names}}",
+    "subcommandRefused": "O bot não oferece este subcomando. Escolha um da lista"
   }
 }

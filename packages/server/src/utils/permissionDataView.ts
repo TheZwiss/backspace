@@ -45,6 +45,7 @@ export function roleView(row: RoleRow, withPermissions: boolean): Role {
     createdAt: row.createdAt,
   };
   if (withPermissions) role.permissions = row.permissions ?? '0';
+  if (row.managedBotId) role.managedBotId = row.managedBotId;
   return role;
 }
 

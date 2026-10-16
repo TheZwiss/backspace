@@ -8,6 +8,7 @@ import { useDmViewer } from '../../hooks/useDmViewer';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmTimestamp, formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
+import { BotBadge } from '../ui/BotBadge';
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
   if (!homeInstance) return false;
@@ -151,9 +152,12 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
-          <span className={nameClass}>
-            {displayName}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={nameClass}>
+              {displayName}
+            </span>
+            {!isGroup && firstOther?.isBot && <BotBadge />}
+          </div>
           {showGroupGlobe && (
             <Tooltip content={groupFederatedMembers.map(m => m.username).join(', ')} position="top">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={fedBadgeClass}>

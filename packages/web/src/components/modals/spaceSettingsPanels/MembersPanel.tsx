@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '../../ui/Avatar';
+import { BotBadge } from '../../ui/BotBadge';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { AddBotModal } from '../AddBotModal';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { parseFederatedUsername, isFederationGlobeApplicable, userDisplayName } from '../../../utils/identity';
 import { useSpaceOrigin } from '../../../hooks/useSpaceOrigin';
@@ -18,11 +20,12 @@ import {
 import { useFormatters } from '../../../i18n/formatters';
 import { LOCK_ICON } from '../../ui/LockNote';
 import { describeError } from '../../../i18n/errors';
+import { isBotManagedRole, isListedForMember } from '../../../utils/botRoles';
 import type { MemberWithUser, Role } from '@backspace/shared';
 
 
 /** Why a role checkbox is locked: the role ranks too high, or it carries bits the viewer lacks. */
-type RoleLock = 'rank' | 'bits';
+type RoleLock = 'managed' | 'rank' | 'bits';
 
 function MembersPanelRow({
   member,
@@ -76,15 +79,19 @@ function MembersPanelRow({
   // A role is locked when it ranks at or above the viewer (hierarchy), or when
   // giving it would hand out bits the viewer does not hold (held-bits rule).
   // Taking a role the member already has is governed by the hierarchy alone.
+  // Another bot's managed role is not listed; a bot's own one is shown, locked.
+  const rolesHere = assignableRoles.filter((role) => isListedForMember(role, member.userId));
   const roleLocks = new Map<string, RoleLock>();
-  for (const role of assignableRoles) {
-    if (!manageableRoleIds.has(role.id)) roleLocks.set(role.id, 'rank');
+  for (const role of rolesHere) {
+    if (isBotManagedRole(role)) roleLocks.set(role.id, 'managed');
+    else if (!manageableRoleIds.has(role.id)) roleLocks.set(role.id, 'rank');
     else if (!savedRoleIds.has(role.id) && !viewerHoldsEveryBit(heldPermissions, stringToPermissions(role.permissions))) {
       roleLocks.set(role.id, 'bits');
     }
   }
-  const lockKinds = (['rank', 'bits'] as const).filter((kind) => [...roleLocks.values()].includes(kind));
+  const lockKinds = (['managed', 'rank', 'bits'] as const).filter((kind) => [...roleLocks.values()].includes(kind));
   const lockReason: Record<RoleLock, string> = {
+    managed: t('spaces:settings.members.rolesManagedByBot'),
     rank: t('spaces:settings.members.rolesAboveYou'),
     bits: t('spaces:settings.members.rolesUnheld'),
   };
@@ -110,6 +117,7 @@ function MembersPanelRow({
           <div className="min-w-0">
             <div className="text-sm font-medium truncate">
               {displayName}
+              {member.user.isBot && <BotBadge className="ml-1.5" />}
               {isFederationGlobeApplicable(canonical) && (
                 <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{parseFederatedUsername(canonical.username).domain}</span>
               )}
@@ -170,7 +178,7 @@ function MembersPanelRow({
       {/* Role checkboxes — only shown when expanded */}
       {isExpanded && expandable && (
         <div className="mt-1 mb-1 ml-10 space-y-1">
-          {assignableRoles.map((role) => {
+          {rolesHere.map((role) => {
             const lock = roleLocks.get(role.id);
             const manageable = lock === undefined;
             return (
@@ -247,11 +255,13 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const myPerms = spacePermissions.get(spaceId);
   const canKick = hasPermissionBit(myPerms, PermissionBits.KICK_MEMBERS);
   const canBan = hasPermissionBit(myPerms, PermissionBits.BAN_MEMBERS);
+  const canInviteBots = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 
   const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState<{ type: 'kick' | 'ban'; userId: string; displayName: string } | null>(null);
+  const [showAddBot, setShowAddBot] = useState(false);
 
   // Assignable roles: exclude @everyone (where role.id === spaceId)
   const assignableRoles = roles.filter((r) => r.id !== spaceId);
@@ -330,7 +340,18 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('common:labels.members')}</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold text-txt-primary">{t('common:labels.members')}</h2>
+        {canInviteBots && (
+          <button
+            type="button"
+            onClick={() => setShowAddBot(true)}
+            className="px-3 py-1.5 rounded-md border border-white/10 text-xs font-medium text-txt-secondary hover:text-txt-primary transition-colors"
+          >
+            {t('spaces:settings.members.botInvite.button')}
+          </button>
+        )}
+      </div>
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
@@ -370,6 +391,13 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
         </div>
       </div>
 
+      <AddBotModal
+        isOpen={showAddBot}
+        onClose={() => setShowAddBot(false)}
+        origin={space?._instanceOrigin ?? ''}
+        spaceId={spaceId}
+        onAdded={() => { void loadSpaceDetail(spaceId); }}
+      />
       <ConfirmDialog
         isOpen={pendingAction !== null}
         onClose={() => setPendingAction(null)}

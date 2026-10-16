@@ -31,9 +31,30 @@ export const users = sqliteTable('users', {
   profileUpdatedAt: integer('profile_updated_at'),
   passwordChangedAt: integer('password_changed_at'),
   showActivity: integer('show_activity').notNull().default(1),
+  /** 1 = the account turned Developer Mode on: shows the Bots tab in its settings. Self-view only, never relayed. */
+  developerMode: integer('developer_mode').notNull().default(0),
   federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
   federationHealPending: integer('federation_heal_pending').default(0),
   federationHomeOrphaned: integer('federation_home_orphaned').default(0),
+  /** 1 = bot account: no password login, authenticates with an owner-issued token. */
+  isBot: integer('is_bot').notNull().default(0),
+  /** users.id of the human who created the bot. No FK: tombstoneUser keeps the row. */
+  botOwnerId: text('bot_owner_id'),
+  /**
+   * A bot's stored status, JSON `{ type, name }` (`BotActivity`), or null. Set
+   * by the owner on the bot's home; a host's federated account of the bot
+   * holds the home's copy (`profile_update`, by-home-id answers). Applied as
+   * the bot's live activity when it connects (ws/botActivity.ts).
+   */
+  botActivity: text('bot_activity'),
+  /**
+   * A bot's requested space permissions: a permission bitmask as a canonical
+   * decimal string, null or '0' for none. Set by the owner on the bot's home;
+   * a host's federated account of the bot holds the home's copy. A manager
+   * adding the bot to a space grants any subset of it through the bot's
+   * managed role (`roles.managed_bot_id`).
+   */
+  botRequestedPermissions: text('bot_requested_permissions'),
   /**
    * The identity a detached account (`federation_home_orphaned = 1`) had before
    * it was detached: its former home instance and its id there. Detaching
@@ -60,6 +81,7 @@ export const users = sqliteTable('users', {
    * composite's second column cannot be used.
    */
   homeUserIdx: index('idx_users_home_user_id').on(table.homeUserId),
+  botOwnerIdx: index('idx_users_bot_owner_id').on(table.botOwnerId),
   /** `resolveRelayActor` matches a former (detached) identity in the same query as `home_user_id`. */
   detachedHomeUserIdx: index('idx_users_detached_home_user_id').on(table.detachedHomeUserId),
 }));
@@ -295,8 +317,16 @@ export const roles = sqliteTable('roles', {
   position: integer('position').default(0),
   permissions: text('permissions'), // JSON string of permission keys
   createdAt: integer('created_at').notNull(),
+  /**
+   * Set on a bot's managed role: the bot (users.id) the role was created for
+   * when it was added to the space. Only that bot holds it; it cannot be
+   * deleted or given to anyone else, and it goes when the bot leaves the
+   * space (utils/botRoles.ts). No FK: tombstoneUser keeps the user row.
+   */
+  managedBotId: text('managed_bot_id'),
 }, (table) => ({
   spaceIdx: index('idx_roles_space_id').on(table.spaceId),
+  managedBotIdx: uniqueIndex('idx_roles_managed_bot').on(table.spaceId, table.managedBotId),
 }));
 
 export const memberRoles = sqliteTable('member_roles', {
@@ -770,6 +800,74 @@ export const userFederationCredentials = sqliteTable('user_federation_credential
   pk: primaryKey({ columns: [table.userId, table.origin] }),
 }));
 
+/**
+ * A revoke of a bot's federated account that an instance has not accepted yet
+ * (it was away). One row per (bot, origin); the background worker retries until
+ * it lands, is refused for good, or 7 days pass, then deletes the row. No FK:
+ * a deleted bot's tombstone must not take the row away.
+ */
+export const botRevocations = sqliteTable('bot_revocations', {
+  botId: text('bot_id').notNull(),
+  origin: text('origin').notNull(),
+  /** 'soft' (token regenerated) or 'full' (bot deleted). */
+  mode: text('mode').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  createdAt: integer('created_at').notNull(),
+  nextAttemptAt: integer('next_attempt_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.botId, table.origin] }),
+  dueIdx: index('idx_bot_revocations_next_attempt_at').on(table.nextAttemptAt),
+}));
+
+/**
+ * A bot's access tokens: `bsb_<id>.<secret>`, shown once. Only the SHA-256 of
+ * the secret is stored, so a copy of the database yields no usable token. A
+ * bot holds up to MAX_BOT_TOKENS_PER_BOT, each revocable on its own; the
+ * rows go with the bot (cascade on a real delete, explicit on a tombstone).
+ */
+export const botTokens = sqliteTable('bot_tokens', {
+  /** The public half of the token (16 hex chars): the lookup key. */
+  id: text('id').primaryKey(),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  name: text('name'),
+  createdAt: integer('created_at').notNull(),
+  /** Written at most once a minute per token. */
+  lastUsedAt: integer('last_used_at'),
+}, (table) => ({
+  botIdx: index('idx_bot_tokens_bot_id').on(table.botId),
+}));
+
+/**
+ * A moderator's mute or deafen of one bot SEAT (a `bot_voice_join` seat in one
+ * voice channel). A bot sits in several channels at once, so its restrictions
+ * are kept per channel; a person's stay per space in `voice_restrictions`.
+ */
+export const botSeatRestrictions = sqliteTable('bot_seat_restrictions', {
+  channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  restrictionType: text('restriction_type').notNull(), // 'mute' | 'deafen'
+  moderatorId: text('moderator_id').references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.channelId, table.botId, table.restrictionType] }),
+  botIdx: index('idx_bot_seat_restrictions_bot_id').on(table.botId),
+}));
+
+// A bot of another instance the admin deleted with "block": its bot proof is
+// refused at registration (403 bot_blocked) until the admin unblocks it.
+// home_instance is the home's domain as extractDomain(...).toLowerCase() gives it.
+export const blockedBots = sqliteTable('blocked_bots', {
+  homeInstance: text('home_instance').notNull(),
+  homeUserId: text('home_user_id').notNull(),
+  username: text('username').notNull(),
+  blockedBy: text('blocked_by').references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.homeInstance, table.homeUserId] }),
+}));
+
 export const inviteLinks = sqliteTable('invite_links', {
   id: text('id').primaryKey(),
   token: text('token').notNull().unique(),
@@ -793,6 +891,42 @@ export const inviteRedemptions = sqliteTable('invite_redemptions', {
 }, (table) => ({
   inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
   userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
+}));
+
+/** Slash commands a bot registers for itself (replace-all through PUT /api/bots/@me/commands). */
+export const botCommands = sqliteTable('bot_commands', {
+  id: text('id').primaryKey(),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  /** JSON array of BotCommandOption. */
+  options: text('options').notNull().default('[]'),
+  updatedAt: integer('updated_at').notNull(),
+  /**
+   * Permissions a person needs in the invoking channel to see and use the
+   * command (canonical decimal mask); null for none. Its subcommands and
+   * groups may add their own, in `options`.
+   */
+  requiredPermissions: text('required_permissions'),
+}, (table) => ({
+  botNameIdx: uniqueIndex('idx_bot_commands_bot_name').on(table.botId, table.name),
+}));
+
+/** One slash-command invocation, kept until it expires so only the invoked bot can answer it. */
+export const interactions = sqliteTable('interactions', {
+  id: text('id').primaryKey(),
+  botId: text('bot_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id'),
+  dmChannelId: text('dm_channel_id'),
+  command: text('command').notNull(),
+  /** JSON object of the validated option values. */
+  options: text('options').notNull().default('{}'),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  responses: integer('responses').notNull().default(0),
+}, (table) => ({
+  expiresIdx: index('idx_interactions_expires_at').on(table.expiresAt),
 }));
 
 // Assets outlive personal collections so removing a favorite cannot break message history.

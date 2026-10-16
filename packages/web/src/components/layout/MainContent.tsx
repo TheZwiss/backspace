@@ -32,6 +32,7 @@ import { ChannelNotificationButton } from '../notifications/ChannelNotificationB
 import { ChannelHeaderTopic } from './ChannelHeaderTopic';
 import { isDmChannel } from '../../stores/spaceStore';
 import { usePointerReveal, VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
+import { BotBadge } from '../ui/BotBadge';
 
 /**
  * Voice channel header, in both of its shapes.
@@ -330,7 +331,10 @@ export function MainContent() {
                 {dmName}
               </span>
             ) : (
-              <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate">{dmName}</span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate">{dmName}</span>
+                {firstOther?.isBot && <BotBadge />}
+              </div>
             )}
             {!isGroupDm && firstOther && isFederationGlobeApplicable(firstOther) && (
               <Tooltip content={firstOther.username} position="bottom">

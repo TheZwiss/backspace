@@ -369,7 +369,24 @@
       "kickFailed": "Falha ao expulsar o membro",
       "banFailed": "Falha ao banir o membro",
       "rolesAboveYou": "Cargos iguais ou superiores ao seu cargo mais alto ficam bloqueados.",
-      "rolesUnheld": "Cargos com permissões que você não tem não podem ser concedidos."
+      "rolesUnheld": "Cargos com permissões que você não tem não podem ser concedidos.",
+      "rolesManagedByBot": "O cargo próprio de um bot fica com o bot.",
+      "botInvite": {
+        "warning": "O bot se torna membro deste espaço e recebe as mensagens e os eventos de todos os canais que as permissões dele permitirem. Adicione apenas bots em que você confia.",
+        "owner": "Dono: @{{owner}}",
+        "button": "Adicionar bot",
+        "title": "Adicionar um bot",
+        "searchPlaceholder": "Pesquisar bots por nome…",
+        "searching": "Pesquisando…",
+        "noResults": "Nenhum bot encontrado",
+        "add": "Adicionar",
+        "adding": "Adicionando…",
+        "permissionsTitle": "Permissões para {{name}}",
+        "permissionsIntro": "O bot pede estas permissões. Elas vão para um cargo com o nome do bot; desmarque as que não quer dar.",
+        "permissionsUnheld": "Permissões que você mesmo não tem não podem ser dadas.",
+        "permissionsNone": "Nada marcado: o bot entra sem cargo.",
+        "back": "Voltar"
+      }
     }
   },
   "bans": {
@@ -396,6 +413,7 @@
     "backToList": "Voltar aos cargos",
     "created": "Cargo criado. Personalize-o abaixo.",
     "aboveYou": "Este cargo tem hierarquia igual ou superior ao seu cargo mais alto. Você pode visualizá-lo, mas não alterá-lo.",
+    "managedByBot": "Este cargo pertence a um bot. Ele sai quando o bot deixa o espaço e não pode ser dado a outra pessoa nem excluído. Suas permissões podem ser alteradas.",
     "reorder": {
       "handle": "Mover {{name}}",
       "handleHint": "Arraste ou use as setas para cima e para baixo",

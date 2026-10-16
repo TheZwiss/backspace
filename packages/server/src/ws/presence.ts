@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm';
-import { ownsChosenStatus, type Activity, type ChosenUserStatus } from '@backspace/shared';
+import { ownsChosenStatus, type Activity, type BotActivity, type ChosenUserStatus, type UserStatus } from '@backspace/shared';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from './handler.js';
 import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { presenceUpdateEvent, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
 import { showReplicaChoice } from './replicaPresence.js';
+import { botActivityAsLive } from '../utils/botActivity.js';
 
 /**
  * The one path for a user changing their own status, shared by REST
@@ -55,6 +56,40 @@ export function applyChosenStatus(userId: string, status: ChosenUserStatus): voi
   void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
     try { queuePresenceRelay(userId, status, activities); } catch (e) { console.warn('[presence] queuePresenceRelay(chosen) failed', e); }
   });
+}
+
+/**
+ * Make `activities` the live activity set of a connected user and tell everyone
+ * who sees their presence: friends, DM and space co-members, the user's own
+ * sessions, and peers (a no-op for a replicated row, whose home projects it).
+ * The caller has validated the list. The one publisher for the WS
+ * `activity_update` and for a bot's stored status (`applyStoredBotActivity`).
+ */
+export function publishActivities(userId: string, activities: Activity[]): void {
+  connectionManager.setUserActivities(userId, activities);
+  const status = connectionManager.getUserStatus(userId) as UserStatus;
+
+  const payload = presenceUpdateFor(userId, status, activities);
+  for (const uid of collectProfileBroadcastTargetIds(userId)) connectionManager.sendToUser(uid, payload);
+  connectionManager.sendToUser(userId, payload);
+
+  void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+    try { queuePresenceRelay(userId, status, activities); } catch (e) { console.warn('[presence] queuePresenceRelay(activity) failed', e); }
+  });
+}
+
+/**
+ * A bot's stored status changed here: the owner saved it on the bot's home, or
+ * the home's copy reached a host's federated account of the bot. While the bot
+ * is connected to this instance and shows activities, the new status replaces
+ * its live activity at once, also one the bot code set (null clears it). An
+ * offline bot shows no activity; the stored value applies at its next
+ * connection (`seedStoredBotActivity` in ws/handler.ts).
+ */
+export function applyStoredBotActivity(userId: string, activity: BotActivity | null): void {
+  if (!connectionManager.isUserOnline(userId)) return;
+  if (!connectionManager.getUserShowActivity(userId)) return;
+  publishActivities(userId, botActivityAsLive(activity));
 }
 
 /**

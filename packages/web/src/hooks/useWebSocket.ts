@@ -1,5 +1,6 @@
 import { receiveChannelPoke } from '../components/chat/channelPoke';
 import { useChannelPokeStore } from '../stores/channelPokeStore';
+import { useEphemeralReplyStore } from '../stores/ephemeralReplyStore';
 import { applySpaceMemberUpdate } from '../stores/spaceMemberUpdates';
 import { useUnreadCountStore } from '../stores/unreadCountStore';
 import React, { useEffect, useRef } from 'react';
@@ -9,6 +10,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useDeveloperModeStore } from '../stores/developerModeStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, FederatedIdentity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
@@ -268,6 +270,12 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       addRealtimeMessage(event.message.channelId, event.message);
       receiveChannelPoke(origin, event.message);
       break;
+    case 'interaction_ephemeral':
+      // A bot's answer for this person alone: shown in its chat until a reload or a dismiss,
+      // with no unread mark, sound or notification.
+      upsertUserView(event.reply.user, origin);
+      useEphemeralReplyStore.getState().add(event.reply);
+      break;
     case 'channel_unread_count':
       useUnreadCountStore.getState().updateCounts(origin, event.counts);
       break;
@@ -285,6 +293,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
         // Whose acknowledgements to read: the store cannot import authStore
         // without dragging the audio pipeline into every settings test.
         useSettingsStore.getState().setUpdateAckUser(event.user.id);
+        useDeveloperModeStore.getState().setEnabled(event.user.developerMode === true);
         // This is what moved the release lookup off the Updates panel: the dot
         // has to be able to appear before an admin ever navigates there. Gated
         // on the flag this event just delivered, not on store state.
@@ -735,6 +744,10 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
           break;
         }
         setUser(event.user);
+        // Another device switched Developer Mode: the account has one value.
+        if (event.user.developerMode !== undefined) {
+          useDeveloperModeStore.getState().setEnabled(event.user.developerMode);
+        }
       }
       {
         // The true home's row of a replicated session carries the choice too.
@@ -780,7 +793,8 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'voice_space_muted': {
       const { setSpaceMutedUser } = useVoiceStore.getState();
-      setSpaceMutedUser(event.spaceId, event.userId, event.muted);
+      // A bot seat's mute is that channel's only.
+      setSpaceMutedUser(event.spaceId, event.userId, event.muted, event.botSeat ? event.channelId : undefined);
       // Broadcast effective state if this targets the current user
       const myMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myMuteId) broadcastVoiceStatus();
@@ -789,7 +803,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'voice_permission_muted': {
       const { setPermissionMutedUser } = useVoiceStore.getState();
-      setPermissionMutedUser(event.spaceId, event.userId, event.muted);
+      setPermissionMutedUser(event.spaceId, event.userId, event.muted, event.channelId);
       const myPermMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myPermMuteId) broadcastVoiceStatus();
       break;
@@ -797,7 +811,8 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'voice_space_deafened': {
       const { setSpaceDeafenedUser } = useVoiceStore.getState();
-      setSpaceDeafenedUser(event.spaceId, event.userId, event.deafened);
+      // A bot seat's deafen is that channel's only.
+      setSpaceDeafenedUser(event.spaceId, event.userId, event.deafened, event.botSeat ? event.channelId : undefined);
       // Broadcast effective state if this targets the current user
       const myDeafenId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myDeafenId) {

@@ -6,7 +6,13 @@ import { api } from '../../../api/client';
 import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useAuthStore } from '../../../stores/authStore';
-import type { AdminUser, AdminUserListResponse } from '@backspace/shared';
+import type { AdminBlockedBot, AdminUser, AdminUserListResponse } from '@backspace/shared';
+import { BotBadge } from '../../ui/BotBadge';
+
+/** A bot whose home is another instance: only such an account can be blocked. */
+function isFederatedBot(user: AdminUser): boolean {
+  return user.isBot && !!user.homeInstance;
+}
 
 export function UsersPanel() {
   const { t } = useTranslation(['admin', 'common']);
@@ -31,6 +37,24 @@ export function UsersPanel() {
   // Confirm dialogs
   const [confirmAction, setConfirmAction] = useState<{ type: 'demote' | 'delete'; user: AdminUser } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  // Delete dialog of a bot of another instance: also refuse its next registration.
+  const [blockBot, setBlockBot] = useState(false);
+
+  const [blockedBots, setBlockedBots] = useState<AdminBlockedBot[]>([]);
+  const fetchBlockedBots = useCallback(() => {
+    api.admin.listBlockedBots().then(({ bots }) => setBlockedBots(bots)).catch(() => {});
+  }, []);
+  useEffect(() => { fetchBlockedBots(); }, [fetchBlockedBots]);
+
+  const handleUnblock = async (bot: AdminBlockedBot) => {
+    setError('');
+    try {
+      await api.admin.unblockBot(bot.homeInstance, bot.homeUserId);
+      fetchBlockedBots();
+    } catch (err) {
+      setError(err instanceof Error ? describeError(err) : t('admin:users.actionFailed'));
+    }
+  };
 
   // Temp password display
   const [tempPassword, setTempPassword] = useState<{ userId: string; password: string } | null>(null);
@@ -121,6 +145,7 @@ export function UsersPanel() {
   };
 
   const handleDeleteUser = (user: AdminUser) => {
+    setBlockBot(false);
     setConfirmAction({ type: 'delete', user });
   };
 
@@ -132,7 +157,9 @@ export function UsersPanel() {
       if (confirmAction.type === 'demote') {
         await api.admin.setUserRole(confirmAction.user.id, false);
       } else {
-        await api.admin.deleteUser(confirmAction.user.id);
+        const blocks = blockBot && isFederatedBot(confirmAction.user);
+        await api.admin.deleteUser(confirmAction.user.id, blocks ? { blockBot: true } : undefined);
+        if (blocks) fetchBlockedBots();
       }
       setConfirmAction(null);
       fetchUsers(query, page, showDeleted, filtersRef.current);
@@ -195,6 +222,7 @@ export function UsersPanel() {
           <option value="">{t('admin:users.filters.allRoles')}</option>
           <option value="admin">{t('admin:users.filters.admin')}</option>
           <option value="non-admin">{t('admin:users.filters.nonAdmin')}</option>
+          <option value="bot">{t('admin:users.filters.bot')}</option>
         </select>
 
         <input
@@ -300,6 +328,7 @@ export function UsersPanel() {
                           {t('admin:users.badge.admin')}
                         </span>
                       )}
+                      {user.isBot && <BotBadge />}
                       {isFederated && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-sky/20 text-accent-sky truncate max-w-[120px]">
                           {user.homeInstance}
@@ -429,6 +458,33 @@ export function UsersPanel() {
         </div>
       )}
 
+      {/* Bots of other instances refused at registration */}
+      {blockedBots.length > 0 && (
+        <div className="space-y-1.5 pt-2">
+          <h3 className="text-sm font-semibold text-txt-primary">{t('admin:users.blockedBots.title')}</h3>
+          <div className="text-xs text-txt-tertiary">{t('admin:users.blockedBots.description')}</div>
+          {blockedBots.map((bot) => (
+            <div key={`${bot.homeInstance}/${bot.homeUserId}`} className="flex items-center gap-3 rounded-lg bg-white/[0.02] p-3.5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-txt-primary truncate">{bot.username}</span>
+                  <BotBadge />
+                </div>
+                <div className="text-[10px] text-txt-tertiary mt-0.5">
+                  {t('admin:users.blockedBots.blockedAt', { date: formatDate(bot.createdAt) })}
+                </div>
+              </div>
+              <button
+                onClick={() => handleUnblock(bot)}
+                className="px-2.5 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors shrink-0"
+              >
+                {t('admin:users.blockedBots.unblock')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Confirm dialogs */}
       <ConfirmDialog
         isOpen={!!resetConfirmUser}
@@ -470,12 +526,28 @@ export function UsersPanel() {
         onConfirm={handleConfirm}
         title={t('admin:users.deleteDialog.title')}
         description={
-          <Trans
-            t={t}
-            i18nKey="admin:users.deleteDialog.description"
-            values={{ username: confirmAction?.user.username ?? '' }}
-            components={{ strong: <strong /> }}
-          />
+          <>
+            <Trans
+              t={t}
+              i18nKey="admin:users.deleteDialog.description"
+              values={{ username: confirmAction?.user.username ?? '' }}
+              components={{ strong: <strong /> }}
+            />
+            {confirmAction && isFederatedBot(confirmAction.user) && (
+              <label className="mt-3 flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={blockBot}
+                  onChange={(e) => setBlockBot(e.target.checked)}
+                  className="mt-0.5 w-3.5 h-3.5 rounded border-border-soft accent-accent-primary"
+                />
+                <span>
+                  <span className="block text-txt-primary">{t('admin:users.deleteDialog.blockBot')}</span>
+                  <span className="block text-xs text-txt-tertiary">{t('admin:users.deleteDialog.blockBotHint')}</span>
+                </span>
+              </label>
+            )}
+          </>
         }
         confirmLabel={t('admin:users.deleteDialog.confirm')}
         variant="danger"

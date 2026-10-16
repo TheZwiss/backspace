@@ -146,3 +146,37 @@ describe('POST /api/auth/attach-proof', () => {
     expect(tokens).toHaveLength(1);
   });
 });
+
+describe('POST /api/auth/attach-proof for a bot with a pending revoke', () => {
+  const botToken = () => signJwt({ userId: 'bot-1', username: 'radio_bot' });
+
+  beforeEach(() => {
+    testDb.insert(schema.users).values({
+      id: 'bot-1', username: 'radio_bot', passwordHash: '!bot', isBot: 1, botOwnerId: 'native-1', createdAt: 1,
+    }).run();
+    testDb.insert(schema.botRevocations).values({
+      botId: 'bot-1', origin: 'https://host.test', mode: 'soft', attempts: 1, createdAt: Date.now(), nextAttemptAt: Date.now() + 1,
+    }).run();
+  });
+
+  const mint = (token: string, targetDomain: string) => app.inject({
+    method: 'POST', url: '/api/auth/attach-proof',
+    headers: { authorization: `Bearer ${token}` }, payload: { targetDomain },
+  });
+
+  it('mints no proof for that host and says why', async () => {
+    const res = await mint(botToken(), 'host.test');
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('bot_revocation_pending');
+    expect(testDb.select().from(schema.federationAttachProofs).all()).toHaveLength(0);
+  });
+
+  it('still mints one for another host', async () => {
+    expect((await mint(botToken(), 'other.test')).statusCode).toBe(200);
+  });
+
+  it('does not touch a person', async () => {
+    const res = await mint(signJwt({ userId: 'native-1', username: 'youruser' }), 'host.test');
+    expect(res.statusCode).toBe(200);
+  });
+});

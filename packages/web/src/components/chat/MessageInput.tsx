@@ -8,11 +8,14 @@ import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
+import { CommandOptionPopover, CommandPopover, CommandSubcommandPopover, CommandValuePopover, type CommandValueCandidate } from './CommandPopover';
+import { placeCaret } from './placeCaret';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
+import type { BotCommandListing, BotCommandOption } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useComposerStore } from '../../stores/composerStore';
@@ -21,9 +24,31 @@ import { usePendingMessageStore } from '../../stores/pendingMessageStore';
 import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/idbHandles';
 import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 import { useAuthStore } from '../../stores/authStore';
-import { selfIdentityOf } from '../../utils/identity';
+import { selfIdentityOf, spaceMemberName } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
+import { getApiForOrigin } from '../../utils/crossStoreResolvers';
 import { describeError } from '../../i18n/errors';
+import { HttpError } from '../../api/client';
+import {
+  argumentFrames,
+  commandPath,
+  commandRows,
+  draftCommandName,
+  headDraft,
+  spaceArguments,
+  parseCommandArgs,
+  remainingOptions,
+  subcommandMatches,
+  suggestOptions,
+  suggestSubcommand,
+  suggestValue,
+  type CommandArgContext,
+  type CommandRow,
+  type OptionSuggest,
+  type SubcommandSuggest,
+  type ValueSuggest,
+} from '../../utils/commandArgs';
+import { filterMentionCandidates, useChannelMentionCandidates } from '../../utils/channelUser';
 
 interface MessageInputProps {
   channelId: string;
@@ -37,6 +62,11 @@ interface MessageInputProps {
    * when the group has no `dm.name` set.
    */
   placeholder?: string;
+}
+
+interface CommandState {
+  query: string;
+  selectedIndex: number;
 }
 
 // Default tus expiration window if a transfer doesn't yet have one (24h).
@@ -67,11 +97,24 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // UI-only state stays local
   const [activePopover, setActivePopover] = useState<InputPopoverTab | null>(null);
+  // Slash commands of the bots in this chat, loaded the first time the composer starts with "/".
+  const [commandState, setCommandState] = useState<CommandState | null>(null);
+  const [chatCommands, setChatCommands] = useState<BotCommandListing[] | null>(null);
+  const pickedCommandRef = useRef<BotCommandListing | null>(null);
+  const [optionSuggest, setOptionSuggest] = useState<OptionSuggest | null>(null);
+  // The value popover of a user, role, channel or boolean option being typed.
+  const [valueSuggest, setValueSuggest] = useState<ValueSuggest | null>(null);
+  // The subcommand popover: the next step of a command's path (`/music queue add`).
+  const [subcommandSuggest, setSubcommandSuggest] = useState<SubcommandSuggest | null>(null);
+  const commandsRequestRef = useRef<Promise<BotCommandListing[]> | null>(null);
+  // True while an Enter that invokes a slash command is on its way: a second Enter must not invoke it again.
+  const commandSubmitRef = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useComposerMention(channelId, textareaRef);
   const mentionAnchorRef = useRef<HTMLSpanElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
   // Note: this ref is intentionally typed `HTMLDivElement | null` (mutable
   // ref shape) rather than the more restrictive `RefObject<HTMLDivElement>`
   // because we assign to `.current` from a callback ref below — the
@@ -195,6 +238,234 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       }
     }
   }, [stagedTransfers, addToast, t]);
+
+  // New chat, new command list.
+  useEffect(() => {
+    setChatCommands(null);
+    setCommandState(null);
+    setOptionSuggest(null);
+    setValueSuggest(null);
+    setSubcommandSuggest(null);
+    commandsRequestRef.current = null;
+    pickedCommandRef.current = null;
+  }, [channelId]);
+
+  // The commands of the bots in this chat, shared by every caller. `fresh` asks the
+  // server again (a bot may have registered, changed or lost commands, or joined or
+  // left the chat): the shown list stays until the answer arrives, and the newest
+  // request wins.
+  const loadChatCommands = useCallback((fresh = false): Promise<BotCommandListing[]> => {
+    const existing = commandsRequestRef.current;
+    if (existing && !fresh) return existing;
+    const request: Promise<BotCommandListing[]> = getApiForOrigin(getChannelOrigin(channelId)).commands
+      .forChat(isDm ? { dmChannelId: channelId } : { channelId })
+      .then((res) => res.commands)
+      .catch(() => [] as BotCommandListing[])
+      .then((commands) => {
+        if (commandsRequestRef.current === request) setChatCommands(commands);
+        return commands;
+      });
+    commandsRequestRef.current = request;
+    return request;
+  }, [channelId, isDm]);
+
+  // A command pasted before the list arrived is spaced once it does, as if typed
+  // now. A layout effect, so the new text is written before the caret is put back.
+  useLayoutEffect(() => {
+    if (!chatCommands) return;
+    const draft = useComposerStore.getState().get(channelId).draftText;
+    const name = draftCommandName(draft);
+    const command = name === null ? undefined : chatCommands.find((c) => c.name === name);
+    if (!command) return;
+    const textarea = textareaRef.current;
+    const model = modelFor(draft);
+    const caret = textarea ? model.toWire(textarea.selectionStart) : draft.length;
+    const spaced = spaceArguments(draft, command, caret);
+    if (spaced.text === draft) return;
+    setDraft(channelId, spaced.text);
+    if (textarea && document.activeElement === textarea) placeCaret(textareaRef, modelFor(spaced.text).toDisplay(spaced.caret));
+  }, [chatCommands, channelId, modelFor, setDraft]);
+
+  // The option popover's rows: the options of the typed command not written yet, required first.
+  const optionMatches = useMemo(() => {
+    if (!optionSuggest || draftCommandName(draftText) !== optionSuggest.command.name) return [];
+    return remainingOptions(optionSuggest.command, draftText)
+      .filter((o) => o.name.startsWith(optionSuggest.query))
+      .slice(0, 10);
+  }, [optionSuggest, draftText]);
+
+  const selectOption = useCallback(
+    (option: BotCommandOption) => {
+      if (!optionSuggest) return;
+      // The composer's spacing gives the argument's capsule room around it.
+      const written = draftText.slice(0, optionSuggest.startIndex) + option.name + ':';
+      const { text } = spaceArguments(written, optionSuggest.command, written.length);
+      setDraft(channelId, text);
+      setOptionSuggest(null);
+      // The option's values are offered straight away when it has any to offer.
+      setValueSuggest(chatCommands ? suggestValue(text, chatCommands, optionSuggest.command) : null);
+      // The draft holds mention tokens; the textarea shows names.
+      const caret = modelFor(text).toDisplay(text.length);
+      placeCaret(textareaRef, caret, true);
+    },
+    [optionSuggest, draftText, setDraft, channelId, chatCommands, modelFor],
+  );
+
+  // What a typed user, role or channel value may name: the chat's people, and its space's roles and channels.
+  const chatPeople = useChannelMentionCandidates(channelId);
+  const chatSpaceId = useSpaceStore((s) => s.channelToSpaceMap.get(channelId));
+  const spaceRoles = useSpaceStore((s) => s.roles);
+  const spaceChannels = useSpaceStore((s) => s.channels);
+  const chatRoles = useMemo(
+    () => (chatSpaceId === undefined ? [] : spaceRoles.filter((r) => r.spaceId === chatSpaceId)),
+    [chatSpaceId, spaceRoles],
+  );
+  const commandContext = useMemo<CommandArgContext>(() => ({
+    users: chatPeople.map((c) => ({
+      id: c.userId,
+      names: [c.user.username, c.user.displayName ?? '', c.member?.nickname ?? ''].filter((n) => n.length > 0),
+    })),
+    roles: chatRoles,
+    channels: chatSpaceId === undefined ? [] : spaceChannels.filter((c) => c.spaceId === chatSpaceId),
+  }), [chatPeople, chatRoles, chatSpaceId, spaceChannels]);
+
+  /**
+   * The toast for a refused invocation. A value the server refused names its
+   * option (`details.field` is `options.<name>`); the server's own reason is
+   * English, so the option name is what is shown.
+   */
+  const describeCommandError = (err: unknown): string => {
+    const field = err instanceof HttpError && err.code === 'validation_failed' ? err.details?.field : undefined;
+    if (typeof field === 'string' && field.startsWith('options.')) {
+      return t('chat:commands.invalidOption', { option: field.slice('options.'.length) });
+    }
+    if (field === 'subcommand') return t('chat:commands.subcommandRefused');
+    return err instanceof Error ? describeError(err) : t('chat:commands.failed');
+  };
+
+  // The arguments of a command draft, drawn as boxes by the composer's mirror.
+  const argumentBoxes = useMemo(() => {
+    const head = /^\/([a-z0-9_-]+)\s/i.exec(draftText);
+    if (!head || !chatCommands) return [];
+    const name = head[1]!.toLowerCase();
+    const picked = pickedCommandRef.current;
+    const command = picked && picked.name === name ? picked : chatCommands.find((c) => c.name === name);
+    if (!command) return [];
+    const units = mentionModel.parts.filter((p) => p.mention).map((p) => ({ start: p.start, end: p.start + p.text.length }));
+    return argumentFrames(mentionModel.text, command, units, commandContext);
+  }, [draftText, chatCommands, mentionModel, commandContext]);
+
+  // The value popover's rows.
+  const valueMatches = useMemo((): CommandValueCandidate[] => {
+    // Like the option popover, it follows the draft: once the command is gone, so is the list.
+    if (!valueSuggest || draftCommandName(draftText) !== valueSuggest.command.name) return [];
+    const { option, query } = valueSuggest;
+    if (option.choices && option.choices.length > 0) {
+      // The list shows a choice's name and writes it; the parser hands the bot its value.
+      return option.choices
+        .filter((c) => c.name.toLowerCase().includes(query) || String(c.value).toLowerCase().includes(query))
+        .map((c) => ({
+          key: String(c.value),
+          label: c.name,
+          detail: String(c.value) === c.name ? undefined : String(c.value),
+          insert: /\s/.test(c.name) ? `"${c.name}"` : c.name,
+        }));
+    }
+    if (option.type === 'boolean') {
+      return ['true', 'false'].filter((v) => v.startsWith(query)).map((v) => ({ key: v, label: v, insert: v }));
+    }
+    if (option.type === 'user') {
+      return filterMentionCandidates(chatPeople, query).map((c) => ({
+        key: c.userId,
+        label: spaceMemberName(c.member, c.user),
+        detail: `@${c.user.username}`,
+        insert: `<@${c.userId}>`,
+      }));
+    }
+    if (option.type === 'role') {
+      return chatRoles
+        .filter((r) => r.name.toLowerCase().includes(query))
+        .sort((a, b) => b.position - a.position)
+        .slice(0, 25)
+        .map((r) => ({ key: r.id, label: r.name, insert: `<@&${r.id}>` }));
+    }
+    return commandContext.channels
+      .filter((c) => (!option.channelTypes || option.channelTypes.includes(c.type)) && c.name.toLowerCase().includes(query))
+      .slice(0, 25)
+      // A name with a space goes in quotes, or the value would end at the space.
+      .map((c) => ({ key: c.id, label: `#${c.name}`, detail: c.type, insert: /\s/.test(c.name) ? `"#${c.name}"` : `#${c.name}` }));
+  }, [valueSuggest, draftText, chatPeople, chatRoles, commandContext]);
+
+  const selectValue = useCallback(
+    (candidate: CommandValueCandidate) => {
+      if (!valueSuggest) return;
+      const text = draftText.slice(0, valueSuggest.startIndex) + candidate.insert;
+      setDraft(channelId, text);
+      // Nothing more is offered until a space is typed, so Enter right after a
+      // picked value sends the command.
+      setValueSuggest(null);
+      setOptionSuggest(null);
+      setSubcommandSuggest(null);
+      const caret = modelFor(text).toDisplay(text.length);
+      placeCaret(textareaRef, caret, true);
+    },
+    [valueSuggest, draftText, setDraft, channelId, modelFor],
+  );
+
+  // The command popover's rows: each command, or each subcommand of one (`/music queue add`).
+  const commandMatches = useMemo(() => {
+    if (!commandState || !chatCommands) return [];
+    const q = commandState.query.toLowerCase();
+    return chatCommands.filter((c) => c.name.includes(q)).flatMap(commandRows).slice(0, 25);
+  }, [commandState, chatCommands]);
+
+  /** Writes the head of a command or subcommand and its required options, and opens what comes next. */
+  const writeHead = useCallback(
+    (command: BotCommandListing, path: readonly string[], options: readonly BotCommandOption[]) => {
+      pickedCommandRef.current = command;
+      // Required options go into the text straight away, ready to be filled in.
+      const { text, caret } = headDraft(command, path, options);
+      setDraft(channelId, text);
+      setCommandState(null);
+      setSubcommandSuggest(null);
+      // With required options the caret goes behind the first one; without, the optional ones are offered.
+      const required = options.some((o) => o.required);
+      setOptionSuggest(!required && chatCommands ? suggestOptions(text, chatCommands, command) : null);
+      // A single required option of a picked type opens its value list at once.
+      setValueSuggest(caret === text.length && chatCommands ? suggestValue(text, chatCommands, command) : null);
+      placeCaret(textareaRef, caret, true);
+    },
+    [setDraft, channelId, chatCommands],
+  );
+
+  const selectCommand = useCallback(
+    (row: CommandRow) => writeHead(row.command, row.path, row.options),
+    [writeHead],
+  );
+
+  // The subcommand popover's rows: the next step of the path whose name starts with what is typed.
+  const subcommandRows = useMemo(
+    () => (subcommandSuggest ? subcommandMatches(subcommandSuggest, draftText).slice(0, 25) : []),
+    [subcommandSuggest, draftText],
+  );
+
+  const selectSubcommand = useCallback(
+    (step: BotCommandOption) => {
+      if (!subcommandSuggest) return;
+      const { command } = subcommandSuggest;
+      const path = [...(commandPath(draftText, command)?.path ?? []), step.name];
+      if (step.type === 'subcommand') {
+        writeHead(command, path, step.options ?? []);
+        return;
+      }
+      // A group: its subcommands are offered next.
+      const text = ['/' + command.name, ...path].join(' ') + ' ';
+      setDraft(channelId, text);
+      setSubcommandSuggest(chatCommands ? suggestSubcommand(text, chatCommands, command) : null);
+      placeCaret(textareaRef, text.length, true);
+    },
+    [subcommandSuggest, draftText, writeHead, setDraft, channelId, chatCommands],
+  );
 
   const handleTyping = useCallback(() => {
     if (typingTimeoutRef.current) return;
@@ -321,6 +592,58 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       typingTimeoutRef.current = undefined;
     }
 
+    // A slash command of a bot in this chat: invoke it instead of posting the text.
+    const commandHead = /^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i.exec(trimmed);
+    if (commandHead && stagedTransfers.length === 0) {
+      // An Enter while the previous one is still resolving or invoking this command does nothing.
+      if (commandSubmitRef.current) return;
+      commandSubmitRef.current = true;
+      try {
+        const name = commandHead[1]!.toLowerCase();
+        const picked = pickedCommandRef.current;
+        const find = (list: BotCommandListing[]): BotCommandListing | undefined =>
+          (picked && picked.name === name ? picked : list.find((c) => c.name === name));
+        // A pasted command may be sent before the list has loaded: wait for it.
+        const command = find(chatCommands ?? await loadChatCommands());
+        if (command) {
+          // A command with subcommands is sent only with a path that reaches one.
+          const head = commandPath(trimmed, command, true);
+          if (!head?.options) {
+            addToast(t('chat:commands.chooseSubcommand', { names: (head?.next ?? []).map((o) => o.name).join(', ') }), 'warning');
+            return;
+          }
+          const parsed = parseCommandArgs({ options: head.options }, trimmed.slice(head.headEnd), commandContext);
+          if (!parsed.ok) {
+            addToast(t('chat:commands.extraText', { text: parsed.extra }), 'warning');
+            return;
+          }
+          // Consume the draft before the request, as a message send does; put it back on failure.
+          pickedCommandRef.current = null;
+          clearComposer(channelId);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.focus();
+          }
+          try {
+            await getApiForOrigin(getChannelOrigin(channelId)).commands.invoke({
+              botId: command.botId,
+              command: command.name,
+              ...(head.path.length > 0 ? { subcommand: head.path } : {}),
+              options: parsed.options,
+              ...(isDm ? { dmChannelId: channelId } : { channelId }),
+            });
+          } catch (err) {
+            const currentDraft = useComposerStore.getState().get(channelId).draftText;
+            setDraft(channelId, submittedDraft + (currentDraft ? '\n' + currentDraft : ''));
+            addToast(describeCommandError(err), 'warning');
+          }
+          return;
+        }
+      } finally {
+        commandSubmitRef.current = false;
+      }
+    }
+
     if (stagedTransfers.length === 0) {
       // Consume the draft synchronously; network completion must not erase newer typing.
       clearComposer(channelId);
@@ -384,6 +707,118 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const handleKeyDown = (e: React.KeyboardEvent): void => {
     // IME confirmation must not select a candidate or send the message.
     if (e.nativeEvent.isComposing) return;
+    // Value popover of a typed option: the same keys as the option popover.
+    if (valueSuggest && valueMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setValueSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.min(prev.selectedIndex + 1, valueMatches.length - 1) }
+          : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setValueSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }
+          : null));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && valueSuggest.touched)) {
+        e.preventDefault();
+        const selected = valueMatches[Math.min(valueSuggest.selectedIndex, valueMatches.length - 1)];
+        if (selected) selectValue(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setValueSuggest(null);
+        return;
+      }
+    }
+
+    // Subcommand popover: the same keys as the option popover.
+    if (subcommandSuggest && subcommandRows.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSubcommandSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.min(prev.selectedIndex + 1, subcommandRows.length - 1) }
+          : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSubcommandSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }
+          : null));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && subcommandSuggest.touched)) {
+        e.preventDefault();
+        const selected = subcommandRows[Math.min(subcommandSuggest.selectedIndex, subcommandRows.length - 1)];
+        if (selected) selectSubcommand(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSubcommandSuggest(null);
+        return;
+      }
+    }
+
+    // Option popover for the typed command: arrows move, Tab picks, Enter picks only after an arrow.
+    if (optionSuggest && optionMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setOptionSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.min(prev.selectedIndex + 1, optionMatches.length - 1) }
+          : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setOptionSuggest((prev) => (prev
+          ? { ...prev, touched: true, selectedIndex: Math.max(prev.selectedIndex - 1, 0) }
+          : null));
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && optionSuggest.touched)) {
+        e.preventDefault();
+        const selected = optionMatches[optionSuggest.selectedIndex];
+        if (selected) selectOption(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOptionSuggest(null);
+        return;
+      }
+    }
+
+    // Slash command popover keyboard navigation
+    if (commandState && commandMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCommandState((prev) => (prev ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, commandMatches.length - 1) } : null));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCommandState((prev) => (prev ? { ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) } : null));
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = commandMatches[commandState.selectedIndex];
+        if (selected) selectCommand(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setCommandState(null);
+        return;
+      }
+    }
+
     if (handleMentionKey(e)) return;
 
     const isPlainArrowUp = e.key === 'ArrowUp'
@@ -479,6 +914,57 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
     updateMention(e);
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+
+    // A pasted or typed command is looked up as soon as the text starts with "/", and
+    // asked for again at the start of every new command, so the list follows the bots.
+    if (value.startsWith('/') && (chatCommands === null || !draftText.startsWith('/'))) {
+      void loadChatCommands(chatCommands !== null);
+    }
+
+    // Detect a slash command: "/" at the very start of the message, no space typed yet.
+    const commandMatch = /^\/([a-z0-9_-]*)$/i.exec(value.slice(0, cursorPos));
+    if (commandMatch && cursorPos === value.length) {
+      // The command list is loaded above, as soon as the text starts with "/".
+      setCommandState({ query: commandMatch[1] ?? '', selectedIndex: 0 });
+    } else {
+      setCommandState(null);
+    }
+
+    // After "/name " the options of that command are offered, and the values of a
+    // user, role, channel or boolean option (only while the caret is at the end).
+    // Both read the draft as stored, mention tokens and all, so offsets match it.
+    const updated = mentionModel.update(value, cursorPos);
+    let wire = updated.value;
+    let atEnd = cursorPos === value.length;
+
+    // Typed or pasted arguments get the composer's spacing, as picked ones do,
+    // so their capsules have room. Only text that grew is respaced: a deleted
+    // space stays deleted, and an IME composition is left alone.
+    const named = chatCommands ? draftCommandName(wire) : null;
+    const picked = pickedCommandRef.current;
+    const typedCommand = named === null ? undefined
+      : picked && picked.name === named ? picked : chatCommands?.find((c) => c.name === named);
+    if (typedCommand && value.length > mentionModel.text.length && !(e.nativeEvent as InputEvent).isComposing) {
+      const spaced = spaceArguments(wire, typedCommand, updated.wireCursor);
+      if (spaced.text !== wire || spaced.caret !== updated.wireCursor) {
+        wire = spaced.text;
+        atEnd = spaced.caret === wire.length;
+        setDraft(channelId, wire);
+        placeCaret(textareaRef, modelFor(wire).toDisplay(spaced.caret));
+      }
+    }
+
+    // Names typed by hand are read against the chat, so a name of several words
+    // stays one value. While a value is being typed only its list is offered.
+    const commands = atEnd ? chatCommands : null;
+    const values = commands ? suggestValue(wire, commands, pickedCommandRef.current, commandContext) : null;
+    const steps = commands ? suggestSubcommand(wire, commands, pickedCommandRef.current) : null;
+    setValueSuggest(values);
+    setSubcommandSuggest(steps);
+    setOptionSuggest(commands && !values && !steps ? suggestOptions(wire, commands, pickedCommandRef.current, commandContext) : null);
+
 
     handleTyping();
 
@@ -781,10 +1267,53 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         </div>
       )}
       <div
+        ref={inputContainerRef}
         className={`relative ${chatReplyTo ? 'rounded-b-lg' : ''} overflow-visible`}
         onDrop={canAttachFiles ? handleDrop : undefined}
         onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
+        {/* Slash command popover */}
+        {commandState && commandMatches.length > 0 && (
+          <CommandPopover
+            commands={commandMatches}
+            selectedIndex={commandState.selectedIndex}
+            onSelect={selectCommand}
+            anchorRef={inputContainerRef}
+            origin={getChannelOrigin(channelId)}
+          />
+        )}
+
+        {/* Slash command subcommand popover */}
+        {subcommandSuggest && subcommandRows.length > 0 && (
+          <CommandSubcommandPopover
+            steps={subcommandRows}
+            selectedIndex={Math.min(subcommandSuggest.selectedIndex, subcommandRows.length - 1)}
+            onSelect={selectSubcommand}
+            anchorRef={inputContainerRef}
+          />
+        )}
+
+        {/* Slash command option popover */}
+        {optionSuggest && optionMatches.length > 0 && (
+          <CommandOptionPopover
+            options={optionMatches}
+            selectedIndex={Math.min(optionSuggest.selectedIndex, optionMatches.length - 1)}
+            onSelect={selectOption}
+            anchorRef={inputContainerRef}
+          />
+        )}
+
+        {/* Slash command value popover */}
+        {valueSuggest && valueMatches.length > 0 && (
+          <CommandValuePopover
+            optionName={valueSuggest.option.name}
+            candidates={valueMatches}
+            selectedIndex={Math.min(valueSuggest.selectedIndex, valueMatches.length - 1)}
+            onSelect={selectValue}
+            anchorRef={inputContainerRef}
+          />
+        )}
+
         {/* Mention autocomplete popover */}
         {mentionState && mentionMatches.length > 0 && (
           <MentionPopover
@@ -835,6 +1364,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             mentionAnchorRef={mentionAnchorRef}
             mentionStart={mentionState?.startIndex}
             model={mentionModel}
+            frames={argumentBoxes}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={canAttachFiles ? handlePaste : undefined}

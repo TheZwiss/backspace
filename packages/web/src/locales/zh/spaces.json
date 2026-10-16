@@ -363,7 +363,24 @@
       "kickFailed": "踢出成员失败",
       "banFailed": "封禁成员失败",
       "rolesAboveYou": "与您的最高身份组同级或更高的身份组已锁定。",
-      "rolesUnheld": "无法授予拥有您没有的权限的身份组。"
+      "rolesUnheld": "无法授予拥有您没有的权限的身份组。",
+      "rolesManagedByBot": "机器人自己的角色始终属于该机器人。",
+      "botInvite": {
+        "warning": "该机器人将成为此服务器的成员，并接收其权限允许的所有频道的消息和事件。请仅添加你信任的机器人。",
+        "owner": "所有者：@{{owner}}",
+        "button": "添加机器人",
+        "title": "添加机器人",
+        "searchPlaceholder": "按名称搜索机器人...",
+        "searching": "搜索中...",
+        "noResults": "未找到机器人",
+        "add": "添加",
+        "adding": "添加中...",
+        "permissionsTitle": "{{name}} 的权限",
+        "permissionsIntro": "机器人请求以下权限。它们会放入以机器人命名的角色；取消勾选你不想授予的权限。",
+        "permissionsUnheld": "你自己没有的权限无法授予。",
+        "permissionsNone": "未勾选任何权限：机器人将不带角色加入。",
+        "back": "返回"
+      }
     }
   },
   "bans": {
@@ -390,6 +407,7 @@
     "backToList": "返回身份组列表",
     "created": "身份组已创建。请在下方进行个性化配置。",
     "aboveYou": "此身份组与您的最高身份组同级或更高。您可以查看，但无法更改。",
+    "managedByBot": "此角色属于一个机器人。机器人离开空间时它会被移除，不能分配给他人或删除。可以更改其权限。",
     "reorder": {
       "handle": "移动 {{name}}",
       "handleHint": "拖动，或使用上下方向键",

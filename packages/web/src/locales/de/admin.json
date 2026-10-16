@@ -411,7 +411,8 @@
       "oldest": "Älteste zuerst",
       "nameDesc": "Name Z bis A",
       "deleted": "Gelöschte",
-      "clear": "Filter zurücksetzen"
+      "clear": "Filter zurücksetzen",
+      "bot": "Bot-Konten"
     },
     "badge": {
       "admin": "Administrator",
@@ -449,7 +450,15 @@
     "deleteDialog": {
       "title": "Nutzer löschen",
       "description": "<strong>{{username}}</strong> endgültig löschen? Die Person wird aus allen Spaces, Direktnachrichten und Freundeslisten entfernt. Das lässt sich nicht rückgängig machen.",
-      "confirm": "Nutzer löschen"
+      "confirm": "Nutzer löschen",
+      "blockBot": "Erneute Registrierung dieses Bots verhindern",
+      "blockBotHint": "Wenn seine Heiminstanz wieder erreichbar ist, kann der Bot hier kein Konto anlegen. Entsperren kannst du ihn unter der Benutzerliste."
+    },
+    "blockedBots": {
+      "title": "Gesperrte Bots",
+      "description": "Bots anderer Instanzen, die sich hier nicht registrieren dürfen. Entsperre einen Bot, um ihn wieder zuzulassen.",
+      "blockedAt": "Gesperrt am {{date}}",
+      "unblock": "Entsperren"
     }
   },
   "mobile": {

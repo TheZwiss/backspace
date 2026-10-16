@@ -13,6 +13,7 @@ import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/Act
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable, spaceMemberName } from '../../utils/identity';
 import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
+import { BotBadge } from '../ui/BotBadge';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { groupMembers, memberNameColor, type MemberGroupKind } from '../../utils/memberGroups';
@@ -86,6 +87,7 @@ function MemberSidebarRow({
           style={colorStyle}
         >
           {displayName}
+          {member.user.isBot && <BotBadge className="ml-1.5" />}
         </span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
           <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>

@@ -161,6 +161,23 @@
     "unknownSender": "Jemand",
     "attachmentOnly": "Hat einen Anhang gesendet"
   },
+  "commands": {
+    "title": "Befehle",
+    "failed": "Der Befehl konnte nicht gesendet werden",
+    "extraText": "Dieser Befehl nimmt keinen freien Text, aber „{{text}}“ bleibt übrig. Erst die Optionen, dann der Text",
+    "invalidOption": "Der Wert von {{option}} passt nicht zu diesem Befehl.",
+    "optionsTitle": "Parameter",
+    "required": "erforderlich",
+    "subcommandsTitle": "Unterbefehle",
+    "group": "Gruppe",
+    "chooseSubcommand": "Wähle einen Unterbefehl: {{names}}",
+    "subcommandRefused": "Der Bot bietet diesen Unterbefehl nicht an. Wähle einen aus der Liste"
+  },
+  "ephemeral": {
+    "onlyYou": "Nur du siehst das",
+    "dismiss": "Ausblenden",
+    "rowLabel": "Antwort von {{author}}, die nur du siehst, {{time}}"
+  },
   "embed": {
     "loadAction": "Zum Laden klicken",
     "loadNamed": "{{name}} laden",

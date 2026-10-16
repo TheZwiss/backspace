@@ -12,6 +12,7 @@ The chat message list (`packages/web/src/components/chat/MessageList.tsx`) is re
 | `packages/web/src/components/chat/messageJumpContext.ts` | `MessageJumpContext` / `useMessageJump()`: the list's jump handle for its rows. |
 | `packages/web/src/components/chat/embeds/*.tsx` | Embed renderers — must obey the dimension reservation contract below. |
 | `packages/web/src/components/chat/AttachmentRenderer.tsx` | Reference for the dimension reservation pattern (`AttachmentRenderer.tsx:81-100`). |
+| `packages/web/src/components/chat/EphemeralReplyRow.tsx` | A bot's answer only the signed-in person sees (`stores/ephemeralReplyStore.ts`): drawn after the last row it is not older than, outside `interleavedMessages`, so it takes no part in anchors, unread or paging; in a detached window one newer than the last row is not drawn. The row after it starts a new group. See bots.md, "Answering". |
 
 ## Bottom clearance — `--composer-clearance`
 

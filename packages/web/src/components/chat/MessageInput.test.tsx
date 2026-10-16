@@ -172,6 +172,223 @@ describe('MessageInput slow sends', () => {
   });
 });
 
+describe('MessageInput slash commands', () => {
+  // jsdom does not implement scrollIntoView; the command popover scrolls its selection.
+  beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(); });
+
+  const play = {
+    id: 'cmd-1',
+    name: 'play',
+    description: 'Play a song',
+    options: [],
+    botId: 'bot-1',
+    updatedAt: 1,
+    bot: { id: 'bot-1', username: 'radio_bot', displayName: null, avatar: null, avatarColor: null },
+  };
+
+  it('invokes a command once however often Enter is pressed while it is on its way', async () => {
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [play] } as never);
+    let finish!: () => void;
+    const invoking = new Promise<never>(resolve => { finish = () => resolve({ id: 'i1' } as never); });
+    const invoke = vi.spyOn(api.commands, 'invoke').mockReturnValue(invoking);
+    useComposerStore.getState().setDraft('dm-1', '/play');
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    const input = screen.getByRole('textbox');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await act(async () => { finish(); await invoking; });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(input).toHaveValue('');
+  });
+
+  it('puts the command back when the invocation fails', async () => {
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [play] } as never);
+    vi.spyOn(api.commands, 'invoke').mockRejectedValue(new Error('Bot offline'));
+    useComposerStore.getState().setDraft('dm-1', '/play');
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/play'));
+    expect(useUIStore.getState().toasts).toEqual([expect.objectContaining({ message: 'Bot offline', type: 'warning' })]);
+  });
+
+  it('offers the people of the chat for a user option and invokes with the picked id', async () => {
+    // The list offers the other people of the DM, never oneself.
+    const bob: User = { ...me, id: 'bob', username: 'bob', displayName: 'Bob' };
+    useSpaceStore.getState().reset();
+    useSpaceStore.getState().populateFromReady('', [], [], [{
+      id: 'dm-1',
+      federatedId: null,
+      ownerId: null,
+      ownerHomeUserId: null,
+      ownerHomeInstance: null,
+      createdAt: 1,
+      members: [me, bob],
+      lastMessage: null,
+      name: null,
+      icon: null,
+      metadataUpdatedAt: 1,
+    }]);
+    const poke = { ...play, id: 'cmd-2', name: 'poke', options: [{ name: 'who', description: 'Who', type: 'user', required: true }] };
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [poke] } as never);
+    const invoke = vi.spyOn(api.commands, 'invoke').mockResolvedValue({ id: 'i1', expiresAt: 1 } as never);
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    await waitFor(() => expect(api.commands.forChat).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+
+    // Picking the command opens the list of people at once.
+    fireEvent.change(input, { target: { value: '/po', selectionStart: 3 } });
+    fireEvent.click(await screen.findByText('/poke'));
+    expect(await screen.findByText('Bob')).toBeTruthy();
+    // The required option is written with the composer's spacing, ready for its value.
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('/poke\u2003who:\u2009\u2002');
+
+    fireEvent.change(input, { target: { value: '/poke who:bo', selectionStart: 12 } });
+    expect(await screen.findByText('Bob')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Tab' });
+    await waitFor(() => expect(input).toHaveValue('/poke who:@Bob'));
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('/poke who:<@bob>');
+    // Nothing is offered after a picked value, so this Enter sends.
+    expect(screen.queryByText('Bob')).toBeNull();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'poke',
+      options: { who: 'bob' },
+      dmChannelId: 'dm-1',
+    })));
+  });
+
+  it('offers the choices of an option by name and sends the chosen value; a space opens the next options', async () => {
+    const play2 = {
+      ...play,
+      id: 'cmd-3',
+      name: 'volume',
+      options: [
+        { name: 'level', description: 'Level', type: 'integer', required: true, choices: [{ name: 'quiet', value: 20 }, { name: 'loud', value: 80 }] },
+        { name: 'fade', description: 'Fade', type: 'boolean', required: false },
+      ],
+    };
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [play2] } as never);
+    const invoke = vi.spyOn(api.commands, 'invoke').mockResolvedValue({ id: 'i1', expiresAt: 1 } as never);
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '/vol', selectionStart: 4 } });
+    fireEvent.click(await screen.findByText('/volume'));
+    expect(await screen.findByText('quiet')).toBeTruthy();
+    fireEvent.change(input, { target: { value: '/volume level:lo', selectionStart: 16 } });
+    expect(await screen.findByText('loud')).toBeTruthy();
+    expect(screen.queryByText('quiet')).toBeNull();
+    fireEvent.keyDown(input, { key: 'Tab' });
+    await waitFor(() => expect(input).toHaveValue('/volume level:loud'));
+
+    // A space after the value offers the options not written yet.
+    fireEvent.change(input, { target: { value: '/volume level:loud ', selectionStart: 19 } });
+    expect(await screen.findByText('fade:')).toBeTruthy();
+    fireEvent.change(input, { target: { value: '/volume level:loud', selectionStart: 18 } });
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'volume',
+      options: { level: 80 },
+    })));
+
+    // A pasted command gets the same spacing as picked arguments.
+    fireEvent.change(input, { target: { value: '/volume level:loud fade:true', selectionStart: 28 } });
+    expect(useComposerStore.getState().get('dm-1').draftText)
+      .toBe('/volume\u2003level:\u2009\u2002loud\u2003\u2002fade:\u2009\u2002true');
+  });
+
+  it('lists each subcommand, writes its path and invokes it with the path', async () => {
+    const music = {
+      ...play,
+      id: 'cmd-4',
+      name: 'music',
+      options: [
+        { name: 'play', description: 'Play now', type: 'subcommand', required: false, options: [] },
+        { name: 'queue', description: 'The queue', type: 'subcommand_group', required: false, options: [
+          { name: 'add', description: 'Add a track', type: 'subcommand', required: false, options: [
+            { name: 'level', description: 'Level', type: 'integer', required: true, choices: [{ name: 'loud', value: 80 }] },
+          ] },
+          { name: 'clear', description: 'Empty it', type: 'subcommand', required: false, options: [] },
+        ] },
+      ],
+    };
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [music] } as never);
+    const invoke = vi.spyOn(api.commands, 'invoke').mockResolvedValue({ id: 'i1', expiresAt: 1 } as never);
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    const input = screen.getByRole('textbox');
+
+    // The command list has a row per subcommand.
+    fireEvent.change(input, { target: { value: '/mu', selectionStart: 3 } });
+    expect(await screen.findByText('/music play')).toBeTruthy();
+    expect(screen.getByText('/music queue clear')).toBeTruthy();
+    fireEvent.click(screen.getByText('/music queue add'));
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('/music queue add\u2003level:\u2009\u2002');
+    expect(await screen.findByText('loud')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'Tab' });
+    await waitFor(() => expect(useComposerStore.getState().get('dm-1').draftText).toBe('/music queue add\u2003level:\u2009\u2002loud'));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'music',
+      subcommand: ['queue', 'add'],
+      options: { level: 80 },
+    })));
+
+    // Typed by hand, the next step is offered after each space.
+    fireEvent.change(input, { target: { value: '/music ', selectionStart: 7 } });
+    expect(await screen.findByText('queue')).toBeTruthy();
+    expect(screen.getByText('play')).toBeTruthy();
+    fireEvent.change(input, { target: { value: '/music q', selectionStart: 8 } });
+    fireEvent.keyDown(input, { key: 'Tab' });
+    await waitFor(() => expect(useComposerStore.getState().get('dm-1').draftText).toBe('/music queue '));
+    expect(await screen.findByText('clear')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Tab' });
+    await waitFor(() => expect(useComposerStore.getState().get('dm-1').draftText).toBe('/music queue clear '));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(invoke).toHaveBeenLastCalledWith(expect.objectContaining({ subcommand: ['queue', 'clear'], options: {} })));
+  });
+
+  it('does not send a command with subcommands before one is chosen', async () => {
+    const music = {
+      ...play,
+      id: 'cmd-5',
+      name: 'music',
+      options: [
+        { name: 'play', description: 'Play now', type: 'subcommand', required: false, options: [] },
+        { name: 'stop', description: 'Stop', type: 'subcommand', required: false, options: [] },
+      ],
+    };
+    vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [music] } as never);
+    const invoke = vi.spyOn(api.commands, 'invoke').mockResolvedValue({ id: 'i1', expiresAt: 1 } as never);
+    useComposerStore.getState().setDraft('dm-1', '/music');
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+    await waitFor(() => expect(useUIStore.getState().toasts).toEqual([
+      expect.objectContaining({ message: 'Choose a subcommand: play, stop', type: 'warning' }),
+    ]));
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useComposerStore.getState().get('dm-1').draftText).toBe('/music');
+  });
+
+  it('asks for the command list again when a new command starts', async () => {
+    const forChat = vi.spyOn(api.commands, 'forChat').mockResolvedValue({ commands: [play] } as never);
+    render(<MessageInput channelId="dm-1" channelName="general" />);
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    await waitFor(() => expect(forChat).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, { target: { value: '/p', selectionStart: 2 } });
+    expect(forChat).toHaveBeenCalledTimes(1);
+    fireEvent.change(input, { target: { value: '', selectionStart: 0 } });
+    fireEvent.change(input, { target: { value: '/', selectionStart: 1 } });
+    await waitFor(() => expect(forChat).toHaveBeenCalledTimes(2));
+  });
+});
+
 it('sends a personal sticker without discarding the current text draft', async () => {
   const token = `sticker:https://chat.test/api/stickers/assets/${'a'.repeat(64)}.webp`;
   vi.spyOn(api.stickers, 'list').mockResolvedValue([{ id: 'a'.repeat(64), name: 'Happy', token }]);

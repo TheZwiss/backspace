@@ -86,7 +86,7 @@ type CheckInviteResponse =
 GET    /users/@me                                        → { user }
 PATCH  /users/@me             { displayName?, avatar?, banner?, accentColor?, avatarColor?,
                                 bio?, customStatus?, status?, replicatedInstances?, homeUserId?,
-                                profileUpdatedAt?, discoverable?, showActivity? } → { user }
+                                profileUpdatedAt?, discoverable?, showActivity?, developerMode? } → the updated user (self view; `developerMode` is in the self view only, and a change is pushed as `user_updated` to the account's own sockets only)
 POST   /users/@me/verify-password  { password }          → { valid }
 POST   /users/@me/change-password  { currentPassword?, newPassword } → { token }
 DELETE /users/@me             { password, username }      → { success }
@@ -422,7 +422,9 @@ GET    /admin/users  ?q=&page=&pageSize=&showDeleted=&homeInstance=&role=&joined
 GET    /admin/users/instances                              → distinct home instance domains
 PATCH  /admin/users/:id/role         { isAdmin }           → AdminUser
 POST   /admin/users/:id/reset-password                     → { temporaryPassword }
-DELETE /admin/users/:id                                    → { success }
+DELETE /admin/users/:id        ?blockBot=1                 → { success } [blockBot: a bot with a homeInstance only, else 400 bot_block_not_federated; its proof is refused at register (403 bot_blocked)]
+GET    /admin/blocked-bots                                 → { bots: AdminBlockedBot[] } (newest first)
+DELETE /admin/blocked-bots/:homeInstance/:homeUserId       → { success } (404 blocked_bot_not_found)
 ```
 
 ## Admin: Instance Updates (`routes/adminUpdates.ts`) — admin required
@@ -701,3 +703,38 @@ POST /csp-report     (no auth) -> 204
 ```
 
 **`POST /api/csp-report`** is the Content Security Policy violation sink named by the policy's `report-uri` and `report-to`. Unauthenticated on purpose: a violation can happen on the login screen before any token exists. It registers content-type parsers for `application/csp-report` and `application/reports+json` in addition to the built-in `application/json`. Fastify ships parsers for neither of the first two and would otherwise answer 415, leaving an empty report log that looks exactly like a clean policy. It answers `204` to everything, including a malformed body, because a browser cannot act on an error and would only retry. It reads at most 16 KB off the wire and logs at most 4096 characters per report at `warn` level with the message `CSP violation reported`. Registered after `@fastify/rate-limit` so the shared 200/minute limit applies; that ordering is load-bearing. See `docs/systems/web-security.md`.
+
+## Bots (`routes/bots.ts`, `routes/reactions.ts`)
+
+Full reference in [bots.md](bots.md). Owner endpoints need the JWT of a native human account.
+
+```
+GET /bots → { bots: BotSummary[] }
+POST /bots { name } → 201 { bot, token } [5 per 15 min; the _bot suffix is appended when missing; max 10 per owner]
+PATCH /bots/:id { displayName?, avatar?, bio?, activity?, requestedPermissions? } → { bot } [owner; displayName must end with _bot; bio ≤ 190 (400 bio_too_long); activity { type: custom|playing|listening|watching, name 1-128 } or null (400 bot_activity_invalid); requestedPermissions: canonical decimal mask (400 bot_permissions_invalid); a new displayName renames the bot's managed roles; bots.md 3, 4]
+POST /bots/:id/token → { token, federation } [5 per 15 min; revokes earlier tokens, cuts the bot off on other instances; per origin `federation` says success, a failure that is still `pending` (retried in the background) or a final refusal; see bots.md, "Revocation retries"]
+GET /bots/:id/tokens → { tokens: BotTokenSummary[], legacy } [owner; no secrets; 30 per 15 min]
+POST /bots/:id/tokens { name? } → 201 { id, name, createdAt, lastUsedAt, token } [owner; 5 per 15 min; max 5 per bot; the secret is shown once]
+DELETE /bots/:id/tokens/:tokenId → { success } [owner; closes the bot's sockets; 30 per 15 min]
+DELETE /bots/:id → { success, federation }
+GET /bots/search?q= → { bots: BotSearchResult[] } [discoverable bots a manager here may add: native ones and registered accounts of bots of other instances; username substring of 2-32 chars, up to 25; each result adds ownerUsername, null when the owner is deleted or not discoverable; 60 per min]
+GET /bots/:id/spaces → { spaces: [{ id, name, icon, botIsMember }] } [owner; the caller's MANAGE_SPACE spaces plus every space the bot already sits in]
+POST /bots/:id/spaces { spaceId, permissions? } → { success } [a native bot or a registered account of another instance's bot; MANAGE_SPACE in the space; permissions ⊆ requested (400 bot_permissions_not_requested) and held (403 cannot_grant_unowned_permissions); omitted: requested ∩ held; a non-empty grant creates the bot's managed role; bots.md 4]
+DELETE /bots/:id/spaces/:spaceId → { success } [the bot's owner, or MANAGE_SPACE in the space]
+PUT /messages/:id/reactions/:emoji → { success, changed } [ADD_REACTIONS for space messages; channel or DM message, found by id]
+DELETE /messages/:id/reactions/:emoji → { success, changed } [own reaction]
+```
+
+`Authorization: Bot <token>` is accepted wherever `Bearer <token>` is (including tus uploads). `POST /auth/register` also takes `botProof` for a bot registering on another instance (bots.md, section 7).
+
+### Slash commands (`routes/botCommands.ts`, `routes/interactions.ts`)
+
+Full reference in [bots.md](bots.md), section 5b.
+```
+PUT    /bots/@me/commands          { commands } → { commands }          [bot token; replaces the whole list; 10 per 5 min]
+GET    /bots/@me/commands          → { commands }                       [bot token]
+GET    /commands                   ?channelId= | ?dmChannelId= → { commands } [caller sees the chat; commands of the bots in it the caller may use (requiredPermissions), with `bot`]
+POST   /interactions               { botId, command, subcommand?, options?, channelId | dmChannelId } → 201 { id, expiresAt } [a person (a bot caller: 403 bots_cannot_invoke_commands); member + SEND_MESSAGES; bot in chat and connected; 5 per 5 s]
+POST   /interactions/:id/respond   { content?, attachments?, ephemeral? } → 201 message | ephemeral reply [the invoked bot; 15 min, 5 responses; goes through the message routes; `ephemeral: true`: text only, not stored, sent to the invoker alone]
+```
+Errors: `bot_account_required`, `command_not_found`, `missing_permission` (403, the command's requiredPermissions), `bot_unavailable` (409), `interaction_not_found`, `interaction_expired` (410), `interaction_responses_exceeded` (429), and `validation_failed` with `details.field` for a bad definition or option value.

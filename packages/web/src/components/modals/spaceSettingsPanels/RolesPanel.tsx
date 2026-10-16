@@ -17,6 +17,7 @@ import {
 } from '../../../utils/roleHierarchy';
 import { RoleOrderList } from './RoleOrderList';
 import { withSavedRole } from '../../../utils/roleOrder';
+import { isBotManagedRole } from '../../../utils/botRoles';
 import { LockNote, LOCK_ICON } from '../../ui/LockNote';
 
 const ALL_PERMISSION_DEFS: PermDef[] = PERMISSION_GROUPS.flatMap((group) => group.perms);
@@ -161,8 +162,10 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const held = useViewerHeldPermissions(spaceId);
   const copyCarriesUnheld = !viewerCanCreateRoleWith(held, stringToPermissions(role.permissions));
   const canCopy = (!space || viewerCanManageRoleAt(space, members, 1)) && !copyCarriesUnheld;
+  // A bot's managed role goes when the bot leaves, not on its own.
+  const isManaged = isBotManagedRole(role);
   // Deleting switches the role's bits off for everyone holding it.
-  const offersDelete = !isEveryone && canEdit;
+  const offersDelete = !isEveryone && !isManaged && canEdit;
   const deleteCarriesUnheld = offersDelete && !viewerHoldsEveryBit(held, stringToPermissions(role.permissions));
   const hasUnheldToggle = canEdit && ALL_PERMISSION_DEFS.some((perm) => !viewerCanSwitchBit(held, perm.bit));
   // Every role write goes to the space's own instance (client-federation.md).
@@ -348,6 +351,8 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       )}
 
       {!canEdit && <LockNote>{t('spaces:roles.aboveYou')}</LockNote>}
+
+      {isManaged && <LockNote>{t('spaces:roles.managedByBot')}</LockNote>}
 
       {(hasUnheldToggle || copyCarriesUnheld) && (
         <LockNote>

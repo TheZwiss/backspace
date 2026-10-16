@@ -9,6 +9,7 @@ import {
 } from './federationOutbox.js';
 import { isOutboxQueueHead, markOutboxOffered, refusalEndsOutboxQueue } from './federationOutboxQueue.js';
 import { runFederationJanitor } from './storageJanitor.js';
+import { runBotRevocationRetries } from './botRevocationQueue.js';
 import { buildFederationHeaders, getOurOrigin, generateHmacSecret, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
 import { evaluateAuthFailure, AUTH_FAILURE_THRESHOLD } from './federationAuthFailure.js';
 import { generateSnowflake } from './snowflake.js';
@@ -50,6 +51,7 @@ const RECOVERY_TICK_INTERVAL_MS = 5_000;   // 5 seconds — demand-driven recove
  */
 const RECOVERY_BACKOFF_MS: readonly number[] = [30_000, 60_000, 300_000, 900_000];
 const JANITOR_INTERVAL_MS = 3_600_000;     // 1 hour
+const BOT_REVOCATION_INTERVAL_MS = 300_000; // 5 minutes (rows carry their own backoff; idle passes are one SELECT)
 
 const OUTBOX_BATCH_LIMIT = 50;
 const FILE_QUEUE_BATCH_LIMIT = 5;
@@ -94,6 +96,7 @@ let fileQueueTimer: ReturnType<typeof setTimeout> | null = null;
 let healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
 let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let janitorTimer: ReturnType<typeof setTimeout> | null = null;
+let botRevocationTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Handshake attempts the outbox worker has started for `pending` peers, keyed by
@@ -1361,6 +1364,16 @@ function scheduleJanitorTick(): void {
   }, JANITOR_INTERVAL_MS);
 }
 
+// ─── Bot revocation retries ──────────────────────────────────────────────────
+
+function scheduleBotRevocationTick(): void {
+  botRevocationTimer = setTimeout(() => {
+    runBotRevocationRetries()
+      .catch(err => console.error('[federation-worker] bot revocation retry failed:', err))
+      .finally(scheduleBotRevocationTick);
+  }, BOT_REVOCATION_INTERVAL_MS);
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 export function startFederationWorkers(): void {
@@ -1370,6 +1383,7 @@ export function startFederationWorkers(): void {
   scheduleHealthCheckTick();
   scheduleRecoveryTick();
   scheduleJanitorTick();
+  scheduleBotRevocationTick();
   startPeerSyncWorkers();
   federatedCallSentinelTimer = setInterval(() => {
     runFederatedCallSentinelTick().catch(err =>
@@ -1433,6 +1447,11 @@ export function stopFederationWorkers(): void {
   if (janitorTimer) {
     clearTimeout(janitorTimer);
     janitorTimer = null;
+  }
+
+  if (botRevocationTimer) {
+    clearTimeout(botRevocationTimer);
+    botRevocationTimer = null;
   }
 
   if (federatedCallSentinelTimer) {

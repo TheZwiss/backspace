@@ -6,6 +6,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import type { MemberWithUser } from '@backspace/shared';
+import { setLocalMute } from '../../utils/voiceLocalKeys';
 
 vi.mock('../../audio/AudioManager', () => ({
   AudioManager: { getInstance: () => ({}) },
@@ -232,5 +233,55 @@ describe('VoiceChannel own row', () => {
     expect(rowOf('Bob')).toHaveAttribute('draggable', 'true');
     fireEvent.contextMenu(rowOf('Ada'));
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe('VoiceChannel local mute of a bot seat', () => {
+  it('a bot muted by the listener in one channel shows as muted there only', () => {
+    const members = [
+      { userId: '1', user: { id: '1', username: 'ada', displayName: 'Ada', avatar: null }, roles: [] },
+      { userId: '2', user: { id: '2', username: 'echo_bot', displayName: 'Echo_bot', avatar: null, isBot: true }, roles: [] },
+    ] as unknown as MemberWithUser[];
+    useSpaceStore.setState({
+      members,
+      channelToSpaceMap: new Map([['voice-1', 'space-1'], ['voice-2', 'space-1']]),
+    });
+    useVoiceStore.setState({
+      currentVoiceChannelId: null,
+      isLiveKitConnected: false,
+      participants: [],
+      voiceUsers: new Map([['voice-1', ['2']], ['voice-2', ['2']]]),
+    });
+
+    setLocalMute('2', 'voice-1', true);
+
+    const first = renderChannel();
+    expect(screen.getByTitle('Locally Muted')).toBeInTheDocument();
+    first.unmount();
+
+    render(<VoiceChannel channelId="voice-2" channelName="Other" onClick={() => {}} canManage={false} onSettingsClick={() => {}} />);
+    expect(screen.queryByTitle('Locally Muted')).toBeNull();
+  });
+});
+
+describe('VoiceChannel bot rows', () => {
+  it('marks a bot in the channel with the bot badge and a person without it', () => {
+    const members = [
+      { userId: '1', user: { id: '1', username: 'ada', displayName: 'Ada', avatar: null }, roles: [] },
+      { userId: '2', user: { id: '2', username: 'echo_bot', displayName: 'Echo_bot', avatar: null, isBot: true }, roles: [] },
+    ] as unknown as MemberWithUser[];
+    useSpaceStore.setState({ members, channelToSpaceMap: new Map([['voice-1', 'space-1']]) });
+    useVoiceStore.setState({
+      currentVoiceChannelId: null,
+      isLiveKitConnected: false,
+      participants: [],
+      voiceUsers: new Map([['voice-1', ['1', '2']]]),
+    });
+
+    renderChannel();
+
+    expect(screen.getAllByText('BOT')).toHaveLength(1);
+    expect(screen.getByText('Echo_bot').parentElement).toHaveTextContent('BOT');
+    expect(screen.getByText('Ada').parentElement).not.toHaveTextContent('BOT');
   });
 });

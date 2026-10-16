@@ -320,6 +320,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       avatarColor: schema.users.avatarColor,
       status: schema.users.status,
       isDeleted: schema.users.isDeleted,
+      isBot: schema.users.isBot,
     })
     .from(schema.dmMembers)
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
@@ -349,6 +350,8 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
         // Only carry presence for native participants — replicated stubs hold
         // stale status owned by their home; emitting it would flap remote UIs.
         status: !m.homeInstance ? (m.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
+        // Only the home names its bots (receivers check that the sender is the home).
+        ...(m.isBot === 1 && !m.homeInstance ? { isBot: true } : {}),
       },
     };
   });
@@ -1014,6 +1017,7 @@ export function queueGroupMetadataRelay(
       avatar: schema.users.avatar,
       avatarColor: schema.users.avatarColor,
       status: schema.users.status,
+      isBot: schema.users.isBot,
     })
     .from(schema.users)
     .where(eq(schema.users.id, payload.actor.userId))
@@ -1035,6 +1039,7 @@ export function queueGroupMetadataRelay(
       // Only carry presence for native participants — replicated stubs hold
       // stale status owned by their home; emitting it would flap remote UIs.
       status: !actorRow.homeInstance ? (actorRow.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
+      ...(actorRow.isBot === 1 && !actorRow.homeInstance ? { isBot: true } : {}),
     },
   };
 

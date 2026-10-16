@@ -157,6 +157,23 @@
     "unknownSender": "有人",
     "attachmentOnly": "发送了一个附件"
   },
+  "commands": {
+    "title": "命令",
+    "failed": "无法发送该命令",
+    "extraText": "此命令没有文本参数，但剩下了“{{text}}”。请先写选项，再写文本",
+    "invalidOption": "{{option}} 的值不适用于此命令。",
+    "optionsTitle": "参数",
+    "required": "必填",
+    "subcommandsTitle": "子命令",
+    "group": "组",
+    "chooseSubcommand": "请选择子命令：{{names}}",
+    "subcommandRefused": "机器人不提供此子命令，请从列表中选择"
+  },
+  "ephemeral": {
+    "onlyYou": "仅你可见",
+    "dismiss": "关闭",
+    "rowLabel": "来自 {{author}} 的仅你可见的回复，{{time}}"
+  },
   "embed": {
     "loadAction": "点击加载",
     "loadNamed": "加载 {{name}}",

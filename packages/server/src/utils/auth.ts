@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { ErrorCode } from '@backspace/shared/src/errors';
+import { isBotTokenString, isRetiredLegacyBotJwt, verifyBotToken } from './botTokens.js';
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, config.passwordHashCost);
@@ -20,9 +21,9 @@ export interface JwtPayload {
   iat?: number;
 }
 
-export function signJwt(payload: JwtPayload): string {
+export function signJwt(payload: JwtPayload, opts?: { expiresIn?: string }): string {
   const options: jwt.SignOptions = {
-    expiresIn: config.jwtExpiresIn as unknown as jwt.SignOptions['expiresIn'],
+    expiresIn: (opts?.expiresIn ?? config.jwtExpiresIn) as unknown as jwt.SignOptions['expiresIn'],
   };
   return jwt.sign(payload, config.jwtSecret, options);
 }
@@ -49,19 +50,26 @@ export class AuthError extends Error {
 }
 
 /**
- * Verify a JWT token AND confirm the user still exists, isn't deleted,
- * and the token hasn't been revoked by a password change. Returns the
- * resolved user identity. Throws AuthError (statusCode = 401) on any
- * failure.
+ * Resolve an access token to its account: a bot token (`bsb_...`, checked
+ * against its stored hash) or a JWT (user sessions, and the federated bot
+ * accounts a host creates). Confirms the account still exists, isn't deleted,
+ * and a JWT hasn't been revoked by a password change. Throws AuthError
+ * (statusCode = 401) on any failure.
  *
  * Used by Fastify's `authenticate` preHandler AND by raw-IncomingMessage
  * paths (tus hooks) that can't go through the preHandler pipeline.
  */
-export async function verifyJwtAndUser(token: string): Promise<{
+export async function verifyAccessToken(token: string): Promise<{
   userId: string;
   username: string;
   homeInstance: string | null;
 }> {
+  if (isBotTokenString(token)) {
+    const resolved = verifyBotToken(token);
+    if (resolved === 'deleted') throw new AuthError('This account has been deleted', 401, 'account_deleted');
+    if (resolved === 'invalid') throw new AuthError('Invalid or expired token', 401);
+    return resolved;
+  }
   let payload: JwtPayload;
   try {
     payload = verifyJwt(token);
@@ -75,6 +83,7 @@ export async function verifyJwtAndUser(token: string): Promise<{
     isDeleted: schema.users.isDeleted,
     passwordChangedAt: schema.users.passwordChangedAt,
     homeInstance: schema.users.homeInstance,
+    isBot: schema.users.isBot,
   }).from(schema.users).where(eq(schema.users.id, payload.userId)).get();
 
   if (!user || user.isDeleted === 1) {
@@ -89,6 +98,10 @@ export async function verifyJwtAndUser(token: string): Promise<{
     }
   }
 
+  if (isRetiredLegacyBotJwt({ id: user.id, isBot: user.isBot, homeInstance: user.homeInstance })) {
+    throw new AuthError('Token has been revoked', 401);
+  }
+
   return {
     userId: payload.userId,
     username: payload.username,
@@ -96,19 +109,26 @@ export async function verifyJwtAndUser(token: string): Promise<{
   };
 }
 
+/** The token of an `Authorization` header: `Bearer <token>`, or its alias `Bot <token>`. Null for anything else. */
+export function tokenFromAuthHeader(header: string | undefined): string | null {
+  if (!header) return null;
+  for (const scheme of ['Bearer ', 'Bot ']) {
+    if (header.startsWith(scheme)) return header.slice(scheme.length);
+  }
+  return null;
+}
+
 export async function authenticate(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const authHeader = request.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const token = tokenFromAuthHeader(request.headers.authorization);
+  if (token === null) {
     reply.code(401).send({ error: 'Missing or invalid authorization header', code: 'unauthorized', statusCode: 401 });
     return;
   }
-
-  const token = authHeader.slice(7);
   try {
-    const identity = await verifyJwtAndUser(token);
+    const identity = await verifyAccessToken(token);
     (request as FastifyRequest & { userId: string; username: string }).userId = identity.userId;
     (request as FastifyRequest & { userId: string; username: string }).username = identity.username;
     (request as FastifyRequest & { userId: string; username: string }).homeInstance = identity.homeInstance;

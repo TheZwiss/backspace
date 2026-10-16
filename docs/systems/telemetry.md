@@ -521,3 +521,7 @@ See [metrics.md](metrics.md) section 10.8 for the gate and its three wordings.
 
 The server reads no telemetry environment variable other than the endpoint. The
 opt-in state lives in the database and nowhere else.
+
+## Bot accounts
+
+Bot accounts (`users.is_bot = 1`) are not counted as users: `registered` and every `active*` figure exclude them (the `LOCAL_USER` predicate in `telemetry/payload.ts`).

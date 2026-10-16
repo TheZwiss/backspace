@@ -19,7 +19,7 @@ import { parseDmSystemEvent, RELAYABLE_DM_SYSTEM_EVENTS } from '@backspace/share
 import type { RelayDelivery } from './dispatch.js';
 import { buildDmMessagePayload, dmChannelMembers, isRelayTarget, isUrlFromPeer, mayRelayInto, memberWithIdentity, nonMemberRefusal, resolveLocalDmMessage, resolveRelayedReplyTarget } from '../dmChannels.js';
 import { attributionRefusal, extractDomain, relayActorOfUser, resolveOrCreateReplicatedUser, resolveRelayActor, sameRelayActor } from '../identity.js';
-import { hydrateReplicatedUserProfile } from '../profile.js';
+import { applyHomeBotFlag, hydrateReplicatedUserProfile } from '../profile.js';
 
 export async function processCreateEvent(
   event: FederationRelayEvent,
@@ -102,6 +102,8 @@ export async function processCreateEvent(
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
     if (p.profile) {
       localUser = await hydrateReplicatedUserProfile(localUser, p.profile, db);
+      // A bot in the DM is named by its own home only (the sender must be that home).
+      localUser = applyHomeBotFlag(localUser, p.profile.isBot, peerOrigin, db);
     }
     resolvedParticipants.push({ localUser, homeUserId: p.homeUserId });
   }

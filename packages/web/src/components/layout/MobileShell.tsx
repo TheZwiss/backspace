@@ -87,6 +87,8 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
   'settings-keybinds': () => <MobileSettingsScreen initialPanel="keybinds" />,
   'settings-desktop': () => <MobileSettingsScreen initialPanel="desktop" />,
+  'settings-developer': () => <MobileSettingsScreen initialPanel="developer" />,
+  'settings-bots': () => <MobileSettingsScreen initialPanel="bots" />,
   'settings-instance': () => <MobileInstancePanel />,
   'settings-instance-general': () => (
     <div className="flex flex-col h-full bg-surface-base">

@@ -161,6 +161,23 @@
     "unknownSender": "Someone",
     "attachmentOnly": "Sent an attachment"
   },
+  "commands": {
+    "title": "Commands",
+    "failed": "The command could not be sent",
+    "extraText": "This command takes no free text, but \"{{text}}\" is left over. Put the options first, the text last",
+    "invalidOption": "The value of {{option}} does not fit this command.",
+    "optionsTitle": "Parameters",
+    "required": "required",
+    "subcommandsTitle": "Subcommands",
+    "group": "group",
+    "chooseSubcommand": "Choose a subcommand: {{names}}",
+    "subcommandRefused": "The bot does not offer this subcommand. Pick one from the list"
+  },
+  "ephemeral": {
+    "onlyYou": "Only you can see this",
+    "dismiss": "Dismiss",
+    "rowLabel": "Answer only you can see from {{author}}, {{time}}"
+  },
   "embed": {
     "loadAction": "Click to load",
     "loadNamed": "Load {{name}}",

@@ -42,7 +42,14 @@ vi.mock('../../ws/handler.js', () => ({
     federatedCalls: new Map(),
     isUserOnline: vi.fn(),
     lateBindFederatedCall: vi.fn(),
+    announceSpaceAccessChange: (...args: unknown[]) => announceSpaceAccessChange(...args),
   },
+}));
+const announceSpaceAccessChange = vi.fn();
+
+const applyStoredBotActivity = vi.fn();
+vi.mock('../../ws/presence.js', () => ({
+  applyStoredBotActivity: (...args: unknown[]) => applyStoredBotActivity(...args),
 }));
 
 const lookupCalls: string[] = [];
@@ -135,6 +142,7 @@ beforeEach(async () => {
   lookupCalls.length = 0;
   answers.clear();
   sendToUser.mockReset();
+  applyStoredBotActivity.mockReset();
   assetGate = null;
   serveImages = false;
   assetFetches.length = 0;
@@ -362,5 +370,153 @@ describe('relayed snapshots carry the handle', () => {
     expect(byId.get('4003')).toBe('max');
     expect(buildProfileSnapshot(row('r-kai')).username).toBe('kai');
     expect(buildProfileSnapshot(row('alice')).username).toBe('alice');
+  });
+});
+
+describe('the bot flag of a user homed elsewhere', () => {
+  const plain = { profileUpdatedAt: 5000, username: 'x', displayName: null, avatar: null, banner: null, avatarColor: null, bio: null };
+
+  it('is taken from the home whatever version its answer carries', async () => {
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7001', profileUpdatedAt: 9000 });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, username: 'radio_bot', isBot: true }, HOME_ORIGIN, testDb);
+
+    expect(row('r-bot').isBot).toBe(1);
+    // The older profile version was still refused; only the flag changed.
+    expect(row('r-bot').profileUpdatedAt).toBe(9000);
+  });
+
+  it('is refused from an instance that is not the home, and never cleared', async () => {
+    insertReplica({ id: 'r-ann', username: `ann@${HOME}`, homeUserId: '7002' });
+    const { applyHomeBotFlag } = await import('./profile.js');
+
+    applyHomeBotFlag(row('r-ann'), true, 'https://third.example', testDb);
+    expect(row('r-ann').isBot).toBe(0);
+
+    applyHomeBotFlag(row('r-ann'), true, HOME, testDb);
+    expect(row('r-ann').isBot).toBe(1);
+    applyHomeBotFlag(row('r-ann'), false, HOME_ORIGIN, testDb);
+    expect(row('r-ann').isBot).toBe(1);
+  });
+
+  it('leaves a detached account and a native user alone', async () => {
+    insertReplica({ id: 'r-det', username: `det@${HOME}`, homeUserId: '7003', federationHomeOrphaned: 1 });
+    const { applyHomeBotFlag } = await import('./profile.js');
+    applyHomeBotFlag(row('r-det'), true, HOME_ORIGIN, testDb);
+    expect(row('r-det').isBot).toBe(0);
+  });
+
+  it('is sent by the home for its own bots only', async () => {
+    insertReplica({ id: 'r-far', username: `far_bot@${HOME}`, homeUserId: '7004', isBot: 1 });
+    testDb.insert(schema.users).values({
+      id: 'native-bot', username: 'echo_bot', passwordHash: '!bot', status: 'offline', isAdmin: 0, createdAt: 1, isBot: 1,
+    }).run();
+    const { buildProfileSnapshot } = await import('../social.js');
+    expect(buildProfileSnapshot(row('native-bot')).isBot).toBe(true);
+    expect(buildProfileSnapshot(row('r-far')).isBot).toBeUndefined();
+  });
+});
+
+describe('the stored status of a bot homed elsewhere', () => {
+  const plain = { profileUpdatedAt: 5000, username: 'radio_bot', displayName: null, avatar: null, banner: null, avatarColor: null, bio: null };
+  const listening = { type: 'listening' as const, name: 'lofi radio' };
+
+  it('a newer profile stores it and shows it at once', async () => {
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7101', isBot: 1, profileUpdatedAt: 1000 });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, botActivity: listening }, HOME_ORIGIN, testDb);
+
+    expect(JSON.parse(row('r-bot').botActivity ?? 'null')).toEqual(listening);
+    expect(applyStoredBotActivity).toHaveBeenCalledWith('r-bot', listening);
+  });
+
+  it('an older profile, an unsaid status or a malformed one keeps the stored status', async () => {
+    const stored = JSON.stringify(listening);
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7102', isBot: 1, profileUpdatedAt: 9000, botActivity: stored });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, botActivity: null }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botActivity).toBe(stored);
+
+    await applyHomeProfile(row('r-bot'), { ...plain, profileUpdatedAt: 9500 }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botActivity).toBe(stored);
+    expect(row('r-bot').profileUpdatedAt).toBe(9500);
+
+    await applyHomeProfile(row('r-bot'), {
+      ...plain,
+      profileUpdatedAt: 9600,
+      botActivity: { type: 'streaming', name: 'x' } as unknown as typeof listening,
+    }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botActivity).toBe(stored);
+    expect(applyStoredBotActivity).not.toHaveBeenCalled();
+  });
+
+  it('a cleared status is cleared here too', async () => {
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7103', isBot: 1, profileUpdatedAt: 1000, botActivity: JSON.stringify(listening) });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, botActivity: null }, HOME_ORIGIN, testDb);
+
+    expect(row('r-bot').botActivity).toBeNull();
+    expect(applyStoredBotActivity).toHaveBeenCalledWith('r-bot', null);
+  });
+
+  it('a person takes no status', async () => {
+    insertReplica({ id: 'r-ann', username: `ann@${HOME}`, homeUserId: '7104', profileUpdatedAt: 1000 });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-ann'), { ...plain, username: 'ann', botActivity: listening }, HOME_ORIGIN, testDb);
+
+    expect(row('r-ann').botActivity).toBeNull();
+    expect(applyStoredBotActivity).not.toHaveBeenCalled();
+  });
+
+  it('a by-home-id answer carries it only when the home said it', async () => {
+    const { homeProfileFromAnswer } = await import('./profile.js');
+    const base = { displayName: null, avatar: null, avatarColor: null, banner: null, bio: null };
+    expect(homeProfileFromAnswer({ username: 'radio_bot', profile: { ...base, isBot: true, botActivity: listening } }).botActivity).toEqual(listening);
+    expect(homeProfileFromAnswer({ username: 'radio_bot', profile: { ...base, isBot: true, botActivity: null } }).botActivity).toBeNull();
+    expect('botActivity' in homeProfileFromAnswer({ username: 'ann', profile: base })).toBe(false);
+  });
+});
+
+describe('what a bot homed elsewhere asks for, and its managed roles here', () => {
+  const plain = { profileUpdatedAt: 5000, username: 'radio_bot', displayName: 'Radio_bot', avatar: null, banner: null, avatarColor: null, bio: null };
+
+  it('a newer profile stores the requested permissions; unsaid or malformed keeps them; none clears', async () => {
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7201', isBot: 1, profileUpdatedAt: 1000 });
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, botRequestedPermissions: '1024' }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botRequestedPermissions).toBe('1024');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, profileUpdatedAt: 6000 }, HOME_ORIGIN, testDb);
+    await applyHomeProfile(row('r-bot'), { ...plain, profileUpdatedAt: 7000, botRequestedPermissions: '0x400' }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botRequestedPermissions).toBe('1024');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, profileUpdatedAt: 8000, botRequestedPermissions: '0' }, HOME_ORIGIN, testDb);
+    expect(row('r-bot').botRequestedPermissions).toBeNull();
+  });
+
+  it('a person takes none', async () => {
+    insertReplica({ id: 'r-ann', username: `ann@${HOME}`, homeUserId: '7202', profileUpdatedAt: 1000 });
+    const { applyHomeProfile } = await import('./profile.js');
+    await applyHomeProfile(row('r-ann'), { ...plain, username: 'ann', botRequestedPermissions: '1024' }, HOME_ORIGIN, testDb);
+    expect(row('r-ann').botRequestedPermissions).toBeNull();
+  });
+
+  it('a new name from the home renames the bot\'s managed roles here', async () => {
+    insertReplica({ id: 'r-bot', username: `radio_bot@${HOME}`, homeUserId: '7203', isBot: 1, displayName: 'Radio_bot', profileUpdatedAt: 1000 });
+    testDb.insert(schema.users).values({ id: 'host-owner', username: 'host-owner', passwordHash: 'x', status: 'offline', isAdmin: 0, createdAt: 1 }).run();
+    testDb.insert(schema.spaces).values({ id: 's1', name: 'S', ownerId: 'host-owner', inviteCode: 'c', visibility: 'public', createdAt: 1 }).run();
+    testDb.insert(schema.roles).values({ id: 'role-bot', spaceId: 's1', name: 'Radio_bot', position: 1, permissions: '0', createdAt: 1, managedBotId: 'r-bot' }).run();
+    const { applyHomeProfile } = await import('./profile.js');
+
+    await applyHomeProfile(row('r-bot'), { ...plain, displayName: 'Jazz_bot' }, HOME_ORIGIN, testDb);
+
+    expect(testDb.select().from(schema.roles).where(eq(schema.roles.id, 'role-bot')).get()?.name).toBe('Jazz_bot');
+    expect(announceSpaceAccessChange).toHaveBeenCalledWith('s1', []);
   });
 });

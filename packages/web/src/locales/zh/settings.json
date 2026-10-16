@@ -130,7 +130,9 @@
       "connections": "连接",
       "keybinds": "按键绑定",
       "desktop": "桌面端",
-      "instance": "实例"
+      "instance": "实例",
+      "bots": "机器人",
+      "developer": "开发者"
     },
     "logOut": "退出登录",
     "backToMenu": "返回设置菜单"
@@ -428,5 +430,106 @@
     },
     "version": "版本 {{version}}",
     "allReleases": "GitHub 上的所有版本"
+  },
+  "bots": {
+    "title": "机器人",
+    "description": "机器人是由程序通过令牌控制的账号。创建机器人，复制其令牌，然后连接你的程序。机器人会在私信中回复。",
+    "create": {
+      "sectionTitle": "创建机器人",
+      "nameLabel": "机器人用户名",
+      "submit": "创建机器人",
+      "hint": "{{min}} 到 {{max}} 个字符：小写字母、数字和下划线。最多可创建 {{limit}} 个机器人。"
+    },
+    "list": {
+      "sectionTitle": "你的机器人",
+      "empty": "你还没有机器人。",
+      "createdOn": "创建于 {{date}}"
+    },
+    "token": {
+      "title": "{{name}} 的令牌",
+      "warning": "请立即复制令牌。它只显示一次，任何拥有它的人都能控制该机器人。",
+      "copy": "复制令牌",
+      "copied": "已复制",
+      "dismiss": "我已保存"
+    },
+    "tokens": {
+      "title": "访问令牌",
+      "loading": "正在加载令牌",
+      "legacy": "此机器人仍在使用旧的长期令牌。创建一个令牌即可切换：旧令牌会立即失效。",
+      "empty": "此机器人没有令牌。",
+      "unnamed": "未命名令牌",
+      "createdOn": "创建于 {{date}}",
+      "neverUsed": "从未使用",
+      "lastUsed": "最近使用 {{time}}",
+      "revoke": "撤销",
+      "confirmRevoke": "确认撤销",
+      "nameLabel": "令牌标签",
+      "namePlaceholder": "标签（可选）",
+      "create": "创建令牌",
+      "limitHint": "每个机器人最多 {{max}} 个令牌。撤销令牌会断开机器人；其他令牌继续有效。"
+    },
+    "actions": {
+      "regenerate": "重置所有令牌",
+      "delete": "删除",
+      "confirmDelete": "确认删除",
+      "cancel": "取消",
+      "edit": "编辑",
+      "save": "保存",
+      "addToServer": "添加到服务器",
+      "tokens": "令牌"
+    },
+    "edit": {
+      "nameLabel": "显示名称",
+      "hint": "用户名 @{{username}} 无法更改。最多 {{max}} 个字符。",
+      "bioLabel": "关于",
+      "bioPlaceholder": "机器人的用途、命令以及获取帮助的地方",
+      "bioCounter": "{{used}}/{{max}}"
+    },
+    "status": {
+      "label": "状态",
+      "none": "无状态",
+      "textLabel": "状态文字",
+      "placeholder": "机器人在名称旁显示的内容",
+      "hint": "机器人连接时显示。机器人的代码可在下次连接前替换它。",
+      "types": {
+        "custom": "自定义",
+        "playing": "正在玩",
+        "listening": "正在听",
+        "watching": "正在看"
+      },
+      "display": {
+        "custom": "{{name}}",
+        "playing": "正在玩 {{name}}",
+        "listening": "正在听 {{name}}",
+        "watching": "正在看 {{name}}"
+      }
+    },
+    "permissions": {
+      "label": "机器人请求的权限",
+      "hint": "将机器人添加到空间的人会看到这些权限已勾选，并可取消任意一项。它们会放入以机器人命名的角色。之后更改不会影响已创建的角色。"
+    },
+    "avatar": {
+      "change": "更换头像",
+      "remove": "移除头像",
+      "cropTitle": "裁剪机器人头像",
+      "uploadFailed": "头像上传失败",
+      "notImage": "请选择图片文件"
+    },
+    "spaces": {
+      "title": "添加到空间",
+      "loading": "正在加载空间",
+      "empty": "你还没有可管理的空间。添加机器人需要空间管理权限。",
+      "add": "添加",
+      "added": "已添加",
+      "remove": "移除"
+    }
+  },
+  "developer": {
+    "title": "开发者",
+    "mode": {
+      "label": "开发者模式",
+      "description": "在设置中显示开发者工具，例如“机器人”标签页。关闭只会隐藏它们，你的机器人会继续运行。",
+      "saveFailed": "无法保存该设置，请重试。"
+    }
   }
 }

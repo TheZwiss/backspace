@@ -225,6 +225,69 @@
       "when": 1791785539220,
       "tag": "0031_personal_stickers",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1791864640234,
+      "tag": "0032_bots",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1791971435284,
+      "tag": "0033_developer_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792004873637,
+      "tag": "0034_bot_revocations",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1792006655245,
+      "tag": "0035_bot_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792093650224,
+      "tag": "0036_bot_seat_restrictions",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1792180050224,
+      "tag": "0037_blocked_bots",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1792266450224,
+      "tag": "0038_bot_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1792352850224,
+      "tag": "0039_bot_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1792439250224,
+      "tag": "0040_command_permissions",
+      "breakpoints": true
     }
   ]
 }

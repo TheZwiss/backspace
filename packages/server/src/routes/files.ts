@@ -4,7 +4,7 @@ import { FileStore } from '@tus/file-store';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { verifyJwtAndUser, AuthError } from '../utils/auth.js';
+import { verifyAccessToken, AuthError, tokenFromAuthHeader } from '../utils/auth.js';
 import {
   parseUploadMetadata,
   extractExtension,
@@ -119,14 +119,13 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
 
     // ── Auth: verify JWT on every incoming request ─────────────────────────
     async onIncomingRequest(req, _res, uploadId) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      const token = tokenFromAuthHeader(req.headers.authorization);
+      if (token === null) {
         throw { status_code: 401, body: 'Missing or invalid authorization header' };
       }
-      const token = authHeader.slice(7);
       let identity: { userId: string; username: string; homeInstance: string | null };
       try {
-        identity = await verifyJwtAndUser(token);
+        identity = await verifyAccessToken(token);
       } catch (err) {
         if (err instanceof AuthError) {
           throw { status_code: err.statusCode, body: err.message };

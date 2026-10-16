@@ -17,12 +17,15 @@ import {
   DesktopDownloadPanel,
   InstancePanel,
   KeybindsPanel,
+  BotsPanel,
+  DeveloperPanel,
   SettingsPanelSuspense,
 } from './lazySettingsPanels';
 import { isElectron } from '../../platform/platform';
 import { useInstanceUpdateBadge } from '../../hooks/useInstanceUpdateBadge';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 import { HiButton } from '../telemetry/answers/HiButton';
+import { useDeveloperModeStore } from '../../stores/developerModeStore';
 
 /**
  * Every tab of user settings, in nav order. The nav on both layouts, the
@@ -38,11 +41,16 @@ const USER_SETTINGS_TABS = [
   { id: 'connections', group: 'app', label: 'settings:nav.tabs.connections' },
   { id: 'keybinds', group: 'app', label: 'settings:nav.tabs.keybinds' },
   { id: 'desktop', group: 'app', label: 'settings:nav.tabs.desktop' },
+  { id: 'developer', group: 'app', label: 'settings:nav.tabs.developer' },
+  { id: 'bots', group: 'app', label: 'settings:nav.tabs.bots' },
   { id: 'instance', group: 'admin', label: 'settings:nav.tabs.instance' },
 ] as const;
 
 export type UserSettingsTab = (typeof USER_SETTINGS_TABS)[number]['id'];
 type TabGroup = (typeof USER_SETTINGS_TABS)[number]['group'];
+
+/** Tabs that exist only while Developer Mode is on (a pure UI switch, see developerModeStore). */
+const DEVELOPER_ONLY_TABS: readonly UserSettingsTab[] = ['bots'];
 
 const GROUP_HEADINGS = {
   user: 'settings:nav.userSettings',
@@ -56,8 +64,10 @@ function isUserSettingsTab(value: unknown): value is UserSettingsTab {
   return typeof value === 'string' && USER_SETTINGS_TABS.some((tab) => tab.id === value);
 }
 
-function tabVisible(tab: UserSettingsTab, isAdmin: boolean): boolean {
-  return USER_SETTINGS_TABS.find((entry) => entry.id === tab)?.group !== 'admin' || isAdmin;
+function tabVisible(tab: UserSettingsTab, isAdmin: boolean, developerMode: boolean): boolean {
+  const group = USER_SETTINGS_TABS.find((entry) => entry.id === tab)?.group;
+  if (group === 'admin' && !isAdmin) return false;
+  return !DEVELOPER_ONLY_TABS.includes(tab) || developerMode;
 }
 
 export function SidebarSubLinks() {
@@ -118,6 +128,7 @@ export function UserSettingsModal() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const updateBadge = useInstanceUpdateBadge();
+  const developerMode = useDeveloperModeStore((s) => s.enabled);
 
   const [tab, setTab] = useState<UserSettingsTab>('account');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
@@ -142,11 +153,18 @@ export function UserSettingsModal() {
   useEffect(() => {
     if (isOpen) {
       const requested = modalData.tab;
-      const deepLinked = isUserSettingsTab(requested) && tabVisible(requested, isAdmin === true);
+      // getState, not a dependency: flipping the switch on its own tab must not re-run this and jump away.
+      const deepLinked = isUserSettingsTab(requested)
+        && tabVisible(requested, isAdmin === true, useDeveloperModeStore.getState().enabled);
       setTab(deepLinked ? requested : 'account');
       setMobileView(deepLinked ? 'content' : 'tabs');
     }
   }, [isOpen, modalData.tab, isAdmin]);
+
+  // The mode was turned off while a developer-only tab was open (another window): fall back to Developer.
+  useEffect(() => {
+    if (!tabVisible(tab, isAdmin === true, developerMode)) setTab('developer');
+  }, [tab, isAdmin, developerMode]);
 
   const handleLogout = () => {
     logout();
@@ -168,7 +186,8 @@ export function UserSettingsModal() {
       <Fragment key={group}>
         {index > 0 && <div className="border-t border-white/[0.04] my-2 mx-2" />}
         <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
-        {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
+        {USER_SETTINGS_TABS.filter((entry) => entry.group === group
+          && tabVisible(entry.id, isAdmin === true, developerMode)).map((entry) => (
           entry.id === 'instance' && layout === 'desktop' ? (
             <Fragment key={entry.id}>
               <button
@@ -200,6 +219,8 @@ export function UserSettingsModal() {
     appearance: () => <AppearancePanel />,
     voice: () => <VoicePanel />,
     privacy: () => <PrivacyPanel />,
+    bots: () => <BotsPanel />,
+    developer: () => <DeveloperPanel />,
     connections: () => <ConnectionsPanel />,
     keybinds: () => <KeybindsPanel />,
     desktop: () => (isElectron()

@@ -10,7 +10,8 @@ import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDel
 import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { sendError, ERROR_MESSAGES } from '../utils/httpErrors.js';
-import type { AdminUser, AdminUserListResponse, AdminResetPasswordResponse } from '@backspace/shared';
+import type { AdminUser, AdminUserListResponse, AdminResetPasswordResponse, AdminBlockedBot } from '@backspace/shared';
+import { extractDomain } from './federation.js';
 
 function reasonOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -25,6 +26,7 @@ function toAdminUser(row: typeof schema.users.$inferSelect): AdminUser {
     avatarColor: row.avatarColor,
     status: row.status ?? 'offline',
     isAdmin: row.isAdmin === 1,
+    isBot: row.isBot === 1,
     isDeleted: row.isDeleted === 1,
     homeInstance: row.homeInstance,
     createdAt: row.createdAt,
@@ -145,6 +147,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         conditions.push(eq(schema.users.isAdmin, 1));
       } else if (roleFilter === 'non-admin') {
         conditions.push(eq(schema.users.isAdmin, 0));
+      } else if (roleFilter === 'bot') {
+        conditions.push(eq(schema.users.isBot, 1));
       }
 
       // Date range filter
@@ -309,12 +313,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // DELETE /api/admin/users/:id — tombstone a user account
-  app.delete<{ Params: { id: string } }>(
+  // DELETE /api/admin/users/:id — tombstone a user account.
+  // `?blockBot=1` on a bot of another instance also refuses its bot proof from
+  // now on, so it cannot register here again when its home comes back
+  // (bots.md, "Blocking a bot of another instance").
+  app.delete<{ Params: { id: string }; Querystring: { blockBot?: string } }>(
     '/api/admin/users/:id',
     { preHandler: [authenticate, requireAdmin] },
     async (request, reply) => {
       const { id: targetId } = request.params;
+      const blockBot = request.query.blockBot === '1' || request.query.blockBot === 'true';
       const db = getDb();
 
       if (targetId === request.userId) {
@@ -343,6 +351,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           statusCode: 400,
           ownedSpaces,
         });
+      }
+
+      if (blockBot && (target.isBot !== 1 || !target.homeInstance || !target.homeUserId)) {
+        return sendError(reply, 400, 'bot_block_not_federated');
+      }
+
+      // Before the tombstone: it renames the account and the block keeps the name.
+      if (blockBot) {
+        db.insert(schema.blockedBots).values({
+          homeInstance: extractDomain(target.homeInstance!).toLowerCase(),
+          homeUserId: target.homeUserId!,
+          username: target.username,
+          blockedBy: request.userId,
+          createdAt: Date.now(),
+        }).onConflictDoNothing().run();
       }
 
       // Collect broadcast targets BEFORE tombstone deletes DB rows
@@ -375,6 +398,29 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.forceDisconnectUser(targetId);
 
       return reply.code(200).send({ success: true });
+    },
+  );
+
+  // GET /api/admin/blocked-bots — bots of other instances refused at registration
+  app.get('/api/admin/blocked-bots', { preHandler: [authenticate, requireAdmin] }, async (_request, reply) => {
+    const bots: AdminBlockedBot[] = getDb().select().from(schema.blockedBots)
+      .orderBy(desc(schema.blockedBots.createdAt))
+      .all();
+    return reply.send({ bots });
+  });
+
+  // DELETE /api/admin/blocked-bots/:homeInstance/:homeUserId — the bot may register again
+  app.delete<{ Params: { homeInstance: string; homeUserId: string } }>(
+    '/api/admin/blocked-bots/:homeInstance/:homeUserId',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { homeInstance, homeUserId } = request.params;
+      const removed = getDb().delete(schema.blockedBots).where(and(
+        eq(schema.blockedBots.homeInstance, homeInstance.toLowerCase()),
+        eq(schema.blockedBots.homeUserId, homeUserId),
+      )).run().changes;
+      if (removed === 0) return sendError(reply, 404, 'blocked_bot_not_found');
+      return reply.send({ success: true });
     },
   );
 
@@ -421,6 +467,26 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         })
         .run();
       return reply.code(200).send({ ok: true, id });
+    },
+  );
+
+  // Test-only: one pass of the bot revocation retries (utils/botRevocationQueue.ts)
+  // at the clock `at` (default now), and what it did. Gated exactly like
+  // seed-peer above. The worker ticks every 5 minutes; the bot revocation e2e
+  // suite runs a pass when the test says, with a clock past the row's next
+  // attempt.
+  app.post<{ Body: { at?: number } }>(
+    '/api/admin/test/bot-revocations/run',
+    async (request, reply) => {
+      if (process.env.NODE_ENV !== 'test' || process.env.ENABLE_TEST_ROUTES !== '1') {
+        return reply.code(404).send({ error: 'Not Found', statusCode: 404 });
+      }
+      const at = request.body?.at;
+      if (at !== undefined && (typeof at !== 'number' || !Number.isFinite(at))) {
+        return reply.code(400).send({ error: 'at must be a number', statusCode: 400 });
+      }
+      const { runBotRevocationRetries } = await import('../utils/botRevocationQueue.js');
+      return reply.code(200).send(await runBotRevocationRetries(at ?? Date.now()));
     },
   );
 

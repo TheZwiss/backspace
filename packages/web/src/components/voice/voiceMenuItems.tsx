@@ -8,6 +8,8 @@ import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { viewerCanActOnUserInSpace } from '../../utils/roleHierarchy';
+import { isBotParticipant, localVolumeIn, setLocalVolume } from '../../utils/voiceLocalKeys';
+import { isVoiceFlagIn } from '../../utils/permissionMute';
 
 /**
  * Build moderation context menu items for a voice user.
@@ -39,9 +41,13 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
 
   const voiceOrigin = getChannelOrigin(channelId);
   const spaceId = derivedSpaceId;
-  const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${targetUserId}`);
-  const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
-  const otherVoiceChannels = channels.filter(c => c.type === 'voice' && c.id !== channelId);
+  const isSpaceMuted = isVoiceFlagIn(spaceMutedUserIds, spaceId, targetUserId, channelId);
+  const isSpaceDeafened = isVoiceFlagIn(spaceDeafenedUserIds, spaceId, targetUserId, channelId);
+  // A bot sits in several channels at once: its mute, deafen and disconnect
+  // name this channel's seat, and it is not moved (its code picks its seats).
+  const isBot = isBotParticipant(targetUserId);
+  const seat = isBot ? { channelId } : {};
+  const otherVoiceChannels = isBot ? [] : channels.filter(c => c.type === 'voice' && c.id !== channelId);
 
   const items: ContextMenuItem[] = [];
 
@@ -57,7 +63,7 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
           ? [React.createElement('line', { key: 'slash', x1: 3, y1: 3, x2: 21, y2: 21, stroke: 'currentColor', strokeWidth: 2.5, strokeLinecap: 'round' })]
           : []),
       ),
-      onClick: () => wsSend({ type: 'voice_space_mute', userId: targetUserId, muted: !isSpaceMuted }, voiceOrigin),
+      onClick: () => wsSend({ type: 'voice_space_mute', userId: targetUserId, muted: !isSpaceMuted, ...seat }, voiceOrigin),
     });
   }
 
@@ -72,7 +78,7 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
           ? [React.createElement('line', { key: 'slash', x1: 3, y1: 3, x2: 21, y2: 21, stroke: 'currentColor', strokeWidth: 2.5, strokeLinecap: 'round' })]
           : []),
       ),
-      onClick: () => wsSend({ type: 'voice_space_deafen', userId: targetUserId, deafened: !isSpaceDeafened }, voiceOrigin),
+      onClick: () => wsSend({ type: 'voice_space_deafen', userId: targetUserId, deafened: !isSpaceDeafened, ...seat }, voiceOrigin),
     });
   }
 
@@ -86,7 +92,7 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
       icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
         React.createElement('path', { d: 'M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 010-1.36C3.36 8.68 7.42 7 12 7s8.64 1.68 11.71 4.72c.18.18.29.44.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 00-2.67-1.85.996.996 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z' }),
       ),
-      onClick: () => wsSend({ type: 'voice_disconnect', userId: targetUserId }, voiceOrigin),
+      onClick: () => wsSend({ type: 'voice_disconnect', userId: targetUserId, ...seat }, voiceOrigin),
     });
   }
 
@@ -120,11 +126,10 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
  * Volume slider for a voice participant, used as a `custom` context menu item.
  * Must be a component (not a plain function) because it subscribes to store state.
  */
-export function VolumeSliderItem({ userId }: { userId: string }) {
+export function VolumeSliderItem({ userId, channelId }: { userId: string; channelId: string }) {
   const { t } = useTranslation(['voice', 'common']);
   const f = useFormatters();
-  const volume = useVoiceStore((s) => s.participantVolumes.get(userId) ?? 100);
-  const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
+  const volume = useVoiceStore((s) => localVolumeIn(s.participantVolumes, userId, channelId));
 
   return (
     <div className="p-3">
@@ -140,7 +145,7 @@ export function VolumeSliderItem({ userId }: { userId: string }) {
           min="0"
           max="200"
           value={volume}
-          onChange={(e) => setParticipantVolume(userId, parseInt(e.target.value))}
+          onChange={(e) => setLocalVolume(userId, channelId, parseInt(e.target.value))}
           className="flex-1 min-w-0 accent-accent-primary h-1"
         />
         <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">

@@ -1,11 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '../ui/Avatar';
+import { BotBadge } from '../ui/BotBadge';
 
 export interface VoiceUserRowProps {
   userId: string;
   displayName: string;
   avatar: string | null;
   avatarColor?: string;
+  /** A bot account: its name carries the bot badge, as in the member list and messages. */
+  isBot?: boolean;
   isMuted?: boolean;
   isDeafened?: boolean;
   isCameraOn?: boolean;
@@ -26,6 +29,7 @@ export function VoiceUserRow({
   displayName,
   avatar,
   avatarColor,
+  isBot = false,
   isMuted,
   isDeafened,
   isCameraOn,
@@ -61,8 +65,11 @@ export function VoiceUserRow({
         avatarColor={avatarColor}
         className={isSpeaking ? 'rounded-full ring-2 ring-status-online' : ''}
       />
-      <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">
-        {displayName}
+      <span className="flex items-center gap-1.5 flex-1 min-w-0">
+        <span className="text-[13px] text-txt-secondary truncate min-w-0">
+          {displayName}
+        </span>
+        {isBot && <BotBadge className="shrink-0" />}
       </span>
       {/* Status badges */}
       <div className="flex items-center gap-1 flex-shrink-0">
