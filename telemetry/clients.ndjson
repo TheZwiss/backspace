@@ -102,3 +102,6 @@
 {"snapshot_date":"2026-10-14","dimension":"web","title":"","count":358,"uniques":358}
 {"snapshot_date":"2026-10-14","dimension":"mobile","title":"","count":230,"uniques":230}
 {"snapshot_date":"2026-10-14","dimension":"desktop","title":"","count":94,"uniques":94}
+{"snapshot_date":"2026-10-15","dimension":"web","title":"","count":325,"uniques":325}
+{"snapshot_date":"2026-10-15","dimension":"mobile","title":"","count":178,"uniques":178}
+{"snapshot_date":"2026-10-15","dimension":"desktop","title":"","count":92,"uniques":92}
