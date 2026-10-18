@@ -20,6 +20,7 @@ type ModalType =
   | 'userProfile'
   | 'connectAndJoin'
   | 'memberRoles'
+  | 'bookmarks'
   | null;
 
 /**

@@ -1,3 +1,4 @@
+import { useBookmarkedConversation } from '../../hooks/useBookmarks';
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { formatters } from '../../i18n/formatters';
@@ -191,6 +192,7 @@ function shouldShowDateDivider(prev: MessageWithUser | undefined, curr: MessageW
 
 export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: MessageListProps) {
   const { t } = useTranslation(['chat', 'common']);
+  useBookmarkedConversation(channelId);
   const messages = useChatStore((s) => s.messages.get(channelId)) ?? EMPTY_MESSAGES;
   const loadMessages = useChatStore((s) => s.loadMessages);
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);

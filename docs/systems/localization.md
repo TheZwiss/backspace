@@ -101,6 +101,7 @@ Rules:
 | `auth` | Login, register, join-by-invite, password fields, federated account creation |
 | `chat` | Message list, composer, attachments, embeds, reactions, replies, typing, jump-to-message |
 | `dm` | DM list, group DM management, DM calls, DM system messages |
+| `bookmarks` | Personal bookmarks: the message hover-bar button and menu entry (`message.*`, `menu.*`) and the failure toasts (`toast.*`), and the list window (`title`, `list.*`, `status.*`, `attachment.*`) |
 | `voice` | Voice channel controls, screen share, stream tiles, device pickers |
 | `spaces` | Space, category and channel CRUD, invites, discovery, membership, bans, roles; the Explore page's Inner and Outer Space sections, the connect-and-join dialog, the connections-that-need-attention chips and the per-space directory switch (`explore.inner.*`, `explore.outer.*`, `explore.connect.*`, `explore.connections.*`, `settings.discovery.directory.*`); the per-space and per-channel notification settings: the bell popover, the dialog, the menu entry and the muted indicator (`notifications.*`; the level and mute-duration labels are closed unions mapped by `switch` in `NotificationSettingsControls.tsx`, never built from the value) |
 | `settings` | User settings modal and its panels (account, voice, privacy, connections, keybinds, desktop) |

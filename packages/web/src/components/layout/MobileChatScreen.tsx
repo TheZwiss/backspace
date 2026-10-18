@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import { useUIStore } from '../../stores/uiStore';
+import { useActiveJump, useJumpStore } from '../../stores/jumpStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { MessageList } from '../chat/MessageList';
@@ -33,6 +34,8 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
   const channelId = params?.channelId;
+  const jumpToMessageId = useActiveJump(channelId);
+  const clearJumpRequest = useJumpStore((s) => s.clearJump);
   const spaceId = params?.spaceId;
   const isDm = spaceId === '@me';
 
@@ -187,7 +190,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
           TypingIndicator is rendered inside MessageInput itself (anchored
           `absolute bottom-full` to the bubble), so we don't render it here. */}
       <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-        {channelId && <MessageList channelId={channelId} />}
+        {channelId && <MessageList channelId={channelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />}
         {channelId && (dmPartnerDeleted
           ? <DmDeletedNotice />
           : <MessageInput channelId={channelId} channelName={channelName} placeholder={inputPlaceholder} />)}

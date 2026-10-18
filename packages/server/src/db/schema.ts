@@ -807,3 +807,67 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+/**
+ * A user's personal bookmarks (docs/systems/bookmarks.md). Each row is a copy of
+ * one message (its text and where it was written) plus the ids needed to open the
+ * original. It lives on the instance that serves the message and is never
+ * relayed. The copy is frozen at bookmark time: whether the original was edited,
+ * deleted or became unreadable is worked out when the list is read, never stored.
+ *
+ * `message_id` and `channel_id` are plain text, not foreign keys: `messages` and
+ * `dm_messages` are two tables, and a bookmark must outlive its original so it can
+ * say that the original is gone. `author_id` is plain text for the same reason.
+ * The `users` cascade does not fire for a tombstoned account (the row stays), so
+ * `tombstoneUser` removes the bookmarks explicitly.
+ */
+export const messageBookmarks = sqliteTable('message_bookmarks', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['channel', 'dm'] }).notNull(),
+  messageId: text('message_id').notNull(),
+  channelId: text('channel_id').notNull(),
+  spaceId: text('space_id'),
+  content: text('content'),
+  authorId: text('author_id').notNull(),
+  authorName: text('author_name').notNull(),
+  spaceName: text('space_name'),
+  channelName: text('channel_name'),
+  instanceOrigin: text('instance_origin').notNull(),
+  messageCreatedAt: integer('message_created_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  // One bookmark per message per user: a second save of the same message is the same bookmark.
+  uniqueMessage: uniqueIndex('idx_message_bookmarks_user_message').on(table.userId, table.kind, table.messageId),
+  // The list: newest first, keyset-paged on (created_at, id), so a read touches the index only.
+  listIdx: index('idx_message_bookmarks_user_created').on(table.userId, sql`created_at DESC`, sql`id DESC`),
+  // "Which messages of this channel are bookmarked": bounded by the channel, not by the user's total.
+  channelIdx: index('idx_message_bookmarks_user_channel').on(table.userId, table.kind, table.channelId),
+}));
+
+/**
+ * The attachments of a bookmarked message. `source_*` name the original's files,
+ * which belong to the original message and may no longer exist. `filename` and
+ * `thumbnail_filename` are the bookmark's own copy: NULL while `copy_status` is
+ * 'reference' (files are not copied yet), set when a copy exists. Only the own
+ * copy is ever deleted with a bookmark.
+ */
+export const bookmarkAttachments = sqliteTable('bookmark_attachments', {
+  id: text('id').primaryKey(),
+  bookmarkId: text('bookmark_id').notNull().references(() => messageBookmarks.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  originalName: text('original_name').notNull(),
+  mimetype: text('mimetype').notNull(),
+  size: integer('size').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  duration: real('duration'),
+  playable: integer('playable', { mode: 'boolean' }),
+  sourceFilename: text('source_filename').notNull(),
+  sourceThumbnailFilename: text('source_thumbnail_filename'),
+  filename: text('filename'),
+  thumbnailFilename: text('thumbnail_filename'),
+  copyStatus: text('copy_status', { enum: ['reference', 'copied', 'unavailable'] }).notNull().default('reference'),
+}, (table) => ({
+  bookmarkIdx: index('idx_bookmark_attachments_bookmark_id').on(table.bookmarkId),
+}));

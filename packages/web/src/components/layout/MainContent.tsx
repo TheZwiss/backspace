@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useActiveJump, useJumpStore } from '../../stores/jumpStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { VoiceGrid } from '../voice/VoiceGrid';
@@ -18,6 +19,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { canStartDmCall, startDmCall, cancelOutgoingDmCall, isDmCallRunning, joinDmCall } from '../../utils/voiceActions';
 import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import { MemberListToggleButton } from './MemberListToggleButton';
+import { BookmarksButton } from './BookmarksButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isMine, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
@@ -90,8 +92,22 @@ export function MainContent() {
   const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
-  const clearJumpRequest = useCallback(() => setJumpToMessageId(null), []);
+  // A jump to a message (search result, bookmark) is a request in `jumpStore`;
+  // this list takes it once its conversation is the open one.
+  const jumpToMessageId = useActiveJump(currentChannelId);
+  const clearJumpRequest = useJumpStore((s) => s.clearJump);
+  const requestJump = useJumpStore((s) => s.requestJump);
+  const jumpFromSearch = useCallback((messageId: string) => {
+    if (currentChannelId) {
+      requestJump(
+        currentSpaceId
+          ? { kind: 'channel', spaceId: currentSpaceId, channelId: currentChannelId }
+          : { kind: 'dm', channelId: currentChannelId },
+        messageId,
+      );
+    }
+    setSearchOpen(false);
+  }, [currentChannelId, currentSpaceId, requestJump]);
 
   // Resolve the DM header's "first other" member through the canonical view
   // cache. The hook must be called unconditionally at the component top, so we
@@ -271,6 +287,7 @@ export function MainContent() {
               )}
             </div>
             <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
+              <BookmarksButton />
               <TransferIndicator />
               <MemberListToggleButton />
             </div>
@@ -415,6 +432,7 @@ export function MainContent() {
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
+            <BookmarksButton />
             <TransferIndicator />
             <div className="w-[1px] h-5 bg-border-soft mx-1" />
             <MemberListToggleButton />
@@ -430,7 +448,7 @@ export function MainContent() {
           anchorRef={searchButtonRef}
           channelId={currentChannelId}
           isDm={true}
-          onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+          onJumpToMessage={jumpFromSearch}
         />
       </div>
     );
@@ -442,6 +460,7 @@ export function MainContent() {
         <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard">
           <span className="text-txt-tertiary">{t('spaces:main.selectChannel')}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <BookmarksButton />
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
@@ -467,6 +486,7 @@ export function MainContent() {
               <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <BookmarksButton />
               <TransferIndicator />
               <MemberListToggleButton />
             </div>
@@ -515,6 +535,7 @@ export function MainContent() {
             )}
           </div>
           <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
+            <BookmarksButton />
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
@@ -555,6 +576,7 @@ export function MainContent() {
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
+          <BookmarksButton />
           <TransferIndicator />
           <div className="w-[1px] h-5 bg-border-soft mx-1" />
           <MemberListToggleButton />
@@ -568,7 +590,7 @@ export function MainContent() {
         anchorRef={searchButtonRef}
         channelId={currentChannelId}
         isDm={false}
-        onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+        onJumpToMessage={jumpFromSearch}
       />
     </div>
   );

@@ -349,6 +349,19 @@ Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's nam
 
 Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 16,777,216 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
 
+## Bookmarks (`routes/bookmarks.ts`)
+
+Every route reads and writes the current user's own bookmarks. A bookmark lives on the instance that serves the message, so a client asks the instance of the conversation it is in. Model, statuses and file handling: [bookmarks.md](bookmarks.md).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/bookmarks?cursor=&limit=` | JWT | One page, newest first: `{ items: Bookmark[], nextCursor: string \| null }`. `limit` 1 to 100, default 30 |
+| GET | `/api/bookmarks/keys?kind=&channelId=` | JWT | `string[]`: the bookmarked message ids of one channel or DM |
+| PUT | `/api/bookmarks/:kind/:messageId` | JWT | Saves a copy of the message, or returns the bookmark already there. `201` created, `200` existed. Body: the `Bookmark` |
+| DELETE | `/api/bookmarks/:kind/:messageId` | JWT | Removes the bookmark and the files it owns. Idempotent: `{ success: true }` even when there was none |
+
+`kind` is `channel` or `dm`. A `Bookmark` (`packages/shared/src/bookmarks.ts`) carries the saved copy, the original's ids, `attachments[]` with a per-file `state` (`available` or `gone`) and `status` (`ok`, `edited`, `deleted`, `unavailable`), both worked out on each read. Refusals: `404 message_not_found` (no such message, or one the caller cannot read; the two are not told apart), `400 validation_failed` (a system message, an unknown `kind`, a cursor this server did not issue, a `limit` over 100). There is no bookmark limit. A create that made a bookmark and a removal that found one are pushed to the caller's own sockets as `bookmark_added` / `bookmark_removed` (websocket.md).
+
 ## GIF (`routes/gif.ts`) — auth required
 ```
 GET /gif/enabled                         → { enabled }

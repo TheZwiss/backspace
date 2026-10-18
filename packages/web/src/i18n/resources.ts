@@ -9,6 +9,7 @@
  */
 import admin from '../locales/en/admin.json';
 import auth from '../locales/en/auth.json';
+import bookmarks from '../locales/en/bookmarks.json';
 import chat from '../locales/en/chat.json';
 import common from '../locales/en/common.json';
 import desktop from '../locales/en/desktop.json';
@@ -31,6 +32,7 @@ export const resources = {
   en: {
     admin,
     auth,
+    bookmarks,
     chat,
     common,
     desktop,

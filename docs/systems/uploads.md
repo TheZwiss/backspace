@@ -379,6 +379,7 @@ Idempotent: no-op if no record exists.
 - Space banners (`spaces.banner` where not null)
 - Attachment filenames (`attachments.filename`)
 - Attachment thumbnails (`attachments.thumbnailFilename` where not null)
+- Files a bookmark owns (`bookmark_attachments.filename` and `thumbnailFilename` where not null): its own copies, never the originals' files (see [bookmarks.md](bookmarks.md))
 
 All values are `path.basename()`-normalized.
 

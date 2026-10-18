@@ -85,6 +85,7 @@ import type {
   TelemetryPayload,
   TelemetryStatus,
 } from '@backspace/shared';
+import type { Bookmark, BookmarkKind, BookmarkPage } from '@backspace/shared/src/bookmarks';
 import { MESSAGE_PAGING_AFTER, MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
 export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
@@ -250,6 +251,19 @@ export class BackspaceApiClient {
     list: () => Promise<NotificationSettingsResponse>;
     updateSpace: (spaceId: string, data: UpdateNotificationSettingRequest) => Promise<NotificationSetting>;
     updateChannel: (channelId: string, data: UpdateNotificationSettingRequest) => Promise<NotificationSetting>;
+  };
+
+  /**
+   * The signed-in user's bookmarks on this instance (docs/systems/bookmarks.md).
+   * Called on the client of the instance that serves the message.
+   */
+  readonly bookmarks: {
+    list: (params?: { cursor?: string; limit?: number }) => Promise<BookmarkPage>;
+    keys: (kind: BookmarkKind, channelId: string) => Promise<string[]>;
+    /** Saves a copy of the message, or returns the bookmark already there. */
+    add: (kind: BookmarkKind, messageId: string) => Promise<Bookmark>;
+    /** Idempotent: succeeds when there was no such bookmark. */
+    remove: (kind: BookmarkKind, messageId: string) => Promise<{ success: boolean }>;
   };
 
   readonly spaces: {
@@ -597,6 +611,22 @@ export class BackspaceApiClient {
         request<NotificationSetting>('PATCH', `/spaces/${encodeURIComponent(spaceId)}/notification-settings`, data),
       updateChannel: (channelId, data) =>
         request<NotificationSetting>('PATCH', `/channels/${encodeURIComponent(channelId)}/notification-settings`, data),
+    };
+
+    this.bookmarks = {
+      list: (params) => {
+        const query = new URLSearchParams();
+        if (params?.cursor) query.set('cursor', params.cursor);
+        if (params?.limit) query.set('limit', String(params.limit));
+        const suffix = query.size > 0 ? `?${query}` : '';
+        return request<BookmarkPage>('GET', `/bookmarks${suffix}`);
+      },
+      keys: (kind, channelId) =>
+        request<string[]>('GET', `/bookmarks/keys?kind=${encodeURIComponent(kind)}&channelId=${encodeURIComponent(channelId)}`),
+      add: (kind, messageId) =>
+        request<Bookmark>('PUT', `/bookmarks/${encodeURIComponent(kind)}/${encodeURIComponent(messageId)}`),
+      remove: (kind, messageId) =>
+        request<{ success: boolean }>('DELETE', `/bookmarks/${encodeURIComponent(kind)}/${encodeURIComponent(messageId)}`),
     };
 
     this.spaces = {

@@ -360,6 +360,7 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `members` | `MobileMembersScreen` | `{ spaceId? }` |
 | `voice-full` | `MobileVoiceFullScreen` | — |
 | `explore` | `ExplorePage` | — |
+| `bookmarks` | `MobileBookmarksScreen` | — |
 | `backspace` | `MobileBackspaceScreen`: `MobileScreenHeader` titled `project:nav.label` over `ProjectHubPage showTopBar={false}` (see [project-hub.md](project-hub.md)) | — |
 | `user-profile` | `UserProfileModal` | `{ userId }` (opens modal via `openModal('userProfile', ...)`) |
 

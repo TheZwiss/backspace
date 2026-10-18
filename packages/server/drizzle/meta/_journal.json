@@ -225,6 +225,13 @@
       "when": 1791785539220,
       "tag": "0031_personal_stickers",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792128991807,
+      "tag": "0032_message_bookmarks",
+      "breakpoints": true
     }
   ]
 }

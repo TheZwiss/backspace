@@ -16,6 +16,8 @@ import { useAuthStore, useSelfIdentity } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { selectMyRoleIdsInChannel, useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useMessageBookmark } from '../../hooks/useBookmarks';
+import { BookmarkIcon } from '../ui/BookmarkIcon';
 import { AttachmentRenderer, attUrlOf } from './AttachmentRenderer';
 import { AttachmentProgress } from './AttachmentProgress';
 import { EmbedRenderer } from './EmbedRenderer';
@@ -146,7 +148,7 @@ function getImageEmbedSourceUrl(content: string | null, embeds: Embed[]): string
 }
 
 export function Message({ message, isCompact, isFirstInGroup, previousMessageId }: MessageProps) {
-  const { t } = useTranslation(['chat', 'common']);
+  const { t } = useTranslation(['chat', 'common', 'bookmarks']);
   const fmt = useFormatters();
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
@@ -212,6 +214,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const messageOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelKey) ?? '');
   const self = useSelfIdentity();
   const isAuthor = isMine(message.user, messageOrigin, self);
+  // A system message (a join, a leave) is not a message the user wrote; the
+  // server refuses to bookmark it.
+  // The instance's origin is '' for the page's own instance, so only a channel
+  // the client does not know has no origin at all.
+  const bookmarkOrigin = useSpaceStore((s) => s.channelOriginMap.get(channelKey));
+  const canBookmark = !pending && message.type !== 'system' && bookmarkOrigin !== undefined;
+  const bookmark = useMessageBookmark({ origin: bookmarkOrigin, channelId: channelKey, messageId: message.id });
   // The channel whose origin issued this message's ids; mentions resolve there.
   const mentionChannelId = channelKey || null;
   const selfIdHere = useSelfIdInChannel(mentionChannelId);
@@ -389,6 +398,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         setReactionPicker('row');
       },
       onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
+      canBookmark,
+      isBookmarked: bookmark.bookmarked,
+      onToggleBookmark: () => { void bookmark.toggle(); },
     });
 
     if (items.length === 0) return;
@@ -814,6 +826,19 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" />
             </svg>
           </button>
+          {canBookmark && (
+            <button
+              onClick={() => { void bookmark.toggle(); }}
+              disabled={bookmark.busy}
+              className={`px-2 h-full transition-all flex items-center justify-center hover:bg-interactive-hover ${
+                bookmark.bookmarked ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-primary'
+              }`}
+              title={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')}
+              aria-pressed={bookmark.bookmarked}
+            >
+              <BookmarkIcon filled={bookmark.bookmarked} />
+            </button>
+          )}
           {canEdit && (
             <button
               onClick={startEditing}

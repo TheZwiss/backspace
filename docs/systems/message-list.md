@@ -99,9 +99,9 @@ The 5000px user-intent threshold matches the `nearBottom` band: distances larger
 
 ## Jump to message
 
-Every jump goes through one function, `jumpToMessage(messageId)` in `MessageList.tsx`, with an id on the channel's origin. Two entry points feed it:
+Every jump goes through one function, `jumpToMessage(messageId)` in `MessageList.tsx`, with an id on the channel's origin. Two kinds of entry feed it:
 
-- **Search results**: `MainContent` passes `jumpToMessageId`; an effect takes each request once (`handledJumpRequestRef`, so a parent that re-renders before clearing it, or passes a new `onJumpHandled` each render, does not start the load again), calls `onJumpHandled` and jumps.
+- **From outside the list** (search results, bookmarks): a request in `stores/jumpStore.ts` (`requestJump(target, messageId)`). `useJumpNavigation` (mounted in `AppLayout`) opens the target conversation by writing the route (and, on a phone, pushing the `channel-chat` screen); `MainContent` and `MobileChatScreen` pass the request to their list as `jumpToMessageId` once its channel is the open one (`useActiveJump`). A request nobody took within `JUMP_REQUEST_TTL_MS` (15 s) is dropped, so a conversation that never opened (the space was left, the channel removed) cannot fire a jump later. An unknown space or DM is refused at `requestJump` with the `chat:list.jump.unavailable` toast. An effect in the list takes each request once (`handledJumpRequestRef`, so a parent that re-renders before clearing it, or passes a new `onJumpHandled` each render, does not start the load again), calls `onJumpHandled` and jumps. A DM is opened through the row it is pinned to (`resolveDmChannelId`); the message id is the one on that row's origin.
 - **Reply previews**: `MessageList` provides `MessageJumpContext`; `Message.tsx` renders the preview as a `<button>` that calls it with `message.replyTo.id`. Outside a list (no context) the preview is inert. The preview holds no interactive content of its own: mentions in it render through `InlineMessageText` as `MentionBadge` with `interactive={false}` (same look, plain text, no profile click), so a click anywhere on the preview jumps.
 
 Order of work:
