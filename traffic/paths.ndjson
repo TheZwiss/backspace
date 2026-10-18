@@ -468,3 +468,13 @@
 {"snapshot_date":"2026-10-17","dimension":"/TheZwiss/backspace/releases/tag/v1.8.0","title":"/releases/tag/v1.8.0","count":25,"uniques":17}
 {"snapshot_date":"2026-10-17","dimension":"/TheZwiss/backspace/pull/398","title":"/pull/398","count":22,"uniques":6}
 {"snapshot_date":"2026-10-17","dimension":"/TheZwiss/backspace/pull/399","title":"/pull/399","count":21,"uniques":3}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace","title":"Overview","count":549,"uniques":240}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/issues","title":"/issues","count":105,"uniques":23}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/pulls","title":"/pulls","count":95,"uniques":17}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/releases","title":"/releases","count":80,"uniques":30}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/releases/tag/v1.11.0","title":"/releases/tag/v1.11.0","count":59,"uniques":35}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/releases/tag/v1.7.0","title":"/releases/tag/v1.7.0","count":40,"uniques":25}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/releases/tag/v1.9.1","title":"/releases/tag/v1.9.1","count":30,"uniques":24}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/releases/tag/v1.8.0","title":"/releases/tag/v1.8.0","count":25,"uniques":17}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/pull/398","title":"/pull/398","count":24,"uniques":6}
+{"snapshot_date":"2026-10-18","dimension":"/TheZwiss/backspace/pull/464","title":"/pull/464","count":22,"uniques":1}

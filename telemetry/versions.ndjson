@@ -190,3 +190,8 @@
 {"snapshot_date":"2026-10-16","dimension":"other","title":"","count":8,"uniques":8}
 {"snapshot_date":"2026-10-16","dimension":"1.4.0","title":"","count":3,"uniques":3}
 {"snapshot_date":"2026-10-16","dimension":"1.8.0","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-10-17","dimension":"1.11.0","title":"","count":30,"uniques":30}
+{"snapshot_date":"2026-10-17","dimension":"1.7.0","title":"","count":9,"uniques":9}
+{"snapshot_date":"2026-10-17","dimension":"other","title":"","count":9,"uniques":9}
+{"snapshot_date":"2026-10-17","dimension":"1.4.0","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-10-17","dimension":"1.8.0","title":"","count":3,"uniques":3}
