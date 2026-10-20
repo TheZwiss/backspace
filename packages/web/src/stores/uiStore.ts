@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@backspace/shared';
 import type { AnchorRect, Placement } from '../hooks/useFloatingPosition';
+import { RIGHT_PANEL_DEFAULT_WIDTH, clampRightPanelWidth } from '../utils/rightPanelResize';
+import { LEFT_PANEL_DEFAULT_WIDTH, clampLeftPanelWidth } from '../utils/leftPanelResize';
 
 type ModalType =
   | 'createSpace'
@@ -53,6 +55,16 @@ interface Toast {
 interface UIState {
   sidebarOpen: boolean;
   memberListOpen: boolean;
+  /** Right-column panel width in CSS layout pixels, shared by the space
+   *  member list, the group-DM roster, and the friends activity list. Resized
+   *  via the drag handle on the column's left border (drag, arrow keys,
+   *  double-click resets); persisted alongside memberListOpen below. */
+  rightPanelWidth: number;
+  /** Left-column width in CSS layout pixels — the 72px space rail plus the
+   *  channel list / home DM list beside it (one grid track, one width).
+   *  Resized via the drag handle on the column's right border (drag, arrow
+   *  keys, double-click resets); persisted alongside memberListOpen. */
+  leftPanelWidth: number;
   activeModal: ModalType;
   modalData: Record<string, unknown>;
   isMobile: boolean;
@@ -72,6 +84,8 @@ interface UIState {
   toasts: Toast[];
   toggleSidebar: () => void;
   toggleMemberList: () => void;
+  setRightPanelWidth: (width: number) => void;
+  setLeftPanelWidth: (width: number) => void;
   openModal: (modal: ModalType, data?: Record<string, unknown>) => void;
   closeModal: () => void;
   setIsMobile: (isMobile: boolean) => void;
@@ -112,11 +126,29 @@ interface UIState {
   setFederationApprovalCount: (count: number) => void;
 }
 
+/**
+ * Persist-schema migration for `backspace-ui-settings` (zustand persist).
+ * v0 → v1: the space member list width (`memberListWidth`) became the shared
+ * right-column width (`rightPanelWidth`) when the group-DM roster and the
+ * friends activity list joined the same resizable column. The stored value
+ * keeps its meaning and its clamps; nothing else moves.
+ */
+export function migrateUiSettings(persisted: unknown, version: number): Partial<UIState> {
+  const state = (persisted ?? {}) as Partial<UIState> & { memberListWidth?: unknown };
+  if (version < 1 && typeof state.memberListWidth === 'number') {
+    const { memberListWidth, ...rest } = state;
+    return { ...rest, rightPanelWidth: clampRightPanelWidth(memberListWidth) };
+  }
+  return state;
+}
+
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
       sidebarOpen: true,
       memberListOpen: true,
+      rightPanelWidth: RIGHT_PANEL_DEFAULT_WIDTH,
+      leftPanelWidth: LEFT_PANEL_DEFAULT_WIDTH,
       activeModal: null,
       modalData: {},
       isMobile: false,
@@ -133,6 +165,11 @@ export const useUIStore = create<UIState>()(
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       toggleMemberList: () => set((state) => ({ memberListOpen: !state.memberListOpen })),
+      // Clamp on write: drag deltas, keyboard steps, and even a corrupted
+      // persisted value must all land inside [MIN, MAX] (utils/rightPanelResize).
+      setRightPanelWidth: (width) => set({ rightPanelWidth: clampRightPanelWidth(width) }),
+      // Same contract for the left column (utils/leftPanelResize).
+      setLeftPanelWidth: (width) => set({ leftPanelWidth: clampLeftPanelWidth(width) }),
 
       openModal: (modal, data = {}) => set({ activeModal: modal, modalData: data }),
       closeModal: () => set({ activeModal: null, modalData: {} }),
@@ -230,11 +267,15 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'backspace-ui-settings',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         memberListOpen: state.memberListOpen,
+        rightPanelWidth: state.rightPanelWidth,
+        leftPanelWidth: state.leftPanelWidth,
         lastChannelPerSpace: state.lastChannelPerSpace,
       }),
+      migrate: migrateUiSettings,
     }
   )
 );

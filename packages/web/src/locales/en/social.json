@@ -79,7 +79,8 @@
     "quietTitle": "It's quiet for now...",
     "quietDescription": "When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!",
     "online": "Online — {{n}}",
-    "offline": "Offline — {{n}}"
+    "offline": "Offline — {{n}}",
+    "resizeHandle": "Resize friends list"
   },
   "instanceNotConnected": "Not connected to {{host}}. Connect to it again and retry."
 }

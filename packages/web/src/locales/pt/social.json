@@ -81,7 +81,8 @@
     "quietTitle": "Está tudo quieto por enquanto...",
     "quietDescription": "Quando um amigo começar uma atividade, como jogar ou ficar num canal de voz, ela aparecerá aqui!",
     "online": "Online — {{n}}",
-    "offline": "Offline — {{n}}"
+    "offline": "Offline — {{n}}",
+    "resizeHandle": "Redimensionar lista de amigos"
   },
   "instanceNotConnected": "Não conectado a {{host}}. Conecte-se novamente e tente de novo."
 }

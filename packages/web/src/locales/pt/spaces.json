@@ -573,6 +573,7 @@
     "dmUnreadMessagesOver99": "Mais de 99 mensagens diretas não lidas"
   },
   "channels": {
+    "resizeHandle": "Redimensionar lista de canais",
     "loading": "Carregando canais",
     "create": "Criar canal",
     "createCategory": "Criar categoria",
@@ -600,6 +601,7 @@
     "titleWithCount_many": "Membros — {{count}}",
     "titleWithCount_other": "Membros — {{count}}",
     "loading": "Carregando membros",
+    "resizeHandle": "Redimensionar lista de membros",
     "groups": {
       "owner": "Dono"
     },

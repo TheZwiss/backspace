@@ -273,7 +273,17 @@ the amber-means-update rule above, not a bug.
 
 ## Layout
 
-3-column grid: 312px channel sidebar | main content | 240px members sidebar
+3-column grid: left column (312px default) | main content | right column (240px default)
+The right column hosts the space members sidebar, the group-DM roster, and the
+friends activity list — one shared, user-resizable width for all three: drag the
+column's left border (RightPanelResizeHandle) or focus it and use
+ArrowLeft/ArrowRight (Shift = bigger step) within 180–420px; double-click
+restores 240px. The width persists per device via uiStore.
+The left column hosts the space channel list and the home DM list behind the
+same contract: drag the column's right border (LeftPanelResizeHandle) or focus
+it and use ArrowLeft/ArrowRight (Shift = bigger step) within 252–492px (the
+list itself spans 180–420px beside the 72px glass strip); double-click
+restores 312px. The width persists per device via uiStore.
 Glass server strip overlays left 72px of channel sidebar.
 Channel sidebar fully opaque with gradient at left edge feeding glass.
 

@@ -43,7 +43,8 @@
   },
   "roster": {
     "owner": "Dono",
-    "sectionCount": "{{label}} — {{total}}"
+    "sectionCount": "{{label}} — {{total}}",
+    "resizeHandle": "Redimensionar lista de membros"
   },
   "kick": {
     "title": "Remover do grupo",
@@ -79,6 +80,7 @@
     "createFailed": "Falha ao criar a DM"
   },
   "list": {
+    "resizeHandle": "Redimensionar mensagens diretas",
     "title": "Mensagens",
     "empty": "Nenhuma conversa ainda.",
     "leaveGroup": "Sair do grupo",

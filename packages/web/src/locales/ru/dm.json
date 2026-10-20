@@ -44,7 +44,8 @@
   },
   "roster": {
     "owner": "Владелец",
-    "sectionCount": "{{label}} — {{total}}"
+    "sectionCount": "{{label}} — {{total}}",
+    "resizeHandle": "Изменить размер списка участников"
   },
   "kick": {
     "title": "Удалить из группы",
@@ -80,6 +81,7 @@
     "createFailed": "Не удалось создать беседу"
   },
   "list": {
+    "resizeHandle": "Изменить размер списка личных сообщений",
     "title": "Сообщения",
     "empty": "Пока нет бесед.",
     "leaveGroup": "Покинуть группу",

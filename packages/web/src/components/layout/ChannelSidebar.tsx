@@ -22,6 +22,7 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
 import { DmListItem } from './DmListItem';
+import { LeftPanelResizeHandle } from './LeftPanelResizeHandle';
 import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useAudioDevices } from '../../hooks/useAudioDevices';
@@ -35,7 +36,7 @@ import type { UserSettingsTab } from '../modals/UserSettings';
 import { ChannelMutedIndicator } from '../notifications/ChannelMutedIndicator';
 
 export function ChannelSidebar() {
-  const { t } = useTranslation(['spaces', 'common', 'project']);
+  const { t } = useTranslation(['spaces', 'common', 'project', 'dm']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
@@ -459,7 +460,11 @@ export function ChannelSidebar() {
   if (!space) {
     return (
       <>
-      <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
+      {/* Width comes from uiStore via AppLayout's grid track / drawer wrapper:
+          drag the column's right border (or use arrow keys on the handle) to
+          resize; double-click the handle to reset. */}
+      <div className="flex-1 desktop:w-full relative bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
+        <LeftPanelResizeHandle label={t('dm:list.resizeHandle')} />
         <div className="h-12 px-[10px] flex items-center border-b border-border-hard z-10">
           <DmSearchBar />
         </div>
@@ -582,7 +587,11 @@ export function ChannelSidebar() {
 
   return (
     <>
-    <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
+    {/* Width comes from uiStore via AppLayout's grid track / drawer wrapper:
+        drag the column's right border (or use arrow keys on the handle) to
+        resize; double-click the handle to reset. */}
+    <div className="flex-1 desktop:w-full relative bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
+      <LeftPanelResizeHandle label={t('spaces:channels.resizeHandle')} />
       {/* Space header */}
       <div className="h-12 flex items-stretch border-b border-border-hard z-10 group/header">
         <button

@@ -42,7 +42,8 @@
   },
   "roster": {
     "owner": "Owner",
-    "sectionCount": "{{label}} — {{total}}"
+    "sectionCount": "{{label}} — {{total}}",
+    "resizeHandle": "Resize member list"
   },
   "kick": {
     "title": "Remove from Group",
@@ -78,6 +79,7 @@
     "createFailed": "Failed to create DM"
   },
   "list": {
+    "resizeHandle": "Resize direct messages",
     "title": "Messages",
     "empty": "No conversations yet.",
     "leaveGroup": "Leave Group",
