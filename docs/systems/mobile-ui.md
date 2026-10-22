@@ -872,7 +872,7 @@ Mobile uses the same `.skeleton` / `.skeleton-bar` / `.skeleton-circle` / `.skel
 
 | Site | Loading source | Status |
 |---|---|---|
-| App boot (root layout pre-`useAuth.user`) | `useAuth.isLoading` (gated by `useDelayedLoading` in `AppLayout`) | Shared with desktop — `AppLayout` returns the boot skeleton before the mobile/desktop branch split, so both paths show it during cold start |
+| App boot (root layout pre-`useAuth.user`) | `useAuth.isLoading` (gated by `useDelayedLoading` in `AppLayout`) | Shared with desktop — `AppLayout` returns the boot skeleton before the mobile/desktop branch split, so both paths show it during cold start. On desktop its left column (space strip + channel list) is drawn at the stored `panelWidths.channelSidebar` width, so a widened column does not snap when the real layout replaces it (see design-system.md, "Resizable columns") |
 | `MessageList` initial + pagination | `chatStore` per-channel `isLoading` / `isLoadingMore` | Shared with desktop — `MessageList` is rendered inside both `MainContent` (desktop) and `MobileChatScreen` (mobile) |
 | `MobileSpacesScreen` channel list | `useSpaceStore.loadingSpaceId === selectedSpaceId` | Mobile-specific render, mirrors desktop `ChannelSidebar`. Empty-state mascot is settle-gated on `loadedSpaceIds` to avoid flashing during the pre-skeleton load window (see "Empty-state mascot — settle gate" above) |
 | `MobileMembersScreen` member list | `useSpaceStore.loadingSpaceId === spaceId` | Mobile-specific render, mirrors desktop `MemberSidebar` |
@@ -893,10 +893,11 @@ The uiStore uses `zustand/persist` with `partialize`:
 ```ts
 partialize: (state) => ({
   memberListOpen: state.memberListOpen,
+  panelWidths: state.panelWidths,
   lastChannelPerSpace: state.lastChannelPerSpace,
 })
 ```
 
-Only `memberListOpen` and `lastChannelPerSpace` persist. Mobile navigation state (`mobileScreen`, `mobileStack`) is ephemeral and resets on page reload.
+Only `memberListOpen`, `panelWidths` and `lastChannelPerSpace` persist. `panelWidths` holds the desktop column widths (see design-system.md, "Resizable columns"); the store's `merge` passes stored widths through `resolvePanelWidths`, so a stale, partial or hand-edited value is clamped to the current bounds, or reset to the default, on load. Mobile navigation state (`mobileScreen`, `mobileStack`) is ephemeral and resets on page reload.
 
 `lastChannelPerSpace` is used by `MobileSpacesScreen` to remember the most-recent text channel for each space (via `setLastChannel`), and by `AppLayout`'s desktop auto-select effect to land on that channel when the user opens a space without a channelId. It is NOT what the mobile Spaces bottom-nav tap reads — that reads `useSpaceStore`'s `currentSpaceId ?? lastSelectedSpaceId` (see "Tab Tap Behavior" above). `lastSelectedSpaceId` itself lives in `useSpaceStore` and is intentionally NOT persisted — only the in-session sticky-memory semantic matters.

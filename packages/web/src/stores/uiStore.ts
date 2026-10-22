@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@backspace/shared';
 import type { AnchorRect, Placement } from '../hooks/useFloatingPosition';
+import { clampPanelWidth, resolvePanelWidths, type PanelWidths, type ResizablePanelId } from './panelWidths';
 
 type ModalType =
   | 'createSpace'
@@ -53,6 +54,9 @@ interface Toast {
 interface UIState {
   sidebarOpen: boolean;
   memberListOpen: boolean;
+  /** Desktop column widths in layout (unzoomed) pixels, always within the
+   *  bounds in `panelWidths.ts`. */
+  panelWidths: PanelWidths;
   activeModal: ModalType;
   modalData: Record<string, unknown>;
   isMobile: boolean;
@@ -72,6 +76,7 @@ interface UIState {
   toasts: Toast[];
   toggleSidebar: () => void;
   toggleMemberList: () => void;
+  setPanelWidth: (panel: ResizablePanelId, width: number) => void;
   openModal: (modal: ModalType, data?: Record<string, unknown>) => void;
   closeModal: () => void;
   setIsMobile: (isMobile: boolean) => void;
@@ -117,6 +122,7 @@ export const useUIStore = create<UIState>()(
     (set, get) => ({
       sidebarOpen: true,
       memberListOpen: true,
+      panelWidths: resolvePanelWidths(),
       activeModal: null,
       modalData: {},
       isMobile: false,
@@ -133,6 +139,9 @@ export const useUIStore = create<UIState>()(
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       toggleMemberList: () => set((state) => ({ memberListOpen: !state.memberListOpen })),
+      setPanelWidth: (panel, width) => set((state) => ({
+        panelWidths: { ...state.panelWidths, [panel]: clampPanelWidth(panel, width) },
+      })),
 
       openModal: (modal, data = {}) => set({ activeModal: modal, modalData: data }),
       closeModal: () => set({ activeModal: null, modalData: {} }),
@@ -233,8 +242,19 @@ export const useUIStore = create<UIState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         memberListOpen: state.memberListOpen,
+        panelWidths: state.panelWidths,
         lastChannelPerSpace: state.lastChannelPerSpace,
       }),
+      // A hand-edited or stale stored width (or one saved under older bounds)
+      // must not escape the current bounds.
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<UIState>;
+        return {
+          ...current,
+          ...stored,
+          panelWidths: resolvePanelWidths(stored.panelWidths),
+        };
+      },
     }
   )
 );

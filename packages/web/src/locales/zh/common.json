@@ -123,6 +123,8 @@
   },
   "chrome": {
     "toggleMemberList": "切换成员列表显示",
+    "resizeMemberList": "调整成员列表宽度",
+    "resizeChannelSidebar": "调整频道列表宽度",
     "closeSettings": "关闭设置"
   },
   "sourceCode": {

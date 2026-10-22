@@ -123,6 +123,8 @@
   },
   "chrome": {
     "toggleMemberList": "Показать или скрыть список участников",
+    "resizeMemberList": "Изменить ширину списка участников",
+    "resizeChannelSidebar": "Изменить ширину списка каналов",
     "closeSettings": "Закрыть настройки"
   },
   "sourceCode": {

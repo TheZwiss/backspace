@@ -25,7 +25,7 @@
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { MemberWithUser, Role, User } from '@backspace/shared';
-import { MemberSidebar } from '../components/layout/MemberSidebar';
+import { RightPanel } from '../components/layout/RightPanel';
 import { UserProfilePopout } from '../components/ui/UserProfilePopout';
 import { UserProfileModal } from '../components/modals/UserProfileModal';
 import { MemberRolesModal } from '../components/modals/MemberRolesModal';
@@ -161,7 +161,7 @@ function Workbench({ scene }: { scene: Scene }) {
     <MemoryRouter>
       <div className="h-screen flex bg-surface-chat">
         <div className="flex-1" />
-        <MemberSidebar />
+        <RightPanel />
       </div>
       {(scene === 'card' || scene === 'no-roles') && (
         <UserProfilePopout

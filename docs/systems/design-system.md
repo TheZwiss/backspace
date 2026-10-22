@@ -273,9 +273,56 @@ the amber-means-update rule above, not a bug.
 
 ## Layout
 
-3-column grid: 312px channel sidebar | main content | 240px members sidebar
+3-column grid: channel sidebar (312px default) | main content | members sidebar (240px default)
 Glass server strip overlays left 72px of channel sidebar.
 Channel sidebar fully opaque with gradient at left edge feeding glass.
+
+### Resizable columns
+
+Both side columns can be widened by dragging a divider on their inner edge
+(the channel sidebar's right edge, the members sidebar's left edge). One rule
+covers both: **the default width is also the minimum**, because the layout is
+designed at that width, so a column only grows, up to its maximum.
+
+| Panel id | Column | Default = min | Max | Divider edge |
+|----------|--------|---------------|-----|--------------|
+| `channelSidebar` | Space strip + channel sidebar | 312px | 480px | right |
+| `memberList` | Member list / group-DM roster / activity panel | 240px | 400px | left |
+
+- **Single source:** `RESIZABLE_PANELS` in `stores/panelWidths.ts` holds each
+  column's `defaultWidth`, `maxWidth`, `edge` and the `common` label key for
+  the divider's accessible name. The live desktop columns take their width
+  from it alone. The literals that remain are outside that path: the mobile
+  drawer's `w-[312px]` in `AppLayout` and the channel sidebar's `w-60`, both
+  overridden at the desktop breakpoint, and the `312px` fallback in
+  `var(--channel-sidebar-width,312px)`. The boot skeleton in `AppLayout`
+  draws its left column at the stored `channelSidebar` width too, so the
+  column does not snap when loading ends.
+- **State:** `uiStore.panelWidths` (layout pixels, one entry per panel id),
+  written only through `setPanelWidth(panel, width)`, which clamps to the
+  bounds. It persists (see mobile-ui.md, "LocalStorage Persistence"), and the
+  store's `merge` re-clamps stored values on load. Read a width like any
+  other uiStore field, `useUIStore((s) => s.panelWidths.<panel>)`.
+- **Divider:** `<PanelResizer panel="…" />` (`components/layout/PanelResizer.tsx`),
+  rendered inside the column's positioned root. Pointer drags use pointer
+  capture and convert pointer deltas with `layoutPixels`, so the edge tracks
+  the cursor at any interface scale. It is a focusable `role="separator"`:
+  arrow keys step 16px (64px with Shift), End jumps to the maximum, and Home,
+  Enter or a double-click restore the default. The 5px hit area is
+  transparent at rest and shows `accent-primary` on hover, focus and drag.
+- **The layout owns the column, content components own only content.**
+  `AppLayout` sizes the left column through the `--channel-sidebar-width` CSS
+  variable on its root, which drives both the grid track and the floating
+  voice panel pinned to the column (`ChannelSidebar`, width `var − 16px`).
+  `RightPanel` is the right column: it hides it when `memberListOpen` is off,
+  applies width, border, surface (`bg-surface-members`, or
+  `bg-surface-channel` for the activity panel) and the divider, and picks the
+  content. `MemberSidebar`, `DmRosterPanel` and `ActivityPanel` render no
+  column of their own, so the column keeps its width when the content swaps.
+- **Adding a resizable column:** add an entry to `RESIZABLE_PANELS` and its
+  label key to every `common.json`, size the column from `uiStore.panelWidths`, and
+  render `<PanelResizer panel="…" />` in it. `PanelResizer.test.tsx` runs its
+  cases for every configured panel.
 
 Card lists (Explore's Inner and Outer Space sections, the Friends page's
 discover list) share one class, `.card-grid` in `globals.css`: one full-width

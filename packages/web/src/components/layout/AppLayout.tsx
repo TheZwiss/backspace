@@ -7,6 +7,7 @@ import { SpaceSidebar } from './SpaceSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
+import { PanelResizer } from './PanelResizer';
 import { MobileShell } from './MobileShell';
 import { ImagePreview } from '../chat/ImagePreview';
 import { CreateSpaceModal } from '../modals/CreateSpace';
@@ -241,6 +242,7 @@ export function AppLayout() {
   const setShowDms = useUIStore((s) => s.setShowDms);
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const channelSidebarWidth = useUIStore((s) => s.panelWidths.channelSidebar);
   const isMobile = useUIStore((s) => s.isMobile);
   
   const channels = useSpaceStore((s) => s.channels);
@@ -358,24 +360,28 @@ export function AppLayout() {
   if (!user || showBootSkeleton) {
     return (
       <div className="h-full flex bg-surface-base" role="status" aria-label={t('app.loading')}>
-        {/* Space strip */}
-        <div className="w-[72px] hidden desktop:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="skeleton skeleton-circle w-12 h-12" style={{ animationDelay: `${i * 0.1}s` }} />
-          ))}
-        </div>
+        {/* Left column: drawn at the stored width so it does not snap when
+            the real layout replaces it. */}
+        <div className="hidden desktop:flex flex-shrink-0" style={{ width: channelSidebarWidth }}>
+          {/* Space strip */}
+          <div className="w-[72px] flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className="skeleton skeleton-circle w-12 h-12" style={{ animationDelay: `${i * 0.1}s` }} />
+            ))}
+          </div>
 
-        {/* Sidebar */}
-        <div className="w-60 hidden desktop:flex bg-surface-channel flex-shrink-0 flex-col pt-4 px-2">
-          {/* Header bar */}
-          <div className="skeleton skeleton-bar w-[60%] h-4 mb-6 ml-2" />
-          {/* Channel items */}
-          {Array.from({ length: 8 }, (_, i) => (
-            <div key={i} className="flex items-center gap-2 px-2 py-1.5 mb-0.5" style={{ animationDelay: `${i * 0.08}s` }}>
-              <div className="skeleton w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ animationDelay: `${i * 0.08}s` }} />
-              <div className="skeleton skeleton-bar flex-1" style={{ width: `${45 + (i * 11) % 35}%`, animationDelay: `${i * 0.08}s` }} />
-            </div>
-          ))}
+          {/* Sidebar */}
+          <div className="flex-1 min-w-0 flex bg-surface-channel flex-col pt-4 px-2">
+            {/* Header bar */}
+            <div className="skeleton skeleton-bar w-[60%] h-4 mb-6 ml-2" />
+            {/* Channel items */}
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 mb-0.5" style={{ animationDelay: `${i * 0.08}s` }}>
+                <div className="skeleton w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ animationDelay: `${i * 0.08}s` }} />
+                <div className="skeleton skeleton-bar flex-1" style={{ width: `${45 + (i * 11) % 35}%`, animationDelay: `${i * 0.08}s` }} />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Main chat area */}
@@ -449,11 +455,17 @@ export function AppLayout() {
 
   // ── Desktop layout ──
   return (
-    <div className="h-full flex flex-col desktop:grid desktop:grid-cols-[312px_1fr] desktop:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
+    // --channel-sidebar-width sizes the left grid column and everything pinned
+    // to it (the floating voice panel in ChannelSidebar).
+    <div
+      className="h-full flex flex-col desktop:grid desktop:grid-cols-[var(--channel-sidebar-width)_1fr] desktop:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden"
+      style={{ ['--channel-sidebar-width' as string]: `${channelSidebarWidth}px` }}
+    >
       {/* Space sidebar - always visible on desktop */}
-      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0'} desktop:static desktop:z-auto desktop:w-auto desktop:transform-none`}>
+      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0'} desktop:relative desktop:z-auto desktop:w-auto desktop:transform-none`}>
         <SpaceSidebar />
         <ChannelSidebar />
+        <PanelResizer panel="channelSidebar" className="hidden desktop:block" />
       </div>
 
       {/* Main content area */}

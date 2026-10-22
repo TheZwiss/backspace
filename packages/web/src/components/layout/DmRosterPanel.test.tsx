@@ -20,8 +20,6 @@ vi.mock('../../audio/AudioManager', () => ({
 type ChatStateShape = { currentChannelId: string | null };
 type SpaceStateShape = { dmChannels: DmChannel[]; currentSpaceId: string | null; userViews: Map<string, unknown>; channelOriginMap: Map<string, string> };
 type UIStateShape = {
-  memberListOpen: boolean;
-  showDms: boolean;
   isMobile: boolean;
   openUserProfile: ReturnType<typeof vi.fn>;
   addToast: ReturnType<typeof vi.fn>;
@@ -37,8 +35,6 @@ const spaceState: SpaceStateShape = {
   channelOriginMap: new Map(),
 };
 const uiState: UIStateShape = {
-  memberListOpen: true,
-  showDms: true,
   isMobile: false,
   openUserProfile: vi.fn(),
   addToast: vi.fn(),
@@ -155,16 +151,10 @@ function setScenario(opts: {
   members: User[];
   ownerId: string;
   isGroupDm?: boolean;
-  memberListOpen?: boolean;
-  showDms?: boolean;
-  currentSpaceId?: string | null;
   friends?: { id: string; _instanceOrigin: string }[];
   channelId?: string | null;
 }) {
   authState.user = opts.caller;
-  uiState.memberListOpen = opts.memberListOpen ?? true;
-  uiState.showDms = opts.showDms ?? true;
-  spaceState.currentSpaceId = opts.currentSpaceId ?? null;
   spaceState.dmChannels = opts.isGroupDm === false
     ? []
     : [makeGroupDm(opts.members, opts.ownerId)];
@@ -185,8 +175,6 @@ beforeEach(() => {
   spaceState.dmChannels = [];
   spaceState.currentSpaceId = null;
   spaceState.userViews = new Map();
-  uiState.memberListOpen = true;
-  uiState.showDms = true;
   uiState.isMobile = false;
   uiState.openUserProfile = vi.fn();
   uiState.addToast = vi.fn();
@@ -217,14 +205,7 @@ function getMenuLabels(): string[] {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-describe('DmRosterPanel — visibility gates', () => {
-  it('renders nothing when memberListOpen is false', () => {
-    const owner = makeUser({ id: 'owner-1', username: 'owner' });
-    setScenario({ caller: owner, members: [owner], ownerId: 'owner-1', memberListOpen: false });
-    const { container } = renderPanel();
-    expect(container.querySelector('[data-dm-roster-panel]')).toBeFalsy();
-  });
-
+describe('DmRosterPanel — group-DM gate', () => {
   it('renders nothing when current channel is not a group DM', () => {
     const caller = makeUser({ id: 'me' });
     setScenario({
@@ -232,19 +213,6 @@ describe('DmRosterPanel — visibility gates', () => {
       members: [caller],
       ownerId: 'me',
       isGroupDm: false,
-    });
-    const { container } = renderPanel();
-    expect(container.querySelector('[data-dm-roster-panel]')).toBeFalsy();
-  });
-
-  it('renders nothing when not in DM view (currentSpaceId set + showDms=false)', () => {
-    const owner = makeUser({ id: 'owner-1' });
-    setScenario({
-      caller: owner,
-      members: [owner],
-      ownerId: 'owner-1',
-      showDms: false,
-      currentSpaceId: 'space-1',
     });
     const { container } = renderPanel();
     expect(container.querySelector('[data-dm-roster-panel]')).toBeFalsy();

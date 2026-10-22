@@ -123,6 +123,8 @@
   },
   "chrome": {
     "toggleMemberList": "Mitgliederliste ein- oder ausblenden",
+    "resizeMemberList": "Breite der Mitgliederliste ändern",
+    "resizeChannelSidebar": "Breite der Kanalliste ändern",
     "closeSettings": "Einstellungen schließen"
   },
   "sourceCode": {

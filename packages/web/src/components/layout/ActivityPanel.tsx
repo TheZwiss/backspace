@@ -67,7 +67,6 @@ export function ActivityPanel() {
   const { t } = useTranslation(['social', 'common']);
   const friends = useSocialStore((s) => s.friends);
   const loadFriends = useSocialStore((s) => s.loadFriends);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
 
@@ -97,8 +96,6 @@ export function ActivityPanel() {
 
     return { activeFriends: active, onlineFriends: online, offlineFriends: offline };
   }, [friends, userActivities]);
-
-  if (!memberListOpen) return null;
 
   const handleFriendClick = (e: React.MouseEvent, friend: TaggedFriend) => {
     e.stopPropagation();
@@ -145,43 +142,41 @@ export function ActivityPanel() {
   };
 
   return (
-    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
-      <div className="p-3">
-        <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
+    <div className="p-3">
+      <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
 
-        {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="text-[16px] font-bold text-txt-primary mb-1">{t('social:activity.quietTitle')}</div>
-            <div className="text-[14px] text-txt-tertiary max-w-[200px] mx-auto">
-              {t('social:activity.quietDescription')}
-            </div>
+      {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
+        <div className="text-center py-8">
+          <div className="text-[16px] font-bold text-txt-primary mb-1">{t('social:activity.quietTitle')}</div>
+          <div className="text-[14px] text-txt-tertiary max-w-[200px] mx-auto">
+            {t('social:activity.quietDescription')}
           </div>
-        ) : (
-          <>
-            {activeFriends.length > 0 && (
-              <div className="mb-4">
-                {activeFriends.map(f => renderFriend(f))}
-              </div>
-            )}
-            {onlineFriends.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                  {t('social:activity.online', { n: onlineFriends.length })}
-                </h3>
-                {onlineFriends.map(f => renderFriend(f))}
-              </div>
-            )}
-            {offlineFriends.length > 0 && (
-              <div>
-                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
-                  {t('social:activity.offline', { n: offlineFriends.length })}
-                </h3>
-                {offlineFriends.map(f => renderFriend(f, true))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          {activeFriends.length > 0 && (
+            <div className="mb-4">
+              {activeFriends.map(f => renderFriend(f))}
+            </div>
+          )}
+          {onlineFriends.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                {t('social:activity.online', { n: onlineFriends.length })}
+              </h3>
+              {onlineFriends.map(f => renderFriend(f))}
+            </div>
+          )}
+          {offlineFriends.length > 0 && (
+            <div>
+              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                {t('social:activity.offline', { n: offlineFriends.length })}
+              </h3>
+              {offlineFriends.map(f => renderFriend(f, true))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

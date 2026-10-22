@@ -14,24 +14,19 @@ import { visualPixels } from '../../platform/interfaceScale';
 import { pointAnchor } from '../../hooks/useFloatingPosition';
 
 /**
- * Right-side roster for group DMs. Mirrors `MemberSidebar`'s layout language
- * (240px column, structural surface, hidden on mobile) so toggling
- * `memberListOpen` feels identical across spaces and group DMs.
- *
- * Renders nothing for 1-on-1 DMs and when `memberListOpen` is false. The
- * default-state inheritance is intentional — this panel does not own a
- * separate boolean and explicitly carries the user's global toggle preference.
+ * Roster for group DMs, rendered by `RightPanel` inside the same column as
+ * `MemberSidebar`, so toggling `memberListOpen` feels identical across spaces
+ * and group DMs. The column — and whether it shows at all — belongs to
+ * RightPanel; this component renders only the roster, and nothing when the
+ * current channel is not a group DM.
  */
 export function DmRosterPanel() {
   const { t } = useTranslation(['dm', 'common']);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const addToast = useUIStore((s) => s.addToast);
 
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
-  const showDms = useUIStore((s) => s.showDms);
 
   const friends = useSocialStore((s) => s.friends);
   const removeFriendStore = useSocialStore((s) => s.removeFriend);
@@ -48,15 +43,9 @@ export function DmRosterPanel() {
   const [pendingTransfer, setPendingTransfer] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Visibility gates ────────────────────────────────────────────────────
-  // Render only when:
-  //   1. We're in the DM view (showDms=true OR no current space).
-  //   2. The current channel is a group DM (ownerId set).
-  //   3. The global member-list toggle is on.
-  const inDmView = showDms || !currentSpaceId;
-  const isGroupDm = !!dmChannel?.ownerId;
-
-  if (!inDmView || !dmChannel || !isGroupDm || !memberListOpen) {
+  // RightPanel decides when the roster shows (DM view, member list on); the
+  // roster itself only needs a group DM to render.
+  if (!dmChannel?.ownerId) {
     return null;
   }
 
@@ -169,13 +158,8 @@ export function DmRosterPanel() {
   const totalCount = dmChannel.members.length;
 
   // ── Render ─────────────────────────────────────────────────────────────
-  // Width / surface mirror `MemberSidebar` so toggling visually swaps a
-  // like-shaped column.
   return (
-    <div
-      data-dm-roster-panel
-      className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard"
-    >
+    <div data-dm-roster-panel>
       <div className="p-3">
         <h3
           data-dm-roster-header

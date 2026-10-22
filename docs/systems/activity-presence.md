@@ -419,7 +419,7 @@ Both `ActivityPanel` and `MemberSidebar` use the same row rendering logic:
 
 ## ActivityPanel (`layout/ActivityPanel.tsx`)
 
-Displayed in the DM home view (right sidebar, 240px wide). Shows friends grouped by activity status.
+Displayed in the DM home view, inside the right column that `RightPanel` owns (width, divider, surface and visibility; see design-system.md, "Resizable columns"). Shows friends grouped by activity status.
 
 ### Friend Categorization
 
@@ -443,7 +443,7 @@ When all three groups are empty, displays: "It's quiet for now..." with explanat
 
 ## MemberSidebar (`layout/MemberSidebar.tsx`)
 
-Displayed in space views (right sidebar, 240px wide). Shows space members grouped by role, with activity display.
+Displayed in space views, inside the right column that `RightPanel` owns (see `ActivityPanel` above). Shows space members grouped by role, with activity display.
 
 ### Activity Integration
 

@@ -123,6 +123,8 @@
   },
   "chrome": {
     "toggleMemberList": "Alternar lista de membros",
+    "resizeMemberList": "Redimensionar lista de membros",
+    "resizeChannelSidebar": "Redimensionar lista de canais",
     "closeSettings": "Fechar configurações"
   },
   "sourceCode": {

@@ -108,7 +108,6 @@ export function MemberSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
 
@@ -121,8 +120,6 @@ export function MemberSidebar() {
 
   const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === currentSpaceId;
   const showMemberSkeleton = useDelayedLoading(isLoadingSpace);
-
-  if (!memberListOpen) return null;
 
   const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
     const color = memberNameColor(member, ownerId);
@@ -169,7 +166,7 @@ export function MemberSidebar() {
   return (
     <>
     {memberMenu.dialogs}
-    <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
+    <div>
       {showMemberSkeleton ? (
         <div className="px-3 pt-4" role="status" aria-label={t('spaces:members.loading')}>
           {/* Role group 1 */}
