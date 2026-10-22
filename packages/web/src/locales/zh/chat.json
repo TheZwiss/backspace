@@ -74,6 +74,8 @@
     "cancelReply": "取消回复",
     "removeAttachment": "移除附件",
     "attachFile": "添加附件",
+    "dropTitle": "上传文件",
+    "dropHint": "松开即可添加",
     "uploading": "正在上传…",
     "uploadingLabel": "正在上传",
     "failedCount_other": "{{count}} 个失败",

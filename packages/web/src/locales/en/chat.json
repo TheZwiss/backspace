@@ -75,6 +75,8 @@
     "cancelReply": "Cancel reply",
     "removeAttachment": "Remove attachment",
     "attachFile": "Attach file",
+    "dropTitle": "Upload file",
+    "dropHint": "Release to attach",
     "uploading": "Uploading…",
     "uploadingLabel": "Uploading",
     "failedCount_one": "{{count}} failed",
