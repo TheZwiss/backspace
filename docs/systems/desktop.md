@@ -8,7 +8,11 @@ Source files:
 - `packages/desktop/src/updateDismissal.ts` — Per-version dismissal persisted to userData
 - `packages/desktop/src/updaterCache.ts` — Reclaims the updater download cache on manual-mode builds
 - `packages/desktop/src/notificationRetention.ts` — Holds each shown native notification until it is clicked, closed or fails (see Notifications)
-- `packages/desktop/src/activityDetector.ts` — Process polling, game dictionary loading/sync, activity change detection
+- `packages/desktop/src/activityDetector.ts` — Process polling, game dictionary loading/sync, local-source matching, the IPC activity overlay
+- `packages/desktop/src/steamGames.ts` — Steam source: library manifests → install dirs
+- `packages/desktop/src/flatpakGames.ts` — Flatpak source: Game-category apps and their sandbox files dirs
+- `packages/desktop/src/gogGames.ts` — GOG source: ~/GOG Games metadata
+- `packages/desktop/src/richPresenceIpc.ts` — local rich presence IPC server (see Rich Presence IPC Server)
 - `packages/desktop/src/keybindManager.ts` — Global keybinds via uIOhook, native keycode mapping, press/release tracking
 - `packages/web/src/stores/keybindStore.ts` — Client-side keybind persistence (Zustand + localStorage)
 - `packages/web/src/hooks/useKeybinds.ts` — Keybind dispatch: Electron IPC bridge + web capture-phase fallback
@@ -912,6 +916,8 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `get-auto-launch-settings` | R->M | `{ openAtLogin, startMinimized }` | Merge OS state with saved prefs |
 | `set-auto-launch-settings` | R->M | `{ openAtLogin, startMinimized }` | Save + apply to OS |
 | `get-current-activity` | R->M | `Activity \| null` | Current detected game activity |
+| `list-known-games` | R->M | `string[]` | Game names for the manual-game picker: the dictionary's games plus every Steam, Flatpak and GOG game installed here (deduplicated without regard to case, sorted, at most 5000) |
+| `get-game-icon` | R->M | `{ data, mime } \| null` | Icon for a game name (base64). Waits for a lookup in flight and starts one for a name nothing warmed, so a hand-typed game gets its icon too |
 | `check-accessibility` | R->M | `boolean` | macOS accessibility permission check |
 | `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
 | `get-update-status` | R->M | `UpdateSnapshot` | Renderer reads the current snapshot on mount |
@@ -928,7 +934,8 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `update-downloaded` | `{ version }` | electron-updater |
 | `update-error` | `{ message, releaseUrl }` | electron-updater (only after confirmed update) |
 | `screen-share-sources` | `ElectronScreenSource[]` | Display media handler |
-| `activity-detected` | `Activity \| null` | Activity detector poll |
+| `activity-detected` | `Activity \| null` | Activity detector: the first activity, sent only when it changes (builds that predate the list) |
+| `activities-detected` | `Activity[]` | Activity detector: every detected game, sent on any change |
 | `keybind-action` | `{ actionId, pressed }` | KeybindManager match |
 | `accessibility-status` | `{ trusted }` | macOS accessibility check result |
 | `keybind-hook-error` | `{ message }` | uIOhook start failure |
@@ -973,7 +980,13 @@ Detection: `typeof window.backspace !== 'undefined'` (see `platform.ts:isElectro
 | `getAutoLaunchSettings()` | invoke | R->M | |
 | `setAutoLaunchSettings(s)` | invoke | R->M | |
 | `onActivityDetected(cb)` | listen | M->R | Returns cleanup function `() => void` |
-| `getCurrentActivity()` | invoke | R->M | Returns `Promise<Activity \| null>` |
+| `getCurrentActivity()` | invoke | R->M | Returns `Promise<Activity \| null>` (the first activity) |
+| `getUnknownWinePrograms()` | invoke | R->M | Running Wine programs of the last scan that no detected game owns (not its process, not its folder), up to 20. Optional in `electron.d.ts` |
+| `listRunningPrograms()` | invoke | R->M | `Promise<{ label, process }[]>`: the player's own non-system programs. Optional in `electron.d.ts` |
+| `setManualGameBindings(list)` | invoke | R->M | `{ name, process }[]` (at most 50, deduplicated by program): the programs the player's manual games follow, validated by `parseManualBinding`, held in memory. Optional in `electron.d.ts` |
+| `setManualGameBinding(b)` | invoke | R->M | `{ name, process } \| null`: one binding, for web clients that predate the list. Optional likewise |
+| `onActivitiesDetected(cb)` | listen | M->R | List channel; returns cleanup function. Optional in `electron.d.ts`: older desktops lack it |
+| `getCurrentActivities()` | invoke | R->M | Returns `Promise<Activity[]>`. Optional likewise |
 | `syncKeybinds(keybinds)` | fire | R->M | |
 | `onKeybindAction(cb)` | listen | M->R | Returns cleanup function |
 | `onAccessibilityStatus(cb)` | listen | M->R | Returns cleanup function |
@@ -1003,7 +1016,14 @@ Direction legend: **fire** = `ipcRenderer.send` (no response), **invoke** = `ipc
 
 ### Overview
 
-Detects running games/applications by polling the OS process list every 15 seconds and matching process names against a game dictionary.
+Detects running games/applications by polling the OS process list every 15 seconds and matching process names (and, on Linux, command lines) against a game dictionary.
+
+On Linux the poll walks `/proc` directly — no subprocess, no lossy `ps` parsing:
+- `/proc/<pid>/exe` symlink → full executable name with case preserved (native programs and AppImage mounts). For a Wine/Proton process this is the Wine *loader* (`wine64-preloader`), never the game, so a Wine process also gets `winExes`, the Windows programs it may run (`deriveWindowsExes`): every `<name>.exe` in its command line read as one string (a Windows path with spaces may arrive as one argv token or several; Proton's `steam.exe Game.exe` shim yields `Game.exe`) and its kernel-truncated `comm`. Wine plumbing every prefix runs (`start.exe`, `explorer.exe`, `services.exe`, `svchost.exe`, crash handlers, ...) is never a candidate. A process counts as Wine when its loader is `wine*` (not `wineserver`) or its command line starts with a Windows path; a native program with `foo.exe` among its arguments does not. Bottles, Heroic, Lutris, Sleepy Launcher and plain `wine` all run games this way, so every `.exe` name in the dictionary matches under any of them
+- `/proc/<pid>/cmdline` → NUL-separated argv, joined with spaces and matched against `cmdlinePatterns`
+- `/proc/<pid>/comm` → last-resort name, kernel-truncated to 15 characters
+
+Windows and macOS keep the `tasklist` / `ps` commands; Linux also falls back to `ps` if the `/proc` walk itself throws.
 
 ### Game Dictionary
 
@@ -1021,14 +1041,19 @@ GameEntry[]
 interface GameEntry {
   id: string;        // unique identifier, e.g. "cs2"
   name: string;      // display name, e.g. "Counter-Strike 2"
-  processes: string[]; // executable names, e.g. ["cs2.exe", "cs2"]
+  processes: string[]; // executable names, e.g. ["cs2.exe", "cs2"]; may be empty when cmdlinePatterns carries the matching
+  cmdlinePatterns?: string[]; // substrings matched against the process command line (case-insensitive)
   type?: string;     // "playing" | "listening" | "watching" | "streaming" (default: "playing")
 }
 ```
 
+`cmdlinePatterns` lets one entry cover every launcher variant of a game whose actual process is a bare interpreter. Minecraft is the canonical case: on Linux it is always a `java` process, so the entry matches `net.minecraft.client.main.main` (vanilla), Fabric/Quilt `KnotClient`, `--launchTarget forgeclient|neoforgeclient` (Neo)Forge, legacy `FMLEntityWrapper`-era launchers, and the Prism/MultiMC entrypoint classes — launcher-agnostically, without ever matching bare `java` (which would false-positive on Minecraft servers and Java IDEs).
+
+A separate `minecraft-launcher` entry (official launcher, Prism, MultiMC, GDLauncher, ATLauncher) is ordered **after** the game entry so a running game always wins over its launcher.
+
 ### Dictionary Loading Strategy
 
-1. **Startup** (`startActivityDetection`): Load best local source — cache file first (`{userData}/games-cache.json`), fall back to bundled seed (`resources/games.json`)
+1. **Startup** (`startActivityDetection`): Read both the cache (`{userData}/games-cache.json`) and the bundled seed (`resources/games.json`), load whichever has the **higher version**, and promote a winning seed into the cache. (Earlier builds let any valid cache shadow the seed, so dictionary updates shipped with new builds never reached existing installs.)
 2. **Background sync** (`syncDictionary`): Fire-and-forget async fetch from GitHub after startup
 
 ### Remote Sync (`syncDictionary()`)
@@ -1049,53 +1074,112 @@ Step 3: If remote version > local version → atomic write to cache, save ETag, 
 
 **Atomic file writes** (`atomicWrite()`): Writes to `{path}.tmp` then `fs.renameSync()` into place. Prevents corrupt cache on crash.
 
-**Hot-swap** (`hotSwapDictionary()`): Replaces `gameEntries` and `processMap` in memory without resetting `currentGameId` or `currentActivity`. Active detection state survives dictionary updates.
+**Hot-swap:** the remote update replaces `gameEntries` in memory without resetting `currentGameId` or `currentActivity`. Active detection state survives dictionary updates.
 
 ### Process Polling
 
 **Interval:** 15 seconds (`POLL_INTERVAL_MS`). First poll runs immediately on start.
 
-**Guard:** `isPolling` flag prevents overlapping polls if a previous `execFile` hasn't returned.
+**Guard:** `isPolling` flag prevents overlapping polls while a previous scan is still in flight.
 
-**Error handling:** First `execFile` failure logs warning and stops detection entirely (`stopActivityDetection()`). The `hasErrored` flag prevents repeated log spam.
+**Error handling:** First command failure (ps/tasklist path) logs a warning and stops detection entirely (`stopActivityDetection()`). The `hasErrored` flag prevents repeated log spam. The Linux `/proc` walk is crash-guarded and degrades to the `ps` path instead of stopping detection.
 
-### Platform Commands
+### Platform Process Sources
 
-| Platform | Command | Output Format |
-|----------|---------|---------------|
+| Platform | Source | Notes |
+|----------|--------|-------|
+| Linux | `/proc` walk | exe symlink → cmdline → comm; exe readlink failures (EACCES on other users' processes) fall through to the next source |
 | macOS | `ps -c -A -o comm` | One process name per line (header: `COMM`) |
-| Linux | `ps -A -o comm` | One process name per line (header: `COMM` or `COMMAND`) |
-| Windows | `tasklist /fo csv /nh` | CSV: `"ImageName","PID","SessionName","Session#","MemUsage"` |
+| Windows | `tasklist /fo csv /nh` | CSV: `"ImageName","PID",...` |
+| Linux fallback | `ps -A -o comm` | Only if the `/proc` walk throws |
 
-Max buffer: 1MB. Process names extracted and lowercased into a `Set<string>`.
+Max buffer for command output: 1MB. Command-based names are lowercased into a `Set<string>`; `/proc`-sourced names keep their case and are compared case-insensitively at match time.
 
-### Matching Algorithm (`poll()`)
+### Matching Algorithm (`findMatchingGame`)
 
-1. Parse running processes into a lowercase `Set<string>`
-2. Iterate `gameEntries` in dictionary order (first match wins = priority)
-3. For each entry, check if any of its `processes` (lowercased) are in the running set
-4. **Game detected (new or changed):** Set `currentGameId`, build `Activity` object with `timestamps.start = Date.now()`, fire `onChangeCallback`
+A running process matches a dictionary entry when any of these hold:
+
+1. **Name match (case-insensitive):** the process name, or for a Wine process any of its `winExes`, equals one of `entry.processes`
+2. **comm truncation:** the dictionary name is longer than 15 characters, the process name is exactly 15 characters, and the dictionary name starts with it — because the kernel stores `comm` in a 16-byte buffer (`minecraft-launcher` → `minecraft-launc`)
+3. **Command-line pattern:** any of `entry.cmdlinePatterns` appears (case-insensitive) in the space-joined argv
+
+Every running game is reported, up to five (`detectActivitiesWithInfo`, `MAX_DETECTED_GAMES`): dictionary matches in dictionary order — which is also the order shown, the first being the primary activity — then the games the source detectors resolve. A game found twice (several processes, or a store plus the dictionary) is listed once under the dictionary's name: a source match is skipped when its process was already claimed or its name equals (ignoring case and punctuation) one already listed. A launcher (`isLauncherGame`: "launcher" in the name or id, `playing` type) is hidden as soon as a real game runs and shown alone otherwise. Other types (watching, listening, streaming) never hide anything and are never hidden.
+
+### Local Game Sources (Steam, Flatpak, GOG, Heroic, Bottles, Lutris)
+
+The dictionary only knows curated titles. Four source detectors extend detection to **any installed game** of their provider, consulted after the dictionary and in registration order:
+
+| Source | Data read | Match | Module |
+|--------|-----------|-------|--------|
+| Steam | `libraryfolders.vdf` (every library, any disk) + `appmanifest_*.acf` (name, installdir, StateFlags bit 4 = fully installed) | The launch command of Steam's supervising `reaper` process (`reaper SteamLaunch AppId=<id> -- …`), which names the app id for every game Steam starts, native or Proton; else the running exe path under `<lib>/steamapps/common/<installdir>/` (native games: a Proton game's own process is a Wine binary inside the Proton directory, so its exe path says nothing about the game). Steam's own tool apps (`Steam Linux Runtime *`, `Proton *`, `Steamworks Common Redistributables`; told apart by name or install directory, the manifest has no flag) are never indexed — their processes run whenever Steam does and used to become the activity. `compatdata` prefixes rejected | `steamGames.ts` |
+| Flatpak | exported `.desktop` (`Game` category required) + `…/flatpak/app/<id>/<arch>/<branch>/active/files/` | running exe path under the app's `active/files` dir; launcher apps (Steam, Lutris, Bottles, Heroic, itch, Prism) excluded so they don't shadow their games | `flatpakGames.ts` |
+| GOG | `~/GOG Games/<dir>/` + `goggame-*.info` (display name, dir-name fallback) | exe path under the game dir (case-insensitive — info and filesystem disagree on case), with a command-line fallback for `start.sh` wrappers | `gogGames.ts` |
+| Heroic, Bottles, Lutris | Heroic: Epic `legendaryConfig/legendary/installed.json`, GOG `gog_store/installed.json` (+ `library.json` titles, the install's `goggame-*.info` play task), Amazon `nile_config/nile/installed.json` (+ library cache), sideloaded `sideload_apps/library.json`, in `~/.config/heroic` and the Flatpak config dir. Bottles: `External_Programs` of every `bottle.yml` (native and Flatpak data dir), its `icons/` image. Lutris: `~/.config/lutris/games/<slug>-<id>.yml` (`game.exe` / `working_dir`; the name is the config's `name:`, else the slug in title case), `lutris_<slug>.png` from the hicolor icon dirs | A Wine process by the Windows program it runs (`winExes`) and, where the launcher names the game's folder, by running from it (`cwd`) or naming it on its command line; Bottles names no host folder, so a program name alone matches. A native process by living under the folder | `launcherGames.ts` (`parseSimpleYaml` reads the few block mappings needed; every file is read defensively, an unknown layout yields no games) |
+
+Properties common to all sources:
+
+- **Priority:** dictionary first (curated names and types win), then sources in order — a Steam install of a dictionary-listed game reports the dictionary entry.
+- **Caching:** each provider's index caches for 60 seconds, so the 15s poll reuses it and installs/uninstalls show up within a minute.
+- **Roots:** Steam roots are realpath-deduplicated across `~/.steam/steam`, the native data dir, the Flatpak sandbox and the snap layout; Flatpak covers user and system installs.
+- **Linux-first:** the sources light up where the metadata exists (Linux). On Windows/macOS detection is dictionary-only.
+
+Detection flows through `detectActivitiesWithInfo` (`detectActivity` returns its first game for older callers): the dictionary is consulted first, then the source detectors above (in registration order) for anything installed but not curated. The state machine semantics are unchanged:
+
+4. **Game detected (new or changed):** Build the `Activity` with `timestamps.start = Date.now()` and refresh the effective activities. Every game keeps its own start time while it runs (`nextScanActivities` returns the previous object for a game still running)
 5. **Same game still running:** No-op (no IPC sent)
-6. **Game exited (was detected, now gone):** Clear `currentGameId` and `currentActivity`, fire callback with `null`
+6. **Game exited (was detected, now gone):** Drop it from the scan layer and refresh — emits only if the effective list (IPC push merged into scan) actually changed. An IPC push replaces the scanned game of the same name in place, or leads the list when no scanned game has that name (`mergeActivities`)
 7. **No game (and none before):** No-op
 
 ### Activity Object
 
 ```typescript
 interface Activity {
-  type: string;       // from GameEntry.type, default "playing"
-  name: string;       // from GameEntry.name
-  details?: string;   // unused currently
-  state?: string;     // unused currently
-  timestamps?: { start?: number; end?: number };
+  type: string;       // from GameEntry.type / IPC push, default "playing"
+  name: string;       // game name, or the IPC push's resolved name
+  details?: string;   // from IPC pushes (osu!lazer's current map)
+  state?: string;     // from IPC pushes (menu / spectating state)
+  timestamps?: { start?: number; end?: number };  // absolute ms; end enables the web countdown
+  assets?: { largeImage?: string; largeText?: string; smallImage?: string; smallText?: string };
 }
 ```
 
 ### Lifecycle
 
-- **Start:** `startActivityDetection(callback)` — called from `app.whenReady()`
-- **Stop:** `stopActivityDetection()` — called from `before-quit`
-- **Query:** `getCurrentActivity()` — exposed via `get-current-activity` IPC handle
+- **Start:** `startActivityDetection(callback)` — called from `app.whenReady()`, followed by `startRichPresenceIpcServer({ onActivity: applyIpcActivity })`
+- **Stop:** `stopActivityDetection()` + `stopRichPresenceIpcServer()` — called from `before-quit`
+- **Query:** `getCurrentActivity()` — exposed via `get-current-activity` IPC handle; returns the effective activity (IPC push ?? scan)
+- **Overlay:** `applyIpcActivity(push | null)` — applies an IPC push immediately (map switches are visible within a second, not on the next poll); a null push falls back to the scan-detected game
+
+---
+
+## Rich Presence IPC Server (activity push)
+
+`richPresenceIpc.ts` speaks the local IPC protocol games use for rich presence, so games that push rich activity (osu!lazer with its current map and menu state) can be surfaced directly instead of only being detected by process name.
+
+### Protocol
+
+- Frames: `[i32 LE opcode][i32 LE length][JSON payload]`; opcodes 0 HANDSHAKE, 1 FRAME, 2 CLOSE, 3 PING, 4 PONG
+- Handshake payload `{v, client_id}`; the raw-JSON (unframed) handshake some client libraries send is accepted too — including multiple messages glued into one segment, split by a brace scanner
+- Commands ride in FRAME payloads `{cmd, args, nonce}`: `SET_ACTIVITY` (applied), `SUBSCRIBE`/`UNSUBSCRIBE` (ACKed, no join/spectate events are ever dispatched), anything else gets an error ACK and keeps the connection
+- `PING` answers `PONG` with the same payload; a client `CLOSE` ends the connection
+
+### Sockets and coexistence
+
+- All ten protocol socket slots are bound, one `net.Server` per path, across `XDG_RUNTIME_DIR` and the TMPDIR chain; sockets are `chmod 600`
+- Slots answering a probe belong to a live server (usually the first-party desktop client) and are left untouched; socket files left by crashed servers are probed (`ECONNREFUSED`) and reclaimed; non-socket files are never deleted
+- With that client already running, a connecting game may land in either server — the same behavior as running two copies of it
+
+### Push semantics
+
+- `SET_ACTIVITY` payloads are normalized: strings clamped to the shared activity limits by codepoints, `timestamps` converted to absolute ms (the protocol sends unix seconds; values below 1e12 are multiplied by 1000), and art references reduced to http(s) URLs (length-clamped). The protocol's asset keys are dropped rather than resolved: they only resolve through Discord's CDN, which this server never contacts. Game icons come from the player's own machine instead (`gameIcons.ts`: Steam's library cache, Flatpak's exported hicolor icons, GOG's `support/icon.png`, an AppImage mount's `.DirIcon`, `.desktop` entries and their theme icons, and for Wine programs the icon resource of the running `.exe` via `peIcon.ts`), extracted on detection and handed to the renderer, which uploads them to the user's own instance and attaches the instance URL to the activity (see activity-presence.md, "Game icons")
+- `buttons`, `party` and `secrets` are never read, let alone relayed
+- The live connection is the source of truth: a push is kept whatever pid it reports (AppImage wrappers and pids from another namespace report pids that are dead or unknown here). A game that exits is dropped by the disconnect grace when its socket closes
+- A 2.5s disconnect grace absorbs client reconnects (Lachee's auto-reconnect); a monotonic sequence number makes the last push win across connections
+- Name resolution for unnamed pushes: the push's own name → the dictionary via the pushing pid (`resolveIpcGameName`: read `/proc/<pid>`, match like a scan) → a small known-client map (osu!lazer) → "Unknown game"
+
+### Overlay
+
+The effective activity is `applyIpcActivity`'s overlay while a push is live, otherwise the scan-detected game (see Activity Detection → Lifecycle). Emissions fire only when the effective activity actually changed, and a scan-game exit that happens under an active overlay is not lost: clearing the overlay afterwards yields no activity rather than a ghost.
 
 ---
 

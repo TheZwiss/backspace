@@ -227,5 +227,8 @@
   "sticker_not_local": "Esta figurinha está guardada em outro servidor, por isso não foi adicionada à sua coleção.",
   "sticker_not_found": "Essa figurinha não existe mais.",
   "sticker_collection_full": "Sua coleção está cheia com {{max}} figurinhas. Remova uma para adicionar outra.",
-  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle."
+  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle.",
+  "game_icon_invalid_image": "Envie uma imagem PNG, JPEG ou WebP de no máximo {{max}} MB.",
+  "game_icon_not_found": "Esse ícone de jogo não existe mais.",
+  "game_icon_collection_full": "A coleção de ícones de jogos está cheia com {{max}} ícones."
 }

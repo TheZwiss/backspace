@@ -349,6 +349,13 @@ Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's nam
 
 Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 16,777,216 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
 
+## Game icons (`routes/gameIcons.ts`)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/game-icons` | JWT | `{image}`; canonical base64 of a PNG, JPEG or WebP of at most 512 KiB (`MAX_GAME_ICON_BYTES`). Re-encodes to a 256 px WebP, stores it content-addressed and records it for the account. Returns `{id, url}` with the absolute URL of the asset. 10 uploads per account per minute (`429 rate_limited`); `409 game_icon_collection_full` at 25,600 icons; `400 game_icon_invalid_image` for anything else |
+| GET | `/api/game-icons/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it. `404 game_icon_not_found` for an unknown id or a missing file |
+
 ## GIF (`routes/gif.ts`) — auth required
 ```
 GET /gif/enabled                         → { enabled }

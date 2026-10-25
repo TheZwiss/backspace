@@ -227,5 +227,8 @@
   "sticker_not_local": "This sticker is stored on another server, so it was not added to your collection.",
   "sticker_not_found": "That sticker no longer exists.",
   "sticker_collection_full": "Your collection is full at {{max}} stickers. Remove one to add another.",
-  "sticker_name_invalid": "Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters."
+  "sticker_name_invalid": "Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.",
+  "game_icon_invalid_image": "Upload a PNG, JPEG or WebP image of at most {{max}} MB.",
+  "game_icon_not_found": "That game icon no longer exists.",
+  "game_icon_collection_full": "The game icon collection is full at {{max}} icons."
 }

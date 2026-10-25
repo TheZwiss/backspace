@@ -30,8 +30,8 @@ function ActivityFriendRow({
   const friendDisplayName = canonical.displayName ?? baseName;
 
   const rowClass = isRichActivity
-    ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
-    : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors';
+    ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-all duration-200 ease-out glass-pill border-l-2 ${accentClass}`
+    : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] border-l-2 border-transparent hover:bg-interactive-hover cursor-pointer group transition-all duration-200 ease-out';
 
   return (
     <div

@@ -759,6 +759,21 @@ A sticker message or reaction crosses instances as its token, through the existi
 
 ---
 
+## 15. Game Icons
+
+The activity a game reports can carry an icon, and that icon comes from the player's own machine: the desktop client extracts it locally (Steam's `appcache/librarycache`, Flatpak's exported hicolor icons, GOG's `support/icon.png`, an AppImage mount's `.DirIcon`, `.desktop` entries and their theme icons — `packages/desktop/src/gameIcons.ts`) and the renderer uploads it to the user's own instance. No external art service is contacted: the protocol's Discord asset keys are dropped at normalization rather than resolved against a third-party CDN.
+
+`POST /api/game-icons` takes `{ image }`, canonical base64 in the JSON body of the authenticated API client, and mirrors the sticker route's shape:
+
+1. more than 10 uploads per account per minute are refused (`429 rate_limited`), as is a full set (`409 game_icon_collection_full`, 25,600 distinct icons per account, `MAX_GAME_ICONS_PER_USER`);
+2. sharp decodes at most 512 KiB (`MAX_GAME_ICON_BYTES`) of PNG, JPEG or WebP and re-encodes to a still WebP fitting 256 x 256 without enlarging (`game_icon_invalid_image` otherwise);
+3. the asset is stored content-addressed (`game-icons/<sha256>.webp` under the upload directory, written atomically), the row upserted in `game_icon_assets`, and the account's entry recorded in `game_icons`. The same bytes from another machine or account deduplicate to the same file;
+4. the response is `{ id, url }` with the absolute instance URL (`/api/game-icons/assets/<sha256>.webp`), which the renderer attaches to the activity's `assets.largeImage` and caches by game name (`localStorage`), so one upload serves every later activity for that game.
+
+`GET /api/game-icons/assets/<id>.webp` is public with the same sandbox headers as a sticker asset (immutable cache, `default-src 'none'`), so a federated peer's browser loads it the way it loads any image embed. **Retention.** `game_icons.created_at` means "last uploaded": an upload of bytes the account already holds renews it. Phase 5 of the storage janitor (`cleanupGameIconAssets`, `utils/gameIconAssets.ts`) drops claims not renewed for a year (`GAME_ICON_RETENTION_MS`), then deletes assets no remaining claim names once they are older than 24 hours (`GAME_ICON_ASSET_GRACE_MS`; an upload writes its asset row before its file and claim), files no asset row names, and stale `.tmp` files, honouring dry run. The desktop client uploads a played game's icon again once its last upload is 30 days old (`backspace_game_icons_seen` in `localStorage`; a cache from before that key counts as due), so only an icon nobody used for a year goes; an icon that expires while still shown on a profile is a missing image until its owner next plays the game. There is no removal route, and account deletion removes only the claims (the janitor then removes the assets). The per-account quota stays the bound on what one account can store (25,600 icons of normally a few dozen KiB each; the 10 uploads per minute make filling it a matter of days); a byte budget is open work.
+
+---
+
 ## Boundary with Federation
 
 This spec covers **local** file storage and serving. The boundary:

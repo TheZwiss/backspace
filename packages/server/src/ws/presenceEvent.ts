@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { Activity, ActivityAssets, ActivityTimestamps, ActivityType, PresenceIdentity, ServerEvent } from '@backspace/shared';
+import type { Activity, ActivityAssets, ActivityPlayback, ActivityTimestamps, ActivityType, PresenceIdentity, ServerEvent } from '@backspace/shared';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { getDb, schema } from '../db/index.js';
 
@@ -70,6 +70,7 @@ export function snapshotActivities(live: Activity[], customStatus: string | null
 
 const VALID_ACTIVITY_TYPES = new Set<string>(['custom', 'playing', 'listening', 'watching', 'streaming']);
 const MAX_TIMESTAMP = 4102444800000;
+const MAX_PLAYBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Validate and normalize an activity list from a client or a peer. Null when
@@ -105,6 +106,30 @@ export function validateActivities(raw: unknown): Activity[] | null {
       if (ts.start !== undefined || ts.end !== undefined) activity.timestamps = ts;
     }
 
+    if (obj.playback && typeof obj.playback === 'object') {
+      const playbackObj = obj.playback as Record<string, unknown>;
+      const positionMs = playbackObj.positionMs;
+      const durationMs = playbackObj.durationMs;
+      if (
+        typeof positionMs === 'number'
+        && Number.isFinite(positionMs)
+        && positionMs >= 0
+        && positionMs <= MAX_PLAYBACK_MS
+      ) {
+        const playback: ActivityPlayback = { positionMs };
+        if (
+          typeof durationMs === 'number'
+          && Number.isFinite(durationMs)
+          && durationMs > 0
+          && durationMs <= MAX_PLAYBACK_MS
+        ) {
+          playback.durationMs = durationMs;
+          playback.positionMs = Math.min(positionMs, durationMs);
+        }
+        activity.playback = playback;
+      }
+    }
+
     if (obj.assets && typeof obj.assets === 'object') {
       const aObj = obj.assets as Record<string, unknown>;
       const assets: ActivityAssets = {};
@@ -118,4 +143,30 @@ export function validateActivities(raw: unknown): Activity[] | null {
     validated.push(activity);
   }
   return validated;
+}
+
+/**
+ * Advance stored media positions by the time an activity has been held on this
+ * server. A late WebSocket ready must see the current point, not the position
+ * from whenever the desktop last reported it.
+ */
+export function projectActivityPlayback(activities: Activity[], elapsedMs: number): Activity[] {
+  if (elapsedMs <= 0) return activities;
+  let changed = false;
+  const projected = activities.map((activity) => {
+    const playback = activity.playback;
+    if (!playback) return activity;
+
+    const positionMs = playback.durationMs === undefined
+      ? playback.positionMs + elapsedMs
+      : Math.min(playback.durationMs, playback.positionMs + elapsedMs);
+    if (positionMs === playback.positionMs) return activity;
+
+    changed = true;
+    return {
+      ...activity,
+      playback: { ...playback, positionMs },
+    };
+  });
+  return changed ? projected : activities;
 }

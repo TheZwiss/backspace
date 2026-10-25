@@ -70,14 +70,32 @@
     "sendMessage": "发送消息",
     "editRoles": "编辑身份组",
     "viewFull": "查看完整个人资料",
-    "addFriend": "添加好友"
+    "addFriend": "添加好友",
+    "playingNow": "正在玩"
   },
   "activity": {
     "title": "当前活跃",
     "quietTitle": "目前很安静…",
     "quietDescription": "当好友开始活动时（例如玩游戏或进行语音通话），我们将在此处展示！",
     "online": "在线 — {{n}}",
-    "offline": "离线 — {{n}}"
+    "offline": "离线 — {{n}}",
+    "types": {
+      "playing": "正在游玩",
+      "listening": "正在收听",
+      "streaming": "正在直播",
+      "watching": "正在观看",
+      "custom": "自定义状态"
+    },
+    "players": {
+      "cloudmusic": "网易云音乐",
+      "qqmusic": "QQ音乐",
+      "kugou": "酷狗音乐",
+      "kuwo": "酷我音乐",
+      "spotify": "Spotify",
+      "applemusic": "Apple Music",
+      "yandexmusic": "Yandex Music"
+    },
+    "openTrack": "打开歌曲"
   },
   "instanceNotConnected": "未连接到 {{host}}。请重新连接后再试。"
 }

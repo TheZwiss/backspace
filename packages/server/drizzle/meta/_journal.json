@@ -225,6 +225,13 @@
       "when": 1791785539220,
       "tag": "0031_personal_stickers",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792200000000,
+      "tag": "0036_game_icons",
+      "breakpoints": true
     }
   ]
 }

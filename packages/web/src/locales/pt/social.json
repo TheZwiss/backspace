@@ -74,14 +74,32 @@
     "sendMessage": "Enviar mensagem",
     "editRoles": "Editar cargos",
     "viewFull": "Ver perfil completo",
-    "addFriend": "Adicionar amigo"
+    "addFriend": "Adicionar amigo",
+    "playingNow": "Jogando agora"
   },
   "activity": {
     "title": "Ativos agora",
     "quietTitle": "Está tudo quieto por enquanto...",
     "quietDescription": "Quando um amigo começar uma atividade, como jogar ou ficar num canal de voz, ela aparecerá aqui!",
     "online": "Online — {{n}}",
-    "offline": "Offline — {{n}}"
+    "offline": "Offline — {{n}}",
+    "types": {
+      "playing": "Jogando",
+      "listening": "Ouvindo música",
+      "streaming": "Transmitindo",
+      "watching": "Assistindo",
+      "custom": "Status personalizado"
+    },
+    "players": {
+      "cloudmusic": "NetEase Cloud Music",
+      "qqmusic": "QQ Music",
+      "kugou": "KuGou",
+      "kuwo": "Kuwo",
+      "spotify": "Spotify",
+      "applemusic": "Apple Music",
+      "yandexmusic": "Yandex Music"
+    },
+    "openTrack": "Abrir faixa"
   },
   "instanceNotConnected": "Não conectado a {{host}}. Conecte-se novamente e tente de novo."
 }

@@ -33,6 +33,7 @@ import { UserProfilePopoutLayer } from '../ui/UserProfilePopoutLayer';
 import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
 import { InstanceUpdateToast } from '../ui/InstanceUpdateToast';
+import { MediaSetupHint } from '../ui/MediaSetupHint';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { useAuth } from '../../hooks/useAuth';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -441,6 +442,7 @@ export function AppLayout() {
         <NotificationController />
         <UpdateToast />
         <InstanceUpdateToast />
+        <MediaSetupHint />
         <ToastContainer />
         <ContextMenuRenderer />
       </>
@@ -492,6 +494,7 @@ export function AppLayout() {
           useFederationToasts() hook above); this also mounts the instance
           update toast. */}
       <InstanceUpdateToast />
+      <MediaSetupHint />
       <ToastContainer />
       <ContextMenuRenderer />
     </div>

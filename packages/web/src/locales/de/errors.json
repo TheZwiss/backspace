@@ -227,5 +227,8 @@
   "sticker_not_local": "Dieser Sticker liegt auf einem anderen Server und wurde deshalb nicht zu deiner Sammlung hinzugefügt.",
   "sticker_not_found": "Diesen Sticker gibt es nicht mehr.",
   "sticker_collection_full": "Deine Sammlung ist mit {{max}} Stickern voll. Entferne einen, um einen neuen hinzuzufügen.",
-  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen."
+  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen.",
+  "game_icon_invalid_image": "Lade ein PNG-, JPEG- oder WebP-Bild mit höchstens {{max}} MB hoch.",
+  "game_icon_not_found": "Dieses Spielsymbol gibt es nicht mehr.",
+  "game_icon_collection_full": "Die Sammlung der Spielsymbole ist mit {{max}} Symbolen voll."
 }

@@ -15,7 +15,27 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { pathToFileURL } from 'url';
-import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
+import {
+  startActivityDetection,
+  stopActivityDetection,
+  getAllCurrentActivities,
+  applyIpcActivity,
+  listKnownGameNames,
+  listRunningPrograms,
+  getUnknownWinePrograms,
+  setManualBinding,
+  setManualBindings,
+} from './activityDetector';
+import type { Activity } from './activityDetector';
+import { resolveGameIcon } from './gameIcons';
+import { startRichPresenceIpcServer, stopRichPresenceIpcServer } from './richPresenceIpc';
+import {
+  startMediaDetection,
+  stopMediaDetection,
+  getCurrentMediaActivity,
+  type MediaSetupHint,
+} from './mediaDetector';
+import { loadActivitySettings, parseActivitySettingsUpdate, saveActivitySettings } from './activitySettings';
 import { KeybindManager } from './keybindManager';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
 import {
@@ -1237,6 +1257,10 @@ if (process.platform === 'win32') {
  */
 export function requestQuit(): void {
   isQuitting = true;
+  stopMediaDetection();
+  stopActivityDetection();
+  mainWindow?.webContents.send('activities-detected', []);
+  mainWindow?.webContents.send('activity-detected', null);
   app.quit();
 }
 
@@ -1476,12 +1500,105 @@ if (!gotTheLock) {
 
     initAutoUpdater();
 
-    // ─── Activity Detection ────────────────────────────────────────────────
-    startActivityDetection((activity) => {
-      mainWindow?.webContents.send('activity-detected', activity);
+    // ─── Activity & Media Detection ────────────────────────────────────────
+    let latestProcessActivities: Activity[] = getAllCurrentActivities();
+    let latestMediaActivity = getCurrentMediaActivity();
+    let currentMediaSetupHint: MediaSetupHint | null = null;
+
+    const buildEffectiveActivities = (): Activity[] => {
+      const activities: Activity[] = [];
+      for (const proc of latestProcessActivities) {
+        // Media players running in the background are not activities unless actively playing via mediaDetector.
+        // Prevent background processes (e.g. cloudmusic.exe in tray) from injecting fake media activities.
+        if (proc.type === 'listening' || proc.type === 'watching') continue;
+        activities.push(proc);
+      }
+      if (latestMediaActivity) {
+        const now = Date.now();
+        const start = latestMediaActivity.timestamps?.start;
+        const durationMs = latestMediaActivity.playback?.durationMs;
+        if (typeof start === 'number' && latestMediaActivity.playback) {
+          const positionMs = durationMs !== undefined
+            ? Math.min(durationMs, Math.max(0, now - start))
+            : Math.max(0, now - start);
+          activities.push({
+            ...latestMediaActivity,
+            playback: {
+              ...latestMediaActivity.playback,
+              positionMs,
+            },
+          });
+        } else {
+          activities.push(latestMediaActivity);
+        }
+      }
+      return activities;
+    };
+
+    const broadcastActivities = () => {
+      const activities = buildEffectiveActivities();
+      mainWindow?.webContents.send('activities-detected', activities);
+      mainWindow?.webContents.send('activity-detected', activities[0] || null);
+    };
+
+    startActivityDetection(
+      () => {
+        // legacy single activity callback maintained
+      },
+      (activities) => {
+        latestProcessActivities = activities;
+        broadcastActivities();
+      },
+    );
+
+    startMediaDetection(
+      (media) => {
+        latestMediaActivity = media;
+        broadcastActivities();
+      },
+      (hint) => {
+        currentMediaSetupHint = hint;
+        mainWindow?.webContents.send('media-setup-hint', hint);
+      },
+    );
+
+    // Rich presence IPC server: games (osu!lazer & co.) push richer
+    // activity that overlays process detection
+    startRichPresenceIpcServer({
+      onActivity: (push) => applyIpcActivity(push),
+    }).catch((err) => {
+      console.warn('[main] Rich presence IPC server failed to start:', err);
     });
 
-    ipcMain.handle('get-current-activity', () => getCurrentActivity());
+    ipcMain.handle('get-current-activity', () => {
+      const activities = buildEffectiveActivities();
+      return activities[0] || null;
+    });
+    ipcMain.handle('get-current-activities', () => buildEffectiveActivities());
+    ipcMain.handle('get-media-setup-hint', () => currentMediaSetupHint);
+    ipcMain.handle('get-activity-settings', () => loadActivitySettings());
+    ipcMain.handle('set-activity-settings', (event, settings: unknown) => {
+      if (event.sender !== mainWindow?.webContents) return;
+      const update = parseActivitySettingsUpdate(settings);
+      if (!update) return;
+      saveActivitySettings({ ...loadActivitySettings(), ...update });
+    });
+    ipcMain.handle('list-known-games', () => listKnownGameNames());
+    ipcMain.handle('list-running-programs', () => listRunningPrograms());
+    ipcMain.handle('get-unknown-wine-programs', () => getUnknownWinePrograms());
+    ipcMain.handle('set-manual-game-binding', (_event, binding: unknown) => { setManualBinding(binding); });
+    ipcMain.handle('set-manual-game-bindings', (_event, bindings: unknown) => { setManualBindings(bindings); });
+
+    // The renderer uploads the icon to the user's instance itself (it holds
+    // the session); main only hands over the bytes it extracted locally.
+    ipcMain.handle('get-game-icon', async (_event, name: unknown) => {
+      if (typeof name !== 'string' || name.length === 0 || name.length > 256) return null;
+      // Waits for a lookup in flight, and starts one for a game nothing warmed
+      // (a name the player typed by hand)
+      const icon = await resolveGameIcon(name);
+      if (!icon) return null;
+      return { data: icon.bytes.toString('base64'), mime: icon.mime };
+    });
 
     // Linux/AppImage path-refresh ONLY. On Windows and macOS the OS is the source
     // of truth for openAtLogin (Task 4) and we must not override user changes made
@@ -1541,6 +1658,10 @@ if (!gotTheLock) {
     systemAudio.stop();
     isQuitting = true;
     stopActivityDetection();
+    stopRichPresenceIpcServer();
+    stopMediaDetection();
     keybindManager.stop();
+    mainWindow?.webContents.send('activities-detected', []);
+    mainWindow?.webContents.send('activity-detected', null);
   });
 }

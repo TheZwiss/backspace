@@ -227,5 +227,8 @@
   "sticker_not_local": "此表情存储在其他服务器上，因此未添加到“我的表情”。",
   "sticker_not_found": "该表情已不存在。",
   "sticker_collection_full": "“我的表情”最多可保存 {{max}} 个。请先移除一个再添加。",
-  "sticker_name_invalid": "表情名称须为 1 到 {{max}} 个字符的单行文本，至少包含一个可见字符，且不能包含控制字符。"
+  "sticker_name_invalid": "表情名称须为 1 到 {{max}} 个字符的单行文本，至少包含一个可见字符，且不能包含控制字符。",
+  "game_icon_invalid_image": "请上传不超过 {{max}} MB 的 PNG、JPEG 或 WebP 图片。",
+  "game_icon_not_found": "该游戏图标已不存在。",
+  "game_icon_collection_full": "游戏图标最多可保存 {{max}} 个。"
 }

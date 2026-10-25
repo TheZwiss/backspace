@@ -174,6 +174,28 @@ interface BackspaceElectronAPI {
   // Activity detection (game/app process scanning)
   onActivityDetected: (callback: (activity: unknown) => void) => (() => void);
   getCurrentActivity: () => Promise<unknown>;
+  /** Every game running at once. Absent in desktop builds that predate multi-game detection. */
+  onActivitiesDetected?: (callback: (activities: unknown) => void) => (() => void);
+  getCurrentActivities?: () => Promise<unknown>;
+  /** Game names for the manual-game picker (dictionary + installed games); absent on older desktops. */
+  listKnownGames?: () => Promise<string[]>;
+  /** Programs the player can tie their game to. Absent in desktop builds that predate the binding. */
+  listRunningPrograms?: () => Promise<Array<{ label: string; process: string }>>;
+  /** Running Wine programs no detected game owns. Absent in desktop builds that predate it. */
+  getUnknownWinePrograms?: () => Promise<Array<{ label: string; process: string }>>;
+  setManualGameBindings?: (bindings: Array<{ name: string; process: string }>) => Promise<void>;
+  setManualGameBinding?: (binding: { name: string; process: string } | null) => Promise<void>;
+  /**
+   * Locally extracted game icon (Steam library cache, .desktop entries,
+   * AppImage/GOG directories) as base64, or null when none was found. The
+   * renderer uploads it to the user's instance and attaches the instance's
+   * URL to the activity it sends.
+   */
+  getGameIcon?: (name: string) => Promise<{ data: string; mime: string } | null>;
+  getActivitySettings?: () => Promise<{ enablePreemption: boolean }>;
+  setActivitySettings?: (settings: { enablePreemption?: boolean }) => Promise<{ enablePreemption: boolean }>;
+  getMediaSetupHint?: () => Promise<string | null>;
+  onMediaSetupHint?: (callback: (hint: string) => void) => (() => void);
 
   // Keybind support
   getKeybindPortalStatus?: () => Promise<KeybindPortalStatus | null>;

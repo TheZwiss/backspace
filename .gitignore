@@ -6,11 +6,18 @@ node_modules/
 dist/
 dist-electron/
 installers/
+output/
+*.tar
+*.tar.*
+*.tgz
+*.zip
 packages/web/dist/
+packages/web/dist-mobile/
 packages/server/dist/
 packages/shared/dist/
 packages/desktop/dist/
 packages/desktop/dist-electron/
+packages/mobile/
 
 # Data
 data/
@@ -60,6 +67,7 @@ Desktop.ini
 # IDE
 .idea/
 .vscode/
+.claude/
 *.code-workspace
 
 # Logs
