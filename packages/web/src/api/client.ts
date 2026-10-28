@@ -1,3 +1,4 @@
+import type { SoundboardPack, SoundboardSound } from '@backspace/shared';
 import type { PersonalSticker } from '@backspace/shared/src/stickers';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
@@ -439,6 +440,14 @@ export class BackspaceApiClient {
     };
   };
 
+  soundboard: {
+    list: () => Promise<SoundboardPack[]>;
+    upload: (spaceId: string, data: { name: string; audio: string; volume: number }) => Promise<SoundboardSound>;
+    remove: (id: string) => Promise<{ success: boolean }>;
+    play: (id: string) => Promise<{ success: boolean }>;
+    audio: (id: string, playback?: boolean) => Promise<ArrayBuffer>;
+  };
+
   stickers: {
     list: () => Promise<PersonalSticker[]>;
     upload: (data: { name: string; image: string }) => Promise<PersonalSticker>;
@@ -529,6 +538,14 @@ export class BackspaceApiClient {
       const messages = await response.json() as T[];
       return { messages, forward };
     }
+    this.soundboard = {
+      list: () => request('GET', '/soundboard'),
+      upload: (spaceId, data) => request('POST', `/spaces/${encodeURIComponent(spaceId)}/soundboard`, data),
+      remove: (id) => request('DELETE', `/soundboard/${encodeURIComponent(id)}`),
+      play: (id) => request('POST', `/soundboard/${encodeURIComponent(id)}/play`),
+      audio: async (id, playback = false) => (await send('GET', playback ? `/soundboard/playback/${encodeURIComponent(id)}` : `/soundboard/${encodeURIComponent(id)}/audio`, undefined, !playback)).arrayBuffer(),
+    };
+
     this.stickers = {
       list: () => request('GET', '/stickers'),
       upload: (data) => request('POST', '/stickers', data),

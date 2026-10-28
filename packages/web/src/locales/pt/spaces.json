@@ -439,6 +439,10 @@
   "permissions": {
     "title": "Permissões",
     "names": {
+      "createSoundboard": "Criar efeitos sonoros",
+      "manageSoundboard": "Gerenciar efeitos sonoros",
+      "useSoundboard": "Usar efeitos sonoros",
+      "useExternalSounds": "Usar sons de outros servidores",
       "administrator": "Administrador",
       "viewChannel": "Ver canais",
       "manageChannels": "Gerenciar canais",

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, blob, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
@@ -816,3 +816,19 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+
+export const soundboardAssets = sqliteTable('soundboard_assets', {
+  id: text('id').primaryKey(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  durationMs: integer('duration_ms').notNull(),
+});
+export const soundboardSounds = sqliteTable('soundboard_sounds', {
+  id: text('id').primaryKey(),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => soundboardAssets.id),
+  creatorId: text('creator_id').notNull(),
+  name: text('name').notNull(),
+  volume: real('volume').notNull().default(1),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ spaceIdx: index('idx_soundboard_space').on(table.spaceId) }));

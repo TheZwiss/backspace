@@ -1,4 +1,25 @@
 {
+  "soundboard": {
+    "title": "Soundboard",
+    "description": "Play a short effect for everyone in your call. Choose sounds from servers you belong to.",
+    "pack": "Server pack",
+    "empty": "No sound packs yet.",
+    "count_one": "{{count}} of 40 sounds",
+    "count_other": "{{count}} of 40 sounds",
+    "refresh": "Refresh",
+    "volume": "Your soundboard volume",
+    "play": "Play in call",
+    "preview": "Listen locally",
+    "confirmDelete": "Delete the sound “{{name}}”?",
+    "search": "Search sounds",
+    "add": "Add sound",
+    "uploadHint": "Up to 5.2 seconds, 5 MB source file. Maximum 40 sounds per server.",
+    "name": "Sound name",
+    "audioFile": "Audio file",
+    "clipVolume": "Effect volume",
+    "permissionHint": "A role with Create soundboard sounds permission is required to add effects.",
+    "invalidAudio": "Choose a valid audio file up to 5.2 seconds and 5 MB."
+},
   "chatPanel": {
     "title": "Chat",
     "close": "Close Chat",

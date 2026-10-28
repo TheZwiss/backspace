@@ -1,4 +1,25 @@
 {
+  "soundboard": {
+    "title": "Soundeffekte",
+    "description": "Spiele einen kurzen Effekt für alle im Anruf ab. Nutze Sounds deiner Server.",
+    "pack": "Server-Paket",
+    "empty": "Noch keine Sound-Pakete.",
+    "count_one": "{{count}} von 40 Sounds",
+    "count_other": "{{count}} von 40 Sounds",
+    "refresh": "Aktualisieren",
+    "volume": "Deine Effektlautstärke",
+    "play": "Im Anruf abspielen",
+    "preview": "Nur selbst anhören",
+    "confirmDelete": "Sound „{{name}}“ löschen?",
+    "search": "Sounds suchen",
+    "add": "Sound hinzufügen",
+    "uploadHint": "Bis zu 5,2 Sekunden und 5 MB Quelldatei. Maximal 40 Sounds pro Server.",
+    "name": "Soundname",
+    "audioFile": "Audiodatei",
+    "clipVolume": "Effektlautstärke",
+    "permissionHint": "Zum Hinzufügen wird die Rollenberechtigung zum Erstellen von Soundeffekten benötigt.",
+    "invalidAudio": "Wähle eine gültige Audiodatei bis 5,2 Sekunden und 5 MB."
+},
   "chatPanel": {
     "title": "Chat",
     "close": "Chat schließen",

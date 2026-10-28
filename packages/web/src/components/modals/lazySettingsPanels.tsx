@@ -136,3 +136,5 @@ export function SettingsPanelSuspense({ children }: { children: ReactNode }) {
     </PanelLoadBoundary>
   );
 }
+
+export const SoundboardPanel = lazyPanel(() => import('../voice/Soundboard'), (m) => m.SoundboardPanel);

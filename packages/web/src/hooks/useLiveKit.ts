@@ -1,3 +1,4 @@
+import { receiveSoundboard } from '../utils/soundboard';
 import { startStreamPreviews, useStreamPreviews } from '../utils/streamPreviews';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -1026,7 +1027,11 @@ export function useLiveKit() {
         }
         updateParticipants();
       });
-      newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
+      newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
+        if (isCurrent() && !participant && topic === 'backspace.soundboard.v1') {
+          void receiveSoundboard(payload, newRoom, hostOrigin, isCurrent);
+          return;
+        }
         if (isCurrent()) handleDataReceived(newRoom, payload, participant, republish, resume);
       });
       newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {

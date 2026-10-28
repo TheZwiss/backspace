@@ -436,6 +436,10 @@
   "permissions": {
     "title": "Permissions",
     "names": {
+      "createSoundboard": "Create soundboard sounds",
+      "manageSoundboard": "Manage soundboard sounds",
+      "useSoundboard": "Use soundboard",
+      "useExternalSounds": "Use sounds from other servers",
       "administrator": "Administrator",
       "viewChannel": "View Channels",
       "manageChannels": "Manage Channels",

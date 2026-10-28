@@ -442,6 +442,10 @@
   "permissions": {
     "title": "Права доступа",
     "names": {
+      "createSoundboard": "Создавать звуковые эффекты",
+      "manageSoundboard": "Управлять звуковыми эффектами",
+      "useSoundboard": "Использовать звуковые эффекты",
+      "useExternalSounds": "Использовать звуки других серверов",
       "administrator": "Администратор",
       "viewChannel": "Просмотр каналов",
       "manageChannels": "Управление каналами",

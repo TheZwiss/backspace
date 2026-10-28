@@ -75,7 +75,7 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -539,7 +539,7 @@ function FolderSlot({
   onDrop: (e: React.DragEvent) => void;
   anchorRef: (el: HTMLDivElement | null) => void;
 }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
 
   const getPillHeight = () => {
@@ -600,7 +600,7 @@ function FolderSlot({
 // ─── SpaceSidebar (main component) ────────────────────────────────────────
 
 export function SpaceSidebar() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
@@ -648,6 +648,7 @@ export function SpaceSidebar() {
 
     const items: ContextMenuItem[] = [
       { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { key: 'soundboard', type: 'action', label: t('voice:soundboard.title'), onClick: () => useUIStore.getState().openModal('soundboard', { spaceId }) },
       { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',

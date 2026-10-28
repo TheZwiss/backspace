@@ -232,6 +232,13 @@
       "when": 1793157333865,
       "tag": "0032_camera_quality",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793238000000,
+      "tag": "0033_soundboard",
+      "breakpoints": true
     }
   ]
 }

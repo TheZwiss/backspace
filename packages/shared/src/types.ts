@@ -2146,3 +2146,21 @@ export type FederationRejectedReason =
 
 /** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
 export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;
+
+
+export interface SoundboardSound {
+  id: string;
+  spaceId: string;
+  name: string;
+  assetId: string;
+  creatorId: string;
+  durationMs: number;
+  volume: number;
+}
+export interface SoundboardPack {
+  spaceId: string;
+  name: string;
+  canCreate: boolean;
+  canManage: boolean;
+  sounds: SoundboardSound[];
+}

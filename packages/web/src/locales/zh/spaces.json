@@ -433,6 +433,10 @@
   "permissions": {
     "title": "权限配置",
     "names": {
+      "createSoundboard": "创建音效",
+      "manageSoundboard": "管理音效",
+      "useSoundboard": "使用音效",
+      "useExternalSounds": "使用其他服务器的音效",
       "administrator": "管理员",
       "viewChannel": "查看频道",
       "manageChannels": "管理频道",

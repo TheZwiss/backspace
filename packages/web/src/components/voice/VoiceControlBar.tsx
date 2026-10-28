@@ -1,3 +1,4 @@
+import { SoundboardButton } from './Soundboard';
 import React, { useEffect, useState, useRef } from 'react';
 import { isElectron } from '../../platform/platform';
 import { openDetachedCallWindow } from './DetachedCallWindow';
@@ -122,6 +123,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
       {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
     >
       <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
+        <SoundboardButton />
         {/* Mute */}
         <button
           onClick={handleMute}

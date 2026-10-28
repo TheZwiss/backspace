@@ -1,4 +1,5 @@
 {
+  "soundboard_full": "此服务器已有 40 个音效，请先删除一个再添加。",
   "generic": "出了点问题。",
   "not_found": "未找到请求的内容。",
   "forbidden": "您无权执行此操作。",

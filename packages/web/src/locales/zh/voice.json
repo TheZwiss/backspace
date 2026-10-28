@@ -1,4 +1,24 @@
 {
+  "soundboard": {
+    "title": "音效面板",
+    "description": "为通话中的所有人播放简短音效，可使用你已加入服务器的音效。",
+    "pack": "服务器音效包",
+    "empty": "暂无音效包。",
+    "count_other": "{{count}} / 40 个音效",
+    "refresh": "刷新",
+    "volume": "你听到的音效音量",
+    "play": "在通话中播放",
+    "preview": "仅自己试听",
+    "confirmDelete": "删除音效“{{name}}”？",
+    "search": "搜索音效",
+    "add": "添加音效",
+    "uploadHint": "最长 5.2 秒，原始文件最大 5 MB。每个服务器最多 40 个音效。",
+    "name": "音效名称",
+    "audioFile": "音频文件",
+    "clipVolume": "音效音量",
+    "permissionHint": "添加音效需要角色具有创建音效的权限。",
+    "invalidAudio": "请选择最长 5.2 秒且不超过 5 MB 的有效音频文件。"
+},
   "chatPanel": {
     "title": "聊天",
     "close": "关闭聊天",

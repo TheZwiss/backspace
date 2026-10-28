@@ -6,6 +6,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const mocks = vi.hoisted(() => ({
+  receiveSoundboard: vi.fn(),
   token: vi.fn(),
   connect: vi.fn(), disconnect: vi.fn(),
   audio: {
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   applyOverdrive: vi.fn(),
   channelOrigin: vi.fn<(channelId: string) => string>(() => ''),
 }));
+vi.mock('../utils/soundboard', () => ({ receiveSoundboard: mocks.receiveSoundboard }));
 vi.mock('livekit-client', async importOriginal => {
   const sdk = await importOriginal<typeof import('livekit-client')>();
   return { ...sdk, Room: class extends sdk.Room {
@@ -379,4 +381,17 @@ describe('the instance hosting the call', () => {
 
     expect(mocks.applyOverdrive).toHaveBeenLastCalledWith(room, Track.Source.ScreenShare, expect.objectContaining({ maxBitrate: 3_000_000 }));
   });
+});
+
+
+it('accepts soundboard events only from the LiveKit server, not a remote participant', async () => {
+  mocks.receiveSoundboard.mockClear();
+  useVoiceStore.setState({ currentVoiceChannelId: 'channel' });
+  const { result } = renderHook(() => useLiveKit());
+  await act(async () => { await result.current.connect('channel'); });
+  const payload = new TextEncoder().encode('{}');
+  act(() => { result.current.room!.emit(RoomEvent.DataReceived, payload, { identity: 'peer' } as never, undefined, 'backspace.soundboard.v1'); });
+  expect(mocks.receiveSoundboard).not.toHaveBeenCalled();
+  act(() => { result.current.room!.emit(RoomEvent.DataReceived, payload, undefined, undefined, 'backspace.soundboard.v1'); });
+  expect(mocks.receiveSoundboard).toHaveBeenCalledOnce();
 });

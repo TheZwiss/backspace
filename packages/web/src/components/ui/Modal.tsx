@@ -6,6 +6,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ModalProps {
+  targetDocument?: Document;
   isOpen: boolean;
   onClose: () => void;
   title?: string;
@@ -28,12 +29,12 @@ interface ModalProps {
  * appended after it.
  */
 export function Modal(props: ModalProps) {
-  const portalContainer = usePortalContainer();
+  const portalContainer = usePortalContainer(props.targetDocument ?? document);
   if (!props.isOpen) return null;
   return createPortal(<ModalSurface {...props} />, portalContainer);
 }
 
-function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default' }: ModalProps) {
+function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', targetDocument = document }: ModalProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   useExitMotion(surfaceRef);
   const { t } = useTranslation('common');
@@ -47,9 +48,9 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   }, [onClose]);
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    targetDocument.addEventListener('keydown', handleKeyDown);
+    return () => targetDocument.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown, targetDocument]);
 
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {

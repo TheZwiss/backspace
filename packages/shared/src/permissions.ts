@@ -20,6 +20,10 @@ export const PermissionBits = {
   // rejects such a message (see shared/src/mentions.ts). Deliberately not in
   // DEFAULT_EVERYONE_PERMISSIONS: mass pings are granted per role.
   MENTION_EVERYONE:     1n << 15n,
+  CREATE_SOUNDBOARD:    1n << 16n,
+  MANAGE_SOUNDBOARD:    1n << 17n,
+  USE_SOUNDBOARD:       1n << 27n,
+  USE_EXTERNAL_SOUNDS:  1n << 28n,
   CONNECT:              1n << 20n,
   SPEAK:                1n << 21n,
   MUTE_MEMBERS:         1n << 22n,
@@ -42,7 +46,9 @@ export const DEFAULT_EVERYONE_PERMISSIONS =
   PermissionBits.ATTACH_FILES |
   PermissionBits.READ_MESSAGE_HISTORY |
   PermissionBits.ADD_REACTIONS |
-  PermissionBits.STREAM;
+  PermissionBits.STREAM |
+  PermissionBits.USE_SOUNDBOARD |
+  PermissionBits.USE_EXTERNAL_SOUNDS;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

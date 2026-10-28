@@ -1,3 +1,4 @@
+import { soundboardRoutes } from './routes/soundboard.js';
 import { recoverInterruptedDmCalls } from './utils/dmCallHistory.js';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
@@ -252,6 +253,7 @@ async function main(): Promise<void> {
   await app.register(messageRoutes);
   await app.register(uploadRoutes);
   await app.register(stickerRoutes);
+  await app.register(soundboardRoutes);
   await app.register(filesRoutes);
   await app.register(dmRoutes);
   await app.register(livekitRoutes);

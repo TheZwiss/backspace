@@ -184,6 +184,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   sticker_invalid_image: 'Upload a PNG, JPEG, WebP or GIF image of at most {{max}} MB',
   sticker_not_local: 'Only stickers from this instance can be added to a collection',
   sticker_not_found: 'Sticker not found',
+  soundboard_full: 'A server soundboard holds at most 40 sounds',
   sticker_collection_full: 'A sticker collection holds at most {{max}} stickers',
   sticker_name_invalid: 'Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.',
   // spaces

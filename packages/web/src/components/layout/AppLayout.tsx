@@ -1,3 +1,4 @@
+import { SoundboardManagerModal } from '../voice/Soundboard';
 import { useNavigationMotion } from '../../hooks/useNavigationMotion';
 import { SpaceProfileModal } from '../modals/SpaceProfileModal';
 import React, { useEffect } from 'react';
@@ -424,6 +425,7 @@ export function AppLayout() {
         {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
         <SpaceSettingsModal />
         <SpaceProfileModal />
+      <SoundboardManagerModal />
         <ChannelSettingsModal />
         <CategorySettingsModal />
         <NewDmModal />
@@ -477,6 +479,7 @@ export function AppLayout() {
       <UserSettingsModal />
       <SpaceSettingsModal />
       <SpaceProfileModal />
+      <SoundboardManagerModal />
       <ChannelSettingsModal />
       <CategorySettingsModal />
       <NewDmModal />

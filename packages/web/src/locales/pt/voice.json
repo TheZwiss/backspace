@@ -1,4 +1,26 @@
 {
+  "soundboard": {
+    "title": "Efeitos sonoros",
+    "description": "Toque um efeito para todos na chamada. Use sons dos servidores dos quais você é membro.",
+    "pack": "Pacote do servidor",
+    "empty": "Ainda não há pacotes de sons.",
+    "count_one": "{{count}} de 40 sons",
+    "count_other": "{{count}} de 40 sons",
+    "count_many": "{{count}} de 40 sons",
+    "refresh": "Atualizar",
+    "volume": "Volume dos efeitos para você",
+    "play": "Tocar na chamada",
+    "preview": "Ouvir só para mim",
+    "confirmDelete": "Excluir o efeito “{{name}}”?",
+    "search": "Buscar efeitos",
+    "add": "Adicionar efeito",
+    "uploadHint": "Até 5,2 segundos e arquivo original de até 5 MB. Máximo de 40 efeitos por servidor.",
+    "name": "Nome do efeito",
+    "audioFile": "Arquivo de áudio",
+    "clipVolume": "Volume do efeito",
+    "permissionHint": "É necessário um cargo com a permissão Criar efeitos sonoros para adicionar sons.",
+    "invalidAudio": "Escolha um áudio válido de até 5,2 segundos e 5 MB."
+},
   "chatPanel": {
     "title": "Chat",
     "close": "Fechar chat",
