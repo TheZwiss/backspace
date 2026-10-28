@@ -1,3 +1,4 @@
+import { StreamLiveBadge } from './StreamLiveBadge';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '../ui/Avatar';
 
@@ -130,7 +131,7 @@ export function VoiceUserRow({
         )}
         {/* Screen sharing LIVE badge */}
         {isScreenSharing && (
-          <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]">{t('voice:badges.live')}</span>
+          <StreamLiveBadge userId={userId} />
         )}
         {/* Locally muted — volume X icon */}
         {isLocallyMuted && (

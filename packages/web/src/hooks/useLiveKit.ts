@@ -1,3 +1,4 @@
+import { startStreamPreviews, useStreamPreviews } from '../utils/streamPreviews';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Room,
@@ -55,9 +56,12 @@ let _activeRoom: Room | null = null;
 const _republishTrackers = new WeakMap<Room, StreamRepublishTracker>();
 /** The shares each room's viewer may watch again after a full reconnect (`StreamResumeMemory`). */
 const _resumeMemories = new WeakMap<Room, StreamResumeMemory>();
+const _previewCleanup = new WeakMap<Room, () => void>();
 
 /** Forget a room's per-sharer stream state: the room is being left. */
 function clearRoomStreamState(room: Room): void {
+  _previewCleanup.get(room)?.();
+  _previewCleanup.delete(room);
   _republishTrackers.get(room)?.clear();
   _resumeMemories.get(room)?.clear();
 }
@@ -452,6 +456,9 @@ export function useLiveKit() {
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
     useVoiceStore.getState().setParticipants(allParticipants);
+    if (useStreamPreviews.getState().room === r) {
+      useStreamPreviews.setState({ identities: Object.fromEntries(allParticipants.map((p) => [p.userId, p.identity])) });
+    }
     SpeakingDetector.getInstance().syncTracks(allParticipants);
   }, []);
 
@@ -821,6 +828,12 @@ export function useLiveKit() {
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
+      _previewCleanup.set(newRoom, startStreamPreviews(newRoom, {
+        getMode: () => useVoiceStore.getState().screenShareConfig.previewMode ?? 'normal',
+        subscribe: (change) => useVoiceStore.subscribe((state, previous) => {
+          if (state.screenShareConfig.previewMode !== previous.screenShareConfig.previewMode) change();
+        }),
+      }));
       // This room's own tracker. Its handlers use it directly, and act only
       // while the room is current: a replaced room's late events belong to
       // nothing the user still sees.
@@ -1210,7 +1223,11 @@ export function useLiveKit() {
         // System Audio first: a toggle change publishes or withdraws only the
         // audio track, never the video.
         await syncScreenShareAudio(room);
-        const opts = buildScreenShareOptions(screenShareConfig);
+        const opts = buildScreenShareOptions({
+          height: screenShareConfig.height, fps: screenShareConfig.fps,
+          mode: screenShareConfig.mode, customBitrateKbps: screenShareConfig.customBitrateKbps,
+          shareAudio: screenShareConfig.shareAudio, codec: screenShareConfig.codec,
+        });
         // Codec changed mid-stream — the codec is baked into SDP negotiation,
         // so republish the same track under the new options (no re-capture).
         const publishedCodec = getRequestedPublishedScreenShareCodec();
@@ -1244,7 +1261,7 @@ export function useLiveKit() {
     };
     _activeTrackUpdate = _activeTrackUpdate.then(updateActiveTracks).catch(() => {});
     return () => { superseded = true; };
-  }, [room, screenShareConfig, streamHostLimits, isScreenSharing, isCameraOn]);
+  }, [room, screenShareConfig.height, screenShareConfig.fps, screenShareConfig.mode, screenShareConfig.customBitrateKbps, screenShareConfig.shareAudio, screenShareConfig.codec, streamHostLimits, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
     return () => {

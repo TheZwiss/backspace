@@ -7,6 +7,7 @@ import { useAuthStore } from './authStore';
 import { isElectron } from '../platform/platform';
 
 export interface ScreenShareConfig {
+  previewMode?: 'normal' | 'blurred' | 'hidden';
   height: number | 'native';
   fps: number;
   mode: 'gaming' | 'text';
@@ -318,7 +319,7 @@ export const useVoiceStore = create<VoiceState>()(
       outputDeviceId: 'default',
       cameraDeviceId: null,
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron(), codec: 'vp9' },
+      screenShareConfig: { previewMode: 'normal', height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron(), codec: 'vp9' },
       cameraConfig: { height: 720, fps: 30, customBitrateKbps: null },
       lastScreenShareSourceId: null,
       participantVolumes: new Map(),

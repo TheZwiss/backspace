@@ -608,6 +608,12 @@ const windowsProcessAudio = new WindowsProcessAudio(
   windowsAudioExecutable,
   (data) => mainWindow?.webContents.send('process-audio-data', data),
   () => mainWindow?.webContents.send('process-audio-ended'),
+  (message) => {
+    console.warn('[WindowsProcessAudio]', message);
+    try {
+      fs.appendFileSync(path.join(app.getPath('userData'), 'windows-process-audio.log'), `${new Date().toISOString()} ${message}\n`);
+    } catch { /* Logging must not interrupt capture cleanup. */ }
+  },
 );
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;

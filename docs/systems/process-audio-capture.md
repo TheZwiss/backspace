@@ -67,3 +67,47 @@ source and rejected the excluded 880 Hz source by 74.2 dB. System-minus-excluded
 capture rejected it by 70.1 dB. These are synthetic routing measurements, not
 network performance or an end-to-end call measurement. Temporary test sink and
 playback processes were removed by the probe cleanup.
+
+
+### Windows test build: readiness protocol
+
+The Windows CRT writes stderr in text mode, translating the helper's READY line
+into CRLF. The original bridge accepted LF only and timed out even if native
+capture had started. The reader now accepts both formats, including chunk splits.
+A Windows CRT probe executed under Wine reproduced CRLF; this verifies the
+protocol mismatch, not WASAPI capture on real Windows.
+
+Native activation and initialization failures now emit a stage and HRESULT. The
+main process records helper startup failures in
+`%APPDATA%/Backspace/windows-process-audio.log`, without PCM or credentials.
+The native COM completion handler also builds with LLVM-MinGW using the SDK ABI
+fallback definitions when audioclientactivationparams.h is absent.
+
+
+### Windows activation callback agility
+
+The Windows 10 test returned `ActivateAudioInterfaceAsync: 0x8000000e`
+(`E_ILLEGAL_METHOD_CALL`). Microsoft's API documentation identifies COM apartment
+or callback agility as possible causes. The portable callback delegated IMarshal
+but failed QueryInterface for IAgileObject; it now explicitly implements both.
+`--self-test` checks both queries without starting capture and succeeds under Wine.
+This is evidence of COM interface exposure, not proof of capture on Windows 10.
+Native startup diagnostics include the real Windows build from RtlGetVersion.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/mmdeviceapi/nf-mmdeviceapi-activateaudiointerfaceasync
+
+
+### Modern OBS plugin comparison
+
+Inspected Ayrton09/win-capture-audio at commit
+40358fd6d6acba7890774a03396b48491a8c7147. Its helper uses the same process-loopback
+activation parameters, with a refcounted WRL FtmBase completion handler and COM
+initialization on the capture thread. This supports investigating callback agility
+for the reported activation error; it does not prove the target OS supports capture.
+The fork checks Windows build 19041 and newer, uses event-driven float/extensible
+capture, and retries device failures. Those later stream-management differences do
+not explain a failure returned directly by ActivateAudioInterfaceAsync.
+
+References:
+- https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.hpp
+- https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.cpp
+- https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/plugin.cpp

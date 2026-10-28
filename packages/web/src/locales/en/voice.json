@@ -113,6 +113,11 @@
     "allAudioExceptBackspace": "All system audio except Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Stream preview",
+    "previewNormal": "Normal",
+    "previewBlurred": "Blurred",
+    "previewHidden": "No image",
+    "previewHint": "Controls the thumbnail shown before watching. Does not change the stream video.",
     "title": "Stream Settings",
     "hostLimits": "Limits set by {{host}}",
     "resolution": "Resolution",

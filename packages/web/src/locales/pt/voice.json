@@ -113,6 +113,11 @@
     "allAudioExceptBackspace": "Todo o sistema, exceto o Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Prévia da transmissão",
+    "previewNormal": "Normal",
+    "previewBlurred": "Desfocada",
+    "previewHidden": "Sem imagem",
+    "previewHint": "Define a miniatura exibida antes de assistir. Não altera o vídeo da transmissão.",
     "title": "Configurações da transmissão",
     "hostLimits": "Limites definidos por {{host}}",
     "resolution": "Resolução",

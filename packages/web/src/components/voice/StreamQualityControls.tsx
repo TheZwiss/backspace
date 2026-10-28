@@ -292,6 +292,18 @@ export function StreamQualityControls() {
         )}
       </div>
 
+      {/* Preview privacy is applied by the sender before thumbnail transmission. */}
+      <div>
+        <label className="block text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2" htmlFor="stream-preview-mode">{t('voice:streamSettings.previewLabel')}</label>
+        <select id="stream-preview-mode" className="input-standard w-full text-xs" value={config.previewMode ?? 'normal'}
+          onChange={(event) => setConfig({ previewMode: event.target.value as 'normal' | 'blurred' | 'hidden' })}>
+          <option value="normal">{t('voice:streamSettings.previewNormal')}</option>
+          <option value="blurred">{t('voice:streamSettings.previewBlurred')}</option>
+          <option value="hidden">{t('voice:streamSettings.previewHidden')}</option>
+        </select>
+        <p className="text-[10px] text-txt-tertiary mt-1.5">{t('voice:streamSettings.previewHint')}</p>
+      </div>
+
       {/* System Audio */}
       <div>
         <div className="flex items-start justify-between gap-4">

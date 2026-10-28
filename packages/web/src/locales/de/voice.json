@@ -113,6 +113,11 @@
     "allAudioExceptBackspace": "Gesamtes System außer Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Stream-Vorschau",
+    "previewNormal": "Normal",
+    "previewBlurred": "Unscharf",
+    "previewHidden": "Kein Bild",
+    "previewHint": "Legt das Vorschaubild vor dem Zuschauen fest. Das Stream-Video bleibt unverändert.",
     "title": "Stream-Einstellungen",
     "hostLimits": "Vorgaben von {{host}}",
     "resolution": "Auflösung",

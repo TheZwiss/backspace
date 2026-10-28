@@ -1,10 +1,21 @@
 // WASAPI process loopback. No injection, drivers, or modifications to other apps.
 #include <windows.h>
 #include <audioclient.h>
+#if __has_include(<audioclientactivationparams.h>)
 #include <audioclientactivationparams.h>
+#else
+// ABI declarations from the Windows SDK audioclientactivationparams.h.
+// MinGW does not yet ship this header; the OS still supplies the actual API.
+#define VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK L"VAD\\Process_Loopback"
+enum PROCESS_LOOPBACK_MODE { PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE };
+struct AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS { DWORD TargetProcessId; PROCESS_LOOPBACK_MODE ProcessLoopbackMode; };
+enum AUDIOCLIENT_ACTIVATION_TYPE { AUDIOCLIENT_ACTIVATION_TYPE_DEFAULT, AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK };
+struct AUDIOCLIENT_ACTIVATION_PARAMS { AUDIOCLIENT_ACTIVATION_TYPE ActivationType; union { AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS ProcessLoopbackParams; }; };
+static_assert(sizeof(AUDIOCLIENT_ACTIVATION_PARAMS) == 12, "Windows SDK activation ABI");
+#endif
 #include <mmdeviceapi.h>
-#include <wrl.h>
-#include <wrl/implements.h>
+#include <wrl/client.h>
+#include <atomic>
 #include <io.h>
 #include <fcntl.h>
 #include <cstdio>
@@ -12,16 +23,37 @@
 #include <vector>
 #include <cstdint>
 using Microsoft::WRL::ComPtr;
-using Microsoft::WRL::RuntimeClass;
-using Microsoft::WRL::RuntimeClassFlags;
-using Microsoft::WRL::ClassicCom;
-using Microsoft::WRL::FtmBase;
-class Activation final : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IActivateAudioInterfaceCompletionHandler, FtmBase> {
+class Activation final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
+    std::atomic<ULONG> references{1};
+    ComPtr<IUnknown> marshaler;
 public:
     HANDLE done = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     HRESULT result = E_PENDING;
     ComPtr<IAudioClient> client;
-    ~Activation() { CloseHandle(done); }
+    Activation() { CoCreateFreeThreadedMarshaler(static_cast<IActivateAudioInterfaceCompletionHandler*>(this), &marshaler); }
+    ~Activation() { if (done) CloseHandle(done); }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IActivateAudioInterfaceCompletionHandler)) {
+            *out = static_cast<IActivateAudioInterfaceCompletionHandler*>(this);
+            AddRef();
+            return S_OK;
+        }
+        if (iid == __uuidof(IAgileObject)) {
+            *out = static_cast<IAgileObject*>(this);
+            AddRef();
+            return S_OK;
+        }
+        if (iid == __uuidof(IMarshal) && marshaler) return marshaler->QueryInterface(iid, out);
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        const ULONG count = --references;
+        if (!count) delete this;
+        return count;
+    }
     HRESULT STDMETHODCALLTYPE ActivateCompleted(IActivateAudioInterfaceAsyncOperation* operation) override {
         ComPtr<IUnknown> unknown;
         HRESULT activationResult = E_FAIL;
@@ -32,8 +64,36 @@ public:
         return S_OK;
     }
 };
+static int fail(const char* stage, HRESULT hr, int code) {
+    std::fprintf(stderr, "ERROR stage=%s HRESULT=0x%08lx\n", stage, static_cast<unsigned long>(hr));
+    std::fflush(stderr);
+    return code;
+}
 int wmain(int argc, wchar_t** argv) {
+    if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) {
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        if (FAILED(hr)) return fail("self-test.CoInitializeEx", hr, 4);
+        ComPtr<Activation> completion;
+        completion.Attach(new Activation());
+        ComPtr<IAgileObject> agile;
+        ComPtr<IMarshal> marshaler;
+        hr = completion.As(&agile);
+        if (FAILED(hr)) return fail("self-test.IAgileObject", hr, 8);
+        hr = completion.As(&marshaler);
+        if (FAILED(hr)) return fail("self-test.IMarshal", hr, 8);
+        std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal\n");
+        return 0;
+    }
     if (argc != 3) return 2;
+    // Record the actual build on failure; GetVersionEx can report a compatibility version.
+    using RtlGetVersionFn = LONG (WINAPI*)(OSVERSIONINFOW*);
+    auto rtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion"));
+    OSVERSIONINFOW version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    if (rtlGetVersion && rtlGetVersion(&version) == 0) {
+        std::fprintf(stderr, "INFO windows=%lu.%lu build=%lu\n", version.dwMajorVersion, version.dwMinorVersion, version.dwBuildNumber);
+        std::fflush(stderr);
+    }
     const bool include = wcscmp(argv[1], L"window") == 0;
     DWORD pid = 0;
     if (include) {
@@ -43,7 +103,7 @@ int wmain(int argc, wchar_t** argv) {
     else return 2;
     if (!pid) return 3;
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(hr)) return 4;
+    if (FAILED(hr)) return fail("CoInitializeEx", hr, 4);
     AUDIOCLIENT_ACTIVATION_PARAMS params{};
     params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
     params.ProcessLoopbackParams.TargetProcessId = pid;
@@ -52,18 +112,25 @@ int wmain(int argc, wchar_t** argv) {
     variant.vt = VT_BLOB;
     variant.blob.cbSize = sizeof(params);
     variant.blob.pBlobData = reinterpret_cast<BYTE*>(&params);
-    auto completion = Microsoft::WRL::Make<Activation>();
+    ComPtr<Activation> completion;
+    completion.Attach(new Activation());
+    if (!completion->done) return fail("CreateEvent", HRESULT_FROM_WIN32(GetLastError()), 5);
     ComPtr<IActivateAudioInterfaceAsyncOperation> operation;
     hr = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, __uuidof(IAudioClient), &variant, completion.Get(), &operation);
-    if (FAILED(hr) || WaitForSingleObject(completion->done, 10000) != WAIT_OBJECT_0 || FAILED(completion->result)) return 5;
+    if (FAILED(hr)) return fail("ActivateAudioInterfaceAsync", hr, 5);
+    if (WaitForSingleObject(completion->done, 10000) != WAIT_OBJECT_0) return fail("activation-timeout", HRESULT_FROM_WIN32(ERROR_TIMEOUT), 5);
+    if (FAILED(completion->result)) return fail("activation-result", completion->result, 5);
     auto client = completion->client;
     WAVEFORMATEX format{};
     format.wFormatTag = WAVE_FORMAT_PCM; format.nChannels = 2; format.nSamplesPerSec = 48000;
     format.wBitsPerSample = 16; format.nBlockAlign = 4; format.nAvgBytesPerSec = 192000;
     hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, 200000, 0, &format, nullptr);
-    if (FAILED(hr)) return 6;
+    if (FAILED(hr)) return fail("IAudioClient.Initialize", hr, 6);
     ComPtr<IAudioCaptureClient> capture;
-    if (FAILED(client->GetService(IID_PPV_ARGS(&capture))) || FAILED(client->Start())) return 7;
+    hr = client->GetService(IID_PPV_ARGS(&capture));
+    if (FAILED(hr)) return fail("GetService", hr, 7);
+    hr = client->Start();
+    if (FAILED(hr)) return fail("IAudioClient.Start", hr, 7);
     _setmode(_fileno(stdout), _O_BINARY);
     std::fprintf(stderr, "READY\n"); std::fflush(stderr);
     while (true) {

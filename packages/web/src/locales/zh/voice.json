@@ -113,6 +113,11 @@
     "allAudioExceptBackspace": "除 Backspace 外的所有系统音频"
   },
   "streamSettings": {
+    "previewLabel": "直播预览",
+    "previewNormal": "正常",
+    "previewBlurred": "模糊",
+    "previewHidden": "无图像",
+    "previewHint": "设置观看前显示的缩略图，不改变直播视频。",
     "title": "推流设置",
     "hostLimits": "限制由 {{host}} 设定",
     "resolution": "分辨率",

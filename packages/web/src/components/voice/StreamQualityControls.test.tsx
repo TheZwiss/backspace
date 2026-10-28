@@ -192,3 +192,14 @@ describe('the System Audio note in the desktop app', () => {
     expect(await screen.findByText(/Windows loopback may capture call audio/)).toBeInTheDocument();
   });
 });
+
+
+it('lets the sharer choose normal, blurred or hidden previews', () => {
+  render(<StreamQualityControls />);
+  const select = screen.getByRole('combobox', { name: 'Stream preview' });
+  expect(select).toHaveValue('normal');
+  fireEvent.change(select, { target: { value: 'blurred' } });
+  expect(useVoiceStore.getState().screenShareConfig.previewMode).toBe('blurred');
+  fireEvent.change(select, { target: { value: 'hidden' } });
+  expect(useVoiceStore.getState().screenShareConfig.previewMode).toBe('hidden');
+});

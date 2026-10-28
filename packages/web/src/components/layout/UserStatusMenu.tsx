@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useExitMotion } from '../../hooks/useExitMotion';
+import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChosenUserStatus } from '@backspace/shared';
 import { selectMyChosenStatus, useAuthStore } from '../../stores/authStore';
@@ -15,6 +16,8 @@ import { PresenceIndicator } from '../ui/PresenceIndicator';
  * path the account settings use — rather than writing the page user directly.
  */
 export function UserStatusMenu({ onClose }: { onClose: () => void }) {
+  const exitRef = useRef<HTMLDivElement>(null);
+  useExitMotion(exitRef);
   const { t } = useTranslation(['spaces', 'common']);
   const user = useAuthStore((s) => s.user);
   const savedStatus: ChosenUserStatus = useAuthStore(selectMyChosenStatus) ?? 'online';
@@ -78,7 +81,8 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="absolute bottom-full left-0 right-0 mb-1 bg-surface-channel rounded-t-lg shadow-lg z-[150] border border-border-hard"
+      className="absolute bottom-full left-0 right-0 mb-1 motion-menu-enter bg-surface-channel rounded-t-lg shadow-lg z-[150] border border-border-hard"
+      ref={exitRef}
       data-testid="user-status-menu"
     >
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border-soft">

@@ -1,3 +1,5 @@
+import { useStreamPreviews } from '../../utils/streamPreviews';
+import { StreamLiveBadge } from './StreamLiveBadge';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
@@ -211,6 +213,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
 
   const { participant } = tile;
   const isLocal = participant.isLocal;
+  const preview = useStreamPreviews((state) => state.images[participant.identity]?.image);
   const userId = participant.userId;
   const avatarUserId = participant.homeUserId ?? userId;
   const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
@@ -436,8 +439,9 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
           className="w-full h-full object-contain bg-black"
         />
       ) : (
-        <div data-testid="stream-tile-placeholder" className={`w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
-          <div className={large ? 'flex flex-col items-center gap-3 min-w-0' : 'flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
+        <div data-testid="stream-tile-placeholder" className={`relative w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
+          {preview && <><img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/65" /></>}
+          <div className={large ? 'relative flex flex-col items-center gap-3 min-w-0' : 'relative flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
             <div className="relative flex-shrink-0">
               <Avatar src={avatar} name={displayName} size={large ? 80 : 44} userId={avatarUserId} user={user ?? undefined} />
             </div>
@@ -460,8 +464,8 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       )}
 
       {/* LIVE badge — top left */}
-      {(!borderless || chromeRevealed) && <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-        {t('voice:badges.live')}
+      {(!borderless || chromeRevealed) && <div className="absolute top-2 left-2">
+        <StreamLiveBadge userId={userId} large />
       </div>}
 
       {/* Stream status — in focus mode this is the visual peer of the Grid

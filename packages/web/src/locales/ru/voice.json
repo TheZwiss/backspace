@@ -113,6 +113,11 @@
     "allAudioExceptBackspace": "Все звуки системы, кроме Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Предпросмотр трансляции",
+    "previewNormal": "Обычный",
+    "previewBlurred": "Размытый",
+    "previewHidden": "Без изображения",
+    "previewHint": "Определяет миниатюру до просмотра. Не изменяет видео трансляции.",
     "title": "Настройки трансляции",
     "hostLimits": "Ограничения задаёт {{host}}",
     "resolution": "Разрешение",

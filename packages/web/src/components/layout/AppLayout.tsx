@@ -1,7 +1,8 @@
+import { useNavigationMotion } from '../../hooks/useNavigationMotion';
 import { SpaceProfileModal } from '../modals/SpaceProfileModal';
 import React, { useEffect } from 'react';
 import { isMobileViewport } from '../../platform/interfaceScale';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { SpaceSidebar } from './SpaceSidebar';
@@ -235,6 +236,7 @@ export function AppLayout() {
 
   const { user, isLoading } = useAuth();
   const showBootSkeleton = useDelayedLoading(isLoading);
+  const { pathname } = useLocation();
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
@@ -244,6 +246,7 @@ export function AppLayout() {
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
+  const navigationRef = useNavigationMotion(`${pathname}:${isMobile}:${!!user && !showBootSkeleton}`);
   
   const channels = useSpaceStore((s) => s.channels);
 
@@ -460,7 +463,7 @@ export function AppLayout() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-w-0 min-h-0 bg-surface-chat relative">
+      <div ref={navigationRef} className="flex-1 flex min-w-0 min-h-0 bg-surface-chat relative">
         <MainContent />
         <RightPanel />
       </div>

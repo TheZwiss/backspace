@@ -451,6 +451,27 @@
   width: 100%;
 }
 
+/* Motion rhythm: small distances, short durations, no layout animation. */
+:root {
+  --motion-fast: 120ms;
+  --motion-enter: 180ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes menuEnter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.motion-menu-enter {
+  animation: menuEnter var(--motion-fast) var(--motion-ease);
+}
+
+/* Settings can contain fixed overlays. Keep their containing block intact. */
+.motion-settings-panel {
+  animation: fadeIn var(--motion-enter) var(--motion-ease);
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -458,26 +479,26 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(10px); opacity: 0; }
+  from { transform: translateY(6px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn var(--motion-fast) var(--motion-ease);
 }
 
 .animate-slide-up {
-  animation: slideUp 0.15s ease-out;
+  animation: slideUp var(--motion-enter) var(--motion-ease);
 }
 
 /* Slides into place from above — used for popovers that open upward */
 @keyframes slideDown {
-  from { transform: translateY(-10px); opacity: 0; }
+  from { transform: translateY(-6px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .animate-slide-down {
-  animation: slideDown 0.15s ease-out;
+  animation: slideDown var(--motion-enter) var(--motion-ease);
 }
 
 @keyframes typingFadeIn {
@@ -651,3 +672,14 @@
 /* ── Electron window drag regions ── */
 .titlebar-drag { -webkit-app-region: drag; }
 .titlebar-no-drag { -webkit-app-region: no-drag; }
+
+/* Apply the OS preference to navigation, popovers, hover transitions and
+   decorative loops, including surfaces rendered in Electron's call window. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -132,7 +132,7 @@ class PanelLoadBoundary extends Component<{ children: ReactNode }, { failed: boo
 export function SettingsPanelSuspense({ children }: { children: ReactNode }) {
   return (
     <PanelLoadBoundary>
-      <Suspense fallback={<SettingsPanelFallback />}>{children}</Suspense>
+      <Suspense fallback={<SettingsPanelFallback />}><div className="motion-settings-panel">{children}</div></Suspense>
     </PanelLoadBoundary>
   );
 }

@@ -40,7 +40,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   // --- VIDEO & UI ---
 
   const activeVideoTrack = tile.videoTrack;
-  const hasVideo = activeVideoTrack !== null;
+  const hasVideo = activeVideoTrack !== null && !unwatchedCameras.has(participant.userId);
 
   // Force re-render when tracks end/mute
   useEffect(() => {
@@ -55,19 +55,19 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    const lkTrack = tile.lkVideoTrack;
+    const lkTrack = unwatchedCameras.has(participant.userId) ? null : tile.lkVideoTrack;
     if (lkTrack) {
       lkTrack.attach(videoEl);
       return () => { lkTrack.detach(videoEl); };
     } else {
       videoEl.srcObject = null;
     }
-  }, [tile.lkVideoTrack]);
+  }, [tile.lkVideoTrack, unwatchedCameras, participant.userId]);
 
   // Context Menu
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (isLocal || !currentVoiceChannelId) return;
+      if (isLocal) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -75,7 +75,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       const channelId = currentVoiceChannelId;
 
       // Build moderation items
-      const modItems = buildVoiceModMenuItems(targetUserId, channelId);
+      const modItems = channelId ? buildVoiceModMenuItems(targetUserId, channelId) : [];
 
       const items: ContextMenuItem[] = [...modItems];
 
@@ -86,7 +86,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       // Camera watch/unwatch
       const targetParticipant = useVoiceStore.getState().participants.find((p) => p.userId === targetUserId);
-      const targetHasCamera = targetParticipant?.isCameraOn ?? false;
+      const targetHasCamera = targetParticipant?.isCameraOn ?? participant.isCameraOn;
       const isCameraUnwatched = useVoiceStore.getState().unwatchedCameras.has(targetUserId);
 
       if (targetHasCamera) {
@@ -104,7 +104,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           ),
           onClick: () => {
             const room = getActiveRoom();
-            const identity = targetParticipant?.identity;
+            const identity = targetParticipant?.identity ?? participant.identity;
             if (isCameraUnwatched) {
               useVoiceStore.getState().rewatchCamera(targetUserId);
               if (identity) setCameraSubscription(room, identity, true);
@@ -138,7 +138,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, currentVoiceChannelId, participant.userId, openContextMenu, t],
+    [isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
   );
 
   return (
@@ -175,6 +175,12 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               <div className="pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
             )}
           </div>
+          {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
+            <button type="button" className="px-3 py-1.5 rounded bg-accent-primary text-white text-xs font-semibold hover:bg-accent-primary/80 transition-colors"
+              onClick={() => { useVoiceStore.getState().rewatchCamera(participant.userId); setCameraSubscription(getActiveRoom(), participant.identity, true); }}>
+              {t('voice:participantMenu.watchCamera')}
+            </button>
+          )}
         </div>
       )}
 

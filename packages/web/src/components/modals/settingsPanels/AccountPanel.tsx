@@ -1,3 +1,4 @@
+import { MotionMenu } from '../../ui/MotionMenu';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectMyChosenStatus, useAuthStore } from '../../../stores/authStore';
@@ -679,7 +680,7 @@ export function AccountPanel() {
                 </svg>
               </button>
               {statusOpen && (
-                <div role="listbox" aria-label={t('settings:account.details.status.label')} className="absolute z-20 mt-1 w-full rounded-md border border-border-hard bg-surface-channel p-1 shadow-lg">
+                <MotionMenu role="listbox" aria-label={t('settings:account.details.status.label')} className="motion-menu-enter absolute z-20 mt-1 w-full rounded-md border border-border-hard bg-surface-channel p-1 shadow-lg">
                   {CHOSEN_STATUS_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -693,7 +694,7 @@ export function AccountPanel() {
                       {t(option.labelKey)}
                     </button>
                   ))}
-                </div>
+                </MotionMenu>
               )}
             </div>
           </div>

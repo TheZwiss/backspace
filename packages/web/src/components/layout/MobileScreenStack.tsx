@@ -1,3 +1,4 @@
+import { useNavigationMotion } from '../../hooks/useNavigationMotion';
 import React, { useRef, useEffect, useState } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 
@@ -8,6 +9,8 @@ interface MobileScreenStackProps {
 
 export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackProps) {
   const mobileStack = useUIStore((s) => s.mobileStack);
+  const mobileScreen = useUIStore((s) => s.mobileScreen);
+  const rootRef = useNavigationMotion(mobileScreen);
   const [transitioning, setTransitioning] = useState<'push' | 'pop' | null>(null);
   const [renderStack, setRenderStack] = useState(mobileStack);
   const prevStackRef = useRef(mobileStack);
@@ -18,6 +21,13 @@ export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackPr
     const prevLen = prevStack.length;
     const newLen = mobileStack.length;
     prevStackRef.current = mobileStack;
+
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setRenderStack(mobileStack);
+      setTransitioning(null);
+      animatingRef.current = false;
+      return;
+    }
 
     if (newLen > prevLen) {
       // Push — render new screen off-screen, then animate in on next frame
@@ -50,6 +60,7 @@ export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackPr
     <div className="relative flex-1 overflow-hidden">
       {/* Root screen — always rendered underneath, invisible when covered by stack */}
       <div
+        ref={rootRef}
         className="flex flex-col h-full"
         style={{ visibility: renderStack.length > 0 ? 'hidden' : 'visible' }}
       >

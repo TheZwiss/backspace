@@ -7,11 +7,12 @@ function child() {
   return Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn() });
 }
 describe('Windows process audio capture', () => {
-  it('includes a selected window, preserves stereo sample boundaries and stops the helper', async () => {
+  it.each(['READY\n', 'READY\r\n'])('accepts helper readiness %j, preserves sample boundaries and stops', async (ready) => {
     const process = child(); mocks.spawn.mockReturnValue(process);
     const data = vi.fn(); const capture = new WindowsProcessAudio('capture.exe', data, vi.fn());
     const started = capture.start('window:123456:0', 99);
-    process.stderr.emit('data', Buffer.from('READY\n'));
+    process.stderr.emit('data', Buffer.from(ready.slice(0, -1)));
+    process.stderr.emit('data', Buffer.from(ready.slice(-1)));
     expect(await started).toBe(true);
     expect(mocks.spawn).toHaveBeenLastCalledWith('capture.exe', ['window', '123456'], { windowsHide: true });
     process.stdout.emit('data', Buffer.from([1, 2, 3]));
