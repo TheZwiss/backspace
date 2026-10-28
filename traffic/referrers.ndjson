@@ -569,3 +569,13 @@
 {"snapshot_date":"2026-10-27","dimension":"yandex.ru","title":"","count":3,"uniques":3}
 {"snapshot_date":"2026-10-27","dimension":"linux-user.gr","title":"","count":2,"uniques":2}
 {"snapshot_date":"2026-10-27","dimension":"Bing","title":"","count":1,"uniques":1}
+{"snapshot_date":"2026-10-28","dimension":"github.com","title":"","count":59,"uniques":21}
+{"snapshot_date":"2026-10-28","dimension":"Google","title":"","count":46,"uniques":38}
+{"snapshot_date":"2026-10-28","dimension":"backspacechat.com","title":"","count":42,"uniques":30}
+{"snapshot_date":"2026-10-28","dimension":"chatgpt.com","title":"","count":5,"uniques":4}
+{"snapshot_date":"2026-10-28","dimension":"yandex.ru","title":"","count":5,"uniques":4}
+{"snapshot_date":"2026-10-28","dimension":"Bing","title":"","count":4,"uniques":2}
+{"snapshot_date":"2026-10-28","dimension":"DuckDuckGo","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-10-28","dimension":"steamcommunity.com","title":"","count":3,"uniques":2}
+{"snapshot_date":"2026-10-28","dimension":"linux-user.gr","title":"","count":2,"uniques":2}
+{"snapshot_date":"2026-10-28","dimension":"Yahoo","title":"","count":1,"uniques":1}
