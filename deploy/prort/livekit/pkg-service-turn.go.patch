@@ -1,0 +1,35 @@
+--- a/pkg/service/turn.go
++++ b/pkg/service/turn.go
+@@ -192,6 +192,32 @@
+ 			logValues = append(logValues, "turn.portTLS", turnConf.TLSPort, "turn.externalTLS", turnConf.ExternalTLS, "turn.proxyProtocol", turnConf.ProxyProtocol)
+ 		}
+ 
++		if turnConf.TCPPort > 0 {
++			tcpListener, err := net.Listen("tcp", net.JoinHostPort(addr, strconv.Itoa(turnConf.TCPPort)))
++			if err != nil {
++				return nil, errors.Wrap(err, "could not listen on TURN TCP port")
++			}
++			if standalone {
++				tcpListener = telemetry.NewListener(tcpListener)
++			}
++			if turnConf.ProxyProtocol {
++				trusted, err := parsePeerCIDRs("turn.proxy_protocol_trusted_cidrs", turnConf.ProxyProtocolTrustedCIDRs)
++				if err != nil {
++					return nil, err
++				}
++				if len(trusted) == 0 {
++					return nil, errors.New("turn.proxy_protocol requires at least one entry in turn.proxy_protocol_trusted_cidrs")
++				}
++				tcpListener = &proxyproto.Listener{Listener: tcpListener, ConnPolicy: proxyProtocolPolicy(trusted)}
++			}
++			serverConfig.ListenerConfigs = append(serverConfig.ListenerConfigs, turn.ListenerConfig{
++				Listener:              tcpListener,
++				RelayAddressGenerator: relayAddrGen,
++				PermissionHandler:     permissionHandler,
++			})
++			logValues = append(logValues, "turn.portTCP", turnConf.TCPPort)
++		}
++
+ 		if turnConf.UDPPort > 0 {
+ 			udpListener, err := net.ListenPacket("udp", net.JoinHostPort(addr, strconv.Itoa(turnConf.UDPPort)))
+ 			if err != nil {

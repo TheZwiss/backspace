@@ -1,0 +1,12 @@
+--- a/utils/hwstats/cpu_linux.go
++++ b/utils/hwstats/cpu_linux.go
+@@ -245,7 +245,8 @@
+ 	case errors.Is(err, os.ErrNotExist):
+ 		return false, nil
+ 	default:
+-		return false, err
++		// PRoot/Android can deny lstat on /sys/fs/cgroup; treat as absent.
++		return false, nil
+ 	}
+ }
+ 

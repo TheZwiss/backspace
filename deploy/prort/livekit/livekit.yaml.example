@@ -1,0 +1,36 @@
+port: 7880
+
+bind_addresses:
+  - 0.0.0.0
+
+rtc:
+  node_ip: <TAILSCALE_IP>
+  advertise_internal_ip: true
+  use_external_ip: false
+  udp_port: 7882
+  tcp_port: 7881
+
+logging:
+  level: info
+keys:
+  <LIVEKIT_API_KEY>: <LIVEKIT_API_SECRET>
+
+turn:
+  enabled: true
+  domain: <MAGICDNS_NAME>
+  cert_file: /opt/caddy/certs/<HOST>.crt
+  key_file: /opt/caddy/certs/<HOST>.key
+  udp_port: 3478
+  tcp_port: 3479
+  proxy_protocol: true
+  proxy_protocol_trusted_cidrs:
+    - 127.0.0.0/8
+    - ::1/128
+  tls_port: 0
+  relay_range_start: 30000
+  relay_range_end: 40000
+  allow_restricted_peer_cidrs:
+    - 10.0.0.0/8
+    - 100.64.0.0/10
+    - 127.0.0.0/8
+    - fd00::/8
