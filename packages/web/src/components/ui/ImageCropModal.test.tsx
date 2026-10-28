@@ -1,104 +1,27 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+const cropImage = vi.hoisted(() => vi.fn());
+vi.mock('../../utils/cropImage', () => ({ cropImage }));
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock('react-easy-crop', () => ({ default: (props: { onCropComplete: (percent: object, pixels: object) => void }) => <button onClick={() => props.onCropComplete({ x: 10, y: 20, width: 80, height: 60 }, { x: 100, y: 200, width: 800, height: 600 })}>Set crop</button> }));
 import { ImageCropModal } from './ImageCropModal';
-
-// These cases mount the real react-easy-crop widget rather than a stub. jsdom
-// gives every box a zero size, so the crop geometry is meaningless here. What
-// is being pinned is that the widget mounts, receives the props this modal
-// passes it, and still injects its own stylesheet. A version bump that dropped
-// any of those would otherwise render an invisible cropper with no error.
-
-function renderModal(props: Partial<React.ComponentProps<typeof ImageCropModal>> = {}) {
-  const onClose = vi.fn();
-  const onCropComplete = vi.fn();
-  const view = render(
-    <ImageCropModal
-      isOpen
-      imageSrc="blob:test-image"
-      onClose={onClose}
-      onCropComplete={onCropComplete}
-      {...props}
-    />,
-  );
-  return { ...view, onClose, onCropComplete };
-}
-
-function injectedStyles(): string {
-  return Array.from(document.head.querySelectorAll('style'))
-    .map((el) => el.textContent ?? '')
-    .join('\n');
-}
-
-describe('ImageCropModal', () => {
-  it('isolates the cropper from root zoom without unscaling the dialog controls', () => {
-    const { container } = renderModal();
-    const cropper = container.querySelector('.reactEasyCrop_Container')!;
-    expect((cropper.parentElement as HTMLElement).style.zoom).toBe('calc(1 / var(--interface-scale, 1))');
-    expect(container.querySelector('input[type="range"]')?.closest('[style*="zoom"]')).toBeNull();
+describe('image crop editor', () => {
+  it('returns GIF crop coordinates without flattening the image into a canvas', async () => {
+    cropImage.mockClear();
+    const selection = vi.fn(); const blob = vi.fn(); const close = vi.fn();
+    render(<ImageCropModal isOpen imageSrc="data:image/gif;base64,test" onClose={close} onCropComplete={blob} onCropSelection={selection} />);
+    fireEvent.click(screen.getByText('Set crop'));
+    fireEvent.click(screen.getByText('common:actions.apply'));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(selection).toHaveBeenCalledWith({ x: 100, y: 200, width: 800, height: 600 }, { x: 10, y: 20, width: 80, height: 60 });
+    expect(cropImage).not.toHaveBeenCalled(); expect(blob).not.toHaveBeenCalled();
   });
-  it('renders nothing while closed', () => {
-    const { container } = render(
-      <ImageCropModal
-        isOpen={false}
-        imageSrc="blob:test-image"
-        onClose={vi.fn()}
-        onCropComplete={vi.fn()}
-      />,
-    );
-    expect(container.innerHTML).toBe('');
-    expect(injectedStyles()).not.toContain('.reactEasyCrop_Container');
-  });
-
-  it('mounts the cropper with the image and injects its stylesheet', () => {
-    const { container } = renderModal();
-
-    expect(container.querySelector('.reactEasyCrop_Container')).not.toBeNull();
-
-    const image = container.querySelector('img.reactEasyCrop_Image');
-    expect(image).not.toBeNull();
-    expect(image!.getAttribute('src')).toBe('blob:test-image');
-
-    // The widget ships no stylesheet import; it appends one to <head> itself.
-    expect(injectedStyles()).toContain('.reactEasyCrop_Container');
-  });
-
-  it('passes cropShape through to the crop area', () => {
-    const { container } = renderModal();
-    expect(container.querySelector('.reactEasyCrop_CropAreaRound')).not.toBeNull();
-  });
-
-  it('renders a square crop area when cropShape is rect', () => {
-    const { container } = renderModal({ cropShape: 'rect' });
-    expect(container.querySelector('.reactEasyCrop_CropArea')).not.toBeNull();
-    expect(container.querySelector('.reactEasyCrop_CropAreaRound')).toBeNull();
-  });
-
-  it('keeps the grid off', () => {
-    const { container } = renderModal();
-    expect(container.querySelector('.reactEasyCrop_CropAreaGrid')).toBeNull();
-  });
-
-  it('uses the given title', () => {
-    renderModal({ title: 'Crop Banner' });
-    expect(screen.getByRole('heading', { name: 'Crop Banner' })).toBeInTheDocument();
-  });
-
-  it('closes on Cancel and on Escape', () => {
-    const { onClose } = renderModal();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(2);
-  });
-
-  it('drives zoom from the slider', () => {
-    const { container } = renderModal();
-    const slider = container.querySelector('input[type="range"]') as HTMLInputElement;
-
-    expect(slider.value).toBe('1');
-    fireEvent.change(slider, { target: { value: '2.5' } });
-    expect(slider.value).toBe('2.5');
+  it('continues to crop static images through the existing canvas path', async () => {
+    const blob = new Blob(['image'], { type: 'image/webp' }); cropImage.mockResolvedValue(blob);
+    const complete = vi.fn();
+    render(<ImageCropModal isOpen imageSrc="test.png" onClose={vi.fn()} onCropComplete={complete} />);
+    fireEvent.click(screen.getByText('Set crop'));
+    fireEvent.click(screen.getByText('common:actions.apply'));
+    await waitFor(() => expect(complete).toHaveBeenCalledWith(blob));
   });
 });

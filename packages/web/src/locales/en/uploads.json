@@ -14,6 +14,8 @@
   },
   "crop": {
     "title": "Crop Image",
-    "applying": "Applying…"
+    "applying": "Applying…",
+    "hint": "Drag the image to adjust the framing and use zoom to move closer.",
+    "zoom": "Image zoom"
   }
 }

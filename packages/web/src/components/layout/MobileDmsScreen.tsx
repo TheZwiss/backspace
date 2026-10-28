@@ -7,6 +7,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { Avatar } from '../ui/Avatar';
+import { PresenceIndicator } from '../ui/PresenceIndicator';
 import { AvatarStack } from '../ui/AvatarStack';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
@@ -56,11 +57,9 @@ function MobileFriendBubble({
           avatarColor={canonical.avatarColor}
           size={40}
         />
-        <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-base ${
-          friend.status === 'online' ? 'bg-status-online' :
-          friend.status === 'idle' ? 'bg-status-idle' :
-          'bg-status-dnd'
-        }`} />
+        <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-base bg-surface-base flex items-center justify-center">
+          <PresenceIndicator status={friend.status} size={9} />
+        </span>
       </div>
       <span className="text-[10px] text-txt-secondary truncate w-full text-center">
         {displayName}

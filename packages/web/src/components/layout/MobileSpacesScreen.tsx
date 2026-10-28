@@ -342,6 +342,8 @@ export function MobileSpacesScreen() {
     const availableFolders = folders.filter(f => !f.spaceIds.includes(spaceId));
 
     const items: ContextMenuItem[] = [
+      { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',
         type: 'action',

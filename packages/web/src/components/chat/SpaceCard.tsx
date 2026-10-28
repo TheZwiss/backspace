@@ -98,7 +98,7 @@ export function SpaceCard({
         : 'border-border-soft hover:border-border-hard'
     }`}>
       {/* Banner area */}
-      <div className="h-32 relative overflow-hidden">
+      <div className="aspect-[9/4] relative overflow-hidden">
         {/* Background layer */}
         {bannerUrl ? (
           <img src={bannerUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />

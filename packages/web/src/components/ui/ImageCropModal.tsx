@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
@@ -14,6 +16,7 @@ interface ImageCropModalProps {
   cropShape?: 'round' | 'rect';
   maxOutputDimension?: number;
   outputType?: string;
+  onCropSelection?: (pixels: Area, percentage: Area) => void | Promise<void>;
 }
 
 export function ImageCropModal({
@@ -26,15 +29,19 @@ export function ImageCropModal({
   cropShape = 'round',
   maxOutputDimension,
   outputType,
+  onCropSelection,
 }: ImageCropModalProps) {
   const { t } = useTranslation(['uploads', 'common']);
+  const portalContainer = usePortalContainer();
   const heading = title ?? t('uploads:crop.title');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCropComplete = useCallback((_croppedArea: Area, croppedPixels: Area) => {
+  const handleCropComplete = useCallback((percentage: Area, croppedPixels: Area) => {
+    setCroppedArea(percentage);
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
@@ -42,6 +49,11 @@ export function ImageCropModal({
     if (!croppedAreaPixels) return;
     setIsProcessing(true);
     try {
+      if (onCropSelection && croppedArea) {
+        await onCropSelection(croppedAreaPixels, croppedArea);
+        onClose();
+        return;
+      }
       const blob = await cropImage(imageSrc, croppedAreaPixels, outputType ?? 'image/webp', {
         maxDimension: maxOutputDimension,
         outputType,
@@ -61,6 +73,7 @@ export function ImageCropModal({
       setCrop({ x: 0, y: 0 });
       setZoom(1);
       setCroppedAreaPixels(null);
+      setCroppedArea(null);
       setIsProcessing(false);
     }
   }, [isOpen, imageSrc]);
@@ -76,7 +89,7 @@ export function ImageCropModal({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
       <div className="relative max-w-md w-full mx-4 bg-surface-elevated rounded-lg shadow-xl animate-slide-up">
@@ -94,6 +107,7 @@ export function ImageCropModal({
           </button>
         </div>
 
+        <p className="px-4 mt-2 text-xs text-txt-tertiary">{t('uploads:crop.hint')}</p>
         {/* Crop area */}
         {/* react-easy-crop mixes DOM rect/client coordinates with CSS pixels.
             Keep only its interactive canvas at effective 100%; dialog controls
@@ -120,6 +134,7 @@ export function ImageCropModal({
           </svg>
           <input
             type="range"
+            aria-label={t('uploads:crop.zoom')}
             min={1}
             max={3}
             step={0.05}
@@ -148,6 +163,7 @@ export function ImageCropModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

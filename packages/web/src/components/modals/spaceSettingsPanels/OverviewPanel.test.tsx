@@ -14,6 +14,8 @@ vi.mock('../../../audio/AudioManager', () => ({
   },
 }));
 
+vi.mock('../../ui/ImageCropModal', () => ({ ImageCropModal: (props: { isOpen: boolean; onCropSelection?: (pixels: object, percentage: object) => void }) => props.isOpen ? <button onClick={() => props.onCropSelection?.({ x: 40, y: 8, width: 160, height: 90 }, { x: 13, y: 8, width: 53, height: 90 })}>Apply animated crop</button> : null }));
+
 import { OverviewPanel } from './OverviewPanel';
 import { useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
@@ -143,7 +145,7 @@ describe('OverviewPanel ownership transfer candidates', () => {
 });
 
 describe('animated server images', () => {
-  it.each([['icon', 0], ['banner', 1]] as const)('uploads the %s GIF intact without opening the cropper', async (kind, index) => {
+  it.each([['icon', 0], ['banner', 1]] as const)('uploads the %s GIF without flattening its animation', async (kind, index) => {
     const upload = vi.fn().mockResolvedValue('transfer-test');
     const originalUpload = useTransferStore.getState().startUpload;
     useTransferStore.setState({ startUpload: upload });
@@ -155,6 +157,7 @@ describe('animated server images', () => {
       const input = view.container.querySelectorAll('input[type="file"]')[index]!;
       const gif = new File(['GIF89a'], 'animated.gif', { type: 'image/gif' });
       fireEvent.change(input, { target: { files: [gif] } });
+      if (kind === 'banner') fireEvent.click(await screen.findByText('Apply animated crop'));
       await waitFor(() => expect(upload).toHaveBeenCalledOnce());
       const sent = upload.mock.calls[0]![0] as File;
       expect(sent.name).toBe(`${kind}.gif`);

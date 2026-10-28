@@ -699,5 +699,15 @@
     "suppressRoles": "Suppress role mentions",
     "massHeading": "Group mentions",
     "massNote": "@here reaches the same members as @everyone. Mentions of you by name always notify you."
+  },
+  "profile": {
+    "title": "Server profile",
+    "view": "View server profile",
+    "viewIcon": "View server icon",
+    "viewBanner": "View server banner",
+    "bannerAlt": "Banner for {{name}}",
+    "server": "Server",
+    "noDescription": "This server has no description yet.",
+    "createdAt": "Created on"
   }
 }

@@ -11,6 +11,7 @@ type ModalType =
   | 'invite'
   | 'userSettings'
   | 'spaceSettings'
+  | 'spaceProfile'
   | 'channelSettings'
   | 'categorySettings'
   | 'imagePreview'

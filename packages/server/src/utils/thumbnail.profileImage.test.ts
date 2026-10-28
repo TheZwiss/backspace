@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import { resizeProfileImage } from './thumbnail';
+import { cropAnimatedBanner } from './cropAnimatedBanner';
 
 // Two-frame 300x200 GIF (150x100 per frame). Embedded so the test does not
 // depend on an external image tool.
@@ -45,5 +46,28 @@ describe('resizeProfileImage', () => {
     const after = await sharp(small, { animated: true }).metadata();
     expect(after.width).toBe(200);
     expect(after.pages).toBe(2);
+  });
+});
+
+describe('animated banner cropping', () => {
+  it('preserves every frame, its timing, and the original upload', async () => {
+    const original = fs.readFileSync(filepath);
+    const before = await sharp(filepath, { animated: true }).metadata();
+    const output = path.join(dir, 'cropped.gif');
+    await cropAnimatedBanner(filepath, output, { x: 40, y: 8, width: 160, height: 90 });
+    const after = await sharp(output, { animated: true }).metadata();
+    expect(after.format).toBe('gif');
+    expect(after.pages).toBe(before.pages);
+    expect(after.delay).toEqual(before.delay);
+    expect(after.loop).toBe(before.loop);
+    expect(after.width).toBe(160);
+    expect(after.pageHeight).toBe(90);
+    expect(fs.readFileSync(filepath).equals(original)).toBe(true);
+  });
+  it('refuses invalid coordinates without changing the source', async () => {
+    const output = path.join(dir, 'invalid.gif');
+    await expect(cropAnimatedBanner(filepath, output, { x: -1, y: 0, width: 10, height: 10 })).rejects.toThrow();
+    await expect(cropAnimatedBanner(filepath, output, { x: 250, y: 0, width: 100, height: 100 })).rejects.toThrow();
+    expect(fs.existsSync(output)).toBe(false);
   });
 });

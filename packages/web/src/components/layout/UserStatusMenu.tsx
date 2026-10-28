@@ -6,6 +6,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { CHOSEN_STATUS_OPTIONS } from '../../utils/statusOptions';
 import { describeError } from '../../i18n/errors';
 import { Avatar } from '../ui/Avatar';
+import { PresenceIndicator } from '../ui/PresenceIndicator';
 
 /**
  * Status switcher opened from the user block at the bottom of the channel
@@ -102,7 +103,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
               onClick={() => void applyStatus(option.value)}
               className="w-full px-3 py-1.5 flex items-center gap-2.5 text-left text-[13.5px] text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors disabled:opacity-50"
             >
-              <span className={`w-3 h-3 rounded-full flex-shrink-0 ${option.dotClass}`} />
+              <PresenceIndicator status={option.value} size={15} />
               <span className="flex-1 truncate">{t(option.labelKey)}</span>
               {active && (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-txt-primary flex-shrink-0">

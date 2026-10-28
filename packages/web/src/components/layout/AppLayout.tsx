@@ -1,3 +1,4 @@
+import { SpaceProfileModal } from '../modals/SpaceProfileModal';
 import React, { useEffect } from 'react';
 import { isMobileViewport } from '../../platform/interfaceScale';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -419,6 +420,7 @@ export function AppLayout() {
         <InviteModal />
         {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
         <SpaceSettingsModal />
+        <SpaceProfileModal />
         <ChannelSettingsModal />
         <CategorySettingsModal />
         <NewDmModal />
@@ -471,6 +473,7 @@ export function AppLayout() {
       <InviteModal />
       <UserSettingsModal />
       <SpaceSettingsModal />
+      <SpaceProfileModal />
       <ChannelSettingsModal />
       <CategorySettingsModal />
       <NewDmModal />

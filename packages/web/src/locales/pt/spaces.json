@@ -712,5 +712,15 @@
     "suppressRoles": "Suprimir menções a cargos",
     "massHeading": "Menções em grupo",
     "massNote": "@here alcança os mesmos membros que @everyone. Menções diretas a você sempre notificam."
+  },
+  "profile": {
+    "title": "Perfil do servidor",
+    "view": "Ver perfil do servidor",
+    "viewIcon": "Ver foto do servidor",
+    "viewBanner": "Ver banner do servidor",
+    "bannerAlt": "Banner de {{name}}",
+    "server": "Servidor",
+    "noDescription": "Este servidor ainda não tem uma descrição.",
+    "createdAt": "Criado em"
   }
 }

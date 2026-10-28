@@ -647,6 +647,8 @@ export function SpaceSidebar() {
     const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
 
     const items: ContextMenuItem[] = [
+      { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',
         type: 'action',

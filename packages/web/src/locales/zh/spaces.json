@@ -686,5 +686,15 @@
     "suppressRoles": "屏蔽 @身份组 提醒",
     "massHeading": "群组提及",
     "massNote": "@here 与 @everyone 通知的成员相同。直接提及你的消息始终会通知你。"
+  },
+  "profile": {
+    "title": "服务器资料",
+    "view": "查看服务器资料",
+    "viewIcon": "查看服务器图标",
+    "viewBanner": "查看服务器横幅",
+    "bannerAlt": "{{name}} 的横幅",
+    "server": "服务器",
+    "noDescription": "该服务器尚无简介。",
+    "createdAt": "创建于"
   }
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import type { User } from '@backspace/shared';
 import { getAvatarGradient, getSpaceGradient } from '../../utils/gradients';
 import { useStaticAvatar } from '../../utils/staticAvatar';
+import { PresenceIndicator } from './PresenceIndicator';
 
 interface AvatarProps {
   src?: string | null;
@@ -22,13 +23,6 @@ interface AvatarProps {
   palette?: 'user' | 'space';
   animate?: boolean;
 }
-
-const statusColors: Record<string, string> = {
-  online: 'bg-status-online',
-  idle: 'bg-status-idle',
-  dnd: 'bg-status-dnd',
-  offline: 'bg-status-offline',
-};
 
 /**
  * Builds a CSS radial-gradient mask that punches a circular hole in the avatar
@@ -51,9 +45,9 @@ function buildCutoutMask(avatarSize: number, ringWidth: number = 0): string {
 function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   let dot: number, gap: number, avatarInset: number;
   if (avatarSize <= 24) {
-    dot = 5; gap = 2; avatarInset = 3;
+    dot = 7; gap = 2; avatarInset = 3;
   } else if (avatarSize <= 48) {
-    dot = 6; gap = 3; avatarInset = 4;
+    dot = 9; gap = 2; avatarInset = 4;
   } else {
     dot = Math.round(avatarSize * 0.15);
     gap = Math.round(avatarSize * 0.05);
@@ -124,15 +118,17 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       </div>
       {/* Status dot — outside the masked div so it isn't clipped */}
       {status && (
-        <div
-          className={`absolute rounded-full ${statusColors[status] ?? 'bg-status-offline'}`}
+        <span
+          className="absolute flex items-center justify-center rounded-full bg-surface-channel"
           style={{
             width: dotDiameter,
             height: dotDiameter,
             bottom: dotInset - dotDiameter / 2,
             right: dotInset - dotDiameter / 2,
           }}
-        />
+        >
+          <PresenceIndicator status={status} size={dotDiameter} />
+        </span>
       )}
     </div>
   );

@@ -889,6 +889,7 @@ export interface UpdateChannelRequest {
 }
 
 export interface UpdateSpaceRequest {
+  bannerCrop?: { x: number; y: number; width: number; height: number };
   ownerTitle?: string | null;
   name?: string;
   icon?: string;

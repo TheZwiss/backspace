@@ -699,5 +699,15 @@
     "suppressRoles": "Rollenerwähnungen unterdrücken",
     "massHeading": "Gruppenerwähnungen",
     "massNote": "@here erreicht dieselben Mitglieder wie @everyone. Erwähnungen von dir mit Namen benachrichtigen dich immer."
+  },
+  "profile": {
+    "title": "Serverprofil",
+    "view": "Serverprofil ansehen",
+    "viewIcon": "Serverbild ansehen",
+    "viewBanner": "Serverbanner ansehen",
+    "bannerAlt": "Banner von {{name}}",
+    "server": "Server",
+    "noDescription": "Dieser Server hat noch keine Beschreibung.",
+    "createdAt": "Erstellt am"
   }
 }
