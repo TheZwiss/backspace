@@ -117,7 +117,7 @@ describe('payloadContextFromConfig', () => {
     domain: 'chat.example',
     registrationOpen: true,
     sourceCodeUrl: 'https://github.com/TheZwiss/backspace',
-    livekit: { url: 'wss://lk.example', apiKey: 'key', apiSecret: 'secret' },
+    livekit: { url: 'wss://lk.example', apiKey: 'key', apiSecret: 'secret', autoUrl: false },
     updates: { ...config.updates, installChannel: 'prebuilt' },
   };
 

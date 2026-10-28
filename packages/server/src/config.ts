@@ -258,6 +258,11 @@ export const config = {
     url: envOptional('LIVEKIT_URL'),
     apiKey: envOptional('LIVEKIT_API_KEY'),
     apiSecret: envOptional('LIVEKIT_API_SECRET'),
+    // When true, a local token request that arrived through a reverse proxy
+    // gets a LiveKit URL for the same public host/protocol the page was loaded
+    // from. This keeps LAN, Tailscale and hostname access working without one
+    // hard-coded address; LIVEKIT_URL stays the fallback (and federation URL).
+    autoUrl: envBool('LIVEKIT_URL_AUTO', false),
   },
 
   federation: {

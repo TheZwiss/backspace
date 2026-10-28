@@ -187,6 +187,25 @@ async function main(): Promise<void> {
 
   await app.register(websocket);
 
+  // Opening the app directly on the plain-HTTP backend port (for example
+  // http://100.113.4.54:3000) gives the browser a non-secure context, so
+  // getUserMedia and getDisplayMedia are blocked. Navigation requests are sent
+  // to the HTTPS edge on 8443; API, asset and WebSocket traffic is untouched.
+  // Requests arriving through Caddy/Tailscale Serve keep the public Host, so no loop.
+  app.addHook('onRequest', async (request, reply) => {
+    const host = request.headers.host;
+    const accept = request.headers.accept ?? '';
+    if (
+      request.method === 'GET' &&
+      host?.endsWith(':3000') &&
+      request.headers['x-forwarded-proto'] === undefined &&
+      accept.includes('text/html')
+    ) {
+      const target = `https://${host.slice(0, -5)}:8443${request.raw.url ?? '/'}`;
+      return reply.redirect(target, 302);
+    }
+  });
+
   // Serve built frontend in production
   const webDistPath = path.resolve(import.meta.dirname ?? '.', '../../web/dist');
   if (fs.existsSync(webDistPath)) {
@@ -196,6 +215,21 @@ async function main(): Promise<void> {
       wildcard: false,
     });
   }
+
+  // CA download over plain HTTP: devices cannot fetch it over HTTPS before
+  // they trust the CA. The file is the Caddy local root, not a secret.
+  const caCertPath = process.env.CA_CERT_PATH ?? '/opt/caddy/ca.crt';
+  app.get('/ca.crt', async (_request, reply) => {
+    try {
+      const cert = fs.readFileSync(caCertPath);
+      return reply
+        .header('Content-Type', 'application/x-x509-ca-cert')
+        .header('Content-Disposition', 'attachment; filename="backspace-ca.crt"')
+        .send(cert);
+    } catch {
+      return reply.code(404).send({ error: 'ca_not_found', statusCode: 404 });
+    }
+  });
 
   // Initialize database
   getDb();

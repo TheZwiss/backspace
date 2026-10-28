@@ -118,7 +118,16 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     const jwt = await token.toJwt();
 
-    const livekitUrl = config.livekit.url ?? '';
+    let livekitUrl = config.livekit.url ?? '';
+    // Behind Caddy or Tailscale Serve, hand the browser a signaling URL
+    // on the exact host it is using. The same Caddy site proxies /livekit, so
+    // 10.0.1.5, the Tailscale IP and the ts.net name all work without pinning
+    // one of them in LIVEKIT_URL. Direct :3000 requests keep the fallback.
+    const forwarded = request.headers['x-forwarded-proto'] ?? request.headers['x-forwarded-host'];
+    if (config.livekit.autoUrl && forwarded && request.headers.host && /^[A-Za-z0-9.\-:\[\]]+$/.test(request.headers.host)) {
+      const wsProto = request.protocol === 'https' ? 'wss' : 'ws';
+      livekitUrl = `${wsProto}://${request.headers.host}/livekit/`;
+    }
 
     const response: LiveKitTokenResponse = {
       token: jwt,
