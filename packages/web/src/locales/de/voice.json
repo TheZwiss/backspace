@@ -1,4 +1,28 @@
 {
+  "textVoice": {
+    "title": "Textstimme",
+    "enable": "Textstimme verwenden",
+    "description": "Tippe, um auf brasilianischem Portugiesisch zu sprechen. Dieser Modus ersetzt dein Mikrofon durch eine synthetische Stimme.",
+    "micOff": "Dein echtes Mikrofon bleibt ausgeschaltet, auch beim Beitritt zu weiteren Anrufen.",
+    "voice": "Brasilianische Stimme",
+    "speed": "Geschwindigkeit",
+    "placeholder": "Schreibe, was du sagen möchtest…",
+    "enterHint": "Enter zum Sprechen · Shift+Enter für eine neue Zeile",
+    "checking": "Sprachdienst wird geprüft…",
+    "unavailable": "Sprachausgabe ist nicht verfügbar. Die Administration muss den Synthesedienst starten.",
+    "speaking": "Wird vorbereitet oder gesprochen…",
+    "muted": "Tritt einem Anruf bei und hebe die Stummschaltung auf. Serverbeschränkungen gelten ebenfalls.",
+    "ready": "Bereit für brasilianisches Portugiesisch.",
+    "speak": "Im Anruf sprechen",
+    "preview": "Nur selbst anhören",
+    "stop": "Sprechen stoppen",
+    "privacy": "Der Text wird auf der Backspace-Instanz verarbeitet und nicht im Chat veröffentlicht. Die Teilnehmer hören ihn wie deine normale Stimme.",
+    "quick": {
+      "hello": "Hallo zusammen!",
+      "wait": "Einen Moment bitte.",
+      "repeat": "Kannst du das bitte wiederholen?"
+    }
+  },
   "soundboard": {
     "title": "Soundeffekte",
     "description": "Spiele einen kurzen Effekt für alle im Anruf ab. Nutze Sounds deiner Server.",

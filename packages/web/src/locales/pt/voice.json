@@ -1,4 +1,28 @@
 {
+  "textVoice": {
+    "title": "Voz por texto",
+    "enable": "Usar voz por texto",
+    "description": "Digite para falar em português brasileiro. Este modo substitui o microfone por uma voz sintetizada.",
+    "micOff": "O microfone real fica desligado neste modo, inclusive ao entrar nas próximas chamadas.",
+    "voice": "Voz brasileira",
+    "speed": "Velocidade",
+    "placeholder": "Digite o que você quer falar…",
+    "enterHint": "Enter para falar · Shift+Enter para nova linha",
+    "checking": "Verificando a voz…",
+    "unavailable": "A voz está indisponível. O administrador precisa iniciar o serviço de síntese nesta instância.",
+    "speaking": "Preparando ou falando…",
+    "muted": "Entre em uma chamada e desative o mute para falar. Restrições do servidor também se aplicam.",
+    "ready": "Pronto para conversar em pt-BR.",
+    "speak": "Falar na chamada",
+    "preview": "Ouvir só para mim",
+    "stop": "Parar de falar",
+    "privacy": "O texto é processado na instância do Backspace e não é publicado no chat. Quem estiver na chamada ouve como sua voz normal.",
+    "quick": {
+      "hello": "Olá, pessoal!",
+      "wait": "Um momento, por favor.",
+      "repeat": "Pode repetir, por favor?"
+    }
+  },
   "soundboard": {
     "title": "Efeitos sonoros",
     "description": "Toque um efeito para todos na chamada. Use sons dos servidores dos quais você é membro.",

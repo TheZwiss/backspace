@@ -1,0 +1,13 @@
+services:
+  tts:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5052:5052"
+    environment:
+      TTS_THREADS: "2"
+    mem_limit: 768m
+    cpus: 2
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

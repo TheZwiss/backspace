@@ -160,6 +160,15 @@ export interface VoiceState {
   /** Drop every watcher not among `present` (the room's participants after a full reconnect). */
   retainWatchers: (present: ReadonlySet<string>) => void;
   soundboardVolume: number;
+  textVoiceEnabled: boolean;
+  textVoiceDraft: string;
+  textVoiceBusy: boolean;
+  setTextVoiceDraft: (text: string) => void;
+  textVoice: string;
+  textVoiceSpeed: number;
+  setTextVoiceEnabled: (enabled: boolean) => void;
+  setTextVoice: (voice: string) => void;
+  setTextVoiceSpeed: (speed: number) => void;
   setSoundboardVolume: (volume: number) => void;
   soundEffectVolume: number;                 // 0-200 (100 = default)
   setSoundEffectVolume: (volume: number) => void;
@@ -345,6 +354,18 @@ export const useVoiceStore = create<VoiceState>()(
 
       soundEffectVolume: 100,
       soundboardVolume: 60,
+      textVoiceEnabled: false,
+      textVoiceDraft: '',
+      textVoiceBusy: false,
+      setTextVoiceDraft: (text) => set({ textVoiceDraft: text.slice(0, 400) }),
+      textVoice: 'pf_dora',
+      textVoiceSpeed: 1,
+      setTextVoiceEnabled: (enabled) => {
+        AudioManager.getInstance().setTextInputOnly(enabled);
+        set({ textVoiceEnabled: enabled, ...(enabled ? { micPermissionDenied: false } : {}) });
+      },
+      setTextVoice: (voice) => set({ textVoice: ['pf_dora', 'pm_alex', 'pm_santa'].includes(voice) ? voice : 'pf_dora' }),
+      setTextVoiceSpeed: (speed) => set({ textVoiceSpeed: Math.max(0.8, Math.min(1.3, speed)) }),
       setSoundboardVolume: (volume) => set({ soundboardVolume: Math.max(0, Math.min(100, volume)) }),
       setSoundEffectVolume: (volume) => set({ soundEffectVolume: volume }),
       messageSoundAllChannels: false,
@@ -976,6 +997,9 @@ export const useVoiceStore = create<VoiceState>()(
         rnnoiseEnabled: state.rnnoiseEnabled,
         soundEffectVolume: state.soundEffectVolume,
         soundboardVolume: state.soundboardVolume,
+        textVoiceEnabled: state.textVoiceEnabled,
+        textVoice: state.textVoice,
+        textVoiceSpeed: state.textVoiceSpeed,
         messageSoundAllChannels: state.messageSoundAllChannels,
         pipEnabled: state.pipEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,

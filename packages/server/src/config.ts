@@ -254,6 +254,9 @@ export const config = {
 
   trustedProxyHops,
 
+  // Optional private resident text-to-speech worker.
+  ttsUrl: envOptional('TTS_URL'),
+
   livekit: {
     url: envOptional('LIVEKIT_URL'),
     apiKey: envOptional('LIVEKIT_API_KEY'),

@@ -1,4 +1,28 @@
 {
+  "textVoice": {
+    "title": "Text voice",
+    "enable": "Use text voice",
+    "description": "Type to speak in Brazilian Portuguese. This mode replaces your microphone with a synthesized voice.",
+    "micOff": "Your real microphone stays off in this mode, including when joining future calls.",
+    "voice": "Brazilian voice",
+    "speed": "Speed",
+    "placeholder": "Type what you want to say…",
+    "enterHint": "Enter to speak · Shift+Enter for a new line",
+    "checking": "Checking speech service…",
+    "unavailable": "Speech is unavailable. Ask the administrator to start the synthesis service on this instance.",
+    "speaking": "Preparing or speaking…",
+    "muted": "Join a call and unmute to speak. Server restrictions also apply.",
+    "ready": "Ready to speak in Brazilian Portuguese.",
+    "speak": "Speak in call",
+    "preview": "Listen privately",
+    "stop": "Stop speaking",
+    "privacy": "Text is processed by the Backspace instance and is not posted to chat. Call participants hear it as your normal voice.",
+    "quick": {
+      "hello": "Hello, everyone!",
+      "wait": "One moment, please.",
+      "repeat": "Could you repeat that?"
+    }
+  },
   "soundboard": {
     "title": "Soundboard",
     "description": "Play a short effect for everyone in your call. Choose sounds from servers you belong to.",

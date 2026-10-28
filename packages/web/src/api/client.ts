@@ -440,6 +440,11 @@ export class BackspaceApiClient {
     };
   };
 
+  tts: {
+    status: () => Promise<{ available: boolean; voices: { id: string; name: string; language: string }[]; maxLength: number }>;
+    speech: (text: string, voice: string, speed: number, signal?: AbortSignal) => Promise<ArrayBuffer>;
+  };
+
   soundboard: {
     list: () => Promise<SoundboardPack[]>;
     upload: (spaceId: string, data: { name: string; audio: string; volume: number }) => Promise<SoundboardSound>;
@@ -463,6 +468,7 @@ export class BackspaceApiClient {
       path: string,
       body?: unknown,
       requireAuth = true,
+      externalSignal?: AbortSignal,
     ): Promise<Response> {
       const headers: Record<string, string> = {};
 
@@ -486,7 +492,7 @@ export class BackspaceApiClient {
           method,
           headers,
           body: body ? JSON.stringify(body) : undefined,
-          signal: controller.signal,
+          signal: externalSignal ? AbortSignal.any([controller.signal, externalSignal]) : controller.signal,
         });
       } catch (err) {
         clearTimeout(timeoutId);
@@ -538,6 +544,10 @@ export class BackspaceApiClient {
       const messages = await response.json() as T[];
       return { messages, forward };
     }
+    this.tts = {
+      status: () => request('GET', '/tts'),
+      speech: async (text, voice, speed, signal) => (await send('POST', '/tts/speech', { text, voice, speed }, true, signal)).arrayBuffer(),
+    };
     this.soundboard = {
       list: () => request('GET', '/soundboard'),
       upload: (spaceId, data) => request('POST', `/spaces/${encodeURIComponent(spaceId)}/soundboard`, data),

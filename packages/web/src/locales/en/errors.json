@@ -1,4 +1,5 @@
 {
+  "tts_unavailable": "Text voice is unavailable. Ask the administrator to start the synthesis service.",
   "soundboard_full": "This server already has 40 sounds. Remove one before adding another.",
   "generic": "Something went wrong.",
   "not_found": "That could not be found.",

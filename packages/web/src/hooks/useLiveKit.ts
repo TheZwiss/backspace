@@ -318,6 +318,7 @@ export function useLiveKit() {
   const switchCameraGenRef = useRef(0);
   
   const isMuted = useVoiceStore((s) => s.isMuted);
+  const textVoiceEnabled = useVoiceStore((s) => s.textVoiceEnabled);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
@@ -537,10 +538,11 @@ export function useLiveKit() {
       try {
         if (!isCurrentRoom()) return;
         const audioManager = AudioManager.getInstance();
+        audioManager.setTextInputOnly(textVoiceEnabled);
 
         // Sync voice processing settings to AudioManager
-        audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
-        await audioManager.setRnnoiseEnabled(rnnoiseEnabled);
+        if (!textVoiceEnabled) audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
+        await audioManager.setRnnoiseEnabled(textVoiceEnabled ? false : rnnoiseEnabled);
         if (!isCurrentRoom()) return;
 
         const micPub = r.localParticipant.getTrackPublications()
@@ -552,7 +554,7 @@ export function useLiveKit() {
         // the publish branch entirely. Re-attempt is gated behind the
         // `requestMicPermission` user-gesture path which clears the flag
         // and triggers this effect to re-run via its dep.
-        if (micPermissionDenied) {
+        if (micPermissionDenied && !textVoiceEnabled) {
           if (micPub?.track) {
             await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack).catch(() => {});
           }
@@ -608,7 +610,7 @@ export function useLiveKit() {
       cancelled = true;
       unsubscribeResume();
     };
-  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, micPermissionDenied]);
+  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, micPermissionDenied, textVoiceEnabled]);
 
   // Subscribe to upstream-input-track-end events from AudioManager whenever a
   // room is connected. The published mic track is a clone of a WebAudio
@@ -620,6 +622,7 @@ export function useLiveKit() {
     const subscriberRoom = roomRef.current;
 
     const unsubscribe = am.onInputTrackEnded(async () => {
+      if (useVoiceStore.getState().textVoiceEnabled) return;
       // Room was replaced or torn down between event emission and handler run.
       if (roomRef.current !== subscriberRoom || !subscriberRoom) return;
 

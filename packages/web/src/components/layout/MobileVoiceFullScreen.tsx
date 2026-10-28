@@ -1,3 +1,4 @@
+import { TextVoiceButton } from '../voice/TextVoice';
 import { SoundboardButton } from '../voice/Soundboard';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -381,10 +382,10 @@ export function MobileVoiceFullScreen() {
 
       {/* Control bar */}
       <div
-        className="glass-bubble mx-2 mb-2 rounded-2xl flex items-center justify-center gap-1.5 px-1 py-3 sm:gap-4 sm:px-4 shrink-0"
+        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 sm:gap-4 sm:px-4 shrink-0"
         style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
-        <SoundboardButton className="w-11 h-11" />
+        <div className="flex w-full justify-center gap-2 sm:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
         {/* Mute */}
         <button
           onClick={toggleMuteFromControl}

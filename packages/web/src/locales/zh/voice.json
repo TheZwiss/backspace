@@ -1,4 +1,28 @@
 {
+  "textVoice": {
+    "title": "文字语音",
+    "enable": "使用文字语音",
+    "description": "输入文字，以巴西葡萄牙语说话。此模式用合成语音替代麦克风。",
+    "micOff": "此模式下真实麦克风保持关闭，包括加入后续通话时。",
+    "voice": "巴西葡萄牙语音色",
+    "speed": "语速",
+    "placeholder": "输入你想说的话…",
+    "enterHint": "Enter 说话 · Shift+Enter 换行",
+    "checking": "正在检查语音服务…",
+    "unavailable": "语音暂不可用，请让管理员启动本实例的语音合成服务。",
+    "speaking": "正在准备或说话…",
+    "muted": "加入通话并取消静音后才能说话，服务器限制仍然适用。",
+    "ready": "已准备好使用巴西葡萄牙语说话。",
+    "speak": "在通话中说话",
+    "preview": "仅自己试听",
+    "stop": "停止说话",
+    "privacy": "文字由 Backspace 实例处理，不会发布到聊天。通话参与者会像听到你的普通语音一样听到它。",
+    "quick": {
+      "hello": "大家好！",
+      "wait": "请稍等。",
+      "repeat": "请再说一遍。"
+    }
+  },
   "soundboard": {
     "title": "音效面板",
     "description": "为通话中的所有人播放简短音效，可使用你已加入服务器的音效。",
