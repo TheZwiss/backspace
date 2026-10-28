@@ -92,6 +92,17 @@ Settings are split into two API surfaces:
 | directoryEnabled | boolean | directoryEnabled | read-only on this route (set through `PATCH /api/settings/instance`); carried here so a non-admin's space settings can read it | false |
 | bitrateMatrixOverrides | Record<string,number>\|null | bitrateMatrixOverrides | Keys: `{res}_{fps}`, values: 1-1000000 | null |
 | allowCustomBitrate | boolean | allowCustomBitrate | boolean | true |
+| camera.mode | 'fixed'\|'user-choice' | cameraMode | enum | 'fixed' |
+| camera.defaultResolution | number | cameraDefaultResolution | Must be in `camera.allowedResolutions` | 720 |
+| camera.defaultFramerate | number | cameraDefaultFramerate | Must be in `camera.allowedFramerates` | 30 |
+| camera.defaultBitrateKbps | number | cameraDefaultBitrateKbps | Within `[min,max]` | 2000 |
+| camera.allowedResolutions | number[] | cameraAllowedResolutions | Non-empty, values from STANDARD_RESOLUTIONS | [540,720,1080] |
+| camera.allowedFramerates | number[] | cameraAllowedFramerates | Non-empty, values from STANDARD_FRAMERATES | [30,60] |
+| camera.minBitrateKbps | number | cameraMinBitrateKbps | 100-1000000, must be < max | 300 |
+| camera.maxBitrateKbps | number | cameraMaxBitrateKbps | 100-1000000, must be > min | 4000 |
+| camera.allowCustomBitrate | boolean | cameraAllowCustomBitrate | boolean | true |
+
+`camera` is optional on the wire (an older peer omits it and readers fall back to the fixed defaults). `fixed` ignores the user's saved choice and publishes at the admin defaults; `user-choice` exposes the allowed values in **Voice & Video → Video**. The client clamps a saved choice to the limits of the instance that issued the LiveKit token.
 
 **Streaming constants** (`packages/shared/src/constants.ts`):
 ```

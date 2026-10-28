@@ -69,7 +69,16 @@
         "fallbackName": "Câmera {{number}}",
         "detectedFallback": "câmera detectada",
         "currentlyUsing": "Em uso: {{label}}",
-        "none": "Nenhuma câmera detectada."
+        "none": "Nenhuma câmera detectada.",
+        "quality": {
+          "label": "Qualidade da webcam",
+          "managed": "A qualidade da webcam é definida pela instância: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Resolução",
+          "framerate": "Taxa de quadros",
+          "bitrate": "Taxa de bits",
+          "useDefault": "Usar padrão",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Testar câmera",

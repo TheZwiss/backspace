@@ -69,7 +69,16 @@
         "fallbackName": "Камера {{number}}",
         "detectedFallback": "обнаруженная камера",
         "currentlyUsing": "Сейчас используется: {{label}}",
-        "none": "Камеры не обнаружены."
+        "none": "Камеры не обнаружены.",
+        "quality": {
+          "label": "Качество веб-камеры",
+          "managed": "Качество веб-камеры задаётся экземпляром: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Разрешение",
+          "framerate": "Частота кадров",
+          "bitrate": "Битрейт",
+          "useDefault": "Использовать значение по умолчанию",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Проверить камеру",

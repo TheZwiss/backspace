@@ -565,7 +565,12 @@
       "undeafen": "Desfazer ensurdecimento",
       "spaceMuted": "Silenciado no espaço",
       "spaceDeafened": "Ensurdecido no espaço",
-      "permissionMuted": "Silenciado (sem permissão para falar)"
+      "permissionMuted": "Silenciado (sem permissão para falar)",
+      "statusMenu": "Status",
+      "customStatus": "Status personalizado",
+      "customStatusPlaceholder": "O que você está fazendo?",
+      "editProfile": "Editar perfil",
+      "statusUpdateFailed": "Não foi possível atualizar o status"
     },
     "dmUnreadMessages_one": "{{count}} mensagem direta não lida",
     "dmUnreadMessages_many": "{{count}} mensagens diretas não lidas",

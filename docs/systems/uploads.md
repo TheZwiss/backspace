@@ -206,8 +206,11 @@ Profile images (avatars, banners, space icons) use the general upload pipeline b
 **Behavior:**
 - Uses sharp with `{ animated: true }` to preserve GIF animation
 - No-op if image width is already <= max dimension
-- Writes to temp file (`filepath + '.tmp'`), then atomically renames (`fs.renameSync`) to avoid corruption
+- Writes to temp file (`filepath + '.tmp' + ext`), then atomically renames (`fs.renameSync`) to avoid corruption
+- Skips the resize for animations with more than `MAX_ANIMATED_PAGES` (120) frames and keeps the original; decoding every frame unbounded can stall the server
 - Non-fatal: on error, original file is preserved, temp file cleaned up
+
+**Animated profile images skip the browser crop.** `AccountPanel` asks `utils/animatedImage.ts` before opening `ImageCropModal`; a GIF (and a WebP/APNG whose `ImageDecoder` frame count is above one) is uploaded with its real extension instead. The crop path paints a single frame into a canvas, which would flatten the animation before the server ever sees it. The avatar and banner containers frame the full image with `object-cover` / `background-size: cover`; the server resize keeps every frame. The upload filename must carry the real extension because `files.ts` derives the served MIME type from it.
 
 ### Profile Upload Lifecycle
 

@@ -339,6 +339,32 @@
     "capWarning": {
       "title": "Matrix values exceed global cap.",
       "description": "Some bitrate values exceed your maximum of {{max}}. Streams at those combos will be quality-degraded to your cap."
+    },
+    "camera": {
+      "label": "Webcam",
+      "description": "Controls the quality users publish their camera at.",
+      "mode": {
+        "label": "Webcam quality policy",
+        "fixed": "Fixed (current behavior)",
+        "userChoice": "Users choose",
+        "fixedHint": "Everyone publishes at the quality below.",
+        "userChoiceHint": "Users pick from the allowed values in Voice & Video settings."
+      },
+      "defaults": {
+        "resolution": "Default resolution",
+        "framerate": "Default frame rate",
+        "bitrate": "Default bitrate (kbps)"
+      },
+      "quality": {
+        "resolutions": "Allowed resolutions",
+        "framerates": "Allowed frame rates",
+        "bitrateRange": "Bitrate range (kbps)",
+        "min": "Min",
+        "max": "Max",
+        "allowCustom": "Allow custom bitrate",
+        "allowCustomHint": "Users can set any bitrate inside the range."
+      },
+      "highEndWarning": "High camera settings cost upload bandwidth and CPU for every participant."
     }
   },
   "updates": {

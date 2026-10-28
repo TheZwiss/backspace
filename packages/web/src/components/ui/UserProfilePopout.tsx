@@ -163,7 +163,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
     >
       {/* Banner */}
       <div
-        className="h-[80px] rounded-t-[12px]"
+        className="h-[100px] rounded-t-[12px]"
         style={bannerSrc
           ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
           : { background: bannerFallback }

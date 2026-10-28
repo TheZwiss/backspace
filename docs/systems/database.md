@@ -450,6 +450,15 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | gifApiKey | text | | Klipy API key |
 | bitrateMatrixOverrides | text | | JSON sparse overrides |
 | allowCustomBitrate | integer NOT NULL | 1 | |
+| cameraMode | text NOT NULL | `'fixed'` | `fixed` or `user-choice`; webcam publish policy |
+| cameraDefaultResolution | integer NOT NULL | 720 | Height in px |
+| cameraDefaultFramerate | integer NOT NULL | 30 | |
+| cameraDefaultBitrateKbps | integer NOT NULL | 2000 | |
+| cameraAllowedResolutions | text NOT NULL | `'540,720,1080'` | CSV |
+| cameraAllowedFramerates | text NOT NULL | `'30,60'` | CSV |
+| cameraMinBitrateKbps | integer NOT NULL | 300 | |
+| cameraMaxBitrateKbps | integer NOT NULL | 4000 | |
+| cameraAllowCustomBitrate | integer NOT NULL | 1 | |
 | maxUploadSizeBytes | integer | | null = use env |
 | federationRelayEnabled | integer NOT NULL | 1 | |
 | federationRelayTtlDays | integer NOT NULL | 30 | |

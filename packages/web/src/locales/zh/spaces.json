@@ -549,7 +549,12 @@
       "undeafen": "取消拒听",
       "spaceMuted": "已被空间静音",
       "spaceDeafened": "已被空间拒听",
-      "permissionMuted": "已静音（无发言权限）"
+      "permissionMuted": "已静音（无发言权限）",
+      "statusMenu": "状态",
+      "customStatus": "自定义状态",
+      "customStatusPlaceholder": "你在做什么？",
+      "editProfile": "编辑个人资料",
+      "statusUpdateFailed": "无法更新状态"
     },
     "dmUnreadMessages_other": "{{count}} 条未读私信",
     "dmUnreadMessagesOver99": "超过 99 条未读私信"

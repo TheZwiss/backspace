@@ -1,7 +1,9 @@
 {
   "chatPanel": {
     "title": "Chat",
-    "close": "Chat schließen"
+    "close": "Chat schließen",
+    "expand": "Chat erweitern",
+    "collapse": "Chat verkleinern"
   },
   "badges": {
     "mutedNoPermission": "Stummgeschaltet (keine Sprechberechtigung)",
@@ -199,7 +201,9 @@
     "disconnect": "Trennen",
     "connectionInfo": "Verbindungsinfo",
     "noiseSuppressionOff": "KI-Rauschunterdrückung ausschalten",
-    "noiseSuppressionOn": "KI-Rauschunterdrückung einschalten"
+    "noiseSuppressionOn": "KI-Rauschunterdrückung einschalten",
+    "focusChat": "Chat fokussieren",
+    "unfocusChat": "Anruf anzeigen"
   },
   "status": {
     "dmCall": "Direktanruf",

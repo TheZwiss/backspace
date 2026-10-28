@@ -1,7 +1,9 @@
 {
   "chatPanel": {
     "title": "Чат",
-    "close": "Закрыть чат"
+    "close": "Закрыть чат",
+    "expand": "Развернуть чат",
+    "collapse": "Свернуть чат"
   },
   "badges": {
     "mutedNoPermission": "Микрофон отключён (нет права говорить)",
@@ -199,7 +201,9 @@
     "disconnect": "Отключиться",
     "connectionInfo": "Сведения о соединении",
     "noiseSuppressionOff": "Выключить ИИ-шумоподавление",
-    "noiseSuppressionOn": "Включить ИИ-шумоподавление"
+    "noiseSuppressionOn": "Включить ИИ-шумоподавление",
+    "focusChat": "Сосредоточиться на чате",
+    "unfocusChat": "Показать звонок"
   },
   "status": {
     "dmCall": "Личный звонок",

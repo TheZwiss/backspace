@@ -1,7 +1,9 @@
 {
   "chatPanel": {
     "title": "聊天",
-    "close": "关闭聊天"
+    "close": "关闭聊天",
+    "expand": "展开聊天",
+    "collapse": "收起聊天"
   },
   "badges": {
     "mutedNoPermission": "已静音（无发言权限）",
@@ -199,7 +201,9 @@
     "disconnect": "断开连接",
     "connectionInfo": "连接信息",
     "noiseSuppressionOff": "停用 AI 噪声抑制",
-    "noiseSuppressionOn": "启用 AI 噪声抑制"
+    "noiseSuppressionOn": "启用 AI 噪声抑制",
+    "focusChat": "专注于聊天",
+    "unfocusChat": "显示通话"
   },
   "status": {
     "dmCall": "私信通话",

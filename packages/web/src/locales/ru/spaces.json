@@ -573,7 +573,12 @@
       "undeafen": "Включить звук",
       "spaceMuted": "Микрофон отключён в пространстве",
       "spaceDeafened": "Звук отключён в пространстве",
-      "permissionMuted": "Микрофон отключён (нет права говорить)"
+      "permissionMuted": "Микрофон отключён (нет права говорить)",
+      "statusMenu": "Статус",
+      "customStatus": "Свой статус",
+      "customStatusPlaceholder": "Чем вы занимаетесь?",
+      "editProfile": "Редактировать профиль",
+      "statusUpdateFailed": "Не удалось обновить статус"
     },
     "dmUnreadMessages_one": "{{count}} непрочитанное личное сообщение",
     "dmUnreadMessages_few": "{{count}} непрочитанных личных сообщения",

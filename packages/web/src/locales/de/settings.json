@@ -69,7 +69,16 @@
         "fallbackName": "Kamera {{number}}",
         "detectedFallback": "erkannte Kamera",
         "currentlyUsing": "Aktuell verwendet: {{label}}",
-        "none": "Keine Kameras gefunden."
+        "none": "Keine Kameras gefunden.",
+        "quality": {
+          "label": "Webcam-Qualität",
+          "managed": "Die Webcam-Qualität wird von der Instanz festgelegt: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Auflösung",
+          "framerate": "Bildrate",
+          "bitrate": "Bitrate",
+          "useDefault": "Standard verwenden",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Kamera testen",

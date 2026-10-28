@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus, InstanceUpdateStatus } from '@backspace/shared';
+import type { CameraStreamingLimits, InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus, InstanceUpdateStatus } from '@backspace/shared';
 import { api } from '../api/client';
 import { describeError } from '../i18n/errors';
 import { EMPTY_ACK, readUpdateAck, writeUpdateAck, pendingUpdateVersion, type UpdateAck } from '../utils/updateAck';
@@ -45,6 +45,24 @@ interface SettingsState {
   resetUpdateState: () => void;
 }
 
+export const DEFAULT_CAMERA_LIMITS: CameraStreamingLimits = {
+  mode: 'fixed',
+  defaultResolution: 720,
+  defaultFramerate: 30,
+  defaultBitrateKbps: 2000,
+  allowedResolutions: [540, 720, 1080],
+  allowedFramerates: [30, 60],
+  minBitrateKbps: 300,
+  maxBitrateKbps: 4000,
+  allowCustomBitrate: true,
+};
+
+export function resolveCameraLimits(
+  limits: InstanceStreamingLimits | null | undefined,
+): CameraStreamingLimits {
+  return limits?.camera ?? DEFAULT_CAMERA_LIMITS;
+}
+
 export const DEFAULT_STREAMING_LIMITS: InstanceStreamingLimits = {
   maxBitrateKbps: 20000,
   minBitrateKbps: 500,
@@ -60,6 +78,7 @@ export const DEFAULT_STREAMING_LIMITS: InstanceStreamingLimits = {
   directoryConfigured: false,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
+  camera: DEFAULT_CAMERA_LIMITS,
 };
 
 /**

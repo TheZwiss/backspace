@@ -23,12 +23,12 @@ import { myRowForOrigin } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus, clearSpaceVoiceForDmCall } from '../utils/voice';
-import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/voiceActions';
+import { buildCameraOptions, requestCameraQuality } from '../utils/camera';
+import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/cameraFlags';
 import { dmCallChannelId, dmCallOrigin, dmCallRoomKey, voiceSessionOrigin } from '../utils/dmCall';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
-  CAMERA_OVERDRIVE,
   buildScreenShareOptions,
   applyOverdrive,
   scheduleScreenShareOverdrive,
@@ -317,6 +317,7 @@ export function useLiveKit() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
+  const cameraConfig = useVoiceStore((s) => s.cameraConfig);
   // The host's limits shape the effective config, so a document that arrives
   // after the share started must reach the running encoder too.
   const { limits: streamHostLimits } = useStreamHostLimits();
@@ -719,6 +720,12 @@ export function useLiveKit() {
       }
     })();
   }, [cameraDeviceId, isCameraOn, isConnected]);
+
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected || !isCameraOn || !streamHostLimits) return;
+    void requestCameraQuality(r);
+  }, [cameraConfig, isCameraOn, isConnected, streamHostLimits]);
 
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
@@ -1230,7 +1237,10 @@ export function useLiveKit() {
           await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
       }
-      if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
+      if (isCameraOn) {
+        const cameraOptions = buildCameraOptions(streamHostLimits ?? undefined);
+        await applyOverdrive(room, Track.Source.Camera, cameraOptions.overdrive);
+      }
     };
     _activeTrackUpdate = _activeTrackUpdate.then(updateActiveTracks).catch(() => {});
     return () => { superseded = true; };

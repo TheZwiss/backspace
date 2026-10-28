@@ -1189,6 +1189,28 @@ export interface InstanceStreamingLimits {
   directoryConfigured: boolean;
   bitrateMatrixOverrides: Record<string, number> | null;
   allowCustomBitrate: boolean;
+  /**
+   * Webcam publish policy. Optional on the wire: an instance that predates
+   * this field (or a peer that has not upgraded) omits it, and readers treat
+   * that as the fixed default rather than guessing from the screen-share
+   * limits, which describe a different surface.
+   */
+  camera?: CameraStreamingLimits;
+}
+
+export type CameraQualityMode = 'fixed' | 'user-choice';
+
+export interface CameraStreamingLimits {
+  /** `fixed` keeps the 720p30/H.264 preset regardless of the user's saved choice. */
+  mode: CameraQualityMode;
+  defaultResolution: number;
+  defaultFramerate: number;
+  defaultBitrateKbps: number;
+  allowedResolutions: number[];
+  allowedFramerates: number[];
+  minBitrateKbps: number;
+  maxBitrateKbps: number;
+  allowCustomBitrate: boolean;
 }
 
 // ─── Federation Types ──────────────────────────────────────────────────────

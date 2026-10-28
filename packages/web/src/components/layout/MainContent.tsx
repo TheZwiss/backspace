@@ -64,6 +64,8 @@ export function MainContent() {
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
+  const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
+  const setVoiceChatFocus = useUIStore((s) => s.setVoiceChatFocus);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
   const participants = useVoiceStore((s) => s.participants);
@@ -106,6 +108,11 @@ export function MainContent() {
   useEffect(() => {
     setSearchOpen(false);
   }, [currentChannelId]);
+
+  // Leaving or switching a call must not leave the next one in chat-only mode.
+  useEffect(() => {
+    setVoiceChatFocus(false);
+  }, [currentVoiceChannelId, setVoiceChatFocus]);
 
   // Handle actual browser fullscreen API.
   //
@@ -277,11 +284,18 @@ export function MainContent() {
           </div>
 
           <div className="flex-1 flex overflow-hidden min-h-0">
-            <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-              <VoiceGrid participants={participants} />
-              <VoiceControlBar revealed={chromeRevealed} />
-            </div>
-            {voiceChatOpen && !voiceFullscreen && (
+            {!voiceChatFocus && (
+              <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+                <VoiceGrid participants={participants} />
+                <VoiceControlBar revealed={chromeRevealed} />
+              </div>
+            )}
+            {voiceChatFocus ? (
+              <div className="flex-1 min-w-0 flex flex-col bg-surface-chat">
+                <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
+                <VoiceControlBar variant="docked" />
+              </div>
+            ) : voiceChatOpen && !voiceFullscreen && (
               <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
             )}
           </div>
@@ -521,11 +535,18 @@ export function MainContent() {
         </div>
 
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-            <VoiceGrid participants={participants} />
-            <VoiceControlBar revealed={chromeRevealed} />
-          </div>
-          {voiceChatOpen && !voiceFullscreen && (
+          {!voiceChatFocus && (
+            <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+              <VoiceGrid participants={participants} />
+              <VoiceControlBar revealed={chromeRevealed} />
+            </div>
+          )}
+          {voiceChatFocus ? (
+            <div className="flex-1 min-w-0 flex flex-col bg-surface-chat">
+              <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
+              <VoiceControlBar variant="docked" />
+            </div>
+          ) : voiceChatOpen && !voiceFullscreen && (
             <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
           )}
         </div>

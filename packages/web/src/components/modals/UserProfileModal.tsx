@@ -239,7 +239,7 @@ export function UserProfileModal() {
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up overflow-hidden">
         {/* Banner */}
         <div
-          className="h-[100px] flex-shrink-0 relative"
+          className="h-[128px] flex-shrink-0 relative"
           style={bannerSrc
             ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { background: bannerFallback }

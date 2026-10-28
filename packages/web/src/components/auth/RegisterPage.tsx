@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ImageCropModal } from '../ui/ImageCropModal';
+import { isAnimatedImageFile, profileImageFileName } from '../../utils/animatedImage';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
@@ -308,13 +309,22 @@ export function RegisterPage() {
   };
 
   // ── Avatar file selection ──
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      setAvatarPreview(URL.createObjectURL(file));
+      setAvatarFile(new File([file], profileImageFileName('avatar', file), {
+        type: file.type || 'image/gif',
+      }));
+      setAvatarCropSrc(null);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setAvatarCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
   const handleAvatarCropComplete = (blob: Blob) => {

@@ -10,6 +10,8 @@ import { DeleteAccountModal } from '../DeleteAccountModal';
 import { api } from '../../../api/client';
 import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
+import { isAnimatedImageFile, profileImageFileName } from '../../../utils/animatedImage';
+import { CHOSEN_STATUS_OPTIONS } from '../../../utils/statusOptions';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS, detachedHomeOf } from '@backspace/shared';
 import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
@@ -174,34 +176,54 @@ export function AccountPanel() {
       })();
 
   // ── File selection handlers ──
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //
+  // Animated files skip the crop step: the canvas in `cropImage` keeps one
+  // frame, so cropping would flatten the animation before it ever reaches the
+  // server (which does preserve every frame). They upload as-is and are framed
+  // by the avatar/banner containers.
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      const previewUrl = URL.createObjectURL(file);
+      setAvatarPreview(previewUrl);
+      setAvatarCropSrc(null);
+      setAvatarFilename(null);
+      await uploadAvatar(file, previewUrl);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setAvatarCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
-  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (bannerInputRef.current) bannerInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+      const previewUrl = URL.createObjectURL(file);
+      setBannerPreview(previewUrl);
+      setBannerCropSrc(null);
+      setBannerFilename(null);
+      await uploadBanner(file, previewUrl);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setBannerCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (bannerInputRef.current) bannerInputRef.current.value = '';
   };
 
-  // ── Crop complete handlers ──
-  const handleAvatarCropComplete = async (blob: Blob) => {
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    const previewUrl = URL.createObjectURL(blob);
-    setAvatarPreview(previewUrl);
-    setAvatarCropSrc(null);
-    const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
+  const uploadAvatar = async (file: File, previewUrl: string) => {
     setUploadingAvatar(true);
     try {
-      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const uploadFile = new File([file], profileImageFileName('avatar', file), {
+        type: file.type || 'image/png',
+      });
+      const tid = await useTransferStore.getState().startUpload(uploadFile, { tray: false });
       const { filename } = await waitForTransferAttachment(tid);
       setAvatarFilename(filename);
     } catch {
@@ -213,15 +235,13 @@ export function AccountPanel() {
     }
   };
 
-  const handleBannerCropComplete = async (blob: Blob) => {
-    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
-    const previewUrl = URL.createObjectURL(blob);
-    setBannerPreview(previewUrl);
-    setBannerCropSrc(null);
-    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+  const uploadBanner = async (file: File, previewUrl: string) => {
     setUploadingBanner(true);
     try {
-      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const uploadFile = new File([file], profileImageFileName('banner', file), {
+        type: file.type || 'image/png',
+      });
+      const tid = await useTransferStore.getState().startUpload(uploadFile, { tray: false });
       const { filename } = await waitForTransferAttachment(tid);
       setBannerFilename(filename);
     } catch {
@@ -231,6 +251,25 @@ export function AccountPanel() {
     } finally {
       setUploadingBanner(false);
     }
+  };
+
+  // ── Crop complete handlers ──
+  const handleAvatarCropComplete = async (blob: Blob) => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setAvatarPreview(previewUrl);
+    setAvatarCropSrc(null);
+    const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
+    await uploadAvatar(file, previewUrl);
+  };
+
+  const handleBannerCropComplete = async (blob: Blob) => {
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setBannerPreview(previewUrl);
+    setBannerCropSrc(null);
+    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+    await uploadBanner(file, previewUrl);
   };
 
   const handleRemoveAvatar = () => {
@@ -348,7 +387,7 @@ export function AccountPanel() {
         <div className="rounded-lg overflow-hidden border border-white/[0.06] mb-4 bg-surface-channel">
           {/* Banner area */}
           <div
-            className="h-[80px]"
+            className="h-[100px]"
             style={displayBannerSrc
               ? { backgroundImage: `url(${displayBannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
               : { background: bannerFallback }
@@ -626,9 +665,9 @@ export function AccountPanel() {
               onChange={(e) => setStatus(e.target.value as ChosenUserStatus)}
               className="input-standard w-full appearance-none"
             >
-              <option value="online">{t('common:states.online')}</option>
-              <option value="idle">{t('common:states.idle')}</option>
-              <option value="dnd">{t('common:states.doNotDisturb')}</option>
+              {CHOSEN_STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
+              ))}
             </select>
           </div>
 

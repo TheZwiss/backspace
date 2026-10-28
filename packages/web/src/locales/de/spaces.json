@@ -557,7 +557,12 @@
       "undeafen": "Ton einschalten",
       "spaceMuted": "Im Space stummgeschaltet",
       "spaceDeafened": "Ton im Space ausgeschaltet",
-      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
+      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)",
+      "statusMenu": "Status",
+      "customStatus": "Benutzerdefinierter Status",
+      "customStatusPlaceholder": "Was machst du gerade?",
+      "editProfile": "Profil bearbeiten",
+      "statusUpdateFailed": "Status konnte nicht aktualisiert werden"
     },
     "dmUnreadMessages_one": "{{count}} ungelesene Direktnachricht",
     "dmUnreadMessages_other": "{{count}} ungelesene Direktnachrichten",

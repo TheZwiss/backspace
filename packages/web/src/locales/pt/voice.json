@@ -1,7 +1,9 @@
 {
   "chatPanel": {
     "title": "Chat",
-    "close": "Fechar chat"
+    "close": "Fechar chat",
+    "expand": "Expandir chat",
+    "collapse": "Recolher chat"
   },
   "badges": {
     "mutedNoPermission": "Silenciado (sem permissão para falar)",
@@ -199,7 +201,9 @@
     "disconnect": "Desconectar",
     "connectionInfo": "Informações da conexão",
     "noiseSuppressionOff": "Desativar supressão de ruído com IA",
-    "noiseSuppressionOn": "Ativar supressão de ruído com IA"
+    "noiseSuppressionOn": "Ativar supressão de ruído com IA",
+    "focusChat": "Focar no chat",
+    "unfocusChat": "Mostrar a chamada"
   },
   "status": {
     "dmCall": "Chamada em DM",

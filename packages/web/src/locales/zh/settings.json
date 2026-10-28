@@ -69,7 +69,16 @@
         "fallbackName": "摄像头 {{number}}",
         "detectedFallback": "检测到的摄像头",
         "currentlyUsing": "当前使用：{{label}}",
-        "none": "未检测到摄像头。"
+        "none": "未检测到摄像头。",
+        "quality": {
+          "label": "摄像头画质",
+          "managed": "摄像头画质由实例设置：{{resolution}}、{{fps}} fps、{{bitrate}}。",
+          "resolution": "分辨率",
+          "framerate": "帧率",
+          "bitrate": "码率",
+          "useDefault": "使用默认值",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "测试摄像头",

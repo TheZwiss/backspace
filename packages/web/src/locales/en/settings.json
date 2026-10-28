@@ -69,7 +69,16 @@
         "fallbackName": "Camera {{number}}",
         "detectedFallback": "detected camera",
         "currentlyUsing": "Currently using: {{label}}",
-        "none": "No cameras detected."
+        "none": "No cameras detected.",
+        "quality": {
+          "label": "Webcam quality",
+          "managed": "Webcam quality is set by the instance: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Resolution",
+          "framerate": "Frame rate",
+          "bitrate": "Bitrate",
+          "useDefault": "Use default",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Test camera",

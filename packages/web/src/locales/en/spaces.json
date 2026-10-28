@@ -557,7 +557,12 @@
       "undeafen": "Undeafen",
       "spaceMuted": "Space Muted",
       "spaceDeafened": "Space Deafened",
-      "permissionMuted": "Muted (No Speak Permission)"
+      "permissionMuted": "Muted (No Speak Permission)",
+      "statusMenu": "Status",
+      "customStatus": "Custom status",
+      "customStatusPlaceholder": "What are you up to?",
+      "editProfile": "Edit profile",
+      "statusUpdateFailed": "Could not update status"
     },
     "dmUnreadMessages_one": "{{count}} unread direct message",
     "dmUnreadMessages_other": "{{count}} unread direct messages",

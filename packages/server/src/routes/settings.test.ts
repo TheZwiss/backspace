@@ -607,3 +607,106 @@ describe('PATCH /api/settings/streaming directory invariant', () => {
     expect(markDirectoryDirty).not.toHaveBeenCalled();
   });
 });
+
+describe('camera streaming limits', () => {
+  it('ships the fixed preset by default on GET', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera).toEqual({
+      mode: 'fixed',
+      defaultResolution: 720,
+      defaultFramerate: 30,
+      defaultBitrateKbps: 2000,
+      allowedResolutions: [540, 720, 1080],
+      allowedFramerates: [30, 60],
+      minBitrateKbps: 300,
+      maxBitrateKbps: 4000,
+      allowCustomBitrate: true,
+    });
+  });
+
+  it('round-trips a user-choice policy and clamps nothing silently', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: {
+        camera: {
+          mode: 'user-choice',
+          defaultResolution: 1080,
+          defaultFramerate: 60,
+          defaultBitrateKbps: 3000,
+          allowedResolutions: [720, 1080],
+          allowedFramerates: [30, 60],
+          minBitrateKbps: 500,
+          maxBitrateKbps: 6000,
+          allowCustomBitrate: false,
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera).toMatchObject({
+      mode: 'user-choice',
+      defaultResolution: 1080,
+      defaultFramerate: 60,
+      defaultBitrateKbps: 3000,
+      allowedResolutions: [720, 1080],
+      allowCustomBitrate: false,
+    });
+
+    const again = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(again.json().camera.defaultBitrateKbps).toBe(3000);
+  });
+
+  it('accepts a partial camera patch and keeps the other fields', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { mode: 'user-choice' } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera.mode).toBe('user-choice');
+    expect(res.json().camera.defaultResolution).toBe(720);
+  });
+
+  it('rejects an unknown mode with camera_mode_invalid', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { mode: 'anything' } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_mode_invalid');
+  });
+
+  it('refuses a default resolution outside the allowlist', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: {
+        camera: { allowedResolutions: [540, 720], defaultResolution: 1080 },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'camera_default_not_allowed', details: { field: 'resolution' } });
+  });
+
+  it('refuses a default bitrate outside the range', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { defaultBitrateKbps: 9000 } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_bitrate_out_of_range');
+  });
+
+  it('refuses an empty resolution allowlist', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { allowedResolutions: [] } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_resolutions_invalid');
+  });
+});

@@ -21,8 +21,8 @@ vi.mock('./voice', () => ({
   broadcastDeafenViaLiveKit: vi.fn(),
 }));
 vi.mock('./screenShare', () => ({
-  CAMERA_PRESET: { resolution: { width: 1280, height: 720 }, encoding: { maxBitrate: 1, maxFramerate: 30 }, codec: 'h264' },
   stopScreenShare: vi.fn(async () => {}),
+  applyOverdrive: vi.fn(async () => true),
 }));
 
 import { handleScreenShareAction } from './voiceActions';

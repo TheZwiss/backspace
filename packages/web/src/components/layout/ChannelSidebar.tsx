@@ -11,7 +11,8 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { VoiceChannel } from '../voice/VoiceChannel';
 import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { ProfileAvatar } from '../ui/ProfileAvatar';
+import { Avatar } from '../ui/Avatar';
+import { UserStatusMenu } from './UserStatusMenu';
 import { Mascot } from '../ui/Mascot';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
@@ -877,7 +878,7 @@ function UserAreaPanel({
   onSettingsClick: (tab?: UserSettingsTab) => void;
 }) {
   const { t } = useTranslation(['spaces', 'common', 'admin']);
-  const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
+  const [openPanel, setOpenPanel] = useState<'status' | 'input' | 'output' | null>(null);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
   const setInputDevice = useVoiceStore((s) => s.setInputDevice);
@@ -983,6 +984,7 @@ function UserAreaPanel({
 
   return (
     <div className="relative" ref={panelRef}>
+      {openPanel === 'status' && <UserStatusMenu onClose={() => setOpenPanel(null)} />}
       {/* Input settings panel */}
       {openPanel === 'input' && (
         <div className="absolute bottom-full left-0 right-0 mb-0 bg-surface-channel rounded-t-lg shadow-lg z-[150] border-t border-x border-border-hard">
@@ -1170,8 +1172,28 @@ function UserAreaPanel({
       {/* User area bar */}
       <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
-        <div className="p-1 hover:bg-interactive-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
-          <ProfileAvatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={shownStatus} user={user} origin="" />
+        <div
+          role="button"
+          tabIndex={0}
+          aria-haspopup="menu"
+          aria-expanded={openPanel === 'status'}
+          title={t('spaces:sidebar.userArea.statusMenu')}
+          onClick={() => {
+            setOpenPanel(openPanel === 'status' ? null : 'status');
+            setShowInputDeviceList(false);
+            setShowOutputDeviceList(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setOpenPanel(openPanel === 'status' ? null : 'status');
+              setShowInputDeviceList(false);
+              setShowOutputDeviceList(false);
+            }
+          }}
+          className="p-1 hover:bg-interactive-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group"
+        >
+          <Avatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={shownStatus} user={user} />
           <div className="flex-1 min-w-0">
             <div className="text-[13.5px] font-semibold text-txt-primary truncate leading-tight">{user.displayName ?? user.username}</div>
             <div className="text-[11px] text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary">@{user.username}</div>

@@ -1,7 +1,9 @@
 {
   "chatPanel": {
     "title": "Chat",
-    "close": "Close Chat"
+    "close": "Close Chat",
+    "expand": "Expand chat",
+    "collapse": "Collapse chat"
   },
   "badges": {
     "mutedNoPermission": "Muted (No Speak Permission)",
@@ -199,7 +201,9 @@
     "disconnect": "Disconnect",
     "connectionInfo": "Connection Info",
     "noiseSuppressionOff": "Disable AI Noise Suppression",
-    "noiseSuppressionOn": "Enable AI Noise Suppression"
+    "noiseSuppressionOn": "Enable AI Noise Suppression",
+    "focusChat": "Focus chat",
+    "unfocusChat": "Show the call"
   },
   "status": {
     "dmCall": "DM Call",

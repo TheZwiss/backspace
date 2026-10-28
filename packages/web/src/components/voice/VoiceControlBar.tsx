@@ -19,14 +19,16 @@ const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surf
  * watches the voice container the pointer actually moves over. It is ignored
  * while docked, where plain hover on the voice panel is the right model.
  */
-export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
+export function VoiceControlBar({ revealed = false, variant = 'floating' }: { revealed?: boolean; variant?: 'floating' | 'docked' }) {
   const { t } = useTranslation(['voice', 'common']);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
+  const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
+  const toggleVoiceChatFocus = useUIStore((s) => s.toggleVoiceChatFocus);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
@@ -53,9 +55,11 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const fullscreenVisibility = revealed || shareMenuOpen
     ? 'opacity-100'
     : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
-  const containerClassName = voiceFullscreen
-    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
-    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
+  const containerClassName = variant === 'docked'
+    ? 'relative z-20 h-20 flex items-center justify-center border-t border-border-soft bg-surface-chat flex-shrink-0'
+    : voiceFullscreen
+      ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
+      : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
 
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
@@ -208,6 +212,27 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
           </svg>
+        </button>
+
+        {/* Chat focus */}
+        <button
+          onClick={toggleVoiceChatFocus}
+          aria-pressed={voiceChatFocus}
+          className={voiceChatFocus
+            ? `${btnBase} bg-surface-channel text-txt-primary`
+            : btnDefault
+          }
+          title={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')}
+        >
+          {voiceChatFocus ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+            </svg>
+          )}
         </button>
 
         {/* Fullscreen Toggle */}

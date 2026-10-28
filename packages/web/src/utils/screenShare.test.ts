@@ -4,6 +4,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import i18n from '../i18n';
 import {
+  applyOverdrive,
   buildScreenShareOptions,
   getPublishedScreenShareCodec,
   publishScreenShare,
@@ -113,6 +114,26 @@ afterEach(() => {
 });
 
 describe('screen-share media options', () => {
+  it('applies bitrate when the browser rejects RTP priority changes', async () => {
+    const room = fakeRoom();
+    const video = makeVideoTrack();
+    const sender = attachPublishedSender(room, video, []);
+    sender.getParameters.mockImplementation(() => ({ encodings: [{ active: true, priority: 'low' }] }));
+    sender.setParameters.mockRejectedValueOnce(new DOMException('priority unsupported', 'OperationError'));
+
+    const applied = await applyOverdrive(room, Track.Source.ScreenShare, {
+      maxBitrate: 3_000_000,
+      maxFramerate: 30,
+      degradationPreference: 'balanced',
+    });
+
+    expect(applied).toBe(true);
+    expect(sender.setParameters).toHaveBeenCalledTimes(2);
+    expect(sender.setParameters).toHaveBeenLastCalledWith(expect.objectContaining({
+      encodings: [expect.objectContaining({ priority: 'low', maxBitrate: 3_000_000, maxFramerate: 30 })],
+    }));
+  });
+
   it('publishes VP9 directly without enabling the H.264 SDP hook', async () => {
     const room = fakeRoom();
     const video = makeVideoTrack();

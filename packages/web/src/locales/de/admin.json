@@ -339,6 +339,32 @@
     "capWarning": {
       "title": "Matrixwerte überschreiten die globale Obergrenze.",
       "description": "Einige Bitraten liegen über deinem Maximum von {{max}}. Streams mit diesen Kombinationen werden auf deine Obergrenze heruntergeregelt."
+    },
+    "camera": {
+      "label": "Webcam-Kamera",
+      "description": "Steuert die Qualität, mit der Benutzer ihre Kamera senden.",
+      "mode": {
+        "label": "Webcam-Qualitätsrichtlinie",
+        "fixed": "Fest (aktuelles Verhalten)",
+        "userChoice": "Benutzer wählen",
+        "fixedHint": "Alle senden mit der unten gewählten Qualität.",
+        "userChoiceHint": "Benutzer wählen in den Voice-&-Video-Einstellungen aus den erlaubten Werten."
+      },
+      "defaults": {
+        "resolution": "Standardauflösung",
+        "framerate": "Standardbildrate",
+        "bitrate": "Standardbitrate (kbps)"
+      },
+      "quality": {
+        "resolutions": "Erlaubte Auflösungen",
+        "framerates": "Erlaubte Bildraten",
+        "bitrateRange": "Bitratenbereich (kbps)",
+        "min": "Min.",
+        "max": "Max.",
+        "allowCustom": "Benutzerdefinierte Bitrate erlauben",
+        "allowCustomHint": "Benutzer können jede Bitrate innerhalb des Bereichs festlegen."
+      },
+      "highEndWarning": "Hohe Kameraeinstellungen kosten Upload-Bandbreite und CPU aller Teilnehmer."
     }
   },
   "updates": {

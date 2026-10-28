@@ -106,7 +106,7 @@ export function MobileYouScreen() {
       <div className="mx-4 rounded-xl overflow-hidden bg-surface-channel">
         {/* Banner or accent background */}
         <div
-          className="h-24 relative"
+          className="h-[120px] relative"
           style={{
             background: bannerUrl
               ? `url(/api/uploads/${user.banner}) center/cover`
