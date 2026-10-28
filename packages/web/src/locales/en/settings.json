@@ -302,6 +302,11 @@
       "pending": "Connecting to the desktop portal. If a system dialog appears, choose shortcuts for the actions you want to use.",
       "ready": "Backspace is registered. Open your system's keyboard shortcut settings to change or remove assignments. The list below is read-only and refreshes when you return to Backspace.",
       "unavailable": "The portal is unavailable, permission was denied, or the session ended. A Global Shortcuts portal backend is required. Local bindings are disabled on Wayland.",
+      "missingDesktopEntry": "The desktop portal cannot find the Backspace application entry. Install or integrate the desktop app before registering global shortcuts.",
+      "integrateAppImage": "Integrate AppImage",
+      "integrationError": "Could not create the application entry. Check access to your applications directory.",
+      "configure": "Configure shortcuts",
+      "configureError": "Could not open the system shortcut editor. Open your desktop keyboard shortcut settings for Backspace.",
       "retry": "Register or reconnect shortcuts",
       "assigned": "System shortcut: {{shortcut}}",
       "notAssigned": "No active system assignment"

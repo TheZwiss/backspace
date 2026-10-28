@@ -557,6 +557,12 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       {
         const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, disconnectFn } = useVoiceStore.getState();
         const myId = event.user.id;
+        useVoiceStore.setState((state) => {
+          const waiting = new Map(state.dmWaitingUntil);
+          for (const dm of event.dmChannels ?? []) waiting.delete(dm.id);
+          for (const call of event.activeCalls ?? []) if (call.dmChannelId && call.waitingUntil) waiting.set(call.dmChannelId, call.waitingUntil);
+          return { dmWaitingUntil: waiting };
+        });
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
             // For federated calls, check membership via token presence (participants may be empty)
@@ -900,6 +906,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       if ((event.message as any).user) upsertUserView((event.message as any).user, origin);
       if ((event.message as any).replyTo?.user) upsertUserView((event.message as any).replyTo.user, origin);
       updateMessage(event.message as any);
+      useSpaceStore.getState().patchDmCopy(event.message.dmChannelId, (dm) => dm.lastMessage?.id === event.message.id ? { ...dm, lastMessage: event.message } : dm);
       break;
 
     case 'federation_file_rejected': {
@@ -1205,11 +1212,25 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       break;
     }
 
+    case 'dm_call_waiting': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
+      useVoiceStore.setState((state) => {
+        const waiting = new Map(state.dmWaitingUntil);
+        if (event.endsAt === null) waiting.delete(event.dmChannelId);
+        else waiting.set(event.dmChannelId, event.endsAt);
+        return { dmWaitingUntil: waiting };
+      });
+      break;
+    }
+
     case 'dm_call_ended': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
       // The call is over: nobody is in it any more, whatever leave events an
       // older server did not send.
-      if (event.dmChannelId) setVoiceUsers(event.dmChannelId, []);
+      if (event.dmChannelId) {
+        setVoiceUsers(event.dmChannelId, []);
+        useVoiceStore.setState((state) => { const waiting = new Map(state.dmWaitingUntil); waiting.delete(event.dmChannelId!); return { dmWaitingUntil: waiting }; });
+      }
       if (dmCallEventIsOurs(event)) teardownDmCall();
       break;
     }

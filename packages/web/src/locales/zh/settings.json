@@ -301,6 +301,11 @@
       "pending": "正在连接到桌面门户。如果弹出系统对话框，请为您要使用的操作选择快捷键。",
       "ready": "Backspace 已注册。打开系统的键盘快捷键设置可更改或移除绑定。下方的列表为只读，当您切回 Backspace 时会自动刷新。",
       "unavailable": "门户不可用、权限被拒绝或会话已结束。需要全局快捷键门户后端支持。Wayland 下已禁用本地绑定。",
+      "missingDesktopEntry": "桌面门户找不到 Backspace 的应用程序条目。注册全局快捷键前，请先安装应用或将其集成到系统。",
+      "integrateAppImage": "集成 AppImage",
+      "integrationError": "无法创建应用程序条目。请检查用户应用程序目录的访问权限。",
+      "configure": "配置快捷键",
+      "configureError": "无法打开系统快捷键编辑器。请在系统快捷键设置中找到 Backspace。",
       "retry": "注册或重新连接快捷键",
       "assigned": "系统快捷键：{{shortcut}}",
       "notAssigned": "暂无有效的系统分配"

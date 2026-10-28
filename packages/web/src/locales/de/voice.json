@@ -106,7 +106,11 @@
     "kind": {
       "monitor": "Bildschirm",
       "window": "Fenster"
-    }
+    },
+    "audioApplication": "Anwendungsaudio",
+    "chooseAudioApplication": "Audioanwendung auswählen",
+    "audioApplicationHint": "Spiele Audio in der Anwendung ab und wähle anschließend das zu teilende Fenster.",
+    "allAudioExceptBackspace": "Gesamtes System außer Backspace"
   },
   "streamSettings": {
     "title": "Stream-Einstellungen",
@@ -181,6 +185,9 @@
   },
   "channelDuration": "Kanal seit {{duration}} aktiv",
   "controls": {
+    "callWindowFailed": "Das Anruffenster konnte nicht geöffnet werden.",
+    "callInWindow": "Der Anruf ist in einem separaten Fenster – zum Anzeigen klicken",
+    "openCallWindow": "Anruf in einem separaten Fenster öffnen",
     "spaceMutedSelfMuted": "Im Space stummgeschaltet (auch selbst stummgeschaltet)",
     "unmuteShortcut": "Stummschaltung aufheben (M)",
     "muteShortcut": "Stummschalten (M)",
@@ -274,5 +281,23 @@
     "stillDenied": "Der Mikrofonzugriff ist weiterhin verweigert. Erlaube ihn für diese Seite in den Browser- oder Geräteeinstellungen.",
     "notFound": "Kein Mikrofon gefunden.",
     "failed": "Auf das Mikrofon konnte nicht zugegriffen werden."
+  },
+  "callOngoing": "Anruf läuft",
+  "callWaiting": "Warten auf die andere Person · endet in {{remaining}}",
+  "rejoinCall": "Wieder beitreten",
+  "history": {
+    "startedBy": "{{actor}} hat den Anruf gestartet",
+    "from": "Beginn:",
+    "to": "Ende:",
+    "status": {
+      "ringing": "Anruf läuft…",
+      "active": "Gespräch läuft",
+      "ended": "Anruf beendet",
+      "missed": "Verpasster Anruf",
+      "rejected": "Anruf abgelehnt",
+      "interrupted": "Anruf unterbrochen",
+      "cancelled": "Anruf abgebrochen"
+    },
+    "duration": "Dauer"
   }
 }

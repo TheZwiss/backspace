@@ -357,7 +357,10 @@ export async function stageScreenCapture(): Promise<MediaStream> {
       ownFree?.stop();
       throw err;
     }
-    if (ownFree) stream.addTrack(ownFree);
+    if (ownFree) {
+      for (const track of stream.getAudioTracks()) { stream.removeTrack(track); track.stop(); }
+      stream.addTrack(ownFree);
+    }
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
     return stream;
@@ -743,9 +746,9 @@ function settleWithin<T>(promise: Promise<T>, ms: number, discard: (late: T) => 
 async function acquireScreenShareAudio(sourceId: string): Promise<MediaStreamTrack> {
   const api = getElectronAPI();
   if (!api?.preselectScreenSource) throw new DOMException('Source preselection is not available', 'NotSupportedError');
+  await api.preselectScreenSource(sourceId, true);
   const ownFree = await acquireAppExcludedSystemAudio();
   if (ownFree) return ownFree;
-  await api.preselectScreenSource(sourceId, true);
   const config = useVoiceStore.getState().screenShareConfig;
   const stream = await navigator.mediaDevices.getDisplayMedia(
     buildCaptureConstraints({ ...config, shareAudio: true }, buildScreenShareOptions(config)),

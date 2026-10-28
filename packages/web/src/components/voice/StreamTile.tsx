@@ -24,6 +24,8 @@ interface StreamTileProps {
   tile: StreamTileType;
   large?: boolean;
   stats: TrackStatsSnapshot | null;
+  borderless?: boolean;
+  chromeRevealed?: boolean;
 }
 
 const STREAM_HEALTH_KEYS = {
@@ -201,7 +203,7 @@ function handleViewerWatchToggle(sharer: StreamWatchTarget, watching: boolean): 
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
-export function StreamTile({ tile, large, stats }: StreamTileProps) {
+export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -420,7 +422,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
   return (
     <div
       data-context-menu
-      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
+      className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
       onContextMenu={handleContextMenu}
@@ -458,13 +460,13 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* LIVE badge — top left */}
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
+      {(!borderless || chromeRevealed) && <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
         {t('voice:badges.live')}
-      </div>
+      </div>}
 
       {/* Stream status — in focus mode this is the visual peer of the Grid
           action: same top edge, height, radius, and surface treatment. */}
-      {(healthWarning || (qualityBadge && hasVideo)) && (
+      {(!borderless || chromeRevealed) && (healthWarning || (qualityBadge && hasVideo)) && (
         <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none`}>
           {healthWarning && (
             <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-[10px] leading-[15px] text-white/90 truncate`}>
@@ -483,7 +485,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* Bottom overlay */}
-      {hasVideo && isWatching && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      {hasVideo && isWatching && (!borderless || chromeRevealed) && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
         <div className="flex items-center gap-1.5 min-w-0">
           {/* Screen icon */}
           <svg

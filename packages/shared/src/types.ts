@@ -557,6 +557,7 @@ export interface Embed {
 // ─── Active Call Types ───────────────────────────────────────────────────────
 
 export interface ActiveCallInfo {
+  waitingUntil?: number;
   dmChannelId: string | null;
   federatedCallId?: string;
   callerId: string;
@@ -765,6 +766,7 @@ export type ServerEvent =
   // `dmChannelId` is null and `federatedCallId` set when the instance holds a
   // federated call with no local copy of the DM (Path B, voice.md).
   | { type: 'dm_call_rejected'; dmChannelId: string | null; federatedCallId?: string }
+  | { type: 'dm_call_waiting'; dmChannelId: string; endsAt: number | null }
   | { type: 'dm_call_ended'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; phase: DmCallPhase; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }

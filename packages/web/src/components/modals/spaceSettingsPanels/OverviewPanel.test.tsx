@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { MemberWithUser, User } from '@backspace/shared';
 
@@ -17,6 +17,8 @@ vi.mock('../../../audio/AudioManager', () => ({
 import { OverviewPanel } from './OverviewPanel';
 import { useSpaceStore, type TaggedSpace } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
+import { useTransferStore } from '../../../stores/transferStore';
+import * as transfer from '../../../utils/waitForTransfer';
 
 const owner: User = {
   id: 'user-1',
@@ -137,5 +139,32 @@ describe('OverviewPanel ownership transfer candidates', () => {
 
     expect(screen.getByText('Member')).toBeInTheDocument();
     expect(screen.queryByText('Owner')).not.toBeInTheDocument();
+  });
+});
+
+describe('animated server images', () => {
+  it.each([['icon', 0], ['banner', 1]] as const)('uploads the %s GIF intact without opening the cropper', async (kind, index) => {
+    const upload = vi.fn().mockResolvedValue('transfer-test');
+    const originalUpload = useTransferStore.getState().startUpload;
+    useTransferStore.setState({ startUpload: upload });
+    const wait = vi.spyOn(transfer, 'waitForTransferAttachment').mockResolvedValue({ filename: `${kind}.gif` } as never);
+    const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:preview');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    try {
+      const view = render(<MemoryRouter><OverviewPanel spaceId="space-1" /></MemoryRouter>);
+      const input = view.container.querySelectorAll('input[type="file"]')[index]!;
+      const gif = new File(['GIF89a'], 'animated.gif', { type: 'image/gif' });
+      fireEvent.change(input, { target: { files: [gif] } });
+      await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+      const sent = upload.mock.calls[0]![0] as File;
+      expect(sent.name).toBe(`${kind}.gif`);
+      expect(sent.type).toBe('image/gif');
+      expect(sent.size).toBe(gif.size);
+      await waitFor(() => expect(wait).toHaveBeenCalledOnce());
+      view.unmount();
+    } finally {
+      useTransferStore.setState({ startUpload: originalUpload });
+      wait.mockRestore(); create.mockRestore(); revoke.mockRestore();
+    }
   });
 });

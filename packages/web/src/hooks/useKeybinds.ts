@@ -21,7 +21,7 @@ function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate =
   lastDispatch[key] = now;
 
   const voice = useVoiceStore.getState();
-  if (!voice.currentVoiceChannelId) return;
+  const inCall = !!voice.currentVoiceChannelId || !!voice.activeDmCall;
 
   switch (actionId) {
     case 'toggleMute':
@@ -31,17 +31,19 @@ function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate =
       if (pressed) toggleDeafenFromControl();
       break;
     case 'toggleCamera':
-      if (pressed) handleCameraAction();
+      if (pressed && inCall) handleCameraAction();
       break;
     case 'toggleScreenShare':
-      if (pressed) handleScreenShareAction();
+      if (pressed && inCall) handleScreenShareAction();
       break;
     case 'disconnect':
-      if (pressed) handleDisconnectAction();
+      if (pressed && inCall) handleDisconnectAction();
       break;
     case 'pushToTalk':
-      voice.setMuted(!pressed); // pressed=true → unmute, pressed=false → mute
-      broadcastVoiceStatus();
+      if (inCall) {
+        voice.setMuted(!pressed); // pressed=true → unmute, pressed=false → mute
+        broadcastVoiceStatus();
+      }
       break;
   }
 }
@@ -186,6 +188,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, dedupl
 export function useKeybinds(): void {
   const keybinds = useKeybindStore((s) => s.keybinds);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const portalStatus = useKeybindPortalStatus();
   const portalRef = useRef(portalStatus);
   portalRef.current = portalStatus;
@@ -198,7 +201,7 @@ export function useKeybinds(): void {
 
   // --- PTT activation lifecycle ---
   useEffect(() => {
-    const inVoice = !!currentVoiceChannelId;
+    const inVoice = !!currentVoiceChannelId || !!activeDmCall;
     const voice = useVoiceStore.getState();
 
     if (hasPtt && inVoice) {
@@ -208,7 +211,7 @@ export function useKeybinds(): void {
     } else if (voice.pttActive) {
       voice.setPttActive(false);
     }
-  }, [hasPtt, currentVoiceChannelId]);
+  }, [hasPtt, currentVoiceChannelId, activeDmCall]);
 
   // Subscribe before syncing. Portal actions have a single source, so rapid PTT
   // press/release cycles must not pass through the legacy hook's time-based dedup.

@@ -260,6 +260,7 @@ export function UserProfileModal() {
         <div className="px-5 flex-shrink-0 relative">
           <Avatar
             src={user.avatar}
+            animate
             name={displayName}
             size={96}
             status={shownStatus}

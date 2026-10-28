@@ -169,9 +169,10 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               userId={avatarUserId}
               user={user ?? undefined}
               origin={userOrigin}
+              animate={isSpeaking}
             />
             {isSpeaking && (
-              <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
+              <div className="pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
             )}
           </div>
         </div>

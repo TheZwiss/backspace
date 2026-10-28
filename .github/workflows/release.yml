@@ -210,6 +210,20 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @backspace/shared build
 
+      - name: Build Windows process audio helpers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($target in @(@{Name='x64';Platform='x64'}, @{Name='arm64';Platform='ARM64'})) {
+            $dir = "packages/desktop/native/process-audio/build-$($target.Name)"
+            cmake -S packages/desktop/native/process-audio -B $dir -A $target.Platform
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build $dir --config Release
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            New-Item -ItemType Directory -Force "packages/desktop/native/process-audio/bin/$($target.Name)"
+            Copy-Item "$dir/Release/backspace-process-audio.exe" "packages/desktop/native/process-audio/bin/$($target.Name)/"
+          }
+
       - name: Compile desktop TypeScript
         working-directory: packages/desktop
         run: pnpm exec tsc

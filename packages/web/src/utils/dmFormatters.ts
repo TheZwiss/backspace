@@ -151,6 +151,7 @@ export function dmSystemActorName(actor: User | null | undefined): string {
 /** The glyph a timeline row shows before the text, or null for none. */
 export function dmSystemIcon(event: DmSystemEvent | null): string | null {
   switch (event?.event) {
+    case 'call_history': return '☎';
     case 'member_added': return '\u2192'; // →
     case 'member_removed': return '\u2190'; // ←
     case 'owner_changed': return '\u265B'; // ♛
@@ -164,6 +165,8 @@ export function dmSystemIcon(event: DmSystemEvent | null): string | null {
 export function dmSystemText(event: DmSystemEvent | null, actorName: string, form: DmSystemForm): string {
   const full = form === 'timeline';
   switch (event?.event) {
+    case 'call_history':
+      return i18n.t(`voice:history.status.${event.status}`);
     case 'space_invite':
       return i18n.t('dm:system.spaceInviteNamed', { spaceName: event.snapshot.spaceName });
     case 'member_added':

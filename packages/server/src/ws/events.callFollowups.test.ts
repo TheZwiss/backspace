@@ -285,9 +285,12 @@ describe('who a relay from the host names', () => {
 
     relayed(processDmCallEndEvent, 'dm_call_end', DAVE, PAIR_FID);
     await settle();
+    expect(connectionManager.getRoom(PAIR)).toBeDefined();
+    expect(relayedTo(PEER2)).toEqual([]);
+    await vi.advanceTimersByTimeAsync(300000);
+    await settle();
 
     expect(connectionManager.getRoom(PAIR)).toBeUndefined();
-    expect(relayedTo(PEER)).toEqual([]);
     expect(relayedTo(PEER2)).toEqual([expect.objectContaining({
       eventType: 'dm_call_end',
       federatedId: PAIR_FID,

@@ -1,3 +1,4 @@
+import { WindowsProcessAudio } from './windowsProcessAudio';
 import {
   app,
   BrowserWindow,
@@ -17,6 +18,7 @@ import os from 'os';
 import { pathToFileURL } from 'url';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 import { KeybindManager } from './keybindManager';
+import { integrateAppImage } from './appImageIntegration';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
 import {
   loadInstanceUrl,
@@ -51,7 +53,7 @@ import {
   type RecoveryState,
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
-import { isNavigationAllowed } from './navigationPolicy';
+import { isCallWindowRequest, isNavigationAllowed } from './navigationPolicy';
 import { NotificationRetainer } from './notificationRetention';
 import {
   screenSharePickerMode,
@@ -85,6 +87,7 @@ app.setName('Backspace');
 }
 
 let mainWindow: BrowserWindow | null = null;
+let callWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -366,8 +369,10 @@ function createWindow(): void {
     minHeight: 500,
     title: 'Backspace',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(process.platform !== 'darwin' ? {
+    ...(process.platform === 'linux' ? { frame: false } : {
+      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    }),
+    ...(process.platform === 'win32' ? {
       titleBarOverlay: {
         color: '#0b0b10',
         symbolColor: '#d8d8de',
@@ -460,14 +465,14 @@ function createWindow(): void {
   // download, and the page that keeps running may be sharing. `did-navigate` fires for a
   // committed cross-document main-frame load; `did-fail-load` for the main frame is the error
   // page that replaced it (-3, ERR_ABORTED, is a cancelled navigation that replaced nothing).
-  mainWindow.webContents.on('render-process-gone', () => systemAudio.stop());
-  mainWindow.webContents.on('did-navigate', () => systemAudio.stop());
+  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
+  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) systemAudio.stop();
+    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); }
   });
 
   mainWindow.on('closed', () => {
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop();
     setMainWindow(null);
     mainWindow = null;
     // Clear recovery state so macOS dock-activate (which calls createWindow again)
@@ -487,7 +492,15 @@ function createWindow(): void {
 
   // Intercept own-instance /join/* URLs so they open in-app instead of the
   // system browser. Other URLs continue to open externally.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isCallWindowRequest(url, frameName)) {
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        width: 960, height: 640, minWidth: 480, minHeight: 320,
+        title: 'Backspace — Call', backgroundColor: '#111116',
+        ...(process.platform === 'linux' ? { frame: false } : {}),
+        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      } };
+    }
     try {
       const u = new URL(url);
       if (
@@ -503,6 +516,12 @@ function createWindow(): void {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('did-create-window', (child) => {
+    callWindow = child;
+    child.on('closed', () => { if (callWindow === child) callWindow = null; });
+    child.webContents.on('will-navigate', (event) => event.preventDefault());
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
 
   // Deny foreign top-level navigations. See navigationPolicy.ts for the
@@ -580,6 +599,16 @@ interface SerializedScreenSource {
 }
 
 let pendingScreenSelection: PendingScreenSelection | null = null;
+let audioCaptureSourceId = '';
+let audioTargetId: string | undefined;
+const windowsAudioExecutable = app.isPackaged
+    ? path.join(process.resourcesPath, 'process-audio', process.arch, 'backspace-process-audio.exe')
+    : path.join(__dirname, '..', 'native', 'process-audio', 'bin', process.arch, 'backspace-process-audio.exe');
+const windowsProcessAudio = new WindowsProcessAudio(
+  windowsAudioExecutable,
+  (data) => mainWindow?.webContents.send('process-audio-data', data),
+  () => mainWindow?.webContents.send('process-audio-ended'),
+);
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;
 
@@ -654,6 +683,15 @@ function registerIpcHandlers(): void {
     if (app.setBadgeCount) {
       app.setBadgeCount(count);
     }
+  });
+
+  ipcMain.on('call-window-control', (event, action: unknown) => {
+    if (event.sender !== mainWindow?.webContents || !callWindow || callWindow.isDestroyed()) return;
+    if (action === 'minimize') callWindow.minimize();
+    else if (action === 'maximize') {
+      if (callWindow.isMaximized()) callWindow.unmaximize();
+      else callWindow.maximize();
+    } else if (action === 'close') callWindow.close();
   });
 
   ipcMain.on('minimize-window', () => {
@@ -820,6 +858,7 @@ function registerIpcHandlers(): void {
   // (the call) to viewers; the stream settings say so before it is turned on.
   ipcMain.handle('get-system-audio-capability', (event, clientUsesSource: unknown) => {
     if (event.sender !== mainWindow?.webContents) return 'unknown';
+    if (process.platform === 'win32' && clientUsesSource === true) return fs.existsSync(windowsAudioExecutable) ? 'excluded' : 'unavailable';
     return withSystemAudioSource(
       ownAudioInSystemAudio(process.platform, process.getSystemVersion()),
       clientUsesSource,
@@ -829,21 +868,34 @@ function registerIpcHandlers(): void {
   // The virtual source that carries every other app's playback (Linux). The
   // renderer opens it like a microphone and calls stop when the share, or its
   // audio, ends.
-  ipcMain.handle('system-audio-start', (event) => {
+  ipcMain.handle('system-audio-target', (event, targetId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'linux') return;
+    audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    audioCaptureSourceId = targetId === 'system' ? 'screen:portal' : 'window:portal';
+  });
+  ipcMain.handle('system-audio-targets', (event) => event.sender === mainWindow?.webContents ? systemAudio.targets() : []);
+  ipcMain.handle('system-audio-start', async (event) => {
     if (event.sender !== mainWindow?.webContents) return { ok: false, reason: 'unsupported-platform' };
-    return systemAudio.start();
+    if (process.platform === 'win32') {
+      const ok = await windowsProcessAudio.start(audioCaptureSourceId, process.pid);
+      return ok ? { ok: true, pcm: true } : { ok: false, reason: 'process-capture-failed' };
+    }
+    if (audioCaptureSourceId.startsWith('window:') && !audioTargetId) return { ok: false, reason: 'audio-target-required' };
+    return systemAudio.start(audioCaptureSourceId.startsWith('window:') ? audioTargetId : undefined);
   });
   ipcMain.handle('system-audio-stop', (event) => {
     if (event.sender !== mainWindow?.webContents) return;
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop();
   });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
   // back to the prompted flow, and leave this armed to hijack the next share.
-  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean) => {
+  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean, targetId?: unknown) => {
     if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId !== 'string' || !sourceId) return;
+    if (sourceId !== audioCaptureSourceId || targetId !== undefined) audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    audioCaptureSourceId = sourceId;
     pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
   });
   // System-picker sessions have no tile to preselect; the renderer only tells
@@ -947,6 +999,12 @@ function registerIpcHandlers(): void {
     return keybindManager.getPortalStatus();
   });
   ipcMain.on('keybind-portal-retry', () => keybindManager.retryPortal());
+  ipcMain.handle('keybind-portal-configure', () => keybindManager.configurePortal());
+  ipcMain.handle('keybind-appimage-integrate', () => {
+    const result = integrateAppImage(process.env.APPIMAGE);
+    if (result) keybindManager.retryPortal();
+    return result;
+  });
 
   ipcMain.handle('check-accessibility', () => {
     return keybindManager.checkAccessibility();
@@ -1538,7 +1596,7 @@ if (!gotTheLock) {
   });
 
   app.on('before-quit', () => {
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop();
     isQuitting = true;
     stopActivityDetection();
     keybindManager.stop();

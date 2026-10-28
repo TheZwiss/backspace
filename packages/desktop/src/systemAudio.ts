@@ -22,7 +22,8 @@ export type NodeMatch = Record<string, string>;
 
 /** The part of `@vencord/venmic`'s `PatchBay` used here. */
 export interface PatchBayLike {
-  link(data: { exclude: NodeMatch[]; only_speakers: boolean; ignore_devices: boolean }): boolean;
+  list?(props: string[]): NodeMatch[];
+  link(data: { include?: NodeMatch[]; exclude: NodeMatch[]; only_speakers: boolean; only_default_speakers: boolean; mute: boolean; ignore_devices: boolean }): boolean;
   unlink(): void;
 }
 
@@ -32,12 +33,13 @@ export interface PatchBayModule {
 
 export type SystemAudioStart =
   | { ok: true; label: string }
-  | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' };
+  | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' | 'audio-target-required' };
 
 export interface SystemAudioController {
   /** Whether `start` can work on this machine (platform, module, PipeWire). The module load is cached, the probe is not: PipeWire may come up later. */
   isAvailable(): boolean;
-  start(): SystemAudioStart;
+  targets(): Array<{ id: string; name: string }>;
+  start(targetId?: string): SystemAudioStart;
   stop(): void;
 }
 
@@ -74,6 +76,9 @@ export function buildExcludeNodes(pids: readonly number[], executablePath: strin
     .map((pid) => ({ 'application.process.id': String(pid) }));
   const binary = baseName(executablePath);
   if (binary) nodes.push({ 'application.process.binary': binary });
+  // A virtual DSP/monitor may already contain Backspace mixed with other apps.
+  // Capture original application streams, never feed that aggregate back in.
+  nodes.push({ 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' });
   return nodes;
 }
 
@@ -112,15 +117,37 @@ export function createSystemAudioController(deps: SystemAudioDeps): SystemAudioC
   return {
     isAvailable: () => reason() === null,
 
-    start(): SystemAudioStart {
+    targets() {
+      if (reason()) return [];
+      try {
+        bay ??= new (module as PatchBayModule).PatchBay();
+        const excluded = new Set(deps.getPids().map(String));
+        const nodes = bay.list?.([]) ?? [];
+        const targets = new Map<string, string>();
+        for (const node of nodes) {
+          const pid = node['application.process.id'];
+          if (node['node.virtual'] === 'true' || node['media.class'] !== 'Stream/Output/Audio' || (pid && excluded.has(pid))) continue;
+          if (buildExcludeNodes(deps.getPids(), deps.executablePath).some((match) => Object.entries(match).every(([key, value]) => node[key] === value))) continue;
+          const serial = node['object.serial'];
+          const id = pid || (serial && /^\d+$/.test(serial) ? `node:${serial}` : null);
+          if (id) targets.set(id, node['application.name'] || node['node.name'] || id);
+        }
+        return [...targets].map(([id, name]) => ({ id, name }));
+      } catch { return []; }
+    },
+
+    start(targetId?: string): SystemAudioStart {
       const unavailable = reason();
       if (unavailable) return { ok: false, reason: unavailable };
       try {
         bay ??= new (module as PatchBayModule).PatchBay();
         // A second start relinks with the pids as they are now.
         const ok = bay.link({
+          include: [{ 'media.class': 'Stream/Output/Audio', ...(targetId ? (targetId.startsWith('node:') ? { 'object.serial': targetId.slice(5) } : { 'application.process.id': targetId }) : {}) }],
           exclude: buildExcludeNodes(deps.getPids(), deps.executablePath),
-          only_speakers: true,
+          only_speakers: false,
+          only_default_speakers: false,
+          mute: false,
           ignore_devices: true,
         });
         linked = ok;

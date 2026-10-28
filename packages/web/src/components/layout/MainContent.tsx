@@ -1,3 +1,4 @@
+import { DmCallStatus } from '../voice/DmCallStatus';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
@@ -7,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { VoiceGrid } from '../voice/VoiceGrid';
+import { openDetachedCallWindow } from '../voice/DetachedCallWindow';
 import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
 import { FriendsPage } from '../chat/FriendsPage';
@@ -59,7 +61,7 @@ function voiceHeaderClassName(fullscreen: boolean, revealed: boolean): string {
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const channels = useSpaceStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -67,6 +69,7 @@ export function MainContent() {
   const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
   const setVoiceChatFocus = useUIStore((s) => s.setVoiceChatFocus);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const callWindowOpen = useUIStore((s) => s.callWindowOpen);
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
   const participants = useVoiceStore((s) => s.participants);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
@@ -89,7 +92,8 @@ export function MainContent() {
   // pointer goes still. It cannot be `group-hover`: fullscreen makes this
   // container the whole viewport, so hover is true wherever the pointer is
   // and the chrome would never leave. See usePointerReveal.
-  const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen);
+  const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
+  const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen, undefined, !!focusedParticipantId?.endsWith(':stream'));
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
@@ -283,10 +287,11 @@ export function MainContent() {
             </div>
           </div>
 
+          {!voiceFullscreen && <DmCallStatus channelId={currentChannelId} />}
           <div className="flex-1 flex overflow-hidden min-h-0">
             {!voiceChatFocus && (
               <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-                <VoiceGrid participants={participants} />
+                {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
                 <VoiceControlBar revealed={chromeRevealed} />
               </div>
             )}
@@ -434,6 +439,7 @@ export function MainContent() {
             <MemberListToggleButton />
           </div>
         </div>
+        <DmCallStatus channelId={currentChannelId} />
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />
         {dmPartnerDeleted
           ? <DmDeletedNotice />
@@ -537,7 +543,7 @@ export function MainContent() {
         <div className="flex-1 flex overflow-hidden min-h-0">
           {!voiceChatFocus && (
             <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-              <VoiceGrid participants={participants} />
+              {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
               <VoiceControlBar revealed={chromeRevealed} />
             </div>
           )}

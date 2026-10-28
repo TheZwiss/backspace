@@ -15,6 +15,7 @@ import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 import { describeError } from '../../../i18n/errors';
 import { useAvatarColorNames } from './spaceOptions';
+import { profileImageFileName } from '../../../utils/animatedImage';
 
 interface OverviewPanelProps {
   spaceId: string;
@@ -124,9 +125,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   // ─── Icon handlers ────────────────────────────────────────────────────────
 
-  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIconSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.toLowerCase() === 'image/gif' || (!file.type && /\.gif$/i.test(file.name))) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await handleCropComplete(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
@@ -139,7 +145,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setIconPreview(previewUrl);
     setCropSrc(null);
 
-    const file = new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
+    const file = blob instanceof File
+      ? new File([blob], profileImageFileName('avatar', blob).replace(/^avatar/, 'icon'), { type: blob.type || 'image/gif' })
+      : new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
     setUploadingIcon(true);
     try {
       const tid = await useTransferStore.getState().startUpload(file, {
@@ -165,9 +173,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   // ─── Banner handlers ──────────────────────────────────────────────────────
 
-  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.toLowerCase() === 'image/gif' || (!file.type && /\.gif$/i.test(file.name))) {
+      if (bannerFileInputRef.current) bannerFileInputRef.current.value = '';
+      await handleBannerCropComplete(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setBannerCropSrc(reader.result as string);
     reader.readAsDataURL(file);
@@ -180,7 +193,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setBannerPreview(previewUrl);
     setBannerCropSrc(null);
 
-    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+    const file = blob instanceof File
+      ? new File([blob], profileImageFileName('banner', blob), { type: blob.type || 'image/gif' })
+      : new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
       const tid = await useTransferStore.getState().startUpload(file, {

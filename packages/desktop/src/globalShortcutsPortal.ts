@@ -101,6 +101,18 @@ export class GlobalShortcutsPortal {
     return result.shortcuts.value;
   }
 
+  /** Ask the desktop to open its shortcut editor (portal version 2). */
+  async configure(): Promise<boolean> {
+    if (this.closed || !this.bound || !this.session) return false;
+    try {
+      await this.call(INTERFACE, 'ConfigureShortcuts', 'osa{sv}', [this.session, '', {}]);
+      return true;
+    } catch (error) {
+      console.warn('[GlobalShortcutsPortal] Could not open shortcut settings:', error);
+      return false;
+    }
+  }
+
   /** Signals can describe only changed entries; re-read the authoritative full list. */
   refresh(): Promise<void> {
     if (this.closed || !this.bound) return Promise.resolve();
@@ -215,7 +227,8 @@ export class GlobalShortcutsPortal {
   private fail(error: unknown): void {
     console.warn('[GlobalShortcutsPortal]', error);
     this.stop();
-    this.status({ state: 'unavailable', shortcuts: {} });
+    const missingDesktopEntry = error instanceof Error && /App info not found/i.test(error.message);
+    this.status({ state: 'unavailable', shortcuts: {}, ...(missingDesktopEntry ? { reason: 'missingDesktopEntry' as const } : {}) });
   }
 
   stop(): void {

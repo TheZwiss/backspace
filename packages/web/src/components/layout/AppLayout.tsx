@@ -26,6 +26,7 @@ import { ConnectAndJoinModal } from '../modals/ConnectAndJoinModal';
 import { MemberRolesModal } from '../modals/MemberRolesModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
+import { DetachedCallWindow } from '../voice/DetachedCallWindow';
 import { SoundController } from '../voice/SoundController';
 import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
 import { NotificationController } from '../NotificationController';
@@ -481,6 +482,7 @@ export function AppLayout() {
       <IncomingCallModal />
       <ImagePreview />
       <PictureInPicture />
+      <DetachedCallWindow />
       <SoundController />
       <GlobalAudioRenderer />
       <NotificationController />

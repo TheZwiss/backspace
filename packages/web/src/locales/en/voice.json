@@ -106,7 +106,11 @@
     "kind": {
       "monitor": "Screen",
       "window": "Window"
-    }
+    },
+    "audioApplication": "Application audio",
+    "chooseAudioApplication": "Select the audio application",
+    "audioApplicationHint": "Play audio in the application to list it, then select the window to share.",
+    "allAudioExceptBackspace": "All system audio except Backspace"
   },
   "streamSettings": {
     "title": "Stream Settings",
@@ -181,6 +185,9 @@
   },
   "channelDuration": "Channel active for {{duration}}",
   "controls": {
+    "callWindowFailed": "Could not open the call window.",
+    "callInWindow": "Call is in a separate window — click to show",
+    "openCallWindow": "Open call in a separate window",
     "spaceMutedSelfMuted": "Space Muted (self-muted)",
     "unmuteShortcut": "Unmute (M)",
     "muteShortcut": "Mute (M)",
@@ -274,5 +281,23 @@
     "stillDenied": "Microphone access is still denied. Allow it for this site in your browser or device settings.",
     "notFound": "No microphone detected.",
     "failed": "Could not access the microphone."
+  },
+  "callOngoing": "Call in progress",
+  "callWaiting": "Waiting for the other person · ends in {{remaining}}",
+  "rejoinCall": "Rejoin call",
+  "history": {
+    "startedBy": "{{actor}} started the call",
+    "from": "From:",
+    "to": "To:",
+    "status": {
+      "ringing": "Calling…",
+      "active": "Call in progress",
+      "ended": "Call ended",
+      "missed": "Missed call",
+      "rejected": "Call declined",
+      "interrupted": "Call interrupted",
+      "cancelled": "Call cancelled"
+    },
+    "duration": "Duration"
   }
 }

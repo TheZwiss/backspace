@@ -94,6 +94,7 @@ export interface VoiceChannelElapsed {
 }
 
 export interface VoiceState {
+  dmWaitingUntil: Map<string, number>;
   voiceUsers: Map<string, string[]>; // channelId → userIds
   voiceChannelElapsedSeconds: Map<string, VoiceChannelElapsed>; // channelId → server duration + local observation time
   currentVoiceChannelId: string | null;
@@ -291,6 +292,7 @@ export function isInVoiceRoom(state: Pick<VoiceState, 'isLiveKitConnected' | 'vo
 export const useVoiceStore = create<VoiceState>()(
   persist(
     (set, get) => ({
+      dmWaitingUntil: new Map(),
       voiceUsers: new Map(),
       voiceChannelElapsedSeconds: new Map(),
       currentVoiceChannelId: null,
@@ -684,12 +686,14 @@ export const useVoiceStore = create<VoiceState>()(
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
       clearAllVoiceUsers: () => set({
+        dmWaitingUntil: new Map(),
         voiceUsers: new Map(),
         voiceChannelElapsedSeconds: new Map(),
         voiceUserStates: new Map(),
       }),
 
       resetSession: () => set({
+        dmWaitingUntil: new Map(),
         // Connection state
         voiceUsers: new Map(),
         voiceChannelElapsedSeconds: new Map(),
@@ -831,6 +835,7 @@ export const useVoiceStore = create<VoiceState>()(
       },
 
       reset: () => set({
+        dmWaitingUntil: new Map(),
         voiceUsers: new Map(),
         voiceChannelElapsedSeconds: new Map(),
         currentVoiceChannelId: null,

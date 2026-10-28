@@ -113,10 +113,14 @@ export async function handleCameraAction(): Promise<void> {
  * new voice status itself, so neither is repeated here.
  */
 export async function handleScreenShareAction(): Promise<void> {
+  return handleScreenShareActionForWindow();
+}
+
+export async function handleScreenShareActionForWindow(targetDocument?: Document): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
   if (!useVoiceStore.getState().isScreenSharing) {
-    openScreenShareSetup();
+    openScreenShareSetup(targetDocument);
     return;
   }
   try {

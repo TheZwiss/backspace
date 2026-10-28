@@ -1806,13 +1806,13 @@ async function handleDmCallEnd(event: Record<string, unknown>, userId: string): 
     const room = connectionManager.getRoom(dmChannelId);
     if (room && room.roomType === 'dm') {
       const meta = room.metadata as DmRoomMeta;
-      if (meta.group) {
+      if (meta.group || meta.state === 'active') {
         // Hanging up or cancelling takes only the sender out of a group
         // call; it ends with the last one out. A member who is not in the
         // call changes nothing.
         if (connectionManager.leaveGroupDmCall(dmChannelId, userId) !== 'ended') return;
       } else {
-        connectionManager.endDmRoom(dmChannelId, 'dm_call_ended');
+        connectionManager.endDmRoom(dmChannelId, 'dm_call_ended', meta.callerId === userId ? 'cancelled' : undefined);
       }
       const fedIdEndRow = getDb().select({ federatedId: schema.dmChannels.federatedId })
         .from(schema.dmChannels).where(eq(schema.dmChannels.id, dmChannelId)).get();

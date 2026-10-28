@@ -1,6 +1,7 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
 import { getAvatarGradient, getSpaceGradient } from '../../utils/gradients';
+import { useStaticAvatar } from '../../utils/staticAvatar';
 
 interface AvatarProps {
   src?: string | null;
@@ -19,6 +20,7 @@ interface AvatarProps {
    * icon (`getSpaceGradient`); people use `user`, the default.
    */
   palette?: 'user' | 'space';
+  animate?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -60,7 +62,9 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user' }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user', animate = false }: AvatarProps) {
+  const imageUrl = src ? ((src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/')) ? src : `/api/uploads/${src}`) : null;
+  const displayedSrc = useStaticAvatar(imageUrl, animate || palette === 'space');
   const initials = name.charAt(0).toUpperCase();
   const fontPx = Math.round(size * 0.4);
   const gradient = palette === 'space'
@@ -94,10 +98,10 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
           ...maskStyle,
         }}
       >
-        {src ? (
+        {displayedSrc ? (
           <img
-            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/'))
-              ? src : `/api/uploads/${src}`}
+            key={displayedSrc}
+            src={displayedSrc}
             alt={name}
             loading="lazy"
             className="w-full h-full rounded-full object-cover"
@@ -112,8 +116,8 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
           />
         ) : null}
         <div
-          className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${src ? 'hidden' : 'flex'}`}
-          style={{ background: gradient.gradient, fontSize: fontPx, ...(src ? { display: 'none' } : {}) }}
+          className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${displayedSrc ? 'hidden' : 'flex'}`}
+          style={{ background: gradient.gradient, fontSize: fontPx, ...(displayedSrc ? { display: 'none' } : {}) }}
         >
           {initials}
         </div>

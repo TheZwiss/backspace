@@ -149,6 +149,8 @@ export function KeybindsPanel() {
 
   const [accessibilityTrusted, setAccessibilityTrusted] = useState<boolean | null>(null);
   const [hookError, setHookError] = useState<string | null>(null);
+  const [portalConfigureError, setPortalConfigureError] = useState(false);
+  const [integrationError, setIntegrationError] = useState(false);
 
   const pressedCodesRef = useRef(new Map<string, { numeric: number; display: string }>());
   const mouseButtonRef = useRef<number | null>(null);
@@ -322,6 +324,25 @@ export function KeybindsPanel() {
         <div className="rounded-lg bg-surface-elevated p-3.5 text-sm text-txt-secondary" role="status">
           <p>{t('keybinds.portal.description')}</p>
           <p className="mt-2">{t(`keybinds.portal.${portal.state}`)}</p>
+          {portal.reason === 'missingDesktopEntry' && <p className="mt-2 text-amber-200">{t('keybinds.portal.missingDesktopEntry')}</p>}
+          {portal.reason === 'missingDesktopEntry' && portal.canIntegrateAppImage && window.backspace?.integrateKeybindAppImage && (
+            <button type="button" onClick={() => {
+              setIntegrationError(false);
+              void window.backspace?.integrateKeybindAppImage?.().then((ok) => setIntegrationError(!ok)).catch(() => setIntegrationError(true));
+            }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+              {t('keybinds.portal.integrateAppImage')}
+            </button>
+          )}
+          {integrationError && <p className="mt-2 text-amber-200">{t('keybinds.portal.integrationError')}</p>}
+          {portal.state === 'ready' && window.backspace?.configureKeybindPortal && (
+            <button type="button" onClick={() => {
+              setPortalConfigureError(false);
+              void window.backspace?.configureKeybindPortal?.().then((opened) => setPortalConfigureError(!opened)).catch(() => setPortalConfigureError(true));
+            }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+              {t('keybinds.portal.configure')}
+            </button>
+          )}
+          {portalConfigureError && <p className="mt-2 text-amber-200">{t('keybinds.portal.configureError')}</p>}
           {portal.state === 'unavailable' && (
             <button type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
               className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">

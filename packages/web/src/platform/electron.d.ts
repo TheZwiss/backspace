@@ -82,6 +82,7 @@ interface BackspaceElectronAPI {
   // Platform info
   platform: NodeJS.Platform;
   // Window controls
+  controlCallWindow?: (action: 'minimize' | 'maximize' | 'close') => void;
   minimize: () => void;
   maximize: () => void;
   close: () => void;
@@ -132,7 +133,7 @@ interface BackspaceElectronAPI {
    * (getDisplayMedia → onScreenShareSources → selectScreenSource).
    */
   getScreenSources?: () => Promise<ElectronScreenSource[]>;
-  preselectScreenSource?: (sourceId: string, shareAudio?: boolean) => Promise<void>;
+  preselectScreenSource?: (sourceId: string, shareAudio?: boolean, targetId?: string) => Promise<void>;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the
    * renderer shows a "choose" card that triggers the portal on click instead
@@ -151,9 +152,13 @@ interface BackspaceElectronAPI {
    * renderer opens as a microphone (`label` names the device). Optional: only
    * desktop builds that ship it have it.
    */
+  setSystemAudioTarget?: (targetId: string) => Promise<void>;
+  getSystemAudioTargets?: () => Promise<Array<{ id: string; name: string }>>;
+  onProcessAudio?: (onData: (data: Uint8Array) => void, onEnded: () => void) => () => void;
   startSystemAudio?: () => Promise<
-    | { ok: true; label: string }
-    | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' }
+    | { ok: true; label: string; pcm?: false }
+    | { ok: true; pcm: true }
+    | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' | 'process-capture-failed' | 'audio-target-required' }
   >;
   stopSystemAudio?: () => Promise<void>;
 
@@ -179,6 +184,8 @@ interface BackspaceElectronAPI {
   getKeybindPortalStatus?: () => Promise<KeybindPortalStatus | null>;
   onKeybindPortalStatus?: (callback: (status: KeybindPortalStatus) => void) => () => void;
   retryKeybindPortal?: () => void;
+  configureKeybindPortal?: () => Promise<boolean>;
+  integrateKeybindAppImage?: () => Promise<boolean>;
   // Older installed shells use send-based IPC and return void.
   syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => Promise<boolean> | void;
   onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => (() => void);
@@ -200,4 +207,6 @@ interface Window {
 interface KeybindPortalStatus {
   state: 'idle' | 'pending' | 'ready' | 'unavailable';
   shortcuts: Record<string, string>;
+  reason?: 'missingDesktopEntry';
+  canIntegrateAppImage?: boolean;
 }

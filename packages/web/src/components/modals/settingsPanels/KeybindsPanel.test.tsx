@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KeybindsPanel } from './KeybindsPanel';
 import { useKeybindStore } from '../../../stores/keybindStore';
@@ -47,6 +47,23 @@ describe('system-managed Wayland shortcuts panel', () => {
     expect(retry).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Register or reconnect shortcuts' }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+  it('opens the system editor and explains when it cannot be opened', async () => {
+    mock.status = { state: 'ready', shortcuts: {} };
+    const configure = vi.fn().mockResolvedValue(false);
+    window.backspace!.configureKeybindPortal = configure;
+    render(<KeybindsPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Configure shortcuts' }));
+    await waitFor(() => expect(configure).toHaveBeenCalledOnce());
+    expect(await screen.findByText(/Could not open the system shortcut editor/)).toBeInTheDocument();
+  });
+  it('offers AppImage integration only for a missing entry when supported', async () => {
+    mock.status = { state: 'unavailable', shortcuts: {}, reason: 'missingDesktopEntry', canIntegrateAppImage: true };
+    const integrate = vi.fn().mockResolvedValue(true);
+    window.backspace!.integrateKeybindAppImage = integrate;
+    render(<KeybindsPanel />);
+    fireEvent.click(screen.getByRole('button', { name: 'Integrate AppImage' }));
+    await waitFor(() => expect(integrate).toHaveBeenCalledOnce());
   });
   it('preserves the recorder and delete button on other platforms', () => {
     mock.status = null;

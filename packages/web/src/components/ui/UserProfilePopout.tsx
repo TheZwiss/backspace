@@ -178,6 +178,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
             deliberately does NOT reopen the card (see issue #37). */}
         <Avatar
           src={user.avatar}
+          animate
           name={displayName}
           size={80}
           status={shownStatus}

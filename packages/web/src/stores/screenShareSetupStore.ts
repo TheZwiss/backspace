@@ -10,18 +10,20 @@ import { create } from 'zustand';
  */
 interface ScreenShareSetupState {
   isOpen: boolean;
-  open: () => void;
+  targetDocument: Document | null;
+  open: (targetDocument?: Document) => void;
   close: () => void;
 }
 
 export const useScreenShareSetupStore = create<ScreenShareSetupState>((set) => ({
   isOpen: false,
-  open: () => set({ isOpen: true }),
-  close: () => set({ isOpen: false }),
+  targetDocument: null,
+  open: (targetDocument) => set({ isOpen: true, targetDocument: targetDocument ?? null }),
+  close: () => set({ isOpen: false, targetDocument: null }),
 }));
 
-export function openScreenShareSetup(): void {
-  useScreenShareSetupStore.getState().open();
+export function openScreenShareSetup(targetDocument?: Document): void {
+  useScreenShareSetupStore.getState().open(targetDocument);
 }
 
 export function closeScreenShareSetup(): void {

@@ -56,6 +56,11 @@ mac:
   target:
     - dmg
 win:
+  extraResources:
+    - from: native/process-audio/bin/${arch}/
+      to: process-audio/${arch}/
+      filter:
+        - "*.exe"
   icon: ./build/icon.ico
   target:
     - nsis

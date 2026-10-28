@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { isElectron } from '../../platform/platform';
+import { openDetachedCallWindow } from './DetachedCallWindow';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -6,7 +8,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
+import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleScreenShareActionForWindow, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
@@ -19,7 +21,7 @@ const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surf
  * watches the voice container the pointer actually moves over. It is ignored
  * while docked, where plain hover on the voice panel is the right model.
  */
-export function VoiceControlBar({ revealed = false, variant = 'floating' }: { revealed?: boolean; variant?: 'floating' | 'docked' }) {
+export function VoiceControlBar({ revealed = false, variant = 'floating', detached = false, detachedFullscreen = false, onDetachedFullscreenToggle }: { revealed?: boolean; variant?: 'floating' | 'docked'; detached?: boolean; detachedFullscreen?: boolean; onDetachedFullscreenToggle?: () => void }) {
   const { t } = useTranslation(['voice', 'common']);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
@@ -29,7 +31,8 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
   const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const toggleVoiceChatFocus = useUIStore((s) => s.toggleVoiceChatFocus);
-  const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const mainFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const voiceFullscreen = detached ? detachedFullscreen : mainFullscreen;
   const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const myUser = useAuthStore((s) => s.user);
@@ -76,7 +79,11 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
       setShareMenuOpen((open) => !open);
       return;
     }
-    handleScreenShareAction();
+    if (detached && shareBtnRef.current) {
+      void handleScreenShareActionForWindow(shareBtnRef.current.ownerDocument);
+    } else {
+      void handleScreenShareAction();
+    }
   };
 
   const handleStopSharing = () => {
@@ -93,7 +100,8 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
   const handleDisconnect = () => handleDisconnectAction();
 
   const handleFullscreen = () => {
-    toggleVoiceFullscreen();
+    if (detached) onDetachedFullscreenToggle?.();
+    else toggleVoiceFullscreen();
   };
 
   useEffect(() => {
@@ -102,9 +110,10 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
         useUIStore.getState().setVoiceFullscreen(false);
       }
     };
+    if (detached) return;
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [voiceFullscreen]);
+  }, [voiceFullscreen, detached]);
 
   return (
     <div
@@ -200,6 +209,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
         {/* Separator */}
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
 
+        {!detached && <>
         {/* Chat Toggle */}
         <button
           onClick={toggleVoiceChat}
@@ -226,14 +236,16 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
         >
           {voiceChatFocus ? (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+              <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm0 2v10h10V7H4Zm12 0v10h4V7h-4Z" />
             </svg>
           ) : (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+              <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v12h11V6H4Zm13 0v12h3V6h-3ZM9 8l4 4-4 4v-3H6v-2h3V8Z" />
             </svg>
           )}
         </button>
+
+        </>}
 
         {/* Fullscreen Toggle */}
         <button
@@ -254,6 +266,16 @@ export function VoiceControlBar({ revealed = false, variant = 'floating' }: { re
             </svg>
           )}
         </button>
+
+        {!detached && isElectron() && (
+          <button onClick={() => {
+            if (!openDetachedCallWindow()) useUIStore.getState().addToast(t('voice:controls.callWindowFailed'), 'warning');
+          }} className={btnDefault} title={t('voice:controls.openCallWindow')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 5h10v2H4v11h14v-8h2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm12-2h6v6h-2V6.4l-5.3 5.3-1.4-1.4L18.6 5H16V3Z" />
+            </svg>
+          </button>
+        )}
 
         {/* Separator */}
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />

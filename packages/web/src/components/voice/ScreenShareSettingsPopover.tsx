@@ -21,7 +21,9 @@ interface ScreenShareSettingsPopoverProps {
 export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSharing }: ScreenShareSettingsPopoverProps) {
   const { t } = useTranslation(['voice', 'common']);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const portalContainer = usePortalContainer();
+  const defaultPortalContainer = usePortalContainer();
+  const anchorDocument = anchorRef.current?.ownerDocument ?? document;
+  const portalContainer = anchorDocument === document ? defaultPortalContainer : anchorDocument.body;
 
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
     placement: 'top',
@@ -40,9 +42,9 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
         onClose();
       }
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [open, onClose, anchorRef]);
+    anchorDocument.addEventListener('mousedown', handleClick);
+    return () => anchorDocument.removeEventListener('mousedown', handleClick);
+  }, [open, onClose, anchorRef, anchorDocument]);
 
   if (!open) return null;
 

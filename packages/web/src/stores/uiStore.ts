@@ -91,6 +91,8 @@ interface UIState {
   voiceChatOpen: boolean;
   voiceChatFocus: boolean;
   voiceFullscreen: boolean;
+  callWindowOpen: boolean;
+  setCallWindowOpen: (open: boolean) => void;
   pipCollapsed: boolean;
   toggleVoiceChat: () => void;
   toggleVoiceChatFocus: () => void;
@@ -200,6 +202,8 @@ export const useUIStore = create<UIState>()(
       voiceChatOpen: false,
       voiceChatFocus: false,
       voiceFullscreen: false,
+      callWindowOpen: false,
+      setCallWindowOpen: (open) => set({ callWindowOpen: open }),
       pipCollapsed: false,
       toggleVoiceChat: () => set((state) => {
         const open = !state.voiceChatOpen;

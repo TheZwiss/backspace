@@ -1,3 +1,4 @@
+import { CallHistoryMessage } from './CallHistoryMessage';
 import type { DmChannel, MessageWithUser } from '@backspace/shared';
 import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +29,8 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
   useTranslation(['dm']);
   const event = parseDmSystemEvent(message.content);
   const actorName = dmSystemActorName(dmSystemActor(message, dm?.members));
+
+  if (event?.event === 'call_history') return <CallHistoryMessage event={event} actorName={actorName} />;
 
   if (event?.event === 'space_invite') {
     return (

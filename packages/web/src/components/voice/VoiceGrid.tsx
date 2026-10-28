@@ -7,12 +7,15 @@ import { deriveGridTiles } from '../../hooks/useLiveKit';
 import { useGridLayout } from '../../hooks/useGridLayout';
 import type { ParticipantInfo, GridTile } from '../../hooks/useLiveKit';
 import { useTrackStats } from '../../hooks/useTrackStats';
+import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 interface VoiceGridProps {
   participants: ParticipantInfo[];
+  fullscreen?: boolean;
+  chromeRevealed?: boolean;
 }
 
-export function VoiceGrid({ participants }: VoiceGridProps) {
+export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = false }: VoiceGridProps) {
   const { t } = useTranslation(['voice', 'common']);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
@@ -32,8 +35,8 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
   // Reset strip visibility when focus target changes
   useEffect(() => {
-    setStripHidden(false);
-  }, [focusedParticipantId]);
+    setStripHidden(!!fullscreen && !!focusedParticipantId?.endsWith(':stream'));
+  }, [focusedParticipantId, fullscreen]);
 
   // Unfocus if the focused stream tile no longer exists
   useEffect(() => {
@@ -81,11 +84,12 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     : null;
 
   // Render a single tile polymorphically
+  const immersive = !!fullscreen && focusedTile?.kind === 'stream';
   const renderTile = (tile: GridTile, large?: boolean) =>
     tile.kind === 'user' ? (
       <VoiceUser tile={tile} large={large} />
     ) : (
-      <StreamTile tile={tile} large={large} stats={streamStats} />
+      <StreamTile tile={tile} large={large} stats={streamStats} borderless={immersive && large} chromeRevealed={chromeRevealed} />
     );
 
   // Focus mode: one large tile + bottom strip
@@ -95,7 +99,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
         <div
-          className="flex-1 p-2 min-h-0 cursor-pointer relative"
+          className={`flex-1 min-h-0 cursor-pointer relative ${immersive ? '' : 'p-2'}`}
           onClick={() => setFocusedParticipant(null)}
           title={t('voice:grid.returnToGridHint')}
         >
@@ -106,7 +110,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
               e.stopPropagation();
               setFocusedParticipant(null);
             }}
-            className="absolute top-4 right-4 z-10 h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
+            className={`absolute top-4 right-4 z-10 h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-opacity ${immersive && !chromeRevealed ? 'opacity-0 pointer-events-none' : ''}`}
             title={t('voice:grid.backToGrid')}
           >
             <svg
@@ -123,7 +127,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
         {/* Centered Hide/Show Members button — divider between focused tile and strip */}
         {otherTiles.length > 0 && (
-          <div className="flex justify-center flex-shrink-0 py-1">
+          <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={immersive ? `absolute inset-x-0 bottom-24 z-10 flex justify-center transition-opacity ${chromeRevealed ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : 'flex justify-center flex-shrink-0 py-1'}>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -147,8 +151,8 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
         )}
 
         {/* Bottom strip of other tiles */}
-        {!stripHidden && otherTiles.length > 0 && (
-          <div className="h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
+        {!stripHidden && otherTiles.length > 0 && (!immersive || chromeRevealed) && (
+          <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={`${immersive ? 'absolute inset-x-0 bottom-32 z-10' : 'flex-shrink-0'} h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar`}>
             {otherTiles.map((t) => (
               <div
                 key={t.key}

@@ -106,7 +106,11 @@
     "kind": {
       "monitor": "Tela",
       "window": "Janela"
-    }
+    },
+    "audioApplication": "Áudio do aplicativo",
+    "chooseAudioApplication": "Selecione o aplicativo de áudio",
+    "audioApplicationHint": "Reproduza algum som no aplicativo para ele aparecer. Depois escolha a janela para transmitir.",
+    "allAudioExceptBackspace": "Todo o sistema, exceto o Backspace"
   },
   "streamSettings": {
     "title": "Configurações da transmissão",
@@ -181,6 +185,9 @@
   },
   "channelDuration": "Canal ativo há {{duration}}",
   "controls": {
+    "callWindowFailed": "Não foi possível abrir a janela da chamada.",
+    "callInWindow": "A chamada está em outra janela — clique para mostrar",
+    "openCallWindow": "Abrir chamada em outra janela",
     "spaceMutedSelfMuted": "Silenciado no espaço (você também se silenciou)",
     "unmuteShortcut": "Reativar microfone (M)",
     "muteShortcut": "Silenciar (M)",
@@ -276,5 +283,23 @@
     "stillDenied": "O acesso ao microfone continua negado. Permita-o para este site nas configurações do navegador ou do dispositivo.",
     "notFound": "Nenhum microfone encontrado.",
     "failed": "Não foi possível acessar o microfone."
+  },
+  "callOngoing": "Chamada em andamento",
+  "callWaiting": "Aguardando a outra pessoa · encerra em {{remaining}}",
+  "rejoinCall": "Voltar à chamada",
+  "history": {
+    "startedBy": "{{actor}} iniciou a chamada",
+    "from": "Início:",
+    "to": "Fim:",
+    "status": {
+      "ringing": "Chamando…",
+      "active": "Chamada em andamento",
+      "ended": "Chamada encerrada",
+      "missed": "Chamada não atendida",
+      "rejected": "Chamada recusada",
+      "interrupted": "Chamada interrompida",
+      "cancelled": "Chamada cancelada"
+    },
+    "duration": "Duração"
   }
 }

@@ -106,7 +106,11 @@
     "kind": {
       "monitor": "屏幕",
       "window": "窗口"
-    }
+    },
+    "audioApplication": "应用音频",
+    "chooseAudioApplication": "选择音频应用",
+    "audioApplicationHint": "在应用中播放声音以显示它，然后选择要共享的窗口。",
+    "allAudioExceptBackspace": "除 Backspace 外的所有系统音频"
   },
   "streamSettings": {
     "title": "推流设置",
@@ -181,6 +185,9 @@
   },
   "channelDuration": "频道已激活 {{duration}}",
   "controls": {
+    "callWindowFailed": "无法打开通话窗口。",
+    "callInWindow": "通话位于独立窗口中 — 点击显示",
+    "openCallWindow": "在独立窗口中打开通话",
     "spaceMutedSelfMuted": "空间静音（自身已静音）",
     "unmuteShortcut": "取消静音 (M)",
     "muteShortcut": "静音 (M)",
@@ -272,5 +279,23 @@
     "stillDenied": "麦克风访问仍被拒绝。请在浏览器或设备设置中允许此网站使用麦克风。",
     "notFound": "未检测到麦克风。",
     "failed": "无法访问麦克风。"
+  },
+  "callOngoing": "通话进行中",
+  "callWaiting": "正在等待对方 · 将于 {{remaining}} 后结束",
+  "rejoinCall": "重新加入通话",
+  "history": {
+    "startedBy": "{{actor}} 发起了通话",
+    "from": "开始：",
+    "to": "结束：",
+    "status": {
+      "ringing": "正在呼叫…",
+      "active": "通话进行中",
+      "ended": "通话已结束",
+      "missed": "未接来电",
+      "rejected": "通话已拒绝",
+      "interrupted": "通话中断",
+      "cancelled": "通话已取消"
+    },
+    "duration": "时长"
   }
 }

@@ -1,3 +1,4 @@
+import { recoverInterruptedDmCalls } from './utils/dmCallHistory.js';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -233,6 +234,7 @@ async function main(): Promise<void> {
 
   // Initialize database
   getDb();
+  recoverInterruptedDmCalls();
 
   // Reset orphaned `users.status` rows this instance owns (native and detached
   // accounts). The previous process's in-memory disconnect timers are gone, so

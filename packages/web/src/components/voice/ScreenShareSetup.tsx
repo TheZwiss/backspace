@@ -75,7 +75,8 @@ export function ScreenShareSetup() {
   const { t } = useTranslation(['voice', 'common']);
   const isOpen = useScreenShareSetupStore((s) => s.isOpen);
   const close = useScreenShareSetupStore((s) => s.close);
-  const portalContainer = usePortalContainer();
+  const targetDocument = useScreenShareSetupStore((s) => s.targetDocument) ?? document;
+  const portalContainer = usePortalContainer(targetDocument);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const lastSourceId = useVoiceStore((s) => s.lastScreenShareSourceId);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
@@ -95,6 +96,16 @@ export function ScreenShareSetup() {
   const [activeTab, setActiveTab] = useState<Tab>('screens');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [audioTargets, setAudioTargets] = useState<Array<{ id: string; name: string }>>([]);
+  const [audioTargetId, setAudioTargetId] = useState('');
+  useEffect(() => {
+    if (!isOpen || api?.platform !== 'linux' || !api.getSystemAudioTargets) return;
+    let cancelled = false;
+    const refresh = () => api.getSystemAudioTargets!().then((targets) => { if (!cancelled) setAudioTargets(targets); }).catch(() => {});
+    void refresh();
+    const timer = setInterval(refresh, 2000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [isOpen, api]);
 
   // Quality drawer
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -219,7 +230,7 @@ export function ScreenShareSetup() {
       // prompted flow, and the preselection then sits armed for its whole TTL
       // ready to hijack the next share. The round trip is free next to a dialog.
       try {
-        await api.preselectScreenSource(sourceId, shareAudio);
+        await api.preselectScreenSource(sourceId, shareAudio, audioTargetId);
       } catch (err) {
         console.error('[ScreenShareSetup] preselectScreenSource failed:', err);
       }
@@ -230,7 +241,7 @@ export function ScreenShareSetup() {
       pendingPromptIdRef.current = sourceId;
     }
     void stage(generation);
-  }, [api, stage]);
+  }, [api, stage, audioTargetId]);
 
   // Ask the desktop who picks, once per open
   useEffect(() => {
@@ -278,6 +289,8 @@ export function ScreenShareSetup() {
   // Reset per open
   useEffect(() => {
     if (!isOpen) return;
+    setAudioTargetId('');
+    if (api?.platform === 'linux' && systemPicker) void api.setSystemAudioTarget?.('');
     setActiveTab('screens');
     setSearch('');
     setSelectedId(null);
@@ -295,7 +308,7 @@ export function ScreenShareSetup() {
     setStaging(false);
     markPromptInFlight(false);
     pendingPromptIdRef.current = null;
-  }, [isOpen, replaceStaged, markPromptInFlight]);
+  }, [isOpen, replaceStaged, markPromptInFlight, api, systemPicker]);
 
   // Stage the remembered source (or a lone screen) so the common case needs a
   // single click on Start
@@ -377,9 +390,9 @@ export function ScreenShareSetup() {
       if (settingsOpen) setSettingsOpen(false);
       else handleClose();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, settingsOpen, handleClose]);
+    targetDocument.addEventListener('keydown', onKey);
+    return () => targetDocument.removeEventListener('keydown', onKey);
+  }, [isOpen, settingsOpen, handleClose, targetDocument]);
   useEffect(() => () => stopStagedCapture(stagedRef.current), []);
 
   const handleStart = useCallback(async () => {
@@ -474,6 +487,23 @@ export function ScreenShareSetup() {
           </button>
         </div>
 
+        {api?.platform === 'linux' && api.getSystemAudioTargets && (activeTab === 'windows' || systemPicker) && config.shareAudio && (
+          <label className="block px-6 pb-3 text-xs text-txt-secondary">
+            {t('voice:screenPicker.audioApplication')}
+            <select className="block w-full mt-1 rounded-lg bg-surface-input p-2" value={audioTargetId} onChange={(event) => {
+              setAudioTargetId(event.target.value);
+              if (systemPicker) void api.setSystemAudioTarget?.(event.target.value);
+              replaceStaged(null);
+              setSelectedId(null);
+              stageGenerationRef.current++;
+            }}>
+              <option value="">{t('voice:screenPicker.chooseAudioApplication')}</option>
+              {systemPicker && <option value="system">{t('voice:screenPicker.allAudioExceptBackspace')}</option>}
+              {audioTargets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}
+            </select>
+            <span className="block mt-1 text-txt-tertiary">{t('voice:screenPicker.audioApplicationHint')}</span>
+          </label>
+        )}
         {/* Toolbar — Screens / Windows plus window search; only where the app lists sources */}
         {showGrid && (
           <div className="flex items-center justify-between gap-3 px-6 pb-3 flex-shrink-0">

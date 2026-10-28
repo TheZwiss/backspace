@@ -303,6 +303,11 @@
       "pending": "Conectando ao portal da área de trabalho. Se aparecer uma caixa de diálogo do sistema, escolha os atalhos das ações que você quer usar.",
       "ready": "O Backspace está registrado. Abra as configurações de atalhos de teclado do sistema para alterar ou remover atribuições. A lista abaixo é somente leitura e é atualizada quando você volta ao Backspace.",
       "unavailable": "O portal está indisponível, a permissão foi negada ou a sessão terminou. É necessário um backend do portal de Atalhos Globais. Os atalhos locais ficam desativados no Wayland.",
+      "missingDesktopEntry": "O portal não encontrou a entrada do aplicativo Backspace. Instale ou integre o aplicativo ao sistema antes de registrar atalhos globais.",
+      "integrateAppImage": "Integrar AppImage ao sistema",
+      "integrationError": "Não foi possível criar a entrada do aplicativo. Verifique o acesso à pasta de aplicativos do usuário.",
+      "configure": "Configurar atalhos",
+      "configureError": "Não foi possível abrir o editor de atalhos. Abra as configurações de atalhos do sistema e procure Backspace.",
       "retry": "Registrar ou reconectar atalhos",
       "assigned": "Atalho do sistema: {{shortcut}}",
       "notAssigned": "Nenhuma atribuição ativa no sistema"

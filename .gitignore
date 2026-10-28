@@ -71,6 +71,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 # tsc emit artifacts — Vite handles compilation, tsc is type-check only
 packages/web/src/**/*.js
+!packages/web/src/audio/worklets/*.worklet.js
 
 # Misc
 .cache/

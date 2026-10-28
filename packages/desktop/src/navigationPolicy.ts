@@ -14,6 +14,10 @@
 // against a compromised or malicious renderer trying to hijack the
 // top-level frame — rather than denying unconditionally.
 
+export function isCallWindowRequest(url: string, frameName: string): boolean {
+  return url === 'about:blank' && frameName === 'backspace-voice-call';
+}
+
 export interface NavigationPolicyInput {
   /** The navigation target, exactly as received from the `will-navigate` event. */
   targetUrl: string;

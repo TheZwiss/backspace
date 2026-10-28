@@ -1,9 +1,13 @@
+/// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('backspace', {
   // Platform info
   platform: process.platform,
   // Window controls
+  controlCallWindow: (action: 'minimize' | 'maximize' | 'close') => {
+    ipcRenderer.send('call-window-control', action);
+  },
   minimize: () => {
     ipcRenderer.send('minimize-window');
   },
@@ -100,13 +104,22 @@ contextBridge.exposeInMainWorld('backspace', {
   getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
   // invoke, not send: the renderer must know the preselection has landed in the
   // main process before it calls getDisplayMedia(), or the two race.
-  preselectScreenSource: (sourceId: string, shareAudio?: boolean) =>
+  preselectScreenSource: (sourceId: string, shareAudio?: boolean, targetId?: string) =>
     ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true),
   getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
   // `true` from a web client that opens the system-audio source (startSystemAudio)
   // itself; an older client passes nothing and gets the loopback's answer.
   getSystemAudioCapability: (usesAppSource?: boolean) =>
     ipcRenderer.invoke('get-system-audio-capability', usesAppSource === true),
+  onProcessAudio: (onData: (data: Uint8Array) => void, onEnded: () => void) => {
+    const data = (_event: Electron.IpcRendererEvent, bytes: Uint8Array) => onData(bytes);
+    const ended = () => onEnded();
+    ipcRenderer.on('process-audio-data', data);
+    ipcRenderer.on('process-audio-ended', ended);
+    return () => { ipcRenderer.removeListener('process-audio-data', data); ipcRenderer.removeListener('process-audio-ended', ended); };
+  },
+  setSystemAudioTarget: (targetId: string) => ipcRenderer.invoke('system-audio-target', targetId),
+  getSystemAudioTargets: () => ipcRenderer.invoke('system-audio-targets'),
   startSystemAudio: () => ipcRenderer.invoke('system-audio-start'),
   stopSystemAudio: () => ipcRenderer.invoke('system-audio-stop'),
   setScreenShareAudioPreference: (shareAudio: boolean) => {
@@ -137,6 +150,8 @@ contextBridge.exposeInMainWorld('backspace', {
   // Keybind support
   getKeybindPortalStatus: () => ipcRenderer.invoke('keybind-portal-status'),
   retryKeybindPortal: () => ipcRenderer.send('keybind-portal-retry'),
+  configureKeybindPortal: () => ipcRenderer.invoke('keybind-portal-configure'),
+  integrateKeybindAppImage: () => ipcRenderer.invoke('keybind-appimage-integrate'),
   onKeybindPortalStatus: (callback: (status: import('./portalShortcut').PortalKeybindStatus) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: import('./portalShortcut').PortalKeybindStatus) => callback(status);
     ipcRenderer.on('keybind-portal-status', handler);
@@ -181,3 +196,40 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.send('recovery-action', action);
   },
 });
+
+// Linux uses a custom frame so Chromium cannot omit minimize/maximize controls.
+// Keep these in preload so older self-hosted web clients retain window controls.
+if (process.platform === 'linux' && !window.opener) {
+  window.addEventListener('DOMContentLoaded', () => {
+    const controls = document.createElement('div');
+    controls.setAttribute('aria-label', 'Window controls');
+    Object.assign(controls.style, {
+      position: 'fixed', top: '0', right: '0', zIndex: '2147483647',
+      display: 'flex', height: 'calc(32px / var(--interface-scale, 1))',
+      color: '#d8d8de', background: '#0b0b10', fontFamily: 'sans-serif',
+    });
+    const buttons: Array<[string, string, string]> = [
+      ['Minimize', '−', 'minimize-window'],
+      ['Maximize or restore', '□', 'maximize-window'],
+      ['Close', '×', 'close-window'],
+    ];
+    for (const [label, symbol, channel] of buttons) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.textContent = symbol;
+      Object.assign(button.style, {
+        width: 'calc(46px / var(--interface-scale, 1))', height: '100%',
+        border: '0', padding: '0', color: 'inherit', background: 'transparent',
+        fontSize: 'calc(18px / var(--interface-scale, 1))', cursor: 'pointer',
+        WebkitAppRegion: 'no-drag',
+      });
+      button.addEventListener('mouseenter', () => { button.style.background = channel === 'close-window' ? '#c42b1c' : '#ffffff20'; });
+      button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
+      button.addEventListener('click', () => ipcRenderer.send(channel));
+      controls.appendChild(button);
+    }
+    document.body.appendChild(controls);
+  });
+}

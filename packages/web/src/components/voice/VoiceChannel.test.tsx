@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { useUIStore } from '../../stores/uiStore';
 import type { MemberWithUser } from '@backspace/shared';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -76,6 +77,27 @@ function renderChannel(canManage = false, onSettingsClick = () => {}) {
     />,
   );
 }
+
+describe('VoiceChannel participant profile', () => {
+  it('opens the member profile when the voice row is clicked', () => {
+    useUIStore.setState({ isMobile: false, userProfilePopout: { user: null, origin: '', anchor: null, placement: 'right', member: null } });
+    renderChannel();
+    fireEvent.click(screen.getByText('Bob'));
+    expect(useUIStore.getState().userProfilePopout.user?.id).toBe('2');
+    expect(useUIStore.getState().userProfilePopout.member).toEqual({ spaceId: 'space-1', userId: '2' });
+  });
+
+  it('offers the profile alongside the voice context menu', () => {
+    const open = vi.fn();
+    useContextMenuStore.setState({ open });
+    renderChannel();
+    fireEvent.contextMenu(screen.getByText('Bob'));
+    expect(open.mock.calls[0][1]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'profile', label: 'View profile' }),
+      expect.objectContaining({ key: 'volume' }),
+    ]));
+  });
+});
 
 describe('VoiceChannel connection diagnostics', () => {
   it('attributes a poor remote connection to that participant', () => {

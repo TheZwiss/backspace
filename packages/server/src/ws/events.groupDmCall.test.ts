@@ -42,6 +42,7 @@ vi.mock('../utils/federationFetch.js', async () => {
   };
 });
 
+import { recoverInterruptedDmCalls } from '../utils/dmCallHistory.js';
 import { connectionManager, buildReadyPayload, VOICE_RECONNECT_GRACE_MS } from './handler.js';
 import type { FederatedCallEntry } from './handler.js';
 import {
@@ -431,17 +432,37 @@ describe('group call: end and decline', () => {
   });
 });
 
-describe('1-on-1 call keeps its semantics', () => {
-  it('ends for both when one side hangs up', async () => {
+describe('1-on-1 call waiting window', () => {
+  it('keeps the remaining participant for five minutes, then ends', async () => {
     await start({ dmChannelId: ONE_ON_ONE }, 'alice', 'alice', ws('alice'));
     await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
     clearReceived();
 
     await end({ dmChannelId: ONE_ON_ONE }, 'bob');
 
+    expect(participants(ONE_ON_ONE)).toEqual(['alice']);
+    expect(received('alice', 'dm_call_ended')).toHaveLength(0);
+    expect(received('alice', 'dm_call_waiting')).toContainEqual(expect.objectContaining({ endsAt: Date.now() + 300000 }));
+    await vi.advanceTimersByTimeAsync(299999);
+    expect(connectionManager.getRoom(ONE_ON_ONE)).toBeDefined();
+    await vi.advanceTimersByTimeAsync(1);
     expect(connectionManager.getRoom(ONE_ON_ONE)).toBeUndefined();
     expect(received('alice', 'dm_call_ended')).toHaveLength(1);
-    expect(received('bob', 'dm_call_ended')).toHaveLength(1);
+  });
+
+  it('cancels the deadline when the other person rejoins and starts a fresh one on another leave', async () => {
+    await start({ dmChannelId: ONE_ON_ONE }, 'alice', 'alice', ws('alice'));
+    await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
+    await end({ dmChannelId: ONE_ON_ONE }, 'bob');
+    await vi.advanceTimersByTimeAsync(240000);
+    await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
+    expect(participants(ONE_ON_ONE)).toEqual(['alice', 'bob']);
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(connectionManager.getRoom(ONE_ON_ONE)).toBeDefined();
+    await end({ dmChannelId: ONE_ON_ONE }, 'bob');
+    expect(buildReadyPayload('alice').activeCalls.find(c => c.dmChannelId === ONE_ON_ONE)?.waitingUntil).toBe(Date.now() + 300000);
+    await end({ dmChannelId: ONE_ON_ONE }, 'alice');
+    expect(connectionManager.getRoom(ONE_ON_ONE)).toBeUndefined();
   });
 
   it('ends for both when the callee declines', async () => {
@@ -1036,13 +1057,13 @@ describe('a relayed accept that moves a member between calls hosted here', () =>
     }));
   });
 
-  it('does not seat the peer\'s acceptor of a 1-on-1, as in 1.8.0', async () => {
+  it('seats the remote participant of a private call so their departure can be tracked', async () => {
     connectionManager.createDmRoom(PAIR_FED, 'alice');
 
     relayedFrom(processDmCallAcceptEvent, relay('dm_call_accept', DAVE, true, PAIR_FED_FID));
     await settle();
 
-    expect(participants(PAIR_FED)).toEqual(['alice']);
+    expect(participants(PAIR_FED)).toEqual(['alice', 'dave-stub']);
   });
 });
 
@@ -1082,5 +1103,49 @@ describe('a refused dm_call_accept', () => {
     expect(received('carol', 'error')).toEqual([
       expect.objectContaining({ code: 'not_dm_member', dmChannelId: ONE_ON_ONE }),
     ]);
+  });
+});
+
+describe('persistent call history', () => {
+  function history() {
+    return sqlite.prepare("SELECT id, content FROM dm_messages WHERE dm_channel_id = ? AND type = 'system'").all(ONE_ON_ONE) as Array<{ id: string; content: string }>;
+  }
+  it('updates one timeline message from ringing to active to its final duration', async () => {
+    const dialedAt = Date.now();
+    await start({ dmChannelId: ONE_ON_ONE }, 'alice', 'alice', ws('alice'));
+    const id = history()[0]!.id;
+    expect(JSON.parse(history()[0]!.content).status).toBe('ringing');
+    await vi.advanceTimersByTimeAsync(1000);
+    const connectedAt = Date.now();
+    await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
+    expect(JSON.parse(history()[0]!.content)).toMatchObject({ status: 'active', connectedAt });
+    await vi.advanceTimersByTimeAsync(65000);
+    await end({ dmChannelId: ONE_ON_ONE }, 'bob');
+    await end({ dmChannelId: ONE_ON_ONE }, 'alice');
+    expect(history()).toHaveLength(1);
+    expect(history()[0]!.id).toBe(id);
+    expect(JSON.parse(history()[0]!.content)).toEqual({ event: 'call_history', startedAt: dialedAt, connectedAt, endedAt: Date.now(), status: 'ended' });
+    expect(received('alice', 'dm_message_created')).toHaveLength(1);
+    expect(received('alice', 'dm_message_updated')).toHaveLength(2);
+  });
+  it('marks unfinished stored calls interrupted after a restart without inventing an end time', async () => {
+    await start({ dmChannelId: ONE_ON_ONE }, 'alice', 'alice', ws('alice'));
+    await accept({ dmChannelId: ONE_ON_ONE }, 'bob', ws('bob'));
+    const unfinished = history()[0]!;
+    connectionManager.destroyRoom(ONE_ON_ONE);
+    sqlite.prepare('UPDATE dm_messages SET content = ? WHERE id = ?').run(unfinished.content, unfinished.id);
+    recoverInterruptedDmCalls();
+    expect(JSON.parse(history()[0]!.content)).toMatchObject({ status: 'interrupted', endedAt: null });
+  });
+});
+
+describe('call history outcomes', () => {
+  it.each(['cancelled', 'missed', 'rejected'] as const)('records %s distinctly before the call is answered', async (outcome) => {
+    await start({ dmChannelId: ONE_ON_ONE }, 'alice', 'alice', ws('alice'));
+    if (outcome === 'cancelled') await end({ dmChannelId: ONE_ON_ONE }, 'alice');
+    else if (outcome === 'rejected') await reject({ dmChannelId: ONE_ON_ONE }, 'bob');
+    else await vi.advanceTimersByTimeAsync(60000);
+    const row = sqlite.prepare("SELECT content FROM dm_messages WHERE dm_channel_id = ? AND type = 'system'").get(ONE_ON_ONE) as { content: string };
+    expect(JSON.parse(row.content)).toMatchObject({ status: outcome, connectedAt: null, endedAt: Date.now() });
   });
 });
