@@ -51,8 +51,8 @@ function ActivityFriendItem({
   const friendDisplayName = userDisplayName(canonical);
 
   const rowClass = isRichActivity
-    ? `flex items-center gap-3 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
-    : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer transition-colors active:bg-interactive-hover';
+    ? `flex items-center gap-3 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-all duration-200 ease-out glass-pill border-l-2 ${accentClass}`
+    : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] border-l-2 border-transparent hover:bg-interactive-hover cursor-pointer transition-all duration-200 ease-out active:bg-interactive-hover';
 
   return (
     <div

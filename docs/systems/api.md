@@ -362,6 +362,13 @@ Every route reads and writes the current user's own bookmarks. A bookmark lives 
 
 `kind` is `channel` or `dm`. A `Bookmark` (`packages/shared/src/bookmarks.ts`) carries the saved copy, the original's ids, `attachments[]` with a per-file `state` (`available` or `gone`) and `status` (`ok`, `edited`, `deleted`, `unavailable`), both worked out on each read. Refusals: `404 message_not_found` (no such message, or one the caller cannot read; the two are not told apart), `400 validation_failed` (a system message, an unknown `kind`, a cursor this server did not issue, a `limit` over 100). There is no bookmark limit. A create that made a bookmark and a removal that found one are pushed to the caller's own sockets as `bookmark_added` / `bookmark_removed` (websocket.md).
 
+## Game icons (`routes/gameIcons.ts`)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/game-icons` | JWT | `{image}`; canonical base64 of a PNG, JPEG or WebP of at most 512 KiB (`MAX_GAME_ICON_BYTES`). Re-encodes to a 256 px WebP, stores it content-addressed and records it for the account. Returns `{id, url}` with the absolute URL of the asset. 10 uploads per account per minute (`429 rate_limited`); `409 game_icon_collection_full` at 25,600 icons; `400 game_icon_invalid_image` for anything else |
+| GET | `/api/game-icons/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it. `404 game_icon_not_found` for an unknown id or a missing file |
+
 ## GIF (`routes/gif.ts`) — auth required
 ```
 GET /gif/enabled                         → { enabled }

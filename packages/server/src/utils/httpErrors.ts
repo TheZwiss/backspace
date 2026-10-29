@@ -194,6 +194,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   sticker_pack_invalid_state: 'Sticker pack is not in a valid state for this action',
   sticker_peer_blocked: 'Sticker synchronization is blocked for this peer',
   sticker_pack_limit_exceeded: 'Sticker pack has reached the maximum number of stickers',
+  // game icons
+  game_icon_invalid_image: 'Upload a PNG, JPEG or WebP image of at most {{max}} MB',
+  game_icon_not_found: 'Game icon not found',
+  game_icon_collection_full: 'A game icon collection holds at most {{max}} icons',
   // spaces
   space_owner_title_invalid: 'Owner titles can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.',
   member_nickname_invalid: 'Nicknames can be at most {{max}} characters on one line, with at least one visible character and no control characters.',

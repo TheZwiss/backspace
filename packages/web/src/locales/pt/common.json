@@ -91,7 +91,8 @@
     "justNow": "Agora mesmo",
     "minutesShort": "{{minutes}} min",
     "hoursMinutesShort": "{{hours}} h {{minutes}} min",
-    "elapsed": "{{duration}} decorridos"
+    "elapsed": "{{duration}} decorridos",
+    "left": "{{duration}} restantes"
   },
   "units": {
     "ms": "{{value}} ms",

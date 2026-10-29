@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import type { Activity, ServerEvent } from '@backspace/shared';
+import type { WebSocket } from 'ws';
 
 setWorkerId(1);
 
@@ -100,5 +101,73 @@ describe("ready payload: friends' activities (#340)", () => {
   it("falls back to a friend's custom status, as for space and DM members", async () => {
     const ready = await readyFor('viewer');
     expect(ready.userActivities?.['quiet-friend']).toEqual([{ type: 'custom', name: 'brb' }]);
+  });
+
+  it('clears activities when the publishing socket disconnects, even if user has other connections', async () => {
+    const { connectionManager } = await import('./handler.js');
+    const wsDesktop = { send: vi.fn(), readyState: 1 } as unknown as WebSocket;
+    const webSend = vi.fn();
+    const wsWeb = { send: webSend, readyState: 1 } as unknown as WebSocket;
+
+    connectionManager.addConnection('local-friend', wsDesktop);
+    connectionManager.addConnection('local-friend', wsWeb);
+
+    connectionManager.setUserActivities('local-friend', playing, wsDesktop);
+    expect(connectionManager.getUserActivities('local-friend')).toEqual(playing);
+
+    // Desktop app disconnects while Web client is still connected
+    connectionManager.removeConnection(wsDesktop);
+
+    // Activities must be immediately cleared!
+    expect(connectionManager.getUserActivities('local-friend')).toEqual([]);
+    // And wsWeb must receive presence_update with activities: []
+    expect(webSend).toHaveBeenCalled();
+    const sent = JSON.parse(webSend.mock.calls[0]![0]);
+    expect(sent.type).toBe('presence_update');
+    expect(sent.activities).toEqual([]);
+
+    connectionManager.removeConnection(wsWeb);
+  });
+
+  it('projects media playback position by the time held on the server', async () => {
+    const { connectionManager } = await import('./handler.js');
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+
+    const media: Activity = {
+      type: 'listening',
+      name: 'Song',
+      playback: { positionMs: 10_000, durationMs: 60_000 },
+    };
+    connectionManager.setUserActivities('local-friend', [media]);
+
+    vi.advanceTimersByTime(5_000);
+    const ready = await readyFor('viewer');
+    expect(ready.userActivities?.['local-friend']).toEqual([{
+      type: 'listening',
+      name: 'Song',
+      playback: { positionMs: 15_000, durationMs: 60_000 },
+    }]);
+
+    connectionManager.clearUserActivities('local-friend');
+    vi.useRealTimers();
+  });
+
+  it('allows immediate activity clearing even inside the 3s rate limit window', async () => {
+    const { connectionManager } = await import('./handler.js');
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+
+    // Initial update consumes rate limit
+    expect(connectionManager.checkActivityRateLimit('local-friend')).toBe(true);
+
+    // 1 second later: normal update is rate-limited
+    vi.advanceTimersByTime(1_000);
+    expect(connectionManager.checkActivityRateLimit('local-friend', false)).toBe(false);
+
+    // But clearing/reducing activities is permitted immediately
+    expect(connectionManager.checkActivityRateLimit('local-friend', true)).toBe(true);
+
+    vi.useRealTimers();
   });
 });

@@ -55,7 +55,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | notes |
 |------|--------|-------|
 | `presence_update` | status: online/idle/dnd | stored as the user's chosen status and published while connected; same path as `PATCH /api/users/@me { status }` (activity-presence.md "DB Persistence") |
-| `activity_update` | activities: Activity[] | rate-limited 3s, respects showActivity |
+| `activity_update` | activities: Activity[] | rate-limited 3s (an update publishing fewer activities than held is exempt), respects showActivity; optional `playback` per activity; the server advances stored `playback.positionMs` by the time held when it builds `ready` / friendship snapshots |
 
 ### Voice (Space Channels)
 | type | fields | notes |

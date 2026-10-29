@@ -1,7 +1,7 @@
 {
   "packages/desktop/src/activityDetector.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/desktop/src/keybindManager.ts": {

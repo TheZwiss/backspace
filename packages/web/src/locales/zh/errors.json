@@ -239,5 +239,8 @@
   "sticker_pack_invalid_state": "该表情包当前状态不允许此操作。",
   "sticker_peer_blocked": "来自该实例的表情同步已被屏蔽。",
   "sticker_pack_limit_exceeded": "该表情包已达到最大表情数量上限。",
-  "sticker_limit_out_of_range": "表情大小限制必须介于 {{min}} 到 {{max}} MB 之间。"
+  "sticker_limit_out_of_range": "表情大小限制必须介于 {{min}} 到 {{max}} MB 之间。",
+  "game_icon_invalid_image": "请上传不超过 {{max}} MB 的 PNG、JPEG 或 WebP 图片。",
+  "game_icon_not_found": "该游戏图标已不存在。",
+  "game_icon_collection_full": "游戏图标最多可保存 {{max}} 个。"
 }

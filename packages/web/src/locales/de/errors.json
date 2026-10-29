@@ -239,5 +239,8 @@
   "sticker_pack_invalid_state": "Dieses Stickerpaket befindet sich nicht in einem gültigen Zustand für diese Aktion.",
   "sticker_peer_blocked": "Die Stickersynchronisierung ist für diese Instanz blockiert.",
   "sticker_pack_limit_exceeded": "Das Stickerpaket hat die maximale Stickeranzahl erreicht.",
-  "sticker_limit_out_of_range": "Das Sticker-Größenlimit muss zwischen {{min}} und {{max}} MB liegen."
+  "sticker_limit_out_of_range": "Das Sticker-Größenlimit muss zwischen {{min}} und {{max}} MB liegen.",
+  "game_icon_invalid_image": "Lade ein PNG-, JPEG- oder WebP-Bild mit höchstens {{max}} MB hoch.",
+  "game_icon_not_found": "Dieses Spielsymbol gibt es nicht mehr.",
+  "game_icon_collection_full": "Die Sammlung der Spielsymbole ist mit {{max}} Symbolen voll."
 }

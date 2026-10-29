@@ -1,5 +1,6 @@
 import type { SoundboardPack, SoundboardSound } from '@backspace/shared';
 import type { PersonalSticker, StickerPackSummary, StickerPackDetail, StickerPackItem } from '@backspace/shared/src/stickers';
+import type { GameIconUpload } from '@backspace/shared/src/gameIcons';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   NotificationSetting,
@@ -497,6 +498,9 @@ export class BackspaceApiClient {
     newVersion: (packId: string) => Promise<{ id: string; newVersion: number; versionId: string; status: string }>;
     deletePack: (id: string) => Promise<{ success: boolean }>;
   };
+  gameIcons: {
+    upload: (data: { image: string }) => Promise<GameIconUpload>;
+  };
 
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     /** Send a request and return the successful response; a failure throws. */
@@ -617,6 +621,10 @@ export class BackspaceApiClient {
       deletePack: (id) => request<{ success: boolean }>('DELETE', `/sticker-packs/${encodeURIComponent(id)}`),
     };
 
+
+    this.gameIcons = {
+      upload: (data) => request('POST', '/game-icons', data),
+    };
 
     this.auth = {
       register: (data: RegisterRequest) =>

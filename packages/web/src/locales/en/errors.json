@@ -239,5 +239,8 @@
   "sticker_pack_invalid_state": "That sticker pack is not in a valid state for this action.",
   "sticker_peer_blocked": "Sticker synchronization is blocked for this peer.",
   "sticker_pack_limit_exceeded": "The sticker pack has reached its limit of stickers.",
-  "sticker_limit_out_of_range": "The sticker size limit must be between {{min}} and {{max}} MB."
+  "sticker_limit_out_of_range": "The sticker size limit must be between {{min}} and {{max}} MB.",
+  "game_icon_invalid_image": "Upload a PNG, JPEG or WebP image of at most {{max}} MB.",
+  "game_icon_not_found": "That game icon no longer exists.",
+  "game_icon_collection_full": "The game icon collection is full at {{max}} icons."
 }

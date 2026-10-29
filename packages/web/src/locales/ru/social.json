@@ -76,14 +76,32 @@
     "sendMessage": "Написать сообщение",
     "editRoles": "Изменить роли",
     "viewFull": "Открыть полный профиль",
-    "addFriend": "Добавить в друзья"
+    "addFriend": "Добавить в друзья",
+    "playingNow": "Сейчас играет"
   },
   "activity": {
     "title": "Сейчас активны",
     "quietTitle": "Пока тихо…",
     "quietDescription": "Когда друг чем-нибудь займётся — например, запустит игру или зайдёт в голосовой канал, — мы покажем это здесь!",
     "online": "В сети — {{n}}",
-    "offline": "Не в сети — {{n}}"
+    "offline": "Не в сети — {{n}}",
+    "types": {
+      "playing": "В игре",
+      "listening": "Слушает музыку",
+      "streaming": "Стримит",
+      "watching": "Смотрит",
+      "custom": "Пользовательский статус"
+    },
+    "players": {
+      "cloudmusic": "NetEase Cloud Music",
+      "qqmusic": "QQ Music",
+      "kugou": "KuGou",
+      "kuwo": "Kuwo",
+      "spotify": "Spotify",
+      "applemusic": "Apple Music",
+      "yandexmusic": "Яндекс Музыка"
+    },
+    "openTrack": "Открыть трек"
   },
   "instanceNotConnected": "Нет подключения к {{host}}. Подключитесь снова и повторите попытку."
 }

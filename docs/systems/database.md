@@ -179,6 +179,20 @@ Migration `0034_message_bookmarks` adds only these two tables. Full description:
 
 Indexes: `UNIQUE idx_message_bookmarks_user_message (user_id, kind, message_id)`; `idx_message_bookmarks_user_created (user_id, created_at DESC, id DESC)` for the list; `idx_message_bookmarks_user_channel (user_id, kind, channel_id)` for the per-conversation lookup; `idx_bookmark_attachments_bookmark_id (bookmark_id)`. There is no limit on the number of bookmarks per user.
 
+### game_icon_assets and game_icons
+
+Migration `0037_game_icons` adds only these two tables; no activity or user column changes (an icon is an `assets.largeImage` URL on a transient activity, see [uploads.md](uploads.md#15-game-icons) and [activity-presence.md](activity-presence.md#game-icons)).
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| game_icon_assets | id | text PK NOT NULL | SHA-256 of the encoded WebP bytes |
+| game_icon_assets | created_at | integer NOT NULL | Epoch ms of the latest upload of these bytes; set before the file is written |
+| game_icons | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE |
+| game_icons | icon_id | text NOT NULL | FK → game_icon_assets.id |
+| game_icons | created_at | integer NOT NULL | Epoch ms |
+
+The composite primary key (user_id, icon_id) makes the upload idempotent; one user holds at most 25,600 rows (`MAX_GAME_ICONS_PER_USER`, checked by the route). Deleting a user removes only its claims; the storage janitor later removes assets no claim names after the retention and grace periods described in [uploads.md](uploads.md#15-game-icons).
+
 ### embeds
 | Column | Type | Notes |
 |--------|------|-------|
