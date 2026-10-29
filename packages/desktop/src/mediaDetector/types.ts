@@ -11,6 +11,10 @@ export interface MediaTrackInfo {
   mediaType?: 'music' | 'video';
 }
 
+export type MediaChangeCallback = (track: MediaTrackInfo | null) => void;
+export type MediaSetupHint = 'netease-smtc';
+export type MediaSetupHintCallback = (hint: MediaSetupHint) => void;
+
 export interface MediaActivity {
   type: 'listening' | 'watching';
   name: string;

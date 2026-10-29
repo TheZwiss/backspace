@@ -8,6 +8,9 @@ import {
   readProcessInfos,
   readProcessInfoByPid,
   parseProcessList,
+  parseDarwinProcessList,
+  parseWindowsProcessJson,
+  parsePlatformProcesses,
   matchesProcessName,
   findMatchingGame,
   detectActivity,
@@ -196,6 +199,47 @@ describe('parseProcessList', () => {
   it('parses macOS ps -c output and skips the COMM header', () => {
     const out = 'COMM\nWindowServer\nOBS\n';
     expect(parseProcessList(out, 'darwin')).toEqual(new Set(['windowserver', 'obs']));
+  });
+});
+
+describe('full platform process listing', () => {
+  it('parses PowerShell process JSON with executable paths', () => {
+    const out = JSON.stringify([
+      {
+        ProcessId: 42,
+        Name: 'cs2.exe',
+        ExecutablePath: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe',
+        CommandLine: '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe" -novid',
+      },
+    ]);
+    expect(parseWindowsProcessJson(out)).toEqual([
+      {
+        pid: 42,
+        name: 'cs2.exe',
+        cmdline: '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe" -novid',
+        exe: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe',
+      },
+    ]);
+    expect(parsePlatformProcesses(out, 'win32')[0]?.pid).toBe(42);
+  });
+
+  it('parses macOS pid and command output without losing executable paths', () => {
+    const out = '  42 /Applications/Game.app/Contents/MacOS/Game --windowed\n 100 /usr/sbin/cfprefsd agent\n';
+    const processes = parseDarwinProcessList(out);
+    expect(processes[0]).toMatchObject({
+      pid: 42,
+      name: 'Game',
+      exe: '/Applications/Game.app/Contents/MacOS/Game',
+    });
+    expect(processes[1]?.name).toBe('cfprefsd');
+    expect(parsePlatformProcesses(out, 'darwin')).toEqual(processes);
+  });
+
+  it('falls back to legacy name-only formats when structured output is absent', () => {
+    const out = '"cs2.exe","1234","Console","1","1,234 K"\n';
+    expect(parsePlatformProcesses(out, 'win32')).toEqual([
+      { pid: 0, name: 'cs2.exe', cmdline: '', exe: null },
+    ]);
   });
 });
 
@@ -652,6 +696,29 @@ describe('Steam source detector', () => {
   it('still matches a native game by the directory its executable lives in', () => {
     const infos = [{ pid: 1, name: 'game', cmdline: 'game', exe: '/lib/steamapps/common/ELDEN RING/game' }];
     expect(detectActivity(infos, [], [steam])?.id).toBe('steam-1245620');
+  });
+
+  it('matches Windows and macOS install paths through a normalized command line', () => {
+    const windows = createSteamSourceDetector(() => [{
+      appId: 730,
+      name: 'Counter-Strike 2',
+      installDir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive',
+    }]);
+    const mac = createSteamSourceDetector(() => [{
+      appId: 123,
+      name: 'Mac Game',
+      installDir: '/Users/player/Library/Application Support/Steam/steamapps/common/Mac Game',
+    }]);
+    expect(windows({
+      name: 'cs2.exe',
+      cmdline: '"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe"',
+      exe: null,
+    })?.id).toBe('steam-730');
+    expect(mac({
+      name: 'Mac Game',
+      cmdline: '/Users/player/Library/Application Support/Steam/steamapps/common/Mac Game/Mac Game',
+      exe: null,
+    })?.id).toBe('steam-123');
   });
 });
 

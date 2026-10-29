@@ -14,6 +14,8 @@ import {
   startRichPresenceIpcServer,
   stopRichPresenceIpcServer,
   getRichPresenceIpcStatus,
+  createRichPresenceTransport,
+  discordNamedPipePath,
   type IpcActivityPush,
 } from './richPresenceIpc';
 
@@ -46,6 +48,16 @@ describe('frame codec', () => {
     expect(tryParseRawJson(Buffer.from('{"v":1,'))).toBeNull(); // incomplete
     expect(tryParseRawJson(Buffer.from('[1,2]'))).toBeNull(); // not an object
     expect(tryParseRawJson(Buffer.from('{"a":"}"}'))?.payload).toEqual({ a: '}' }); // braces inside strings
+  });
+});
+
+describe('transport selection', () => {
+  it('uses Unix sockets on Unix and Discord named pipes on Windows', () => {
+    expect(createRichPresenceTransport('linux').kind).toBe('unix-socket');
+    expect(createRichPresenceTransport('darwin').kind).toBe('unix-socket');
+    expect(createRichPresenceTransport('win32').kind).toBe('named-pipe');
+    expect(discordNamedPipePath(0)).toBe('\\\\.\\pipe\\discord-ipc-0');
+    expect(discordNamedPipePath(9)).toBe('\\\\.\\pipe\\discord-ipc-9');
   });
 });
 

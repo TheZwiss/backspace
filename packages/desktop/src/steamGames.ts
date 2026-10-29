@@ -103,13 +103,36 @@ export function parseAppManifest(text: string): ParsedAppManifest | null {
  * Realpath-deduplicated so ~/.steam/steam and ~/.local/share/Steam collapse
  * into a single root, and nonexistent candidates are dropped.
  */
-export function getSteamRoots(home: string = os.homedir()): string[] {
-  const candidates = [
+export function candidateSteamRoots(
+  home: string = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  if (platform === 'win32') {
+    const bases = [
+      env['ProgramFiles(x86)'],
+      env['ProgramFiles'],
+      env['ProgramW6432'],
+    ].filter((value): value is string => Boolean(value));
+    return [...new Set(bases.map((base) => path.win32.join(base, 'Steam')))];
+  }
+  if (platform === 'darwin') {
+    return [path.join(home, 'Library', 'Application Support', 'Steam')];
+  }
+  return [
     path.join(home, '.steam', 'steam'),
     path.join(home, '.local', 'share', 'Steam'),
     path.join(home, '.var', 'app', 'com.valvesoftware.Steam', '.local', 'share', 'Steam'),
     path.join(home, 'snap', 'steam', 'common', '.local', 'share', 'Steam'),
   ];
+}
+
+export function getSteamRoots(
+  home: string = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const candidates = candidateSteamRoots(home, platform, env);
 
   const roots: string[] = [];
   const seen = new Set<string>();

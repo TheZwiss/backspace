@@ -5,6 +5,7 @@ import path from 'path';
 import {
   parseLibraryFoldersVdf,
   parseAppManifest,
+  candidateSteamRoots,
   getSteamRoots,
   loadSteamIndex,
   resetSteamIndexCache,
@@ -148,6 +149,16 @@ describe('parseAppManifest', () => {
 // ─── getSteamRoots ──────────────────────────────────────────────────────────
 
 describe('getSteamRoots', () => {
+  it('knows the default Steam roots on Windows and macOS', () => {
+    expect(candidateSteamRoots('/home/u', 'darwin')).toEqual([
+      path.join('/home/u', 'Library', 'Application Support', 'Steam'),
+    ]);
+    expect(candidateSteamRoots('/home/u', 'win32', {
+      'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+      ProgramFiles: 'C:\\Program Files',
+    })).toEqual(['C:\\Program Files (x86)\\Steam', 'C:\\Program Files\\Steam']);
+  });
+
   it('finds the native root and drops missing packagings', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-roots-'));
     fs.mkdirSync(path.join(home, '.local', 'share', 'Steam', 'steamapps'), { recursive: true });

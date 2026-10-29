@@ -4,10 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { app } from 'electron';
-import { findSteamGameForLaunch, findSteamGameForProcess, loadSteamIndex, type SteamGame } from './steamGames';
-import { findFlatpakGameForProcess, loadFlatpakIndex } from './flatpakGames';
-import { findGogGameForProcess, loadGogIndex } from './gogGames';
-import { findLauncherGameForProcess, loadLauncherIndex } from './launcherGames';
+import { loadSteamIndex } from './steamGames';
+import { loadFlatpakIndex } from './flatpakGames';
+import { loadGogIndex } from './gogGames';
+import { loadLauncherIndex } from './launcherGames';
+import {
+  defaultGameSourceDetectors,
+  type GameSourceProcess,
+  type MatchedGame,
+  type SourceDetector,
+} from './gameSources';
 import { warmGameIcon, warmGameIconForIpc } from './gameIcons';
 import type { IpcActivityPush } from './richPresenceIpc';
 import { decodeWin32Output } from './mediaDetector/win32Media';
@@ -56,11 +62,6 @@ interface GameEntry {
   type?: string;
 }
 
-interface VersionedDictionary {
-  version: number;
-  games: GameEntry[];
-}
-
 const VALID_TYPES = new Set(['playing', 'listening', 'watching', 'streaming']);
 const POLL_INTERVAL_MS = 15_000;
 const REMOTE_URL = 'https://raw.githubusercontent.com/TheZwiss/backspace/main/packages/desktop/resources/games.json';
@@ -90,28 +91,8 @@ let onListChangeCallback: ((activities: Activity[]) => void) | null = null;
 
 // ─── Process information ────────────────────────────────────────────────────
 
-export interface ProcessInfo {
+export interface ProcessInfo extends GameSourceProcess {
   pid: number;
-  /** Best-effort process name: exe basename, else first cmdline token, else comm. */
-  name: string;
-  /** Command line tokens joined with single spaces (empty when unavailable). */
-  cmdline: string;
-  /** Full executable path from the /proc exe symlink, case preserved; null when unavailable. */
-  exe: string | null;
-  /**
-   * The Windows programs a Wine/Proton process may be running ("StarRail.exe").
-   * Its `exe` is the Wine loader, so `name` says "wine64-preloader" whatever
-   * the game is; the real names are in the command line (a Windows path, or
-   * "steam.exe Game.exe" as Proton's shim writes it) and, kernel-truncated, in
-   * comm. Absent for anything that is not a Wine process.
-   */
-  winExes?: string[];
-  /**
-   * Working directory of a Wine process. The Windows program is usually
-   * started from its own folder, which is where its icon is found. Only set
-   * together with `winExes`.
-   */
-  cwd?: string;
 }
 
 /**
@@ -307,12 +288,15 @@ export function readProcessInfoByPid(pid: number, procRoot = '/proc'): ProcessIn
 
 // ─── Platform process listing (fallback for non-Linux, or /proc unavailable) ─
 
+const WINDOWS_PROCESS_QUERY =
+  'Get-CimInstance Win32_Process | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress';
+
 function getProcessCommand(): { executable: string; args: string[] } {
   if (process.platform === 'win32') {
-    return { executable: 'tasklist', args: ['/fo', 'csv', '/nh'] };
+    return { executable: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_PROCESS_QUERY] };
   }
   if (process.platform === 'darwin') {
-    return { executable: 'ps', args: ['-c', '-A', '-o', 'comm'] };
+    return { executable: 'ps', args: ['-axo', 'pid=,command='] };
   }
   // Linux and other Unix
   return { executable: 'ps', args: ['-A', '-o', 'comm'] };
@@ -353,54 +337,90 @@ function infosFromNames(names: Set<string>): ProcessInfo[] {
   return [...names].map((name) => ({ pid: 0, name, cmdline: '', exe: null }));
 }
 
+function commandExecutable(command: string): { exe: string | null; name: string } {
+  const trimmed = command.trim();
+  const quoted = trimmed.match(/^"([^"]+)"(?:\s|$)/);
+  const first = quoted?.[1] ?? trimmed.split(/\s+/, 1)[0] ?? '';
+  const exe = first || null;
+  const windowsBase = exe?.match(/[^\\/]+$/)?.[0];
+  return { exe, name: windowsBase || path.basename(first) || first };
+}
+
+/**
+ * Parse the full command-and-path process query used on macOS. This gives
+ * source providers an executable path instead of only a truncated comm name.
+ */
+export function parseDarwinProcessList(stdout: string): ProcessInfo[] {
+  const processes: ProcessInfo[] = [];
+  for (const raw of stdout.split('\n')) {
+    const match = raw.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match?.[1] || !match[2]) continue;
+    const command = match[2].trim();
+    const executable = commandExecutable(command);
+    if (!executable.name) continue;
+    processes.push({
+      pid: Number(match[1]),
+      name: executable.name,
+      cmdline: command,
+      exe: executable.exe,
+    });
+  }
+  return processes;
+}
+
+interface WindowsProcessJson {
+  ProcessId?: unknown;
+  Name?: unknown;
+  ExecutablePath?: unknown;
+  CommandLine?: unknown;
+}
+
+/** Parse the Unicode-safe PowerShell JSON process query used on Windows. */
+export function parseWindowsProcessJson(stdout: string): ProcessInfo[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout.replace(/^\uFEFF/, ''));
+  } catch {
+    return [];
+  }
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+  const processes: ProcessInfo[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as WindowsProcessJson;
+    if (typeof item.ProcessId !== 'number' || typeof item.Name !== 'string' || !item.Name) continue;
+    const exe = typeof item.ExecutablePath === 'string' && item.ExecutablePath ? item.ExecutablePath : null;
+    processes.push({
+      pid: item.ProcessId,
+      name: item.Name,
+      cmdline: typeof item.CommandLine === 'string' ? item.CommandLine : '',
+      exe,
+    });
+  }
+  return processes;
+}
+
+export function parsePlatformProcesses(
+  stdout: string,
+  platform: NodeJS.Platform = process.platform,
+): ProcessInfo[] {
+  if (platform === 'win32') {
+    const parsed = parseWindowsProcessJson(stdout);
+    if (parsed.length > 0) return parsed;
+  }
+  if (platform === 'darwin') {
+    const parsed = parseDarwinProcessList(stdout);
+    if (parsed.length > 0) return parsed;
+  }
+  return infosFromNames(parseProcessList(stdout, platform));
+}
+
 // ─── Matching ───────────────────────────────────────────────────────────────
 
-/** A resolved game, whichever source produced it. */
-export interface MatchedGame {
-  id: string;
-  name: string;
-  type: string;
-}
+export type { MatchedGame, SourceDetector } from './gameSources';
+export { createSteamSourceDetector } from './gameSources';
 
-/**
- * A source detector resolves a running process to an installed game the
- * dictionary does not know (Steam libraries, Flatpak, GOG, ...). Returning
- * null lets the next source try.
- */
-export type SourceDetector = (info: ProcessInfo) => MatchedGame | null;
-
-/**
- * Steam games: first by the launch command of the supervising `reaper`
- * process (it names the app id, which is the only thing a Proton game's own
- * processes do not), then by the install directory holding the executable.
- */
-export function createSteamSourceDetector(loadGames: () => SteamGame[] = () => loadSteamIndex()): SourceDetector {
-  return (info) => {
-    const games = loadGames();
-    const game = findSteamGameForLaunch(info.cmdline, games) ?? findSteamGameForProcess(info.exe, games);
-    return game ? { id: `steam-${game.appId}`, name: game.name, type: 'playing' } : null;
-  };
-}
-
-const steamSourceDetector = createSteamSourceDetector();
-
-const flatpakSourceDetector: SourceDetector = (info) => {
-  const game = findFlatpakGameForProcess(info.exe, loadFlatpakIndex());
-  return game ? { id: `flatpak-${game.appId}`, name: game.name, type: 'playing' } : null;
-};
-
-const gogSourceDetector: SourceDetector = (info) => {
-  const game = findGogGameForProcess(info.exe, info.cmdline, loadGogIndex());
-  return game ? { id: `gog-${game.id}`, name: game.name, type: 'playing' } : null;
-};
-
-/** Heroic, Bottles and Lutris: games that run under Wine are named by the launcher that installed them. */
-const launcherSourceDetector: SourceDetector = (info) => {
-  const game = findLauncherGameForProcess(info, loadLauncherIndex());
-  return game ? { id: game.id, name: game.name, type: 'playing' } : null;
-};
-
-const sourceDetectors: SourceDetector[] = [steamSourceDetector, flatpakSourceDetector, gogSourceDetector, launcherSourceDetector];
+const sourceDetectors: SourceDetector[] = [...defaultGameSourceDetectors];
 
 /**
  * Whether a running process matches a dictionary entry:
@@ -1302,7 +1322,7 @@ function pollViaCommand(): void {
     }
 
     const rawString = typeof stdout === 'string' ? stdout : decodeWin32Output(stdout);
-    const infos = infosFromNames(parseProcessList(rawString));
+    const infos = parsePlatformProcesses(rawString);
     applyDetectedGames(detectActivitiesWithInfo(infos, gameEntries, undefined, undefined, manualBindings), infos);
   });
 }

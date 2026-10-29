@@ -13,6 +13,16 @@ import {
   type SmtcProbeResult,
 } from './win32Media';
 import { parseMprisMetadata, getPlayerDisplayName } from './linuxMpris';
+import { mediaAdapterFor } from './adapter';
+
+describe('Media Detector - platform adapters', () => {
+  it('selects an adapter for each supported desktop platform', () => {
+    expect(mediaAdapterFor('linux')).not.toBeNull();
+    expect(mediaAdapterFor('win32')).not.toBeNull();
+    expect(mediaAdapterFor('darwin')).not.toBeNull();
+    expect(mediaAdapterFor('freebsd')).toBeNull();
+  });
+});
 
 describe('Media Detector - Canonical Track URLs', () => {
   it('normalizes Spotify URI to open.spotify.com URL', () => {

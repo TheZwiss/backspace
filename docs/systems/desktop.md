@@ -1023,7 +1023,7 @@ On Linux the poll walks `/proc` directly — no subprocess, no lossy `ps` parsin
 - `/proc/<pid>/cmdline` → NUL-separated argv, joined with spaces and matched against `cmdlinePatterns`
 - `/proc/<pid>/comm` → last-resort name, kernel-truncated to 15 characters
 
-Windows and macOS keep the `tasklist` / `ps` commands; Linux also falls back to `ps` if the `/proc` walk itself throws.
+Windows uses a PowerShell `Get-CimInstance Win32_Process` query so source providers receive the executable path and command line, not only `tasklist`'s image name. macOS uses `ps -axo pid=,command=` for the same reason. Both retain name-only parsing as a fallback when structured output is unavailable; Linux also falls back to `ps` if the `/proc` walk itself throws.
 
 ### Game Dictionary
 
@@ -1089,8 +1089,8 @@ Step 3: If remote version > local version → atomic write to cache, save ETag, 
 | Platform | Source | Notes |
 |----------|--------|-------|
 | Linux | `/proc` walk | exe symlink → cmdline → comm; exe readlink failures (EACCES on other users' processes) fall through to the next source |
-| macOS | `ps -c -A -o comm` | One process name per line (header: `COMM`) |
-| Windows | `tasklist /fo csv /nh` | CSV: `"ImageName","PID",...` |
+| macOS | `ps -axo pid=,command=` | PID, executable path and full command line; legacy name-only `COMM` parsing remains the fallback |
+| Windows | PowerShell `Get-CimInstance Win32_Process` | Unicode-safe JSON with `ProcessId`, `Name`, `ExecutablePath` and `CommandLine`; legacy `tasklist` CSV remains the fallback |
 | Linux fallback | `ps -A -o comm` | Only if the `/proc` walk throws |
 
 Max buffer for command output: 1MB. Command-based names are lowercased into a `Set<string>`; `/proc`-sourced names keep their case and are compared case-insensitively at match time.
@@ -1120,8 +1120,8 @@ Properties common to all sources:
 
 - **Priority:** dictionary first (curated names and types win), then sources in order — a Steam install of a dictionary-listed game reports the dictionary entry.
 - **Caching:** each provider's index caches for 60 seconds, so the 15s poll reuses it and installs/uninstalls show up within a minute.
-- **Roots:** Steam roots are realpath-deduplicated across `~/.steam/steam`, the native data dir, the Flatpak sandbox and the snap layout; Flatpak covers user and system installs.
-- **Linux-first:** the sources light up where the metadata exists (Linux). On Windows/macOS detection is dictionary-only.
+- **Roots:** Steam roots are realpath-deduplicated per platform: Linux covers `~/.steam/steam`, the native data dir, Flatpak and snap; macOS covers `~/Library/Application Support/Steam`; Windows covers the Steam directories under `ProgramFiles(x86)`, `ProgramFiles` and `ProgramW6432`. `libraryfolders.vdf` still adds every library on any disk. Flatpak covers user and system installs.
+- **Platform coverage:** Steam source detection works on Linux, Windows and macOS when a full process path or command line is available. Flatpak is Linux-specific; GOG and the Heroic/Bottles/Lutris parser remain metadata-driven and light up where those install layouts exist. The dictionary remains available on all three platforms.
 
 Detection flows through `detectActivitiesWithInfo` (`detectActivity` returns its first game for older callers): the dictionary is consulted first, then the source detectors above (in registration order) for anything installed but not curated. The state machine semantics are unchanged:
 
@@ -1165,7 +1165,8 @@ interface Activity {
 
 ### Sockets and coexistence
 
-- All ten protocol socket slots are bound, one `net.Server` per path, across `XDG_RUNTIME_DIR` and the TMPDIR chain; sockets are `chmod 600`
+- On Linux and macOS, all ten Unix socket slots are bound, one `net.Server` per path, across `XDG_RUNTIME_DIR` and the TMPDIR chain; sockets are `chmod 600`
+- On Windows, the same ten slots use Discord-compatible named pipes (`\\.\pipe\discord-ipc-N`). Existing pipes are probed and left untouched; there is no filesystem cleanup step because a named pipe disappears with its owning process
 - Slots answering a probe belong to a live server (usually the first-party desktop client) and are left untouched; socket files left by crashed servers are probed (`ECONNREFUSED`) and reclaimed; non-socket files are never deleted
 - With that client already running, a connecting game may land in either server — the same behavior as running two copies of it
 
