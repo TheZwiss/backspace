@@ -143,6 +143,17 @@ function getReferencedFilenames(): Set<string> {
     if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
   }
 
+  // Files a bookmark owns (its own copies, never the originals' files). Without
+  // this the orphan phase would delete them.
+  const bookmarkRows = db.select({
+    filename: schema.bookmarkAttachments.filename,
+    thumbnailFilename: schema.bookmarkAttachments.thumbnailFilename,
+  }).from(schema.bookmarkAttachments).all();
+  for (const row of bookmarkRows) {
+    if (row.filename) referenced.add(path.basename(row.filename));
+    if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
+  }
+
   return referenced;
 }
 

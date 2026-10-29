@@ -16,6 +16,7 @@ import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
 import { MobileInstancePanel } from './MobileInstancePanel';
+import { MobileBookmarksScreen } from '../bookmarks/MobileBookmarksScreen';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
@@ -135,6 +136,7 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
   'group-dm-info': (params) => <MobileGroupDmInfo params={params} />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,
+  'bookmarks': () => <MobileBookmarksScreen />,
   'backspace': () => <MobileBackspaceScreen />,
   'user-profile': (params) => {
     // Open the user profile modal with the userId from params

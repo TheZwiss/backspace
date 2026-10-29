@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
+import { BookmarkIcon } from '../ui/BookmarkIcon';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
 import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
@@ -25,7 +26,7 @@ interface ActionRow {
 
 export function MobileYouScreen() {
   useEmojiShortcodeNames();
-  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project']);
+  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project', 'bookmarks']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -56,6 +57,11 @@ export function MobileYouScreen() {
         </svg>
       ),
       action: () => pushMobileScreen('friends'),
+    },
+    {
+      label: t('bookmarks:title'),
+      icon: <BookmarkIcon size={20} />,
+      action: () => pushMobileScreen('bookmarks'),
     },
     {
       label: t('settings:nav.tabs.connections'),

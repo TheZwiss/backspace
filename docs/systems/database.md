@@ -148,6 +148,37 @@ Migration `0031_personal_stickers` adds only these two tables; message and react
 
 The composite primary key (user_id, sticker_id) makes collection idempotent; one user holds at most 200 rows (`MAX_PERSONAL_STICKERS`, checked by the routes). Removing an entry or deleting its user removes only the association. An asset stays while any collection entry, message or reaction on this instance names it; after that, and once past its grace period, the storage cleanup deletes the row and its file (`cleanupUnusedStickerAssets`). Files live under `UPLOAD_DIR/stickers`, outside the attachment phases and the storage stats.
 
+### message_bookmarks and bookmark_attachments
+
+Migration `0032_message_bookmarks` adds only these two tables. Full description: [bookmarks.md](bookmarks.md).
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| message_bookmarks | id | text PK NOT NULL | Snowflake |
+| message_bookmarks | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE (a tombstone keeps the row, so `tombstoneUser` purges explicitly) |
+| message_bookmarks | kind | text NOT NULL | `channel` or `dm`: which table holds the original |
+| message_bookmarks | message_id | text NOT NULL | The original's id; no FK (two source tables, and the bookmark outlives the original) |
+| message_bookmarks | channel_id | text NOT NULL | The original's channel or DM id; no FK |
+| message_bookmarks | space_id | text | NULL for a DM |
+| message_bookmarks | content | text | Frozen copy of the text; NULL for attachment-only messages |
+| message_bookmarks | author_id | text NOT NULL | The author's row id on `instance_origin`; no FK |
+| message_bookmarks | author_name | text NOT NULL | Display name at save time (`Deleted User` for a tombstoned author) |
+| message_bookmarks | space_name | text | Frozen; NULL for a DM |
+| message_bookmarks | channel_name | text | Frozen; for a DM the group name or the other members' names |
+| message_bookmarks | instance_origin | text NOT NULL | Origin of the instance that serves the original |
+| message_bookmarks | message_created_at | integer NOT NULL | The original's time, epoch ms |
+| message_bookmarks | created_at | integer NOT NULL | When it was bookmarked, epoch ms |
+| bookmark_attachments | id | text PK NOT NULL | Snowflake |
+| bookmark_attachments | bookmark_id | text NOT NULL | FK → message_bookmarks.id, ON DELETE CASCADE |
+| bookmark_attachments | position | integer NOT NULL | Order on the message |
+| bookmark_attachments | original_name, mimetype, size, width, height, duration, playable | | Metadata copied from `attachments` |
+| bookmark_attachments | source_filename | text NOT NULL | The original's file; belongs to the original message and may no longer exist |
+| bookmark_attachments | source_thumbnail_filename | text | The original's thumbnail |
+| bookmark_attachments | filename, thumbnail_filename | text | The bookmark's own copy; NULL while `copy_status` is `reference` |
+| bookmark_attachments | copy_status | text NOT NULL DEFAULT 'reference' | `reference`, `copied` or `unavailable` |
+
+Indexes: `UNIQUE idx_message_bookmarks_user_message (user_id, kind, message_id)`; `idx_message_bookmarks_user_created (user_id, created_at DESC, id DESC)` for the list; `idx_message_bookmarks_user_channel (user_id, kind, channel_id)` for the per-conversation lookup; `idx_bookmark_attachments_bookmark_id (bookmark_id)`. There is no limit on the number of bookmarks per user.
+
 ### embeds
 | Column | Type | Notes |
 |--------|------|-------|
