@@ -268,6 +268,15 @@
     background: rgba(255, 255, 255, 0.10);
     border-color: rgba(255, 255, 255, 0.14);
   }
+
+  /* Drop scrim — blurred, tinted veil over a chat region while files are
+     dragged onto it. A scrim, not a surface: it carries no border or shadow,
+     the dashed frame and the glass-bubble label inside it are the controls. */
+  .drop-scrim {
+    -webkit-backdrop-filter: blur(12px) saturate(110%);
+    backdrop-filter: blur(12px) saturate(110%);
+    background: var(--glass-bg);
+  }
   .glass-pill-mine {
     background: rgba(134, 239, 172, 0.10);
     border-color: rgba(134, 239, 172, 0.25);
@@ -383,6 +392,11 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgb(var(--bg-elevated));
+  }
+  .drop-scrim {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgb(var(--bg-elevated) / 0.92);
   }
 }
 

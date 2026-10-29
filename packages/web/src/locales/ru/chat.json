@@ -77,6 +77,8 @@
     "cancelReply": "Отменить ответ",
     "removeAttachment": "Удалить вложение",
     "attachFile": "Прикрепить файл",
+    "dropTitle": "Загрузить файл",
+    "dropHint": "Отпустите, чтобы прикрепить",
     "uploading": "Загрузка…",
     "uploadingLabel": "Загрузка",
     "failedCount_one": "{{count}} с ошибкой",

@@ -76,6 +76,8 @@
     "cancelReply": "Cancelar resposta",
     "removeAttachment": "Remover anexo",
     "attachFile": "Anexar arquivo",
+    "dropTitle": "Enviar arquivo",
+    "dropHint": "Solte para anexar",
     "uploading": "Enviando…",
     "uploadingLabel": "Enviando",
     "failedCount_one": "{{count}} falhou",
