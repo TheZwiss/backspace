@@ -246,6 +246,20 @@
       "when": 1793312404436,
       "tag": "0034_message_bookmarks",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1793312528415,
+      "tag": "0035_federated_sticker_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1793312533643,
+      "tag": "0036_max_sticker_size",
+      "breakpoints": true
     }
   ]
 }

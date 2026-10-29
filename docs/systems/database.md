@@ -150,7 +150,7 @@ The composite primary key (user_id, sticker_id) makes collection idempotent; one
 
 ### message_bookmarks and bookmark_attachments
 
-Migration `0032_message_bookmarks` adds only these two tables. Full description: [bookmarks.md](bookmarks.md).
+Migration `0034_message_bookmarks` adds only these two tables. Full description: [bookmarks.md](bookmarks.md).
 
 | Table | Column | Type | Notes |
 |-------|--------|------|-------|

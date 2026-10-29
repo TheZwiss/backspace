@@ -131,8 +131,11 @@ function DesktopPopover({
       const floating = floatingRef.current;
       const anchor = anchorRef.current;
       if (!floating) return;
-      if (floating.contains(e.target as Node)) return;
-      if (anchor && anchor.contains(e.target as Node)) return;
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (floating.contains(target)) return;
+      if (anchor && anchor.contains(target)) return;
+      if ((target as Element).closest?.('[role="dialog"], [aria-modal="true"], [data-modal]')) return;
       onClose();
     };
     document.addEventListener('mousedown', handler);

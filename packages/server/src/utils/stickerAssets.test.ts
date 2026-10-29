@@ -13,7 +13,7 @@ let db: ReturnType<typeof drizzle<typeof schema>>;
 let sqlite: Database.Database;
 vi.mock('../db/index.js', () => ({ getDb: () => db, schema }));
 vi.mock('../config.js', () => ({ config: settings }));
-import { cleanupUnusedStickerAssets, stickerAssetDir, stickerAssetPath, STICKER_ASSET_GRACE_MS } from './stickerAssets.js';
+import { cleanupUnusedStickerAssets, stickerAssetDir, stickerAssetPath, stickerPreviewPath, STICKER_ASSET_GRACE_MS } from './stickerAssets.js';
 
 const NOW = 10 * STICKER_ASSET_GRACE_MS;
 const OLD = NOW - STICKER_ASSET_GRACE_MS - 1;
@@ -23,6 +23,7 @@ const tokenOf = (id: string, origin = 'https://chat.test') => `sticker:${origin}
 function addAsset(id: string, createdAt = OLD): void {
   db.insert(schema.stickerAssets).values({ id, createdAt }).run();
   fs.writeFileSync(stickerAssetPath(id), Buffer.alloc(10));
+  fs.writeFileSync(stickerPreviewPath(id), Buffer.alloc(5));
 }
 
 beforeEach(async () => {
@@ -54,13 +55,20 @@ describe('cleanupUnusedStickerAssets', () => {
     sqlite.prepare("INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ('m2', 'channel', 'alice', ?, 1)").run(`look ${tokenOf(idOf(6))}`);
 
     const dry = cleanupUnusedStickerAssets(true, NOW);
-    expect(dry).toEqual({ deletedFiles: 2, freedBytes: 20, errors: [] });
+    expect(dry).toEqual({ deletedFiles: 2, freedBytes: 30, errors: [] });
     expect(fs.existsSync(stickerAssetPath(idOf(6)))).toBe(true);
+    expect(fs.existsSync(stickerPreviewPath(idOf(6)))).toBe(true);
 
     const result = cleanupUnusedStickerAssets(false, NOW);
-    expect(result).toEqual({ deletedFiles: 2, freedBytes: 20, errors: [] });
-    for (const n of [1, 2, 3, 4, 5]) expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(true);
-    for (const n of [6, 7]) expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(false);
+    expect(result).toEqual({ deletedFiles: 2, freedBytes: 30, errors: [] });
+    for (const n of [1, 2, 3, 4, 5]) {
+      expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(true);
+      expect(fs.existsSync(stickerPreviewPath(idOf(n)))).toBe(true);
+    }
+    for (const n of [6, 7]) {
+      expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(false);
+      expect(fs.existsSync(stickerPreviewPath(idOf(n)))).toBe(false);
+    }
     expect(db.select().from(schema.stickerAssets).all().map(row => row.id).sort()).toEqual([1, 2, 3, 4, 5].map(idOf));
   });
 

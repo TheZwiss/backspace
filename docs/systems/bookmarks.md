@@ -4,7 +4,7 @@ A user's personal list of saved messages. A bookmark is a **copy of the message'
 
 Source files:
 - `packages/server/src/db/schema.ts` -- `messageBookmarks`, `bookmarkAttachments`
-- `packages/server/drizzle/0032_message_bookmarks.sql` -- the migration
+- `packages/server/drizzle/0034_message_bookmarks.sql` -- the migration
 - `packages/server/src/utils/bookmarks.ts` -- create, list, delete, status resolution, `snapshotBookmarkAttachments`, `deleteBookmarkFiles`, `purgeUserBookmarks`
 - `packages/server/src/routes/bookmarks.ts` -- the REST routes
 - `packages/server/src/utils/userDeletion.ts` -- `tombstoneUser` purges a user's bookmarks
@@ -96,4 +96,4 @@ A created bookmark is announced as `bookmark_added` and a removed one as `bookma
 
 - After DM origin failover (client-federation.md, "DM Origin Failover") a DM bookmark stays on the old instance.
 - A bookmark of a deleted original can show only the saved copy: nothing about the original is read once it is gone.
-- Migration `0032_message_bookmarks` is numbered and timestamped for the branch it was written on. Drizzle applies only migrations whose journal `when` is newer than the newest one already applied, so on a database that another branch has migrated further (for example one with `0032_bots` to `0040`) it is skipped without an error and every bookmark route answers 500 `no such table: message_bookmarks`. When merging with such a branch, renumber it after the last migration and give it a later `when`. A database already past it needs the SQL applied once by hand.
+- Migration `0034_message_bookmarks` is numbered and timestamped for the branch it was written on. Drizzle applies only migrations whose journal `when` is newer than the newest one already applied, so on a database that another branch has migrated further (for example one with `0034_bots` to `0040`) it is skipped without an error and every bookmark route answers 500 `no such table: message_bookmarks`. When merging with such a branch, renumber it after the last migration and give it a later `when`. A database already past it needs the SQL applied once by hand.
