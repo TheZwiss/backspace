@@ -70,6 +70,13 @@ win:
   target:
     - nsis
 linux:
+  # Package the native PipeWire addon explicitly: optional dependency discovery
+  # can omit venmic in pnpm workspaces even when its prebuild exists.
+  extraResources:
+    - from: node_modules/@vencord/venmic/prebuilds/venmic-addon-linux-${arch}/node-napi-v7.node
+      to: venmic/node-napi-v7.node
+    - from: node_modules/@vencord/venmic/LICENSE
+      to: venmic/LICENSE
   # electron-builder derives the Linux executable name from package.json `name`
   # when this key is unset (LinuxPackager: `appInfo.sanitizedName.toLowerCase()`),
   # and this package is named `@backspace/desktop`. Sanitising drops the slash and

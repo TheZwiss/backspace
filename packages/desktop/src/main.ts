@@ -629,7 +629,9 @@ const systemAudio = createSystemAudioController({
   platform: process.platform,
   // Optional, Linux-only native module: a static import would fail to load elsewhere.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  loadModule: () => require('@vencord/venmic') as PatchBayModule,
+  loadModule: () => (app.isPackaged
+    ? require(path.join(process.resourcesPath, 'venmic', 'node-napi-v7.node'))
+    : require('@vencord/venmic')) as PatchBayModule,
   getPids: () => app.getAppMetrics().map((metric) => metric.pid),
   executablePath: process.execPath,
   isSandboxed,
