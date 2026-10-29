@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFormatters } from '../../i18n/formatters';
 import type { CallHistoryEvent } from '@backspace/shared/src/dmSystemEvents';
 
 const appearance = {
@@ -13,7 +14,8 @@ const appearance = {
 } satisfies Record<CallHistoryEvent['status'], { frame: string; text: string; badge: string; mark: string }>;
 
 export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEvent; actorName: string }) {
-  const { t, i18n } = useTranslation('voice');
+  const { t } = useTranslation('voice');
+  const f = useFormatters();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (event.status !== 'active') return;
@@ -26,8 +28,8 @@ export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEve
     ? `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
     : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const look = appearance[event.status];
-  const date = (value: number) => new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium' }).format(value);
-  const clock = (value: number) => new Intl.DateTimeFormat(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(value);
+  const date = f.formatMediumDate;
+  const clock = (value: number) => f.formatTime(value, true);
   const timestamp = (label: string, value: number) => <div className="min-w-0">
     <div className="text-[10px] uppercase tracking-wider text-txt-tertiary mb-1">{label}</div>
     <time dateTime={new Date(value).toISOString()} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">

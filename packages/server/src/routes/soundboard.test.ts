@@ -15,7 +15,7 @@ vi.mock('../config.js', () => ({ config: { livekit: { url: 'ws://127.0.0.1:7880'
 vi.mock('../utils/federationAuth.js', () => ({ getOurOrigin: () => 'https://chat.test' }));
 vi.mock('../ws/handler.js', () => ({ connectionManager: { getUserRoom: () => mocks.current, getVoiceUserStatus: () => mocks.status } }));
 vi.mock('livekit-server-sdk', () => ({ DataPacket_Kind: { RELIABLE: 0 }, RoomServiceClient: class { sendData = mocks.sendData; } }));
-vi.mock('../utils/auth.js', () => ({ authenticate: async (request: any, reply: any) => { if (!request.headers.authorization) return reply.code(401).send(); request.userId = request.headers.authorization; } }));
+vi.mock('../utils/auth.js', () => ({ authenticate: async (request: any, reply: any) => { if (!request.headers.authorization) return reply.code(401).send(); request.userId = request.headers.authorization; request.username = request.userId; } }));
 import { soundboardRoutes, _resetSoundboardLimits } from './soundboard.js';
 import { validateSoundboardWav } from '../utils/soundboardAudio.js';
 function wav(samples = 4800) {
@@ -72,6 +72,7 @@ it('authorizes sound playback against the current room and sends only a short se
   expect(played.statusCode).toBe(200); expect(mocks.sendData).toHaveBeenCalledOnce();
   const [room, data] = mocks.sendData.mock.calls[0]!; expect(room).toBe('voice'); expect(data.byteLength).toBeLessThan(2048);
   const event = JSON.parse(new TextDecoder().decode(data));
+  expect(event.senderIdentity).toBe('member:member'); expect(event.senderUserId).toBe('member');
   const audio = await app.inject({ url: `/api/soundboard/playback/${event.ticket}` }); expect(audio.statusCode).toBe(200); expect(audio.rawPayload).toEqual(wav());
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(429);
   mocks.current = null;

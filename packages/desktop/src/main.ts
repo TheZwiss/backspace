@@ -1,4 +1,5 @@
 import { WindowsProcessAudio } from './windowsProcessAudio';
+import { LocalTextVoice, type TextVoiceDevice } from './textVoice';
 import {
   app,
   BrowserWindow,
@@ -87,6 +88,9 @@ app.setName('Backspace');
 }
 
 let mainWindow: BrowserWindow | null = null;
+const localTextVoice = new LocalTextVoice(path.join(app.getPath('userData'), 'text-voice'), (status) => {
+  mainWindow?.webContents.send('local-text-voice-status', status);
+});
 let callWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
 let tray: Tray | null = null;
@@ -669,6 +673,16 @@ function takePendingScreenSelection(): PendingScreenSelection | null {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle('local-text-voice-status', (event) => event.sender === mainWindow?.webContents ? localTextVoice.getStatus() : null);
+  ipcMain.handle('local-text-voice-prepare', (event, device: TextVoiceDevice) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.prepare(device);
+  });
+  ipcMain.handle('local-text-voice-speech', (event, data: unknown) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.speech(data);
+  });
+  ipcMain.handle('local-text-voice-release', (event) => { if (event.sender === mainWindow?.webContents) localTextVoice.release(); });
   ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const sender = event.sender;
@@ -1337,6 +1351,7 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
+    localTextVoice.registerProtocol();
     // Development runs inside the stock Electron.app bundle, whose Dock icon
     // macOS caches per bundle, so the copied icns in the dev script does not
     // show. Set it at runtime; packaged builds carry the icon in their own
@@ -1602,6 +1617,7 @@ if (!gotTheLock) {
   });
 
   app.on('before-quit', () => {
+    localTextVoice.release();
     systemAudio.stop(); windowsProcessAudio.stop();
     isQuitting = true;
     stopActivityDetection();

@@ -8,22 +8,34 @@
     "speed": "Geschwindigkeit",
     "placeholder": "Schreibe, was du sagen möchtest…",
     "enterHint": "Enter zum Sprechen · Shift+Enter für eine neue Zeile",
-    "checking": "Sprachdienst wird geprüft…",
-    "unavailable": "Sprachausgabe ist nicht verfügbar. Die Administration muss den Synthesedienst starten.",
+    "checking": "Stimme wird auf diesem Gerät vorbereitet…",
+    "unavailable": "Klicke auf Stimme vorbereiten, um das lokale Modell zu laden.",
     "speaking": "Wird vorbereitet oder gesprochen…",
     "muted": "Tritt einem Anruf bei und hebe die Stummschaltung auf. Serverbeschränkungen gelten ebenfalls.",
     "ready": "Bereit für brasilianisches Portugiesisch.",
     "speak": "Im Anruf sprechen",
     "preview": "Nur selbst anhören",
     "stop": "Sprechen stoppen",
-    "privacy": "Der Text wird auf der Backspace-Instanz verarbeitet und nicht im Chat veröffentlicht. Die Teilnehmer hören ihn wie deine normale Stimme.",
+    "privacy": "Der Text wird auf diesem Gerät in Sprache umgewandelt. Nur Audio wird übertragen; der Text wird weder zum Server gesendet noch im Chat veröffentlicht.",
     "quick": {
       "hello": "Hallo zusammen!",
       "wait": "Einen Moment bitte.",
       "repeat": "Kannst du das bitte wiederholen?"
-    }
+    },
+    "processing": "Lokale Verarbeitung",
+    "automatic": "Automatisch",
+    "prepare": "Stimme vorbereiten",
+    "backendActive": "Verarbeitung: {{backend}}",
+    "gpuUnavailable": "GPU ist auf diesem Gerät nicht verfügbar. Wähle CPU.",
+    "localError": "Stimme konnte nicht vorbereitet oder erzeugt werden. Versuche es erneut oder wähle CPU.",
+    "downloadProgress": "Modell wird geladen: {{progress}}",
+    "downloadHint": "Erste Nutzung: etwa 95 MB für CPU oder 330 MB für GPU. Das Modell bleibt auf diesem Gerät.",
+    "unsupported": "Nutze HTTPS oder den aktuellen Electron-Client. Dein echtes Mikrofon bleibt in diesem Modus ausgeschaltet."
   },
   "soundboard": {
+    "frequentEmpty": "Spiele Sounds ab, um deine Favoriten hier zu sehen.",
+    "noResults": "Keine Sounds gefunden.",
+    "frequent": "Häufig verwendet",
     "title": "Soundeffekte",
     "description": "Spiele einen kurzen Effekt für alle im Anruf ab. Nutze Sounds deiner Server.",
     "pack": "Server-Paket",
@@ -43,7 +55,7 @@
     "clipVolume": "Effektlautstärke",
     "permissionHint": "Zum Hinzufügen wird die Rollenberechtigung zum Erstellen von Soundeffekten benötigt.",
     "invalidAudio": "Wähle eine gültige Audiodatei bis 5,2 Sekunden und 5 MB."
-},
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Chat schließen",

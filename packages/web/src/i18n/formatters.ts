@@ -13,7 +13,7 @@ import i18n from './index';
  */
 export interface Formatters {
   /** `2:05 PM` / `14:05` */
-  formatTime: (timestamp: number) => string;
+  formatTime: (timestamp: number, includeSeconds?: boolean) => string;
   /** `Mar 15` this year, `Dec 14, 2025` otherwise. */
   formatShortDate: (timestamp: number, now?: Date) => string;
   /** `March 15, 2026` */
@@ -103,7 +103,9 @@ export function createFormatters(getLocale: () => string): Formatters {
   }
 
   return {
-    formatTime: (timestamp) => dateFormat({ hour: 'numeric', minute: '2-digit' }).format(timestamp),
+    formatTime: (timestamp, includeSeconds = false) => dateFormat(includeSeconds
+      ? { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+      : { hour: 'numeric', minute: '2-digit' }).format(timestamp),
 
     formatShortDate: (timestamp, now = new Date()) => {
       const sameYear = new Date(timestamp).getFullYear() === now.getFullYear();

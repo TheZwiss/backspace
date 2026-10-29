@@ -5,16 +5,17 @@ const mocks = vi.hoisted(() => ({
   audio: vi.fn().mockResolvedValue(new ArrayBuffer(100)),
   resume: vi.fn().mockResolvedValue(undefined),
   decode: vi.fn().mockResolvedValue({ duration: 0.1 }),
-  start: vi.fn(), stop: vi.fn(), gain: { value: 0 }, listener: null as null | (() => void),
+  start: vi.fn(), stop: vi.fn(), gain: { value: 0 }, listener: null as null | (() => void), source: null as null | { onended: (() => void) | null },
 }));
 vi.mock('../stores/voiceStore', () => ({ useVoiceStore: { getState: () => mocks.state, subscribe: (fn: () => void) => { mocks.listener = fn; return () => { mocks.listener = null; }; } } }));
 vi.mock('../stores/spaceStore', () => ({ getApiForOrigin: () => ({ soundboard: { audio: mocks.audio } }) }));
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({ resumeContext: mocks.resume, getMasterOutput: () => ({}), getContext: () => ({
   decodeAudioData: mocks.decode,
-  createBufferSource: () => ({ connect: vi.fn(), disconnect: vi.fn(), start: mocks.start, stop: mocks.stop, buffer: null, onended: null }),
+  createBufferSource: () => { const source = { connect: vi.fn(), disconnect: vi.fn(), start: mocks.start, stop: mocks.stop, buffer: null, onended: null as null | (() => void) }; mocks.source = source; return source; },
   createGain: () => ({ connect: vi.fn(), disconnect: vi.fn(), gain: mocks.gain }),
 }) }) } }));
-import { receiveSoundboard, _resetSoundboardForTests } from './soundboard';
+import { receiveSoundboard, playLocalSoundboard, _resetSoundboardForTests } from './soundboard';
+import { useSoundboardPlaybackStore } from '../stores/soundboardPlaybackStore';
 const packet = (ticket = '00000000-0000-4000-8000-000000000001') => new TextEncoder().encode(JSON.stringify({ type: 'soundboard_play', ticket, assetId: 'a'.repeat(64), volume: 0.8, createdAt: Date.now() }));
 beforeEach(() => { _resetSoundboardForTests(); vi.clearAllMocks(); mocks.state.isLiveKitConnected = true; mocks.state.isDeafened = false; mocks.state.soundboardVolume = 60; mocks.state.outputVolume = 100; });
 afterEach(_resetSoundboardForTests);
@@ -42,4 +43,14 @@ it('does not play a clip whose download finishes after leaving the call', async 
   const receiving = receiveSoundboard(packet(), { state: 'connected' } as Room, '', () => current);
   current = false; resolve(new ArrayBuffer(100)); await receiving;
   expect(mocks.start).not.toHaveBeenCalled();
+});
+
+it('marks the sender only while a received effect is playing', async () => {
+  const event = { type: 'soundboard_play', ticket: '00000000-0000-4000-8000-000000000003', assetId: 'b'.repeat(64), volume: 1, createdAt: Date.now(), senderIdentity: 'user:name', senderUserId: 'user' };
+  await receiveSoundboard(new TextEncoder().encode(JSON.stringify(event)), { state: 'connected' } as Room, '', () => true);
+  expect(useSoundboardPlaybackStore.getState().identity).toBe('user:name');
+  mocks.source?.onended?.();
+  expect(useSoundboardPlaybackStore.getState().identity).toBeNull();
+  await playLocalSoundboard(new ArrayBuffer(1), 'preview', 1);
+  expect(useSoundboardPlaybackStore.getState().identity).toBeNull();
 });

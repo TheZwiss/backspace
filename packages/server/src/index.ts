@@ -1,4 +1,3 @@
-import { ttsRoutes } from './routes/tts.js';
 import { soundboardRoutes } from './routes/soundboard.js';
 import { recoverInterruptedDmCalls } from './utils/dmCallHistory.js';
 import Fastify, { type FastifyRequest } from 'fastify';
@@ -255,7 +254,6 @@ async function main(): Promise<void> {
   await app.register(uploadRoutes);
   await app.register(stickerRoutes);
   await app.register(soundboardRoutes);
-  await app.register(ttsRoutes);
   await app.register(filesRoutes);
   await app.register(dmRoutes);
   await app.register(livekitRoutes);

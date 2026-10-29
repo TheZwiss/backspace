@@ -226,7 +226,7 @@ jobs:
 
       - name: Compile desktop TypeScript
         working-directory: packages/desktop
-        run: pnpm exec tsc
+        run: pnpm build:ts
 
       - name: Build and publish desktop app
         working-directory: packages/desktop

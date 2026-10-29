@@ -280,7 +280,6 @@ export const ERROR_CODES = [
   'sticker_not_found',
   'sticker_collection_full',
   'soundboard_full',
-  'tts_unavailable',
   'sticker_name_invalid',
 ] as const;
 

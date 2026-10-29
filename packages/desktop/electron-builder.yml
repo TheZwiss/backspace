@@ -15,6 +15,11 @@ directories:
   output: dist-electron
 files:
   - dist/**/*
+  # Only the pinned asyncify runtime is used by the local voice engine.
+  - "!dist/text-voice/ort-wasm-simd-threaded.jsep.*"
+  - "!dist/text-voice/ort-wasm-simd-threaded.jspi.*"
+  - "!dist/text-voice/ort-wasm-simd-threaded.mjs"
+  - "!dist/text-voice/ort-wasm-simd-threaded.wasm"
   - resources/**/*
   # Exclude host-compiled native module artifacts from the asar.
   # electron-rebuild (postinstall) compiles uiohook-napi for the build machine,

@@ -117,7 +117,7 @@ export async function soundboardRoutes(app: FastifyInstance): Promise<void> {
     const livekitRoom = room.roomType === 'space' ? room.roomId : channel ? (channel.federatedId ?? `dm-${room.roomId}`) : room.roomId;
     try {
       const client = new RoomServiceClient(config.livekit.url.replace(/^ws/, 'http'), config.livekit.apiKey, config.livekit.apiSecret);
-      await client.sendData(livekitRoom, new TextEncoder().encode(JSON.stringify({ type: 'soundboard_play', assetOrigin: getOurOrigin(), ticket, assetId: sound.assetId, name: sound.name, volume: sound.volume, createdAt: Date.now() })), DataPacket_Kind.RELIABLE, { topic: 'backspace.soundboard.v1' });
+      await client.sendData(livekitRoom, new TextEncoder().encode(JSON.stringify({ type: 'soundboard_play', senderIdentity: `${request.userId}:${request.username}`, senderUserId: request.userId, assetOrigin: getOurOrigin(), ticket, assetId: sound.assetId, name: sound.name, volume: sound.volume, createdAt: Date.now() })), DataPacket_Kind.RELIABLE, { topic: 'backspace.soundboard.v1' });
     } catch { grants.delete(ticket); return sendError(reply, 503, 'voice_disabled'); }
     return { success: true };
   });

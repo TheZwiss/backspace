@@ -2,6 +2,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { getApiForOrigin } from '../stores/spaceStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { Room } from 'livekit-client';
+import { useSoundboardPlaybackStore } from '../stores/soundboardPlaybackStore';
 
 /** Client decoders accept common audio formats; the server only accepts bounded PCM. */
 export async function encodeSoundboardFile(file: File): Promise<string> {
@@ -25,11 +26,11 @@ export async function encodeSoundboardFile(file: File): Promise<string> {
 
 let active: AudioBufferSourceNode | null = null;
 let cancelWatch: (() => void) | null = null;
-export function stopSoundboard(): void { const source = active; active = null; cancelWatch?.(); cancelWatch = null; try { source?.stop(); } catch {} }
+export function stopSoundboard(): void { const source = active; active = null; cancelWatch?.(); cancelWatch = null; useSoundboardPlaybackStore.getState().setPlayback(null, null); try { source?.stop(); } catch {} }
 const buffers = new Map<string, AudioBuffer>();
 const latest = new WeakMap<Room, string>();
 let generation = 0;
-export async function playLocalSoundboard(data: ArrayBuffer, key: string, volume: number, allowed: () => boolean = () => true): Promise<void> {
+export async function playLocalSoundboard(data: ArrayBuffer, key: string, volume: number, allowed: () => boolean = () => true, sender?: { identity: string; userId: string }): Promise<void> {
   const ownGeneration = ++generation;
   const audio = AudioManager.getInstance(); await audio.resumeContext();
   const context = audio.getContext(); if (!context) return;
@@ -51,8 +52,9 @@ export async function playLocalSoundboard(data: ArrayBuffer, key: string, volume
   source.buffer = buffer; source.connect(gain); gain.connect(audio.getMasterOutput()); active = source;
   cancelWatch = useVoiceStore.subscribe(update); update();
   if (active !== source) { source.disconnect(); gain.disconnect(); return; }
-  source.onended = () => { source.disconnect(); gain.disconnect(); if (active === source) { active = null; cancelWatch?.(); cancelWatch = null; } };
+  source.onended = () => { source.disconnect(); gain.disconnect(); if (active === source) { active = null; cancelWatch?.(); cancelWatch = null; useSoundboardPlaybackStore.getState().setPlayback(null, null); } };
   source.start();
+  if (sender && active === source) useSoundboardPlaybackStore.getState().setPlayback(sender.identity, sender.userId);
 }
 
 /** Only server-originated LiveKit packets may invoke this; remote peer packets are ignored. */
@@ -74,7 +76,7 @@ export async function receiveSoundboard(payload: Uint8Array, room: Room, origin:
       assetOrigin = parsed.origin;
     }
     const data = cached ? new ArrayBuffer(0) : await getApiForOrigin(assetOrigin).soundboard.audio(event.ticket, true);
-    if (allowed() && latest.get(room) === event.ticket) await playLocalSoundboard(data, event.assetId, event.volume, allowed);
+    if (allowed() && latest.get(room) === event.ticket) await playLocalSoundboard(data, event.assetId, event.volume, allowed, typeof event.senderIdentity === 'string' && typeof event.senderUserId === 'string' && event.senderIdentity.startsWith(`${event.senderUserId}:`) && event.senderUserId.length > 0 ? { identity: event.senderIdentity, userId: event.senderUserId } : undefined);
   } catch { /* Missing/autoplay-denied effects must not interrupt the call. */ }
 }
 

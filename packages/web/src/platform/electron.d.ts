@@ -78,7 +78,21 @@ interface DesktopUpdateSnapshot {
   status: DesktopUpdateStatus;
 }
 
+interface LocalTextVoiceStatus {
+  phase: 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
+  device?: 'auto' | 'cpu' | 'gpu';
+  backend?: 'cpu' | 'webgpu';
+  progress?: number;
+  adapter?: { vendor: string; architecture: string; description: string } | null;
+  error?: string;
+}
+
 interface BackspaceElectronAPI {
+  getTextVoiceStatus?: () => Promise<LocalTextVoiceStatus>;
+  prepareTextVoice?: (device: 'auto' | 'cpu' | 'gpu') => Promise<LocalTextVoiceStatus>;
+  synthesizeTextVoice?: (text: string, voice: string, speed: number) => Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }>;
+  releaseTextVoice?: () => Promise<void>;
+  onTextVoiceStatus?: (callback: (status: LocalTextVoiceStatus) => void) => () => void;
   // Platform info
   platform: NodeJS.Platform;
   // Window controls

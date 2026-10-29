@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
     room: { state: 'connected', localParticipant: { getTrackPublication: () => ({ track: {}, isMuted: false }) } } as any,
   };
 });
+vi.mock('../platform/textVoice', () => ({ supportsLocalTextVoice: () => true, synthesizeLocalTextVoice: (...args: unknown[]) => mocks.speech(...args) }));
 vi.mock('../hooks/useLiveKit', () => ({ getActiveRoom: () => mocks.room }));
 vi.mock('./dmCall', () => ({ voiceSessionOrigin: () => '' }));
 vi.mock('../stores/voiceStore', () => ({ useVoiceStore: {

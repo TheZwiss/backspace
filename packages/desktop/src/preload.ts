@@ -2,6 +2,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('backspace', {
+  getTextVoiceStatus: () => ipcRenderer.invoke('local-text-voice-status'),
+  prepareTextVoice: (device: 'auto' | 'cpu' | 'gpu') => ipcRenderer.invoke('local-text-voice-prepare', device),
+  synthesizeTextVoice: (text: string, voice: string, speed: number) => ipcRenderer.invoke('local-text-voice-speech', { text, voice, speed }),
+  releaseTextVoice: () => ipcRenderer.invoke('local-text-voice-release'),
+  onTextVoiceStatus: (callback: (status: unknown) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+    ipcRenderer.on('local-text-voice-status', handler);
+    return () => ipcRenderer.removeListener('local-text-voice-status', handler);
+  },
   // Platform info
   platform: process.platform,
   // Window controls

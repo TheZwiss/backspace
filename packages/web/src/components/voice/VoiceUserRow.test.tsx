@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { VoiceUserRow } from './VoiceUserRow';
+import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 
 const baseProps = {
   userId: 'user-1',
@@ -9,6 +10,15 @@ const baseProps = {
 };
 
 describe('VoiceUserRow', () => {
+  it('prioritizes the blue soundboard ring over speaking green', () => {
+    useSoundboardPlaybackStore.getState().setPlayback('user-1:Ada', 'user-1');
+    const { container, unmount } = render(<VoiceUserRow {...baseProps} isSpeaking />);
+    expect(container.querySelector('.ring-blue-500')).not.toBeNull();
+    unmount();
+    useSoundboardPlaybackStore.getState().setPlayback(null, null);
+    const next = render(<VoiceUserRow {...baseProps} isSpeaking />);
+    expect(next.container.querySelector('.ring-status-online')).not.toBeNull();
+  });
   it('shows an unobtrusive connection warning beside the participant', () => {
     render(
       <VoiceUserRow

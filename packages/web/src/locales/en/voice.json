@@ -8,22 +8,34 @@
     "speed": "Speed",
     "placeholder": "Type what you want to say…",
     "enterHint": "Enter to speak · Shift+Enter for a new line",
-    "checking": "Checking speech service…",
-    "unavailable": "Speech is unavailable. Ask the administrator to start the synthesis service on this instance.",
+    "checking": "Preparing speech on this device…",
+    "unavailable": "Click Prepare voice to download or load the local model.",
     "speaking": "Preparing or speaking…",
     "muted": "Join a call and unmute to speak. Server restrictions also apply.",
     "ready": "Ready to speak in Brazilian Portuguese.",
     "speak": "Speak in call",
     "preview": "Listen privately",
     "stop": "Stop speaking",
-    "privacy": "Text is processed by the Backspace instance and is not posted to chat. Call participants hear it as your normal voice.",
+    "privacy": "Text becomes speech on this device. Only audio goes to the call; text is not sent to the server or posted in chat.",
     "quick": {
       "hello": "Hello, everyone!",
       "wait": "One moment, please.",
       "repeat": "Could you repeat that?"
-    }
+    },
+    "processing": "Local processing",
+    "automatic": "Automatic",
+    "prepare": "Prepare voice",
+    "backendActive": "Processing: {{backend}}",
+    "gpuUnavailable": "GPU is unavailable on this device. Select CPU.",
+    "localError": "Could not prepare or generate speech. Try again or select CPU.",
+    "downloadProgress": "Downloading model: {{progress}}",
+    "downloadHint": "First use: approximately 95 MB for CPU or 330 MB for GPU. The model stays on this device.",
+    "unsupported": "To prepare speech, use HTTPS or the updated Electron client. Your real microphone remains off in this mode."
   },
   "soundboard": {
+    "frequentEmpty": "Play sounds to see your favorites here.",
+    "noResults": "No sounds found.",
+    "frequent": "Frequently used",
     "title": "Soundboard",
     "description": "Play a short effect for everyone in your call. Choose sounds from servers you belong to.",
     "pack": "Server pack",
@@ -43,7 +55,7 @@
     "clipVolume": "Effect volume",
     "permissionHint": "A role with Create soundboard sounds permission is required to add effects.",
     "invalidAudio": "Choose a valid audio file up to 5.2 seconds and 5 MB."
-},
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Close Chat",

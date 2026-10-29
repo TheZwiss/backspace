@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFormatters } from '../../i18n/formatters';
 import { useUIStore } from '../../stores/uiStore';
 import { getApiForOrigin, useSpaceStore, type TaggedSpace } from '../../stores/spaceStore';
 import { stripUploadPrefix } from '../../utils/assetUrls';
@@ -15,7 +16,8 @@ export function SpaceProfileModal() {
 }
 
 function SpaceProfileContent({ space }: { space: TaggedSpace }) {
-  const { t, i18n } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common']);
+  const f = useFormatters();
   const close = useUIStore((state) => state.closeModal);
   const [preview, setPreview] = useState<{ src: string; label: string } | null>(null);
   const asset = (value: string | null) => !value ? null : /^(https?:|data:|blob:)/i.test(value)
@@ -41,7 +43,7 @@ function SpaceProfileContent({ space }: { space: TaggedSpace }) {
         <h3 className="text-xl font-bold text-txt-primary break-words">{space.name}</h3>
         <p className="mt-2 text-sm leading-relaxed text-txt-secondary whitespace-pre-wrap break-words">{space.description || t('spaces:profile.noDescription')}</p>
         <div className="mt-5 pt-3 border-t border-white/5 text-xs text-txt-tertiary">
-          {t('spaces:profile.createdAt')} <time dateTime={new Date(space.createdAt).toISOString()}>{new Intl.DateTimeFormat(i18n.language, { dateStyle: 'long' }).format(space.createdAt)}</time>
+          {t('spaces:profile.createdAt')} <time dateTime={new Date(space.createdAt).toISOString()}>{f.formatLongDate(space.createdAt)}</time>
         </div>
       </div>
     </div>}

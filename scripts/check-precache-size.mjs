@@ -35,7 +35,7 @@ async function readPrecacheSettings() {
   const requireFromWeb = createRequire(path.join(webDir, 'package.json'));
   const { runnerImport } = await import(pathToFileURL(requireFromWeb.resolve('vite')).href);
   const { module } = await runnerImport(limitModule, { configFile: false, logLevel: 'silent', root: webDir });
-  return { limitBytes: module.PRECACHE_MAX_FILE_BYTES, extensions: module.PRECACHE_FILE_EXTENSIONS };
+  return { limitBytes: module.PRECACHE_MAX_FILE_BYTES, extensions: module.PRECACHE_FILE_EXTENSIONS, excludedPrefixes: module.PRECACHE_EXCLUDED_PREFIXES ?? [] };
 }
 
 function kib(bytes) {
@@ -43,14 +43,14 @@ function kib(bytes) {
 }
 
 async function main() {
-  const { limitBytes, extensions } = await readPrecacheSettings();
+  const { limitBytes, extensions, excludedPrefixes } = await readPrecacheSettings();
   let swSource;
   try {
     swSource = readFileSync(path.join(distDir, 'sw.js'), 'utf8');
   } catch {
     throw new Error(`${path.relative(root, distDir)}/sw.js not found; build the web app first`);
   }
-  const files = collectPrecacheCandidates(distDir, readPrecacheManifest(swSource), extensions);
+  const files = collectPrecacheCandidates(distDir, readPrecacheManifest(swSource), extensions).filter((file) => !excludedPrefixes.some((prefix) => file.path.startsWith(prefix)));
   const { budgetBytes, overBudget, largest } = evaluatePrecacheBudget(limitBytes, files);
   const share = `${Math.round(PRECACHE_BUDGET_SHARE * 100)}%`;
 

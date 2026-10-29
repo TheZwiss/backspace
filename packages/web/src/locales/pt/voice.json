@@ -8,22 +8,34 @@
     "speed": "Velocidade",
     "placeholder": "Digite o que você quer falar…",
     "enterHint": "Enter para falar · Shift+Enter para nova linha",
-    "checking": "Verificando a voz…",
-    "unavailable": "A voz está indisponível. O administrador precisa iniciar o serviço de síntese nesta instância.",
+    "checking": "Preparando a voz neste dispositivo…",
+    "unavailable": "Clique em Preparar voz para baixar ou carregar o modelo local.",
     "speaking": "Preparando ou falando…",
     "muted": "Entre em uma chamada e desative o mute para falar. Restrições do servidor também se aplicam.",
     "ready": "Pronto para conversar em pt-BR.",
     "speak": "Falar na chamada",
     "preview": "Ouvir só para mim",
     "stop": "Parar de falar",
-    "privacy": "O texto é processado na instância do Backspace e não é publicado no chat. Quem estiver na chamada ouve como sua voz normal.",
+    "privacy": "O texto é transformado em voz neste dispositivo. Somente o áudio vai para a chamada; o texto não é enviado ao servidor nem publicado no chat.",
     "quick": {
       "hello": "Olá, pessoal!",
       "wait": "Um momento, por favor.",
       "repeat": "Pode repetir, por favor?"
-    }
+    },
+    "processing": "Processamento local",
+    "automatic": "Automático",
+    "prepare": "Preparar voz",
+    "backendActive": "Processamento: {{backend}}",
+    "gpuUnavailable": "A GPU não está disponível neste dispositivo. Selecione CPU.",
+    "localError": "Não foi possível preparar ou gerar a voz. Tente novamente ou selecione CPU.",
+    "downloadProgress": "Baixando o modelo: {{progress}}",
+    "downloadHint": "No primeiro uso: aproximadamente 95 MB em CPU ou 330 MB em GPU. O modelo fica salvo neste dispositivo.",
+    "unsupported": "Para preparar a voz, use HTTPS ou o cliente Electron atualizado. O microfone real continua desligado neste modo."
   },
   "soundboard": {
+    "frequentEmpty": "Toque sons para ver seus favoritos aqui.",
+    "noResults": "Nenhum som encontrado.",
+    "frequent": "Usados com frequência",
     "title": "Efeitos sonoros",
     "description": "Toque um efeito para todos na chamada. Use sons dos servidores dos quais você é membro.",
     "pack": "Pacote do servidor",
@@ -44,7 +56,7 @@
     "clipVolume": "Volume do efeito",
     "permissionHint": "É necessário um cargo com a permissão Criar efeitos sonoros para adicionar sons.",
     "invalidAudio": "Escolha um áudio válido de até 5,2 segundos e 5 MB."
-},
+  },
   "chatPanel": {
     "title": "Chat",
     "close": "Fechar chat",

@@ -1,14 +1,16 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { textVoiceAssets } from './src/build/textVoiceAssets';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { devCspPreamble } from './src/build/devCsp';
 import { preloadStartupChunks } from './src/build/startupChunks';
-import { PRECACHE_GLOB_PATTERNS, PRECACHE_MAX_FILE_BYTES } from './src/build/precache';
+import { PRECACHE_GLOB_PATTERNS, PRECACHE_MAX_FILE_BYTES, PRECACHE_EXCLUDED_PREFIXES } from './src/build/precache';
 
 export default defineConfig({
   plugins: [
+    textVoiceAssets(),
     devCspPreamble(),
     preloadStartupChunks(),
     react(),
@@ -44,11 +46,13 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         // The precached file types; the CI size check reads the same list.
         globPatterns: PRECACHE_GLOB_PATTERNS,
+        globIgnores: PRECACHE_EXCLUDED_PREFIXES.map((prefix) => `${prefix}**`),
         // CI fails when a precached file nears this limit; see src/build/precache.ts.
         maximumFileSizeToCacheInBytes: PRECACHE_MAX_FILE_BYTES,
       },
     }),
   ],
+  worker: { format: 'es', rollupOptions: { external: ['module'], output: { entryFileNames: 'local-text-voice/[name]-[hash].js', chunkFileNames: 'local-text-voice/[name]-[hash].js' } } },
   test: {
     globals: true,
     environment: 'jsdom',

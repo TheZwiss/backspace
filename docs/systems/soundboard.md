@@ -1,9 +1,25 @@
 # Soundboard
 
 Members can play short effects in server voice channels and active private calls.
-Open **Sound effects** in the call controls. The pack selector contains the servers
-the member has joined on the instance hosting the call. Server settings and the
+Open **Sound effects** in the call controls or beside AI noise suppression in the
+“Voice connected” controls. The panel opens above and slightly to the right of
+the clicked button, with a translucent background, no dimming overlay or focus
+trap, and viewport-aware positioning. Server settings and the
 server context menu also expose a library with upload, local preview and deletion.
+
+The top row contains search and a speaker button that opens the listener's volume
+slider. The main area shows up to three personally most-used effects, then the
+current server's effects in three columns, followed by other joined servers.
+A left rail lists servers with effects and scrolls within the panel. Small static
+server avatars precede section names; rail GIFs animate only while hovered.
+Successful plays update local frequency counts separately for each account and
+instance. Inaccessible or deleted sounds cannot appear in the frequent list.
+
+The server supplies the authenticated actor's LiveKit identity in playback events.
+While the actual effect plays, that participant's call avatar and voice-list row
+use a blue outline, with priority over the green microphone-speaking outline.
+The marker clears on completion, replacement, stop or leaving the call. Personal
+previews do not create a marker; older events without an actor still play.
 
 ## Limits and permissions
 

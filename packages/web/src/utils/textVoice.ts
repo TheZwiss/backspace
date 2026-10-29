@@ -2,8 +2,8 @@ import { AudioManager } from '../audio/AudioManager';
 import { Track } from 'livekit-client';
 import { getActiveRoom } from '../hooks/useLiveKit';
 import { useVoiceStore } from '../stores/voiceStore';
-import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
-import { voiceSessionOrigin } from './dmCall';
+import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
+import { supportsLocalTextVoice, synthesizeLocalTextVoice } from '../platform/textVoice';
 
 let current: { controller: AbortController; source: AudioBufferSourceNode | null } | null = null;
 export function stopTextVoice(): void {
@@ -34,7 +34,7 @@ export function splitSpeech(text: string, max = 120): string[] {
 
 export function canUseTextVoice(): boolean {
   const state = useVoiceStore.getState();
-  if (!state.textVoiceEnabled || !state.isLiveKitConnected || state.isMuted || state.isDeafened) return false;
+  if (!supportsLocalTextVoice() || !state.textVoiceEnabled || !state.isLiveKitConnected || state.isMuted || state.isDeafened) return false;
   const id = state.currentVoiceChannelId;
   if (!id) return !!state.activeDmCall;
   const spaceId = useSpaceStore.getState().channelToSpaceMap.get(id);
@@ -53,7 +53,6 @@ export async function speakText(text: string, preview = false): Promise<void> {
   const room = getActiveRoom();
   const allowed = () => current === job && !job.controller.signal.aborted && (preview || (canUseTextVoice() && getActiveRoom() === room && room?.state === 'connected'));
   const state = useVoiceStore.getState();
-  const client = getApiForOrigin(voiceSessionOrigin(state));
   const audio = AudioManager.getInstance();
   const unsubscribe = useVoiceStore.subscribe(() => { if (!allowed()) stopTextVoice(); });
   const fail = () => new DOMException('Speech stopped', 'AbortError');
@@ -71,7 +70,7 @@ export async function speakText(text: string, preview = false): Promise<void> {
     }
     const chunks = splitSpeech(value);
     const fetchChunk = async (chunk: string) => {
-      try { return { data: await client.tts.speech(chunk, state.textVoice, state.textVoiceSpeed, job.controller.signal) }; }
+      try { return { data: await synthesizeLocalTextVoice(chunk, state.textVoice, state.textVoiceSpeed, job.controller.signal) }; }
       catch (error) { return { error }; }
     };
     let next = fetchChunk(chunks[0]!);

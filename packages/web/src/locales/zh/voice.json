@@ -8,22 +8,34 @@
     "speed": "语速",
     "placeholder": "输入你想说的话…",
     "enterHint": "Enter 说话 · Shift+Enter 换行",
-    "checking": "正在检查语音服务…",
-    "unavailable": "语音暂不可用，请让管理员启动本实例的语音合成服务。",
+    "checking": "正在此设备上准备语音…",
+    "unavailable": "点击「准备语音」下载或加载本地模型。",
     "speaking": "正在准备或说话…",
     "muted": "加入通话并取消静音后才能说话，服务器限制仍然适用。",
     "ready": "已准备好使用巴西葡萄牙语说话。",
     "speak": "在通话中说话",
     "preview": "仅自己试听",
     "stop": "停止说话",
-    "privacy": "文字由 Backspace 实例处理，不会发布到聊天。通话参与者会像听到你的普通语音一样听到它。",
+    "privacy": "文字在此设备上转换为语音。只有音频会传入通话，文字不会发送到服务器或发布到聊天。",
     "quick": {
       "hello": "大家好！",
       "wait": "请稍等。",
       "repeat": "请再说一遍。"
-    }
+    },
+    "processing": "本地处理",
+    "automatic": "自动",
+    "prepare": "准备语音",
+    "backendActive": "处理方式：{{backend}}",
+    "gpuUnavailable": "此设备无法使用 GPU，请选择 CPU。",
+    "localError": "无法准备或生成语音，请重试或选择 CPU。",
+    "downloadProgress": "正在下载模型：{{progress}}",
+    "downloadHint": "首次使用：CPU 约 95 MB，GPU 约 330 MB。模型保存在此设备上。",
+    "unsupported": "请使用 HTTPS 或更新后的 Electron 客户端准备语音。此模式下真实麦克风仍保持关闭。"
   },
   "soundboard": {
+    "frequentEmpty": "播放声音后，常用声音会显示在这里。",
+    "noResults": "未找到声音。",
+    "frequent": "常用",
     "title": "音效面板",
     "description": "为通话中的所有人播放简短音效，可使用你已加入服务器的音效。",
     "pack": "服务器音效包",
@@ -42,7 +54,7 @@
     "clipVolume": "音效音量",
     "permissionHint": "添加音效需要角色具有创建音效的权限。",
     "invalidAudio": "请选择最长 5.2 秒且不超过 5 MB 的有效音频文件。"
-},
+  },
   "chatPanel": {
     "title": "聊天",
     "close": "关闭聊天",

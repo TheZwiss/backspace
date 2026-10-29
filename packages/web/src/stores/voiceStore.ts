@@ -160,6 +160,8 @@ export interface VoiceState {
   /** Drop every watcher not among `present` (the room's participants after a full reconnect). */
   retainWatchers: (present: ReadonlySet<string>) => void;
   soundboardVolume: number;
+  textVoiceDevice: 'auto' | 'cpu' | 'gpu';
+  setTextVoiceDevice: (device: 'auto' | 'cpu' | 'gpu') => void;
   textVoiceEnabled: boolean;
   textVoiceDraft: string;
   textVoiceBusy: boolean;
@@ -354,6 +356,8 @@ export const useVoiceStore = create<VoiceState>()(
 
       soundEffectVolume: 100,
       soundboardVolume: 60,
+      textVoiceDevice: 'auto',
+      setTextVoiceDevice: (device) => set({ textVoiceDevice: ['auto', 'cpu', 'gpu'].includes(device) ? device : 'auto' }),
       textVoiceEnabled: false,
       textVoiceDraft: '',
       textVoiceBusy: false,
@@ -998,6 +1002,7 @@ export const useVoiceStore = create<VoiceState>()(
         soundEffectVolume: state.soundEffectVolume,
         soundboardVolume: state.soundboardVolume,
         textVoiceEnabled: state.textVoiceEnabled,
+        textVoiceDevice: state.textVoiceDevice,
         textVoice: state.textVoice,
         textVoiceSpeed: state.textVoiceSpeed,
         messageSoundAllChannels: state.messageSoundAllChannels,

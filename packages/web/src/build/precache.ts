@@ -20,3 +20,6 @@ export const PRECACHE_MAX_FILE_BYTES = 3 * 1024 * 1024;
 export const PRECACHE_FILE_EXTENSIONS = ['js', 'wasm', 'css', 'html'] as const;
 
 export const PRECACHE_GLOB_PATTERNS: string[] = [`**/*.{${PRECACHE_FILE_EXTENSIONS.join(',')}}`];
+
+// Large optional inference resources are fetched only after preparing local voice.
+export const PRECACHE_EXCLUDED_PREFIXES = ['local-text-voice/'];

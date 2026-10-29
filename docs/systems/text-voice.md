@@ -1,96 +1,111 @@
-# Text voice (pt-BR)
+# Local text voice (pt-BR)
 
-**Voice settings → Text voice** enables a persistent alternative to hardware
-microphone capture. The same switch and composer are available from the speech
-bubble button in server calls, private calls and the detached desktop call window.
-The UI calls the feature “Voz por texto”.
+Enable **Voice settings → Text voice**, or open the speech-bubble control in a
+call. Choose automatic processing, CPU or GPU, then click **Prepare voice** once.
+Choose Dora, Alex or Santa, enter up to 400 characters, and press Enter to speak.
+Shift+Enter inserts a newline. Local preview does not broadcast. Drafts remain in
+memory; voice, speed, processing preference and the mode preference persist.
 
-Choose Dora, Alex or Santa, type up to 400 characters, and press Enter or **Speak
-in call**. Shift+Enter inserts a newline. **Listen privately** previews the voice
-without publishing it. The three quick phrases insert Brazilian Portuguese text,
-even when interface labels use another language. Drafts survive closing the panel
-but are kept in memory only. Voice, speed and the mode preference persist.
+Text-to-speech runs entirely on the speaker's client. There is no synthesis
+service, Python requirement, `TTS_URL`, or `/api/tts` route in the Backspace server.
+The old worker was removed from the checkout and stopped in the preview. Its
+original implementation is recoverable from commit `69a97392`.
 
-In text mode the actual microphone is released. Pending capture results are
-stopped and subsequent device-acquisition calls are blocked. Joining another call
-also skips microphone pre-arming. Disabling text mode restores the normal input
-pipeline. Mute, deafen, moderator restrictions, channel permissions and leaving the
-call apply to synthetic speech; muting cancels pending synthesis and playback.
+## Electron and browser runtimes
 
-## Synthesis worker
+Electron owns an isolated, sandboxed, hidden engine window. The preload exposes
+bounded synthesis operations, not arbitrary model paths, files, commands or IPC.
+Only the primary app window may invoke the controller. Replies are accepted only
+from the local engine renderer. A private, secure custom protocol serves an
+explicit allowlist of model/runtime files. Node integration is disabled in that
+renderer, and its content policy does not allow remote connections or unsafe JS
+evaluation. The renderer's model is released after a minute without use, on
+explicit release or when the app quits.
 
-The optional worker uses [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx)
-0.6.1 with the int8 [Kokoro 82M](https://github.com/hexgrad/kokoro) model. It runs on
-CPU with two inference threads by default and holds the model and all three pt-BR
-voices in memory. No PyTorch, GPU, voice recording or commercial API is needed.
-Pinned weights total approximately 115 MiB; the downloader verifies SHA-256.
-Kokoro weights use Apache-2.0 and the ONNX wrapper uses MIT.
+The browser uses the same inference core in a dedicated Web Worker. It requires
+HTTPS (localhost is also secure), WebAssembly, Workers and Web Crypto. WebGPU
+availability depends on browser and graphics drivers. Without it, automatic mode
+uses CPU; explicitly selecting unavailable GPU reports that condition instead of
+claiming to use a GPU. Browser CPU is typically slower because normal page
+isolation limits this worker to one WASM thread.
 
-[Piper](https://github.com/OHF-Voice/piper1-gpl) was also evaluated as an alternative
-(current release 1.8.0, September 2026). The local int8 Kokoro benchmark synthesized
-a greeting in about 0.3 seconds and a longer sentence in 0.8 seconds with peak RSS
-around 274 MiB for one voice. The resident worker reached approximately 340 MiB
-after exercising all three voices. Kokoro provides the desired Brazilian voice
-choices without the full PyTorch stack. These are measurements on the development PC, not a promise
-for phone hardware.
+Both use [Kokoro](https://github.com/hexgrad/kokoro),
+[ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html), and
+[Echogarden's eSpeak-NG port](https://github.com/echogarden-project/espeak-ng-emscripten)
+for actual Portuguese phonemization. The small `phonemizer` npm distribution
+contains English voices only and is deliberately not used for pt-BR.
 
-From the repository root, with Python 3.10–3.13 and venv available:
+CPU uses INT8 weights (about 95 MB including three voice vectors); GPU uses FP32
+(about 330 MB). GPU uses WebGPU, allowing NVIDIA and AMD through the same code
+path, rather than requiring CUDA. A few shape/control operators can still run on
+CPU. Automatic mode falls back to CPU if GPU loading or later inference fails.
+AMD hardware was not available for physical testing; its fallback path is covered
+by automated tests. Driver/browser compatibility still requires real AMD testing.
 
-```sh
-sh services/tts/setup.sh
-services/tts/.venv/bin/python services/tts/server.py
-```
+Electron downloads fixed, SHA-256-verified public assets to its user-data
+`text-voice` directory. Browser weights are downloaded directly from pinned Hugging
+Face URLs and verified before being stored in Cache Storage. Neither weights nor
+typed text go through the Backspace server. Initial downloads need Internet;
+subsequent preparations reuse local models. Browser caches may be evicted by the
+browser, in which case preparing downloads them again. Private browsing can deny
+persistent caching while still allowing synthesis for the current session.
 
-Configure the Backspace **server's** environment and restart it:
+The web deployment serves only static runtime/phonemizer assets. They are optional,
+not service-worker precache entries, so ordinary users do not automatically fetch
+large inference resources. ONNX/eSpeak npm dependencies are build-time dependencies
+and do not add a synthesis runtime to the production Node server. Model weights
+are never embedded in the application bundle or in the server image.
 
-```env
-TTS_URL=http://127.0.0.1:5052
-```
+## Call behavior
 
-The worker binds to loopback by default. For Termux, run it inside the existing
-Debian environment, whose glibc/ARM64 Python wheels are supported by the inference
-stack; native Android/bionic wheel availability is not assumed. The existing
-Backspace and LiveKit configuration continues working when the optional worker is
-absent. No new public port or Tailscale rule is needed: clients use the normal
-authenticated Backspace API. Phone deployment has not been benchmarked here.
+Text mode releases actual hardware capture, rejects queued acquisitions, stops
+late permission results and skips microphone pre-arming on subsequent joins.
+Synthetic samples enter the existing Web Audio microphone destination directly,
+bypassing microphone gain, echo cancellation and noise suppression. LiveKit
+publishes the user's normal microphone track, so listeners need no TTS support.
+This works in server and private calls, including the detached Electron call UI.
 
-An optional independent container is also provided:
+Normal mute, deafen, moderator restrictions and leaving the call cancel speech.
+Local preview uses only the selected output device. Text is not posted to chat or
+kept as a server history. Only synthesized audio is relayed to call participants.
+Screen-share audio and soundboards keep their independent existing paths.
 
-```sh
-docker compose -f services/tts/compose.yaml up -d --build
-```
+Text is split into bounded clauses; the next clause is prepared while the current
+one plays. Canceling discards pending results and stops active playback. Inference
+already executing inside ONNX is not always interruptible, but results from an
+obsolete job cannot play. Disabling the mode can release the engine itself.
 
-That publishes `127.0.0.1:5052` on the host. A Backspace container must instead use
-the worker's private service address on a shared Docker network; `127.0.0.1`
-inside a container is that container itself. Keep the worker private; its HTTP
-endpoint delegates authentication to Backspace's proxy. `TTS_HOST`, `TTS_PORT`,
-`TTS_MODEL_DIR` and `TTS_THREADS` configure the worker if needed. The container
-recipe is provided but the local validation used the Python environment directly.
+## Measurements and checks
 
-## Audio and request lifecycle
+Measured on this development machine: Ryzen 5 5600X, RTX 4070 SUPER 12 GB,
+NVIDIA 615.78.08, Electron 43.7.5 / ONNX Runtime Web 1.31.1.
+Median of three warm generations, including pt-BR phonemization and WAV encoding;
+model preparation/download and playback duration are excluded:
 
-`GET /api/tts` reports availability. `POST /api/tts/speech` authenticates the user,
-validates text, fixed voice IDs and speed (0.8–1.3), and proxies only to configured
-`TTS_URL`. It limits each user to one active request and 45 chunks/minute, with four
-requests globally. Worker requests time out and returned audio is capped at 2 MB.
-Responses are not cached, and neither service logs typed text.
+| Electron processing | “Oi, tudo bem?” | 56-character sentence |
+| --- | ---: | ---: |
+| CPU, INT8, two WASM threads | 730 ms | 1,863 ms |
+| RTX via WebGPU, FP32 | 192 ms | 484 ms |
 
-The client splits text into clauses of at most 120 characters. It starts the next
-request while playing the current clause, reducing time to first audio and gaps.
-Audio enters the existing Web Audio microphone destination directly, bypassing
-microphone gain, noise suppression and echo cancellation. LiveKit publishes it as
-the user's normal microphone track, so other clients need no TTS support. Screen
-audio and soundboards retain their existing paths. Local preview connects only to
-the selected output device. Regular synthesis is not locally monitored, avoiding
-a second copy of the speaker's voice.
+The browser worker, tested in an isolated Chromium context **without** the
+Electron bridge, generated a 51-character phrase in about 2.8 s on CPU (one thread)
+and 0.43–0.63 s on the RTX. These are different utterances and are not a controlled
+same-graph CPU/GPU comparison. Phone performance has not been benchmarked.
 
-The local integration probe used two isolated Electron renderer contexts and a
-real LiveKit room. Remote decoded audio measured approximately 425 ms to the first
-signal, with zero calls to `getUserMedia`. This timing covers synthesis, HTTP,
-publication and reception on the local development network; other hosts and
-connections may differ.
+Sampled aggregate Electron working sets reached roughly 1.06 GiB for CPU and
+1.89 GiB after CPU→GPU testing. Those numbers include Electron processes and
+shared pages; they are not exclusive model RAM. They must not be presented as
+additional physical RAM or as a phone-server cost. Idle release frees the engine
+renderer. The former approximately 340 MiB Python service no longer runs.
 
-Stopping, muting, changing rooms or disabling text mode invalidates the job, aborts
-pending HTTP requests and stops the active source. Stale downloads cannot play
-afterward. Canceling a request does not necessarily interrupt inference already
-running inside ONNX, but its result is discarded and the request is bounded.
+A real two-client LiveKit probe received synthesized speech about 665 ms after
+submission using the Electron-local GPU path, with **zero** `getUserMedia` calls.
+The same probe received a server-authorized soundboard event and observed its blue
+actor indicator activate and clear after playback. This is local-network transport
+and decoded-signal validation, not a Windows/AMD listening test.
+
+Raw measurements: [text-voice-2026-10-28.json](../benchmarks/text-voice-2026-10-28.json).
+Focused tests cover input validation, renderer trust, file allowlists, idle unload,
+GPU fallback, cancellation, microphone release, private-call eligibility and local
+preview isolation. The container-side Python configuration from the earlier design
+is no longer needed.

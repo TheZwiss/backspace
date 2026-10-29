@@ -1,3 +1,4 @@
+import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
@@ -21,6 +22,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.identity === participant.identity);
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -145,7 +147,9 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
     <div
       data-context-menu
       className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
-        isSpeaking
+        isSoundboardPlaying
+          ? 'ring-[3px] ring-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.25)]'
+          : isSpeaking
           ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
       } h-full w-full`}
@@ -171,8 +175,8 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               origin={userOrigin}
               animate={isSpeaking}
             />
-            {isSpeaking && (
-              <div className="pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
+            {(isSoundboardPlaying || isSpeaking) && (
+              <div className={`pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ${isSoundboardPlaying ? 'ring-blue-500' : 'ring-status-online animate-pulse'}`} />
             )}
           </div>
           {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
