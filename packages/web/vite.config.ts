@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { speechRecognitionAssets } from './src/build/speechRecognitionAssets';
 import { textVoiceAssets } from './src/build/textVoiceAssets';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
@@ -11,6 +12,7 @@ import { PRECACHE_GLOB_PATTERNS, PRECACHE_MAX_FILE_BYTES, PRECACHE_EXCLUDED_PREF
 export default defineConfig({
   plugins: [
     textVoiceAssets(),
+    speechRecognitionAssets(),
     devCspPreamble(),
     preloadStartupChunks(),
     react(),

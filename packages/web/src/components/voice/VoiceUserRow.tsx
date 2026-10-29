@@ -42,7 +42,7 @@ export function VoiceUserRow({
   size = 'default',
   className = '',
 }: VoiceUserRowProps) {
-  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.userId === userId);
+  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.userIds.has(userId));
   const { t } = useTranslation(['voice', 'common']);
   const avatarSize = size === 'compact' ? 20 : 24;
 

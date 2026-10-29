@@ -5,6 +5,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { SoundboardButton } from './Soundboard';
+import { TextVoiceButton } from './TextVoice';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
 
@@ -163,7 +164,7 @@ export function VoiceControls() {
         />
       </div>
 
-      {/* Row 2: Camera, Screen Share, Noise Suppression, Soundboard */}
+      {/* Row 2: Camera, Screen Share, Noise Suppression, Text Voice, Soundboard */}
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         {canSpeak && (
           <button
@@ -238,6 +239,7 @@ export function VoiceControls() {
           </svg>
         </button>
 
+        <TextVoiceButton variant="toolbar" className="flex-1 h-[34px] bg-surface-base" />
         <SoundboardButton variant="toolbar" className="flex-1 h-[34px] bg-surface-base" />
 
         {/* Screen share menu — quality settings + stop, anchored to the share button */}

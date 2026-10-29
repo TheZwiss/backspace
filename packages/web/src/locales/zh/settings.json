@@ -323,7 +323,8 @@
       "pushToTalk": "按键发言",
       "toggleCamera": "切换摄像头",
       "toggleScreenShare": "切换屏幕共享",
-      "disconnect": "断开连接"
+      "disconnect": "断开连接",
+      "dictationPushToTalk": "听写并发送语音（按住）"
     },
     "row": {
       "recordingPrompt": "请按下组合键…",

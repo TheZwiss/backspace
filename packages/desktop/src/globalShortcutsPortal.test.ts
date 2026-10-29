@@ -123,7 +123,7 @@ describe('GlobalShortcuts portal lifecycle', () => {
     const bind = bus.call.mock.calls.find(([message]) => message.member === 'BindShortcuts')![0];
     expect(bind.signature).toBe('oa(sa{sv})sa{sv}');
     expect(bind.body[1].map((entry: [string, unknown]) => entry[0])).toEqual([
-      'toggleMute', 'toggleDeafen', 'pushToTalk', 'toggleCamera', 'toggleScreenShare', 'disconnect',
+      'dictationPushToTalk', 'toggleMute', 'toggleDeafen', 'pushToTalk', 'toggleCamera', 'toggleScreenShare', 'disconnect',
     ]);
     for (const entry of bind.body[1]) expect(entry[1]).not.toHaveProperty('preferred_trigger');
     await client.start();

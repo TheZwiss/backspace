@@ -45,7 +45,7 @@ export function canUseTextVoice(): boolean {
 
 export async function speakText(text: string, preview = false): Promise<void> {
   const value = text.trim();
-  if (!value || value.length > 400) throw new Error('text-voice-invalid');
+  if (!value || value.length > 2000) throw new Error('text-voice-invalid');
   stopTextVoice();
   const job = { controller: new AbortController(), source: null as AudioBufferSourceNode | null };
   current = job;
@@ -88,9 +88,15 @@ export async function speakText(text: string, preview = false): Promise<void> {
       source.connect(gain);
       gain.connect(preview ? audio.getMasterOutput() : audio.getSpeechInput());
       if (!preview) gain.connect(audio.getAnalyserNode());
+      const monitor = !preview ? context.createGain() : null;
+      const updateMonitor = () => {
+        if (monitor) { const live = useVoiceStore.getState(); monitor.gain.value = live.textVoiceMonitor && !live.isDeafened ? Math.min(1, live.outputVolume / 100) : 0; }
+      };
+      if (monitor) { updateMonitor(); source.connect(monitor); monitor.connect(audio.getMasterOutput()); }
+      const unsubscribeMonitor = monitor ? useVoiceStore.subscribe(updateMonitor) : () => {};
       job.source = source;
       await new Promise<void>((resolve) => {
-        source.onended = () => { source.disconnect(); gain.disconnect(); if (job.source === source) job.source = null; resolve(); };
+        source.onended = () => { unsubscribeMonitor(); monitor?.disconnect(); source.disconnect(); gain.disconnect(); if (job.source === source) job.source = null; resolve(); };
         source.start();
       });
       if (!allowed()) throw fail();

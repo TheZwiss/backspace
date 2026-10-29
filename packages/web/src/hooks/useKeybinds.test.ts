@@ -17,6 +17,7 @@ vi.mock('../stores/spaceStore', () => ({
   getChannelOrigin: () => 'local', getMyUserIdForOrigin: () => 'me',
   useSpaceStore: { getState: () => ({ channelToSpaceMap: new Map() }) },
 }));
+vi.mock('../utils/dictation', () => ({ pressDictation: vi.fn(), releaseDictation: vi.fn(), cancelDictation: vi.fn() }));
 vi.mock('../utils/voice', () => ({ broadcastVoiceStatus: vi.fn() }));
 vi.mock('../utils/voiceActions', () => ({
   toggleMuteFromControl: mock.mute, toggleDeafenFromControl: mock.deafen, handleCameraAction: mock.camera,
@@ -174,4 +175,15 @@ describe('global shortcut renderer bridge', () => {
     expect(mock.camera).toHaveBeenCalledOnce();
     expect(mock.voice.setMuted).toHaveBeenCalledWith(false);
   });
+});
+
+it('routes dictation holds through the native bridge without unmuting the hardware microphone', async () => {
+  const dictation = await import('../utils/dictation');
+  useKeybindStore.setState({ keybinds: [{ ...binding, actionId: 'dictationPushToTalk' }] });
+  renderHook(() => useKeybinds());
+  mock.voice.setMuted.mockClear();
+  act(() => { actionListener({ actionId: 'dictationPushToTalk', pressed: true }); actionListener({ actionId: 'dictationPushToTalk', pressed: false }); });
+  expect(dictation.pressDictation).toHaveBeenCalledWith(true);
+  expect(dictation.releaseDictation).toHaveBeenCalled();
+  expect(mock.voice.setMuted).not.toHaveBeenCalled();
 });

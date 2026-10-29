@@ -8,6 +8,7 @@ const SERVICE = 'org.freedesktop.portal.Desktop';
 const PATH = '/org/freedesktop/portal/desktop';
 const INTERFACE = 'org.freedesktop.portal.GlobalShortcuts';
 const ACTIONS: Record<string, string> = {
+  dictationPushToTalk: 'Dictation to voice (hold)',
   toggleMute: 'Toggle microphone', toggleDeafen: 'Toggle deafen', pushToTalk: 'Push to talk',
   toggleCamera: 'Toggle camera', toggleScreenShare: 'Toggle screen sharing', disconnect: 'Disconnect from voice',
 };

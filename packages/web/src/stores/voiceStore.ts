@@ -168,6 +168,8 @@ export interface VoiceState {
   setTextVoiceDraft: (text: string) => void;
   textVoice: string;
   textVoiceSpeed: number;
+  textVoiceMonitor: boolean;
+  setTextVoiceMonitor: (enabled: boolean) => void;
   setTextVoiceEnabled: (enabled: boolean) => void;
   setTextVoice: (voice: string) => void;
   setTextVoiceSpeed: (speed: number) => void;
@@ -361,9 +363,11 @@ export const useVoiceStore = create<VoiceState>()(
       textVoiceEnabled: false,
       textVoiceDraft: '',
       textVoiceBusy: false,
-      setTextVoiceDraft: (text) => set({ textVoiceDraft: text.slice(0, 400) }),
+      setTextVoiceDraft: (text) => set({ textVoiceDraft: text.slice(0, 2000) }),
       textVoice: 'pf_dora',
       textVoiceSpeed: 1,
+      textVoiceMonitor: true,
+      setTextVoiceMonitor: (enabled) => set({ textVoiceMonitor: enabled }),
       setTextVoiceEnabled: (enabled) => {
         AudioManager.getInstance().setTextInputOnly(enabled);
         set({ textVoiceEnabled: enabled, ...(enabled ? { micPermissionDenied: false } : {}) });
@@ -1005,6 +1009,7 @@ export const useVoiceStore = create<VoiceState>()(
         textVoiceDevice: state.textVoiceDevice,
         textVoice: state.textVoice,
         textVoiceSpeed: state.textVoiceSpeed,
+        textVoiceMonitor: state.textVoiceMonitor,
         messageSoundAllChannels: state.messageSoundAllChannels,
         pipEnabled: state.pipEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,

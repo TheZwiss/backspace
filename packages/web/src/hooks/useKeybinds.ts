@@ -4,6 +4,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { isElectron } from '../platform/platform';
 import { toggleMuteFromControl, toggleDeafenFromControl, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../utils/voiceActions';
 import { broadcastVoiceStatus } from '../utils/voice';
+import { pressDictation, releaseDictation, cancelDictation } from '../utils/dictation';
 import { useKeybindPortalStatus } from './useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,7 @@ const lastDispatch: Record<string, number> = {};
 
 /** Dispatch a keybind action to the appropriate voice handler */
 function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate = true): void {
+  if (actionId === 'dictationPushToTalk') deduplicate = false; // Recorder owns idempotent holds/releases.
   const now = Date.now();
   const key = `${actionId}:${pressed}`;
   if (deduplicate && now - (lastDispatch[key] || 0) < 100) return;
@@ -38,6 +40,9 @@ function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate =
       break;
     case 'disconnect':
       if (pressed && inCall) handleDisconnectAction();
+      break;
+    case 'dictationPushToTalk':
+      if (pressed) { if (inCall) void pressDictation(true); } else releaseDictation();
       break;
     case 'pushToTalk':
       if (inCall) {
@@ -163,7 +168,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, dedupl
     pressedKeys.clear();
   };
   const onBlur = () => {
-    if (!hookRunningRef.current) releaseAll();
+    if (!hookRunningRef.current) { if (activeActions.has('dictationPushToTalk')) cancelDictation(); releaseAll(); }
     // Native keyup owns the release outside the window. Forget local state so
     // it cannot suppress the next press after focus returns.
     activeActions.clear();

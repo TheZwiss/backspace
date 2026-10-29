@@ -22,7 +22,7 @@ import { SoundboardButton, SoundboardLibrary } from './Soundboard';
 import { useSoundboardUsageStore } from '../../stores/soundboardUsageStore';
 
 describe('soundboard player', () => {
-  beforeEach(() => { useSoundboardUsageStore.setState({ counts: {} }); api.soundboard.play.mockReset(); });
+  beforeEach(() => { voice.isMuted = false; voice.isDeafened = false; voice.isLiveKitConnected = true; useSoundboardUsageStore.setState({ counts: {} }); api.soundboard.play.mockReset(); });
   it('opens an anchored non-modal popover and closes outside or on Escape', async () => {
     render(<SoundboardButton variant="toolbar" className="h-[34px]" />);
     const button = screen.getByRole('button', { name: 'soundboard.title' });
@@ -56,6 +56,33 @@ describe('soundboard player', () => {
     expect(screen.getByText('Bell')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'missing' } });
     expect(screen.getByText('soundboard.noResults')).toBeTruthy();
+  });
+  it('allows sending effects with a muted microphone, retaining deafen blocking', async () => {
+    voice.isMuted = true;
+    api.soundboard.play.mockResolvedValueOnce(undefined);
+    const view = render(<SoundboardLibrary origin="" />);
+    const play = await screen.findByRole('button', { name: 'Airhorn' });
+    expect(play).not.toBeDisabled();
+    fireEvent.click(play);
+    await waitFor(() => expect(api.soundboard.play).toHaveBeenCalledWith('a'));
+    expect(screen.getAllByRole('button', { name: 'Airhorn' }).every((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
+    view.unmount();
+    voice.isDeafened = true;
+    render(<SoundboardLibrary origin="" />);
+    expect((await screen.findAllByRole('button', { name: 'Airhorn' })).every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+  });
+  it('sends every rapid click even while earlier requests remain in flight', async () => {
+    const completions: Array<() => void> = [];
+    api.soundboard.play.mockImplementation(() => new Promise<void>((resolve) => { completions.push(resolve); }));
+    render(<SoundboardLibrary origin="" />);
+    const play = await screen.findByRole('button', { name: 'Airhorn' });
+    for (let index = 0; index < 12; index++) fireEvent.click(play);
+    expect(api.soundboard.play).toHaveBeenCalledTimes(12);
+    expect(play).not.toBeDisabled();
+    expect(useSoundboardUsageStore.getState().counts).toEqual({});
+    completions.forEach((resolve) => resolve());
+    await waitFor(() => expect(useSoundboardUsageStore.getState().counts['["","user"]']).toEqual({ a: 12 }));
+    expect(screen.getAllByRole('button', { name: 'Airhorn' }).every((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
   });
   it('records only a successful play', async () => {
     api.soundboard.play.mockRejectedValueOnce(new Error('failed')).mockResolvedValueOnce(undefined);

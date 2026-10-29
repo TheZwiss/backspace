@@ -23,7 +23,7 @@ function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: 
   const { t } = useTranslation(['voice', 'common']);
   const { formatDuration, formatPercent } = useFormatters();
   const volume = useVoiceStore((state) => state.soundboardVolume);
-  const muted = useVoiceStore((state) => state.isMuted || state.isDeafened);
+  const deafened = useVoiceStore((state) => state.isDeafened);
   const connected = useVoiceStore((state) => state.isLiveKitConnected);
   const [packs, setPacks] = useState<SoundboardPack[]>([]);
   const [selected, setSelected] = useState(spaceId ?? '');
@@ -33,7 +33,6 @@ function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: 
   const [gain, setGain] = useState(80);
   const [query, setQuery] = useState('');
   const [pending, setPending] = useState(false);
-  const [cooldown, setCooldown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const client = getApiForOrigin(origin);
@@ -44,16 +43,16 @@ function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: 
     finally { setLoading(false); }
   }, [client, spaceId]);
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { if (!cooldown) return; const timer = setTimeout(() => setCooldown(false), 2000); return () => clearTimeout(timer); }, [cooldown]);
   const pack = packs.find((entry) => entry.spaceId === (spaceId ?? selected));
   const myId = getMyUserIdForOrigin(origin);
   const canCreate = !!pack?.canCreate;
   const canDelete = (sound: SoundboardSound) => pack?.canManage || (pack?.canCreate && sound.creatorId === myId);
-  const action = async (job: () => Promise<void>) => {
-    if (pending) return;
-    setPending(true); setError('');
+  const action = async (job: () => Promise<void>, exclusive = true) => {
+    if (exclusive && pending) return;
+    if (exclusive) setPending(true);
+    setError('');
     try { await job(); } catch (err) { setError(err instanceof Error && err.message === 'soundboard-invalid' ? t('voice:soundboard.invalidAudio') : describeError(err)); }
-    finally { setPending(false); }
+    finally { if (exclusive) setPending(false); }
   };
   return <div className="space-y-4">
     <p className="text-sm text-txt-secondary">{t('voice:soundboard.description')}</p>
@@ -64,10 +63,10 @@ function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: 
     {!!pack?.sounds.length && <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('voice:soundboard.search')} aria-label={t('voice:soundboard.search')} className="input-standard w-full"/>}
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-80 overflow-y-auto scrollbar-thin">
       {pack?.sounds.filter((sound) => sound.name.toLowerCase().includes(query.toLowerCase())).map((sound) => <div key={sound.id} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-        <button type="button" disabled={pending || cooldown || !connected || muted || manageOnly} onClick={() => void action(async () => { await client.soundboard.play(sound.id); setCooldown(true); })} className="w-full flex flex-col items-center gap-2 text-txt-primary hover:text-accent-primary disabled:opacity-40 transition-colors" title={t('voice:soundboard.play')}>
+        <button type="button" disabled={!connected || deafened || manageOnly} onClick={() => void action(async () => { await client.soundboard.play(sound.id); }, false)} className="w-full flex flex-col items-center gap-2 text-txt-primary hover:text-accent-primary disabled:opacity-40 transition-colors" title={t('voice:soundboard.play')}>
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-primary/10 text-accent-primary">{icon}</span><span className="text-xs font-semibold break-words line-clamp-2">{sound.name}</span>
         </button>
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-txt-tertiary"><span>{formatDuration(Math.ceil(sound.durationMs / 1000))}</span><button type="button" disabled={pending} className="hover:text-accent-primary" title={t('voice:soundboard.preview')} onClick={() => void action(async () => { await playLocalSoundboard(await client.soundboard.audio(sound.id), sound.assetId, sound.volume); })}>{t('voice:soundboard.preview')}</button></div>
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-txt-tertiary"><span>{formatDuration(Math.ceil(sound.durationMs / 1000))}</span><button type="button" className="hover:text-accent-primary" title={t('voice:soundboard.preview')} onClick={() => void action(async () => { await playLocalSoundboard(await client.soundboard.audio(sound.id), sound.assetId, sound.volume); }, false)}>{t('voice:soundboard.preview')}</button></div>
         {canDelete(sound) && <button type="button" disabled={pending} className="mt-2 text-[11px] text-accent-rose hover:underline" onClick={() => { if (window.confirm(t('voice:soundboard.confirmDelete', { name: sound.name }))) void action(async () => { await client.soundboard.remove(sound.id); await load(); }); }}>{t('common:actions.delete')}</button>}
       </div>)}
     </div>
@@ -101,7 +100,7 @@ function SoundboardPlayer({ origin }: { origin: string }) {
   const myId = getMyUserIdForOrigin(origin);
   const volume = useVoiceStore((s) => s.soundboardVolume);
   const connected = useVoiceStore((s) => s.isLiveKitConnected);
-  const muted = useVoiceStore((s) => s.isMuted || s.isDeafened);
+  const deafened = useVoiceStore((s) => s.isDeafened);
   const channel = useVoiceStore((s) => s.currentVoiceChannelId);
   const currentSpace = useSpaceStore((s) => channel ? s.channelToSpaceMap.get(channel) : undefined);
   const spaces = useSpaceStore((s) => s.spaces);
@@ -110,8 +109,6 @@ function SoundboardPlayer({ origin }: { origin: string }) {
   const [query, setQuery] = useState('');
   const [volumeOpen, setVolumeOpen] = useState(false);
   const [hovered, setHovered] = useState('');
-  const [pending, setPending] = useState(false);
-  const [cooldown, setCooldown] = useState(false);
   const [error, setError] = useState('');
   const sections = useRef<Record<string, HTMLElement | null>>({});
   const scrollArea = useRef<HTMLDivElement>(null);
@@ -124,15 +121,14 @@ function SoundboardPlayer({ origin }: { origin: string }) {
     return () => { doc.removeEventListener('keydown', onKey); doc.removeEventListener('mousedown', onPointer); };
   }, [volumeOpen]);
   useEffect(() => { let active = true; client.soundboard.list().then((list) => { if (active) setPacks(list); }).catch((err) => { if (active) setError(describeError(err)); }); return () => { active = false; }; }, [client]);
-  useEffect(() => { if (!cooldown) return; const timer = setTimeout(() => setCooldown(false), 2000); return () => clearTimeout(timer); }, [cooldown]);
   const sorted = [...packs].sort((a, b) => Number(b.spaceId === currentSpace) - Number(a.spaceId === currentSpace));
   const matches = (sound: SoundboardSound) => sound.name.toLocaleLowerCase().includes(query.toLocaleLowerCase());
   const visiblePacks = sorted.filter((pack) => pack.sounds.some(matches));
   const frequent = sorted.flatMap((p) => p.sounds).filter((sound) => counts[sound.id] && matches(sound)).sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0)).slice(0, 3);
-  const run = async (job: () => Promise<void>) => { if (pending) return; setPending(true); setError(''); try { await job(); } catch (err) { setError(describeError(err)); } finally { setPending(false); } };
+  const run = async (job: () => Promise<void>) => { setError(''); try { await job(); } catch (err) { setError(describeError(err)); } };
   const soundCard = (sound: SoundboardSound) => <div key={sound.id} className="min-w-0 rounded-lg bg-white/[0.05] p-2">
-    <button type="button" disabled={pending || cooldown || !connected || muted} onClick={() => void run(async () => { await client.soundboard.play(sound.id); if (myId) useSoundboardUsageStore.getState().recordPlay(origin, myId, sound.id); setCooldown(true); })} className="flex w-full items-center gap-2 text-left text-xs font-semibold text-txt-primary hover:text-accent-primary disabled:opacity-40" title={t('soundboard.play')}><span className="shrink-0 text-accent-primary">{icon}</span><span className="truncate">{sound.name}</span></button>
-    <button type="button" disabled={pending} onClick={() => void run(async () => { await playLocalSoundboard(await client.soundboard.audio(sound.id), sound.assetId, sound.volume); })} className="mt-1 text-[10px] text-txt-tertiary hover:text-accent-primary">{t('soundboard.preview')}</button>
+    <button type="button" disabled={!connected || deafened} onClick={() => void run(async () => { await client.soundboard.play(sound.id); if (myId) useSoundboardUsageStore.getState().recordPlay(origin, myId, sound.id); })} className="flex w-full items-center gap-2 text-left text-xs font-semibold text-txt-primary hover:text-accent-primary disabled:opacity-40" title={t('soundboard.play')}><span className="shrink-0 text-accent-primary">{icon}</span><span className="truncate">{sound.name}</span></button>
+    <button type="button" onClick={() => void run(async () => { await playLocalSoundboard(await client.soundboard.audio(sound.id), sound.assetId, sound.volume); })} className="mt-1 text-[10px] text-txt-tertiary hover:text-accent-primary">{t('soundboard.preview')}</button>
   </div>;
   return <div className="space-y-3">
     <div className="flex items-center gap-2"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('soundboard.search')} aria-label={t('soundboard.search')} className="input-standard min-w-0 flex-1"/><div ref={volumeContainer} className="relative"><button type="button" aria-label={t('soundboard.volume')} aria-expanded={volumeOpen} onClick={() => setVolumeOpen(!volumeOpen)} className="p-2 text-txt-secondary hover:text-txt-primary"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a5 5 0 0 1 0 6m3-9a9 9 0 0 1 0 12"/></svg></button>

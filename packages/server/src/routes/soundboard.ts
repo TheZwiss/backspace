@@ -15,10 +15,8 @@ import { connectionManager } from '../ws/handler.js';
 import { config } from '../config.js';
 
 const uploadLimit = createFixedWindowLimit({ max: 10, windowMs: 60_000 });
-const playLimit = createFixedWindowLimit({ max: 1, windowMs: 2000 });
-const roomLimit = createFixedWindowLimit({ max: 5, windowMs: 10_000 });
 const grants = new Map<string, { assetId: string; until: number }>();
-export function _resetSoundboardLimits(): void { uploadLimit.reset(); playLimit.reset(); roomLimit.reset(); grants.clear(); }
+export function _resetSoundboardLimits(): void { uploadLimit.reset(); grants.clear(); }
 const member = (spaceId: string, userId: string) => getDb().select().from(schema.spaceMembers).where(and(eq(schema.spaceMembers.spaceId, spaceId), eq(schema.spaceMembers.userId, userId))).get();
 const can = (spaceId: string, userId: string, permission: bigint) => hasPermission(userId, spaceId, permission);
 const metadata = (spaceId: string) => getDb().select({ id: schema.soundboardSounds.id, spaceId: schema.soundboardSounds.spaceId,
@@ -90,10 +88,15 @@ export async function soundboardRoutes(app: FastifyInstance): Promise<void> {
     if (!asset) return sendError(reply, 404, 'not_found');
     return reply.type('audio/wav').header('Cache-Control', 'no-store').send(brotliDecompressSync(asset.data));
   });
-  app.post<{ Params: { id: string } }>('/api/soundboard/:id/play', { preHandler: authenticate }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>('/api/soundboard/:id/play', {
+    preHandler: authenticate,
+    // Allow rapid overlapping clicks without consuming the general API budget.
+    // Keep a high per-IP flood ceiling, with no per-effect or per-room cooldown.
+    config: { rateLimit: { max: 1200, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     const current = connectionManager.getUserRoom(request.userId);
     const status = connectionManager.getVoiceUserStatus(request.userId);
-    if (!current || status?.isMuted || status?.isDeafened) return sendError(reply, 403, 'forbidden');
+    if (!current || status?.isDeafened) return sendError(reply, 403, 'forbidden');
     const { room } = current;
     if (room.roomType === 'dm' && (room.metadata as { state: string }).state !== 'active') return sendError(reply, 403, 'forbidden');
     const db = getDb();
@@ -108,7 +111,6 @@ export async function soundboardRoutes(app: FastifyInstance): Promise<void> {
       const restriction = db.select().from(schema.voiceRestrictions).where(and(eq(schema.voiceRestrictions.spaceId, spaceId), eq(schema.voiceRestrictions.userId, request.userId))).get();
       if (restriction) return sendError(reply, 403, 'forbidden');
     }
-    if (!playLimit.consume(request.userId) || !roomLimit.consume(room.roomId)) return sendError(reply, 429, 'rate_limited');
     if (!config.livekit.url || !config.livekit.apiKey || !config.livekit.apiSecret) return sendError(reply, 503, 'voice_disabled');
     for (const [key, value] of grants) if (value.until < Date.now()) grants.delete(key);
     if (grants.size >= 2000) grants.delete(grants.keys().next().value!);

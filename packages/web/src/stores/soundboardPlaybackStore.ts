@@ -1,13 +1,21 @@
 import { create } from 'zustand';
 
+export interface SoundboardSender {
+  identity: string;
+  userId: string;
+}
+
 interface PlaybackState {
-  identity: string | null;
-  userId: string | null;
-  setPlayback: (identity: string | null, userId: string | null) => void;
+  identities: Set<string>;
+  userIds: Set<string>;
+  setPlaybacks: (senders: SoundboardSender[]) => void;
 }
 
 export const useSoundboardPlaybackStore = create<PlaybackState>((set) => ({
-  identity: null,
-  userId: null,
-  setPlayback: (identity, userId) => set({ identity, userId }),
+  identities: new Set(),
+  userIds: new Set(),
+  setPlaybacks: (senders) => set({
+    identities: new Set(senders.map((sender) => sender.identity)),
+    userIds: new Set(senders.map((sender) => sender.userId)),
+  }),
 }));

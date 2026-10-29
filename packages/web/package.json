@@ -36,6 +36,8 @@
   },
   "devDependencies": {
     "@echogarden/espeak-ng-emscripten": "0.3.5",
+    "@huggingface/transformers": "4.3.2",
+    "@noble/hashes": "2.0.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.6",
@@ -43,6 +45,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.6.1",
+    "esbuild": "0.27.4",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^28.1.0",
     "onnxruntime-web": "1.31.1",

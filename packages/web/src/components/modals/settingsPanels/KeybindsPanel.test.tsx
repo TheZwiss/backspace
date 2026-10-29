@@ -25,10 +25,10 @@ describe('system-managed Wayland shortcuts panel', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
-  it('shows all six actions read-only and follows system assignment changes', () => {
+  it('shows all seven actions read-only and follows system assignment changes', () => {
     mock.status = { state: 'ready', shortcuts: { pushToTalk: 'F9' } };
     const { rerender, container } = render(<KeybindsPanel />);
-    expect(container.querySelectorAll('dt')).toHaveLength(6);
+    expect(container.querySelectorAll('dt')).toHaveLength(7);
     expect(screen.getByText('System shortcut: F9')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     mock.status = { state: 'ready', shortcuts: { pushToTalk: 'F10' } };

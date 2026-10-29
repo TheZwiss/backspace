@@ -22,7 +22,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
-  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.identity === participant.identity);
+  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.identities.has(participant.identity));
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);

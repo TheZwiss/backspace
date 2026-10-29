@@ -11,6 +11,7 @@ export interface Keybind {
 export const BINDABLE_ACTIONS = [
   { id: 'toggleMute', label: 'Toggle Mute', type: 'toggle' as const },
   { id: 'toggleDeafen', label: 'Toggle Deafen', type: 'toggle' as const },
+  { id: 'dictationPushToTalk', label: 'Dictation to voice (hold)', type: 'hold' as const },
   { id: 'pushToTalk', label: 'Push to Talk', type: 'hold' as const },
   { id: 'toggleCamera', label: 'Toggle Camera', type: 'toggle' as const },
   { id: 'toggleScreenShare', label: 'Toggle Screen Share', type: 'toggle' as const },

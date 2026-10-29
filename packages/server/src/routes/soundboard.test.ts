@@ -1,6 +1,7 @@
 import { setWorkerId } from '../utils/snowflake.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
@@ -38,7 +39,9 @@ beforeEach(async () => {
     db.insert(schema.roles).values({ id, spaceId: id, name: '@everyone', permissions: DEFAULT_EVERYONE_PERMISSIONS.toString(), createdAt: 1 }).run();
     for (const userId of ['owner', 'member']) db.insert(schema.spaceMembers).values({ spaceId: id, userId, joinedAt: 1 }).run();
   }
-  app = Fastify(); await app.register(soundboardRoutes);
+  app = Fastify();
+  await app.register(rateLimit, { max: 200, timeWindow: '1 minute' });
+  await app.register(soundboardRoutes);
 });
 afterEach(async () => { await app.close(); sqlite.close(); vi.unstubAllEnvs(); });
 it('validates actual canonical PCM duration and rejects spoofed formats', () => {
@@ -74,7 +77,7 @@ it('authorizes sound playback against the current room and sends only a short se
   const event = JSON.parse(new TextDecoder().decode(data));
   expect(event.senderIdentity).toBe('member:member'); expect(event.senderUserId).toBe('member');
   const audio = await app.inject({ url: `/api/soundboard/playback/${event.ticket}` }); expect(audio.statusCode).toBe(200); expect(audio.rawPayload).toEqual(wav());
-  expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(429);
+  expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(200);
   mocks.current = null;
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers() })).statusCode).toBe(403);
 });
@@ -82,8 +85,41 @@ it('checks external-sound permission, server mute and active private calls', asy
   const sound = (await upload('s2')).json();
   db.update(schema.roles).set({ permissions: (DEFAULT_EVERYONE_PERMISSIONS & ~PermissionBits.USE_EXTERNAL_SOUNDS).toString() }).where(eq(schema.roles.id, 's1')).run();
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(403);
-  mocks.status = { isMuted: true };
+  db.insert(schema.voiceRestrictions).values({ spaceId: 's1', userId: 'owner', restrictionType: 'mute', createdAt: 1 }).run();
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers() })).statusCode).toBe(403);
   mocks.status = {}; mocks.current = { roomId: 'dm', room: { roomId: 'dm', roomType: 'dm', metadata: { state: 'active' } } };
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(200);
+});
+
+it('sends reliable sound events while self-muted but rejects deafen and missing SPEAK permission', async () => {
+  const sound = (await upload()).json();
+  mocks.status = { isMuted: true, isDeafened: false };
+  const played = await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') });
+  expect(played.statusCode).toBe(200);
+  expect(mocks.sendData).toHaveBeenCalledWith('voice', expect.any(Uint8Array), 0, { topic: 'backspace.soundboard.v1' });
+  mocks.status.isDeafened = true;
+  expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(403);
+  mocks.status.isDeafened = false;
+  db.update(schema.roles).set({ permissions: (DEFAULT_EVERYONE_PERMISSIONS & ~PermissionBits.SPEAK).toString() }).where(eq(schema.roles.id, 's1')).run();
+  expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(403);
+  expect(mocks.sendData).toHaveBeenCalledOnce();
+});
+
+it('accepts rapid playback beyond the general API budget and retains only the high flood ceiling', async () => {
+  const sound = (await upload()).json();
+  mocks.status = { isMuted: true };
+  const requests = await Promise.all(Array.from({ length: 240 }, () => app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })));
+  expect(requests.every((response) => response.statusCode === 200)).toBe(true);
+  expect(mocks.sendData).toHaveBeenCalledTimes(240);
+  const remaining = await Promise.all(Array.from({ length: 960 }, () => app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })));
+  expect(remaining.every((response) => response.statusCode === 200)).toBe(true);
+  expect(mocks.sendData).toHaveBeenCalledTimes(1200);
+  expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(429);
+  // The soundboard burst must not exhaust normal API requests.
+  expect((await app.inject({ url: '/api/soundboard', headers: headers('member') })).statusCode).toBe(200);
+}, 15000);
+
+it('keeps the existing upload limit', async () => {
+  for (let index = 0; index < 10; index++) expect((await upload()).statusCode).toBe(201);
+  expect((await upload()).statusCode).toBe(429);
 });

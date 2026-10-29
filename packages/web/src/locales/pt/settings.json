@@ -325,7 +325,8 @@
       "pushToTalk": "Aperte para falar",
       "toggleCamera": "Alternar câmera",
       "toggleScreenShare": "Alternar compartilhamento de tela",
-      "disconnect": "Desconectar"
+      "disconnect": "Desconectar",
+      "dictationPushToTalk": "Ditar e enviar voz (segurar)"
     },
     "row": {
       "recordingPrompt": "Pressione uma combinação de teclas…",
