@@ -11,6 +11,13 @@ import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 import i18n from '../i18n';
 import { isElectron, getElectronAPI } from '../platform/platform';
 import { acquireAppExcludedSystemAudio } from './systemAudioSource';
+import {
+  canCropCaptureWindow,
+  isWindowSourceId,
+  openWindowCropTrack,
+  setWindowCropResolution,
+  type WindowCaptureTarget,
+} from './windowCropCapture';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
@@ -337,12 +344,38 @@ export function isCaptureCancellation(err: unknown): boolean {
   return err.name === 'NotAllowedError' || err.name === 'AbortError';
 }
 
-/** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
-export async function stageScreenCapture(): Promise<MediaStream> {
+/**
+ * Must run inside a user gesture in browsers (getDisplayMedia requires transient activation).
+ *
+ * `sourceId` is the tile the user picked, when the desktop app listed sources.
+ * A window on Windows is captured as its display and cropped to the window
+ * (windowCropCapture.ts): capturing the window itself would leave Windows
+ * Graphics Capture's yellow border around it for the whole share.
+ */
+export async function stageScreenCapture(
+  sourceId?: string | null,
+  audioTargetId?: string,
+): Promise<MediaStream> {
   const config = useVoiceStore.getState().screenShareConfig;
   const opts = buildScreenShareOptions(config);
   if (!isScreenCaptureSupported()) {
     throw new DOMException('getDisplayMedia is not available', 'NotSupportedError');
+  }
+  const api = getElectronAPI();
+  // Looked up before the audio capture: one preselection names both the display
+  // to capture and the window whose process tree supplies the audio.
+  const cropTarget: WindowCaptureTarget | null = sourceId && isWindowSourceId(sourceId) && canCropCaptureWindow()
+    ? await api!.getWindowCaptureTarget!(sourceId).catch(() => null)
+    : null;
+  if (api?.preselectScreenSource && sourceId) {
+    // The preselection is awaited here, before getDisplayMedia(): the two
+    // travel different IPC pipes and the display-media handler must find it
+    // armed. A cropped window shares its display but keeps its own audio.
+    try {
+      await api.preselectScreenSource(cropTarget?.screenSourceId ?? sourceId, config.shareAudio, audioTargetId, cropTarget ? sourceId : undefined);
+    } catch (err) {
+      console.error('[ScreenShare] Could not preselect the source:', err);
+    }
   }
   try {
     // Where the desktop app can build the system audio without Backspace's own
@@ -351,7 +384,7 @@ export async function stageScreenCapture(): Promise<MediaStream> {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia(
-        buildCaptureConstraints(ownFree ? { ...config, shareAudio: false } : config, opts),
+        buildCaptureConstraints(ownFree || cropTarget ? { ...config, shareAudio: false } : config, opts),
       );
     } catch (err) {
       ownFree?.stop();
@@ -360,6 +393,20 @@ export async function stageScreenCapture(): Promise<MediaStream> {
     if (ownFree) {
       for (const track of stream.getAudioTracks()) { stream.removeTrack(track); track.stop(); }
       stream.addTrack(ownFree);
+    }
+    if (cropTarget) {
+      const cropped = await openWindowCropTrack(stream, cropTarget, {
+        frameRate: opts.capture.frameRate,
+        destination: opts.capture.width > 0 && opts.capture.height > 0
+          ? { width: opts.capture.width, height: opts.capture.height }
+          : undefined,
+        sourceId: sourceId!,
+      });
+      if (cropped) {
+        const raw = stream.getVideoTracks()[0];
+        if (raw) stream.removeTrack(raw);
+        stream.addTrack(cropped);
+      }
     }
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
@@ -389,11 +436,21 @@ export async function applyStagedCaptureConfig(stream: MediaStream): Promise<voi
   if (!track || track.readyState !== 'live') return;
   const config = useVoiceStore.getState().screenShareConfig;
   const opts = buildScreenShareOptions(config);
-  const constraints = buildCaptureConstraints(config, opts).video;
-  try {
-    if (typeof constraints === 'object') await track.applyConstraints(constraints);
-  } catch (err) {
-    console.warn('[ScreenShare] Failed to apply staged constraints:', err);
+  // A cropped window is a canvas, not a camera: it is resized directly and has
+  // no capture constraints to satisfy.
+  const resized = setWindowCropResolution(
+    track,
+    opts.capture.width > 0 && opts.capture.height > 0
+      ? { width: opts.capture.width, height: opts.capture.height }
+      : undefined,
+  );
+  if (!resized) {
+    const constraints = buildCaptureConstraints(config, opts).video;
+    try {
+      if (typeof constraints === 'object') await track.applyConstraints(constraints);
+    } catch (err) {
+      console.warn('[ScreenShare] Failed to apply staged constraints:', err);
+    }
   }
   track.contentHint = opts.contentHint;
 }

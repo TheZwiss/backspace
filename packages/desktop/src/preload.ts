@@ -110,11 +110,16 @@ contextBridge.exposeInMainWorld('backspace', {
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => {
     ipcRenderer.send('screen-share-selected', sourceId, shareAudio ?? true);
   },
-  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
+  // thumbnails: false is the cheap refresh (ids and names only) the setup
+  // screen polls with; omitted means a full enumeration with previews.
+  getScreenSources: (options?: { thumbnails?: boolean }) => ipcRenderer.invoke('get-screen-sources', options),
   // invoke, not send: the renderer must know the preselection has landed in the
   // main process before it calls getDisplayMedia(), or the two race.
-  preselectScreenSource: (sourceId: string, shareAudio?: boolean, targetId?: string) =>
-    ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true),
+  preselectScreenSource: (sourceId: string, shareAudio?: boolean, targetId?: string, audioSourceId?: string) =>
+    ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true, targetId, audioSourceId),
+  // Where a window is: the renderer captures that display and crops to it, so
+  // the share has no Windows Graphics Capture border (windowCropCapture.ts).
+  getWindowCaptureTarget: (sourceId: string) => ipcRenderer.invoke('get-window-capture-target', sourceId),
   getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
   // `true` from a web client that opens the system-audio source (startSystemAudio)
   // itself; an older client passes nothing and gets the loopback's answer.

@@ -146,8 +146,30 @@ interface BackspaceElectronAPI {
    * web client feature-detects them and falls back to the prompted flow
    * (getDisplayMedia → onScreenShareSources → selectScreenSource).
    */
-  getScreenSources?: () => Promise<ElectronScreenSource[]>;
-  preselectScreenSource?: (sourceId: string, shareAudio?: boolean, targetId?: string) => Promise<void>;
+  /**
+   * `thumbnails: false` asks for ids, names and icons only — the cheap poll the
+   * setup screen runs while it is open. Older desktop builds ignore the
+   * argument and always return previews.
+   */
+  getScreenSources?: (options?: { thumbnails?: boolean }) => Promise<ElectronScreenSource[]>;
+  preselectScreenSource?: (
+    sourceId: string,
+    shareAudio?: boolean,
+    targetId?: string,
+    /** A window source whose audio to take while `sourceId` is only its display. */
+    audioSourceId?: string,
+  ) => Promise<void>;
+  /**
+   * Where a window is on its display, for the borderless window-capture path.
+   * Null where the build or the machine cannot answer; the caller then shares
+   * the window through Chromium as before.
+   */
+  getWindowCaptureTarget?: (sourceId: string) => Promise<{
+    screenSourceId: string;
+    monitor: { width: number; height: number };
+    crop: { x: number; y: number; width: number; height: number };
+    minimized: boolean;
+  } | null>;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the
    * renderer shows a "choose" card that triggers the portal on click instead

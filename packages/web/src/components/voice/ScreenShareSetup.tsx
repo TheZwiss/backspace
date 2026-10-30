@@ -17,7 +17,15 @@ import {
   canAddScreenShareAudioLater,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from './StreamQualityControls';
-import { pickAutoStageSource, type ScreenSourceTab } from '../../utils/screenShareSources';
+import { mergeScreenSources, pickAutoStageSource, sameScreenSources, type ScreenSourceTab } from '../../utils/screenShareSources';
+
+/**
+ * How often the open setup screen re-lists sources. Windows open and close
+ * while the user is choosing — the whole point of the refresh — so this is
+ * short enough to feel live and long enough that the enumeration is not a
+ * continuous scan of every window.
+ */
+const SOURCE_POLL_MS = 2_000;
 
 /**
  * ScreenShareSetup — the one screen every screen share starts from.
@@ -171,7 +179,7 @@ export function ScreenShareSetup() {
    * `claimed` reuses a generation already taken by stageSource; a direct call
    * (the "Choose screen" button) takes a fresh one.
    */
-  const stage = useCallback(async (claimed?: number) => {
+  const stage = useCallback(async (claimed?: number, sourceId?: string | null) => {
     const generation = claimed ?? ++stageGenerationRef.current;
     setError(null);
     setStaging(true);
@@ -179,7 +187,7 @@ export function ScreenShareSetup() {
     // System picker: no tile carries the audio preference, so send it ahead of the request
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
-      const stream = await stageScreenCapture();
+      const stream = await stageScreenCapture(sourceId, audioTargetId);
       if (generation !== stageGenerationRef.current) {
         // Superseded while the picker was open: never adopt it, and never
         // leave the OS capturing for a stream nothing will publish.
@@ -201,7 +209,7 @@ export function ScreenShareSetup() {
         setStaging(false);
       }
     }
-  }, [api, replaceStaged, markPromptInFlight]);
+  }, [api, audioTargetId, replaceStaged, markPromptInFlight]);
 
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
   const stageSource = useCallback(async (sourceId: string) => {
@@ -223,25 +231,15 @@ export function ScreenShareSetup() {
     }
     setSelectedId(sourceId);
     const generation = ++stageGenerationRef.current;
-    if (api.preselectScreenSource) {
-      // Awaited: the preselection and getDisplayMedia() travel different IPC
-      // pipes with no ordering guarantee between them. If the display-media
-      // handler wins the race it finds no preselection, degrades to the
-      // prompted flow, and the preselection then sits armed for its whole TTL
-      // ready to hijack the next share. The round trip is free next to a dialog.
-      try {
-        await api.preselectScreenSource(sourceId, shareAudio, audioTargetId);
-      } catch (err) {
-        console.error('[ScreenShareSetup] preselectScreenSource failed:', err);
-      }
-      // A newer tile was clicked while the preselection was in flight
-      if (generation !== stageGenerationRef.current) return;
-    } else {
+    if (!api.preselectScreenSource) {
       // Older desktop: the main process will push sources; answer with this id when it does.
       pendingPromptIdRef.current = sourceId;
     }
-    void stage(generation);
-  }, [api, stage, audioTargetId]);
+    // The preselection itself is awaited inside stageScreenCapture, right
+    // before getDisplayMedia(), so the display-media handler always finds it
+    // armed; a cropped window preselects its display instead of itself.
+    void stage(generation, sourceId);
+  }, [api, stage]);
 
   // Ask the desktop who picks, once per open
   useEffect(() => {
@@ -255,19 +253,69 @@ export function ScreenShareSetup() {
     return () => { cancelled = true; };
   }, [isOpen, electron, api]);
 
-  // Electron: list sources up front when we can. `sourcesNonce` is what the
-  // empty state's "Try again" bumps — an enumeration that came back empty
-  // (macOS without the Screen Recording grant) is worth retrying by hand once
-  // the user has granted it, and nothing else would re-run this.
+  // Electron: list sources up front when we can, and keep the list live while
+  // the screen is open. `sourcesNonce` is what the empty state's "Try again"
+  // bumps — an enumeration that came back empty (macOS without the Screen
+  // Recording grant) is worth retrying by hand once the user has granted it,
+  // and nothing else would re-run this.
+  //
+  // The first pass and every fifth poll carry thumbnails; the polls between
+  // them ask for ids and names only. A thumbnail is a capture of that window,
+  // and the setup screen stays open for as long as the user takes to choose,
+  // so paying for every preview on every tick would keep the whole desktop
+  // being photographed under an open dialog. The periodic full pass is what
+  // keeps the previews of animated windows moving.
   useEffect(() => {
     if (!isOpen || !canListSources || !api?.getScreenSources) return;
     let cancelled = false;
+    let inFlight = false;
+    let nextWantsThumbnails = true;
+    let ticks = 0;
     setLoadingSources(true);
-    api.getScreenSources()
-      .then((list) => { if (!cancelled) setSources(list); })
-      .catch((err) => { console.error('[ScreenShareSetup] getScreenSources failed:', err); if (!cancelled) setSources([]); })
-      .finally(() => { if (!cancelled) setLoadingSources(false); });
-    return () => { cancelled = true; };
+
+    const load = async (): Promise<void> => {
+      if (inFlight) return;
+      inFlight = true;
+      const withThumbnails = nextWantsThumbnails;
+      nextWantsThumbnails = false;
+      try {
+        const list = await api!.getScreenSources!({ thumbnails: withThumbnails });
+        if (cancelled) return;
+        setSources((previous) => {
+          const merged = mergeScreenSources(previous, list);
+          return sameScreenSources(previous, merged) ? previous : merged;
+        });
+      } catch (err) {
+        if (cancelled) return;
+        // A failed refresh leaves the grid the user is already looking at; only
+        // the first load has nothing to fall back to.
+        if (withThumbnails) {
+          console.error('[ScreenShareSetup] getScreenSources failed:', err);
+          setSources([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingSources(false);
+        inFlight = false;
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(() => {
+      // A hidden window cannot use the grid, and the main process serves a
+      // cache instead of enumerating for an unfocused one anyway.
+      if (document.hidden) return;
+      if (++ticks % 5 === 0) nextWantsThumbnails = true;
+      void load();
+    }, SOURCE_POLL_MS);
+    // Coming back to the app is when a window opened meanwhile first becomes
+    // visible: refresh at once instead of waiting out the interval.
+    const onFocus = (): void => { void load(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [isOpen, canListSources, api, sourcesNonce]);
 
   // Older desktop: main pushes sources for an in-flight getDisplayMedia

@@ -14,6 +14,7 @@ struct AUDIOCLIENT_ACTIVATION_PARAMS { AUDIOCLIENT_ACTIVATION_TYPE ActivationTyp
 static_assert(sizeof(AUDIOCLIENT_ACTIVATION_PARAMS) == 12, "Windows SDK activation ABI");
 #endif
 #include <mmdeviceapi.h>
+#include <dwmapi.h>
 #include <wrl/client.h>
 #include <atomic>
 #include <io.h>
@@ -69,7 +70,19 @@ static int fail(const char* stage, HRESULT hr, int code) {
     std::fflush(stderr);
     return code;
 }
+// Coordinates are compared against what Chromium's display capture reports,
+// and that is physical pixels. Without this the process is DPI-unaware and
+// Windows silently scales every rectangle it hands out — the crop would be
+// wrong on exactly the machines that use display scaling.
+static void enablePerMonitorDpiAwareness() {
+    using SetContextFn = BOOL (WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto setContext = reinterpret_cast<SetContextFn>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext"));
+    if (setContext) setContext(reinterpret_cast<DPI_AWARENESS_CONTEXT>(static_cast<INT_PTR>(-4)));
+}
+
 int wmain(int argc, wchar_t** argv) {
+    enablePerMonitorDpiAwareness();
     if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) {
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (FAILED(hr)) return fail("self-test.CoInitializeEx", hr, 4);
@@ -82,6 +95,38 @@ int wmain(int argc, wchar_t** argv) {
         hr = completion.As(&marshaler);
         if (FAILED(hr)) return fail("self-test.IMarshal", hr, 8);
         std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal\n");
+        return 0;
+    }
+    // Window geometry for the borderless window-capture path: the renderer
+    // captures the display the window is on and crops to this rectangle, which
+    // is the one way to share a single window on Windows 10 without the yellow
+    // capture border (Windows Graphics Capture draws it; display capture does
+    // not). Physical pixels, JSON on stdout, one line.
+    if (argc == 3 && wcscmp(argv[1], L"geometry") == 0) {
+        auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
+        if (!IsWindow(hwnd)) {
+            std::fprintf(stderr, "ERROR stage=geometry reason=invalid-window\n");
+            return 3;
+        }
+        RECT frame{};
+        // The extended frame bounds are the visible window without the invisible
+        // resize border, which is what a viewer expects to see.
+        if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))
+            && !GetWindowRect(hwnd, &frame)) {
+            return 3;
+        }
+        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO info{};
+        info.cbSize = sizeof(info);
+        if (!GetMonitorInfoW(monitor, &info)) return 3;
+        std::fprintf(stdout,
+            "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s}\n",
+            static_cast<long>(frame.left), static_cast<long>(frame.top),
+            static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
+            static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
+            static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
+            static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
+            IsIconic(hwnd) ? "true" : "false");
         return 0;
     }
     if (argc != 3) return 2;

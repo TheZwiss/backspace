@@ -16,6 +16,7 @@ import {
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { execFile } from 'child_process';
 import { pathToFileURL } from 'url';
 import {
   startActivityDetection,
@@ -663,24 +664,75 @@ let lastScreenSources: Electron.DesktopCapturerSource[] = [];
 let lastServedScreenSources: SerializedScreenSource[] = [];
 let lastScreenEnumerationAt: number | null = null;
 
-async function enumerateScreenSources(): Promise<Electron.DesktopCapturerSource[]> {
+/**
+ * @param withThumbnails Capture a preview of every source. False is the cheap
+ *   poll the setup screen runs while it is open: ids, names and icons only, no
+ *   pixels. A zero thumbnail size is Electron's way of asking for none.
+ */
+async function enumerateScreenSources(withThumbnails = true): Promise<Electron.DesktopCapturerSource[]> {
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
-    thumbnailSize: { width: 320, height: 180 },
+    thumbnailSize: withThumbnails ? { width: 320, height: 180 } : { width: 0, height: 0 },
     fetchWindowIcons: true,
   });
   lastScreenSources = sources;
   return sources;
 }
 
-function serializeScreenSources(sources: Electron.DesktopCapturerSource[]): SerializedScreenSource[] {
+function serializeScreenSources(
+  sources: Electron.DesktopCapturerSource[],
+  withThumbnails = true,
+): SerializedScreenSource[] {
   return sources.map((source) => ({
     id: source.id,
     name: source.name,
-    thumbnailDataUrl: source.thumbnail.toDataURL(),
+    // An empty string, not an empty PNG: the renderer keeps the thumbnail it
+    // already has for this id instead of replacing it with a blank tile.
+    thumbnailDataUrl: withThumbnails ? source.thumbnail.toDataURL() : '',
     appIconDataUrl: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
     isScreen: source.id.startsWith('screen:'),
   }));
+}
+
+/** Physical rectangle of a display, which is the space the helper's rectangles use. */
+function displayPhysicalBounds(display: Electron.Display): { x: number; y: number; width: number; height: number } {
+  return {
+    x: Math.round(display.bounds.x * display.scaleFactor),
+    y: Math.round(display.bounds.y * display.scaleFactor),
+    width: Math.round(display.bounds.width * display.scaleFactor),
+    height: Math.round(display.bounds.height * display.scaleFactor),
+  };
+}
+
+interface WindowGeometry {
+  window: [number, number, number, number];
+  monitor: [number, number, number, number];
+  minimized: boolean;
+}
+
+/**
+ * Ask the helper where a window is. The renderer crops a display capture to
+ * this rectangle, which is how a single window can be shared on Windows 10
+ * without Windows Graphics Capture's yellow border — the capture is of the
+ * display, and a display capture draws no border.
+ */
+function queryWindowGeometry(hwnd: string): Promise<WindowGeometry | null> {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32' || !fs.existsSync(windowsAudioExecutable)) { resolve(null); return; }
+    execFile(windowsAudioExecutable, ['geometry', hwnd], { windowsHide: true, timeout: 5_000 }, (error, stdout) => {
+      if (error) { resolve(null); return; }
+      try {
+        const parsed = JSON.parse(stdout.trim()) as WindowGeometry;
+        const sane = Array.isArray(parsed.window) && parsed.window.length === 4
+          && Array.isArray(parsed.monitor) && parsed.monitor.length === 4
+          && parsed.window.every((n) => Number.isFinite(n))
+          && parsed.monitor.every((n) => Number.isFinite(n));
+        resolve(sane ? parsed : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
 }
 
 function currentPickerMode(): ScreenSharePickerMode {
@@ -879,7 +931,8 @@ function registerIpcHandlers(): void {
   // policy: the app's own window only, focused only, and no faster than the
   // cache window, so a page polling on a timer cannot quietly photograph
   // whatever the user switched to.
-  ipcMain.handle('get-screen-sources', async (event): Promise<SerializedScreenSource[]> => {
+  ipcMain.handle('get-screen-sources', async (event, options?: { thumbnails?: boolean }): Promise<SerializedScreenSource[]> => {
+    const withThumbnails = options?.thumbnails !== false;
     const decision = screenEnumerationDecision({
       fromMainWindow: event.sender === mainWindow?.webContents,
       windowFocused: mainWindow?.isFocused() ?? false,
@@ -888,9 +941,47 @@ function registerIpcHandlers(): void {
     });
     if (decision === 'deny') return [];
     if (decision === 'serve-cache') return lastServedScreenSources;
-    lastServedScreenSources = serializeScreenSources(await enumerateScreenSources());
+    lastServedScreenSources = serializeScreenSources(await enumerateScreenSources(withThumbnails), withThumbnails);
     lastScreenEnumerationAt = Date.now();
     return lastServedScreenSources;
+  });
+  // Where a window is, and which display to capture for it. The renderer turns
+  // this into a cropped display capture: sharing the window as Chromium would
+  // (Windows Graphics Capture) draws the yellow border on Windows 10, and a
+  // display capture does not. Null means "fall back to the ordinary window
+  // capture" — an older helper, a window that is gone, or a display Electron
+  // and the helper disagree about.
+  ipcMain.handle('get-window-capture-target', async (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32') return null;
+    if (typeof sourceId !== 'string') return null;
+    const match = /^window:(\d+):\d+$/.exec(sourceId);
+    if (!match) return null;
+    const geometry = await queryWindowGeometry(match[1]!);
+    if (!geometry) return null;
+    const [mx, my, mw, mh] = geometry.monitor;
+    const [wx, wy, ww, wh] = geometry.window;
+    const display = screen.getAllDisplays().find((candidate) => {
+      const rect = displayPhysicalBounds(candidate);
+      return Math.abs(rect.x - mx) <= 2 && Math.abs(rect.y - my) <= 2
+        && Math.abs(rect.width - mw) <= 2 && Math.abs(rect.height - mh) <= 2;
+    });
+    if (!display) return null;
+    const matches = (source: Electron.DesktopCapturerSource): boolean =>
+      source.id.startsWith('screen:') && source.display_id === String(display.id);
+    let source = lastScreenSources.find(matches);
+    if (!source) source = (await enumerateScreenSources(false)).find(matches);
+    if (!source) return null;
+    const left = Math.max(mx, wx);
+    const top = Math.max(my, wy);
+    const right = Math.min(mx + mw, wx + ww);
+    const bottom = Math.min(my + mh, wy + wh);
+    if (right - left < 16 || bottom - top < 16) return null;
+    return {
+      screenSourceId: source.id,
+      monitor: { width: mw, height: mh },
+      crop: { x: left - mx, y: top - my, width: right - left, height: bottom - top },
+      minimized: geometry.minimized === true,
+    };
   });
   ipcMain.handle('get-screen-share-picker-mode', (event) => {
     if (event.sender !== mainWindow?.webContents) return 'app';
@@ -933,11 +1024,14 @@ function registerIpcHandlers(): void {
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
   // back to the prompted flow, and leave this armed to hijack the next share.
-  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean, targetId?: unknown) => {
+  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean, targetId?: unknown, audioSourceId?: unknown) => {
     if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId !== 'string' || !sourceId) return;
     if (sourceId !== audioCaptureSourceId || targetId !== undefined) audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
-    audioCaptureSourceId = sourceId;
+    // Usually the audio comes from the source being captured. A cropped window
+    // share captures the display but must take the audio of the window's own
+    // process tree, so it names that source separately.
+    audioCaptureSourceId = typeof audioSourceId === 'string' && /^window:\d+:\d+$/.test(audioSourceId) ? audioSourceId : sourceId;
     pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
   });
   // System-picker sessions have no tile to preselect; the renderer only tells

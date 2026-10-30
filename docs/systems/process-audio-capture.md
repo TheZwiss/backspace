@@ -111,3 +111,59 @@ References:
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.hpp
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.cpp
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/plugin.cpp
+
+## Verified on Windows 10 22H2 (build 19045), 2026-10-30
+
+The reported `ActivateAudioInterfaceAsync: 0x8000000e` was fixed by the agile
+completion handler described above; on this build it activates and captures.
+
+Evidence, all on a real Windows 10 x64 machine with the helper built from this
+source (MinGW-w64, statically linked):
+
+- `--self-test` → `SELF_TEST_OK IAgileObject IMarshal`, exit 0.
+- `exclude <pid>` while a 440 Hz WAV played in another process → `READY`, and
+  572,160 bytes of PCM in 3 s (~191 kB/s, the expected 48 kHz stereo s16le).
+  RMS 6354, peak 9119: the tone is in the capture, not silence.
+- Through the app: `startSystemAudio` returned `{ ok: true, pcm: true }`, and
+  `onProcessAudio` delivered 756,480 bytes in ~4 s.
+
+The local build needs two flags the CI (MSVC) build does not: `-municode`
+(entry point is `wmain`) and `-static -static-libgcc -static-libstdc++` (the
+helper is shipped as a single file). `CMakeLists.txt` sets them for MinGW.
+
+## Window geometry and borderless window capture
+
+Windows Graphics Capture draws a yellow border around a captured **window** for
+the whole session, and Windows 10 has no API to turn it off (`IsBorderRequired`
+arrives with `IGraphicsCaptureSession3` on Windows 11). Display capture draws no
+border. OBS shows the border with its WGC method and cannot see GPU-composited
+windows (Chrome, Brave, Electron) with BitBlt.
+
+Discord does not show the border, and its `discord_voice.node` explains why: the
+capture stack ("wumpus", Rust) has `graphics_capture_window_source`,
+`graphics_capture_display_source`, `dxgi_window_source`, `dxgi_display_source`
+and `gdi_window_source`, plus `window_validation` and a `WindowOccluded` error.
+Its window share is a display duplication cropped to the window rectangle
+(`DwmGetWindowAttribute` for the frame bounds), not a window capture.
+
+Backspace does the same: the helper's `geometry <hwnd>` mode prints the
+window's physical rectangle and its monitor's rectangle as one JSON line, the
+main process maps that monitor to a `desktopCapturer` screen source
+(`get-window-capture-target`), the renderer captures that display and crops
+each frame to the window on a canvas (`packages/web/src/utils/windowCropCapture.ts`),
+and the canvas track is what gets published. Audio still comes from the window's
+process tree, named separately in the preselection (`audioSourceId`).
+
+Measured on the same machine, counting yellow pixels on a 1920×1080 screenshot
+while a 900×620 Notepad was shared:
+
+| Capture | Yellow pixels |
+|---|---|
+| Nothing captured | 203 |
+| Window capture (WGC) | 694 |
+| Display capture cropped to the window | 203 |
+
+Limits, stated rather than hidden: a window on top of the shared one is inside
+the crop (as it is in Discord's), the crop follows moves and resizes but a
+window dragged to another display ends the track instead of showing the wrong
+monitor, and a minimized window freezes the last frame.
