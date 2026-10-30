@@ -69,7 +69,16 @@
         "fallbackName": "Kamera {{number}}",
         "detectedFallback": "erkannte Kamera",
         "currentlyUsing": "Aktuell verwendet: {{label}}",
-        "none": "Keine Kameras gefunden."
+        "none": "Keine Kameras gefunden.",
+        "quality": {
+          "label": "Webcam-Qualität",
+          "managed": "Die Webcam-Qualität wird von der Instanz festgelegt: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Auflösung",
+          "framerate": "Bildrate",
+          "bitrate": "Bitrate",
+          "useDefault": "Standard verwenden",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Kamera testen",
@@ -127,6 +136,7 @@
       "appearance": "Darstellung",
       "voice": "Sprache & Video",
       "privacy": "Privatsphäre",
+      "stickers": "Sticker",
       "connections": "Verbindungen",
       "keybinds": "Tastenkürzel",
       "desktop": "Desktop",
@@ -137,6 +147,26 @@
   },
   "appearance": {
     "title": "Darstellung"
+  },
+  "stickers": {
+    "title": "Meine Sticker-Bibliothek",
+    "description": "Private Sticker-Alben, die nur du sehen kannst. Jedes Album enthält bis zu 30 animierte oder statische Sticker.",
+    "packs": "Private Alben",
+    "newPack": "Name des neuen Albums",
+    "createPack": "Album erstellen",
+    "favorites": "Favoriten",
+    "favoritesHint": "Klicke im Chat mit rechts auf einen Sticker, um hier eine lokale Kopie zu speichern.",
+    "noFavorites": "Noch keine favorisierten Sticker.",
+    "share": "Album teilen",
+    "instance": "Diese Instanz",
+    "requestShare": "Freigabe anfordern",
+    "shareRequested": "Freigabeanfrage gesendet.",
+    "cropTitle": "Sticker quadratisch zuschneiden",
+    "itemName": "Sticker-Name",
+    "deletePack": "Album löschen",
+    "deletePackTitle": "„{{name}}“ löschen?",
+    "deletePackDescription": "Das Album und ausstehende Freigabeanfragen werden entfernt. Bereits gesendete Sticker bleiben im Chat verfügbar.",
+    "deletePackSuccess": "Album gelöscht."
   },
   "account": {
     "title": "Mein Konto",
@@ -268,7 +298,44 @@
     "activity": {
       "sectionTitle": "Aktivitätsstatus",
       "label": "Aktivitätsstatus teilen",
-      "description": "Andere dürfen sehen, was du gerade machst, etwa welche Spiele du spielst oder welche Musik du hörst."
+      "description": "Andere dürfen sehen, was du gerade machst, etwa welche Spiele du spielst oder welche Musik du hörst.",
+      "game": {
+        "label": "Manuell erstellt",
+        "description": "Füge ein nicht erkanntes Spiel hinzu. Es bleibt sichtbar, bis du es entfernst.",
+        "placeholder": "Spielname",
+        "set": "Festlegen",
+        "detectedLabel": "Gerade erkannt",
+        "detectedDescription": "Zeige ein erkanntes Spiel unter einem anderen Namen. Das wird für das nächste Mal gemerkt.",
+        "renamePlaceholder": "Anzeigen als…",
+        "renameLabel": "{{name}} anzeigen als",
+        "renamedLabel": "Umbenannte Spiele",
+        "renamedItem": "{{detected}} → {{chosen}}",
+        "restore": "Zurücksetzen",
+        "descriptionBound": "Füge ein nicht erkanntes Spiel hinzu: wähle sein Programm und benenne es. Es wird angezeigt, solange das Programm läuft.",
+        "programLabel": "Programm",
+        "programPlaceholder": "Laufendes Programm wählen…",
+        "programHint": "Starte zuerst das Spiel und wähle dann sein Programm aus der Liste.",
+        "clearRename": "Leeren",
+        "unknownLabel": "Nicht erkannte Wine-Programme",
+        "unknownDescription": "Diese laufen, passen aber zu keinem bekannten Spiel. Ist eines dein Spiel, zeige es als dein Spiel an.",
+        "unknownUse": "Zu meinen Spielen",
+        "gamesLabel": "Deine Spiele",
+        "gamesDescription": "Das erste Spiel zeigen die Listen an; verschiebe Spiele, um die Priorität festzulegen. Ein verborgenes Spiel sehen andere nicht.",
+        "moveUp": "{{name}} nach oben",
+        "moveDown": "{{name}} nach unten",
+        "hide": "Verbergen",
+        "show": "Zeigen",
+        "hideGame": "{{name}} verbergen",
+        "showGame": "{{name}} zeigen",
+        "add": "Hinzufügen",
+        "remove": "Entfernen",
+        "statusName": "nur per Name",
+        "statusRunning": "läuft",
+        "statusWaiting": "wartet auf {{program}}",
+        "dragHandle": "{{name}} ziehen, um die Priorität zu ändern",
+        "manualNameLabel": "Name von {{name}}",
+        "save": "Speichern"
+      }
     }
   },
   "connections": {
@@ -293,6 +360,11 @@
       "pending": "Verbindung zum Desktop-Portal wird hergestellt. Wenn ein Systemdialog erscheint, weise den gewünschten Aktionen Tastenkürzel zu.",
       "ready": "Backspace ist registriert. Öffne die Systemeinstellungen für Tastenkürzel, um Belegungen zu ändern oder zu entfernen. Die Liste unten ist schreibgeschützt und wird bei der Rückkehr zu Backspace aktualisiert.",
       "unavailable": "Das Portal ist nicht verfügbar, die Berechtigung wurde verweigert oder die Sitzung wurde beendet. Ein Global-Shortcuts-Portal-Backend ist erforderlich. Lokale Belegungen sind unter Wayland deaktiviert.",
+      "missingDesktopEntry": "Das Desktop-Portal findet den Anwendungseintrag für Backspace nicht. Installiere oder integriere die App vor der Registrierung globaler Tastenkürzel.",
+      "integrateAppImage": "AppImage integrieren",
+      "integrationError": "Der Anwendungseintrag konnte nicht erstellt werden. Prüfe den Zugriff auf den Anwendungsordner.",
+      "configure": "Tastenkürzel konfigurieren",
+      "configureError": "Der Tastenkürzel-Editor konnte nicht geöffnet werden. Öffne die Tastenkürzel-Einstellungen des Systems für Backspace.",
       "retry": "Tastenkürzel registrieren oder neu verbinden",
       "assigned": "System-Tastenkürzel: {{shortcut}}",
       "notAssigned": "Keine aktive Systembelegung"
@@ -310,7 +382,8 @@
       "pushToTalk": "Push-to-Talk",
       "toggleCamera": "Kamera ein/aus",
       "toggleScreenShare": "Bildschirmfreigabe ein/aus",
-      "disconnect": "Verbindung trennen"
+      "disconnect": "Verbindung trennen",
+      "dictationPushToTalk": "Diktieren und Stimme senden (halten)"
     },
     "row": {
       "recordingPrompt": "Tastenkombination drücken…",

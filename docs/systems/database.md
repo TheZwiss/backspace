@@ -103,13 +103,14 @@ PK: (spaceId, userId)
 | userId | text NOT NULL | FK → users.id |
 | replyToId | text | FK → messages.id SET NULL |
 | content | text | For a system row, JSON (`channelSystemEvents.ts`) |
+| stickerAssetId | text | SHA-256 named by a complete sticker token in `content`; maintained by migration `0040` triggers and indexed for cleanup/querying |
 | type | text NOT NULL, default `'user'` | `user` (a member wrote it) or `system` (the instance wrote it; a poke is the only one so far, websocket.md "Channel pokes"). Migration `0029_persistent_channel_pokes` |
 | editedAt | integer | |
 | createdAt | integer NOT NULL | |
 
 A system row's `userId` is the member who acted (the poker). `userWrittenMessages()` in `db/userWrittenMessages.ts` is the one condition for "a message a member wrote": the unread counts, the last message id in `ready`, channel search and the reply target check all take it, so a system row is never unread, never found by a search and never replied to.
 
-Indexes: `idx_messages_channel_id` (channelId); `idx_messages_user_id` (userId); `idx_messages_channel_unread` (channelId, `CAST(id AS INTEGER)`, userId, type), created by migration `0027_unread_count_indexes` and given `type` by `0029_persistent_channel_pokes`. The last one serves the unread counts (websocket.md, "Unread counts"): the messages members wrote in a channel after a read cursor, compared as numbers, without reading the table. SQLite uses an expression index only when the query spells the expression the same way, type name case included, so the count writes `CAST(... AS INTEGER)`; the index names the column unqualified because SQLite refuses a qualified one there.
+Indexes: `idx_messages_channel_id` (channelId); `idx_messages_user_id` (userId); `idx_messages_sticker_asset_id` (stickerAssetId); `idx_messages_channel_unread` (channelId, `CAST(id AS INTEGER)`, userId, type), created by migration `0027_unread_count_indexes` and given `type` by `0029_persistent_channel_pokes`. The last one serves the unread counts (websocket.md, "Unread counts"): the messages members wrote in a channel after a read cursor, compared as numbers, without reading the table. SQLite uses an expression index only when the query spells the expression the same way, type name case included, so the count writes `CAST(... AS INTEGER)`; the index names the column unqualified because SQLite refuses a qualified one there.
 
 ### attachments
 | Column | Type | Default | Notes |
@@ -148,6 +149,53 @@ Migration `0031_personal_stickers` adds only these two tables; message and react
 
 The composite primary key (user_id, sticker_id) makes collection idempotent; one user holds at most 200 rows (`MAX_PERSONAL_STICKERS`, checked by the routes). Removing an entry or deleting its user removes only the association. An asset stays while any collection entry, message or reaction on this instance names it; after that, and once past its grace period, the storage cleanup deletes the row and its file (`cleanupUnusedStickerAssets`). Files live under `UPLOAD_DIR/stickers`, outside the attachment phases and the storage stats.
 
+Migration `0038_sticker_library` adds `sticker_packs.scope_type`, `sticker_packs.space_id`, `sticker_favorites`, and `sticker_pack_shares`; `0039_sticker_pack_space_unique` enforces one server-scoped pack per space. Private albums are user-scoped packs limited to 30 items, server packs are space-scoped and limited to 50, and instance packs keep the existing 100-item limit. Favorites reference content-addressed assets and are counted by the sticker janitor. Details: [stickers.md](stickers.md).
+
+### message_bookmarks and bookmark_attachments
+
+Migration `0034_message_bookmarks` adds only these two tables. Full description: [bookmarks.md](bookmarks.md).
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| message_bookmarks | id | text PK NOT NULL | Snowflake |
+| message_bookmarks | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE (a tombstone keeps the row, so `tombstoneUser` purges explicitly) |
+| message_bookmarks | kind | text NOT NULL | `channel` or `dm`: which table holds the original |
+| message_bookmarks | message_id | text NOT NULL | The original's id; no FK (two source tables, and the bookmark outlives the original) |
+| message_bookmarks | channel_id | text NOT NULL | The original's channel or DM id; no FK |
+| message_bookmarks | space_id | text | NULL for a DM |
+| message_bookmarks | content | text | Frozen copy of the text; NULL for attachment-only messages |
+| message_bookmarks | author_id | text NOT NULL | The author's row id on `instance_origin`; no FK |
+| message_bookmarks | author_name | text NOT NULL | Display name at save time (`Deleted User` for a tombstoned author) |
+| message_bookmarks | space_name | text | Frozen; NULL for a DM |
+| message_bookmarks | channel_name | text | Frozen; for a DM the group name or the other members' names |
+| message_bookmarks | instance_origin | text NOT NULL | Origin of the instance that serves the original |
+| message_bookmarks | message_created_at | integer NOT NULL | The original's time, epoch ms |
+| message_bookmarks | created_at | integer NOT NULL | When it was bookmarked, epoch ms |
+| bookmark_attachments | id | text PK NOT NULL | Snowflake |
+| bookmark_attachments | bookmark_id | text NOT NULL | FK → message_bookmarks.id, ON DELETE CASCADE |
+| bookmark_attachments | position | integer NOT NULL | Order on the message |
+| bookmark_attachments | original_name, mimetype, size, width, height, duration, playable | | Metadata copied from `attachments` |
+| bookmark_attachments | source_filename | text NOT NULL | The original's file; belongs to the original message and may no longer exist |
+| bookmark_attachments | source_thumbnail_filename | text | The original's thumbnail |
+| bookmark_attachments | filename, thumbnail_filename | text | The bookmark's own copy; NULL while `copy_status` is `reference` |
+| bookmark_attachments | copy_status | text NOT NULL DEFAULT 'reference' | `reference`, `copied` or `unavailable` |
+
+Indexes: `UNIQUE idx_message_bookmarks_user_message (user_id, kind, message_id)`; `idx_message_bookmarks_user_created (user_id, created_at DESC, id DESC)` for the list; `idx_message_bookmarks_user_channel (user_id, kind, channel_id)` for the per-conversation lookup; `idx_bookmark_attachments_bookmark_id (bookmark_id)`. There is no limit on the number of bookmarks per user.
+
+### game_icon_assets and game_icons
+
+Migration `0037_game_icons` adds only these two tables; no activity or user column changes (an icon is an `assets.largeImage` URL on a transient activity, see [uploads.md](uploads.md#15-game-icons) and [activity-presence.md](activity-presence.md#game-icons)).
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| game_icon_assets | id | text PK NOT NULL | SHA-256 of the encoded WebP bytes |
+| game_icon_assets | created_at | integer NOT NULL | Epoch ms of the latest upload of these bytes; set before the file is written |
+| game_icons | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE |
+| game_icons | icon_id | text NOT NULL | FK → game_icon_assets.id |
+| game_icons | created_at | integer NOT NULL | Epoch ms |
+
+The composite primary key (user_id, icon_id) makes the upload idempotent; one user holds at most 25,600 rows (`MAX_GAME_ICONS_PER_USER`, checked by the route). Deleting a user removes only its claims; the storage janitor later removes assets no claim names after the retention and grace periods described in [uploads.md](uploads.md#15-game-icons).
+
 ### embeds
 | Column | Type | Notes |
 |--------|------|-------|
@@ -175,9 +223,10 @@ PK: id
 | messageId | text NOT NULL | FK → messages.id CASCADE |
 | userId | text NOT NULL | FK → users.id CASCADE |
 | emoji | text NOT NULL | |
+| stickerAssetId | text | SHA-256 when `emoji` is a sticker token; NULL for native emoji |
 | createdAt | integer NOT NULL | |
 
-Indexes: `idx_reactions_message_id` (messageId); `idx_reactions_message_user_emoji` UNIQUE (messageId, userId, emoji), one reaction per user and emoji on a message. Writers insert with `ON CONFLICT DO NOTHING` and treat no row written as "already reacted" (`reaction_add` in `ws/events.ts`). See "Reaction uniqueness (0024)" below.
+Indexes: `idx_reactions_message_id` (messageId); `idx_reactions_sticker_asset_id` (stickerAssetId); `idx_reactions_message_user_emoji` UNIQUE (messageId, userId, emoji), one reaction per user and emoji on a message. Writers insert with `ON CONFLICT DO NOTHING` and treat no row written as "already reacted" (`reaction_add` in `ws/events.ts`). See "Reaction uniqueness (0024)" below.
 
 ---
 
@@ -214,6 +263,7 @@ PK: (dmChannelId, userId)
 | userId | text NOT NULL | | FK → users.id |
 | replyToId | text | | FK → dm_messages.id SET NULL |
 | content | text | | |
+| stickerAssetId | text | SHA-256 named by a complete sticker token in `content`; maintained by migration `0040` triggers |
 | type | text NOT NULL | `'user'` | user/system |
 | editedAt | integer | | |
 | sourceInstance | text | | Federation source origin |
@@ -221,7 +271,7 @@ PK: (dmChannelId, userId)
 | encryptionVersion | integer | 0 | |
 | createdAt | integer NOT NULL | | |
 
-Indexes: `idx_dm_messages_dm_channel_id` (dmChannelId); `idx_dm_messages_user_id` (userId); `idx_dm_messages_source_unique` UNIQUE (sourceInstance, sourceMessageId) where sourceInstance is set; `idx_dm_messages_channel_unread` (dmChannelId, `CAST(id AS INTEGER)`, userId), migration `0027_unread_count_indexes`, as `idx_messages_channel_unread` above.
+Indexes: `idx_dm_messages_dm_channel_id` (dmChannelId); `idx_dm_messages_user_id` (userId); `idx_dm_messages_sticker_asset_id` (stickerAssetId); `idx_dm_messages_source_unique` UNIQUE (sourceInstance, sourceMessageId) where sourceInstance is set; `idx_dm_messages_channel_unread` (dmChannelId, `CAST(id AS INTEGER)`, userId), migration `0027_unread_count_indexes`, as `idx_messages_channel_unread` above.
 
 ### dm_reactions
 PK: id
@@ -231,9 +281,10 @@ PK: id
 | dmMessageId | text NOT NULL | FK → dm_messages.id CASCADE |
 | userId | text NOT NULL | FK → users.id CASCADE |
 | emoji | text NOT NULL | |
+| stickerAssetId | text | SHA-256 when `emoji` is a sticker token; NULL for native emoji |
 | createdAt | integer NOT NULL | |
 
-Indexes: `idx_dm_reactions_dm_message_id` (dmMessageId); `idx_dm_reactions_message_user_emoji` UNIQUE (dmMessageId, userId, emoji). Both writers, the local `reaction_add` and the relayed one (`processReactionAddEvent`, live delivery and the catch-up pull alike), insert with `ON CONFLICT DO NOTHING`; a relayed add that writes nothing is accepted as already held.
+Indexes: `idx_dm_reactions_dm_message_id` (dmMessageId); `idx_dm_reactions_sticker_asset_id` (stickerAssetId); `idx_dm_reactions_message_user_emoji` UNIQUE (dmMessageId, userId, emoji). Both writers, the local `reaction_add` and the relayed one (`processReactionAddEvent`, live delivery and the catch-up pull alike), insert with `ON CONFLICT DO NOTHING`; a relayed add that writes nothing is accepted as already held.
 
 #### Reaction uniqueness (0024)
 The squashed baseline (0000) created both reaction tables without a unique key; only pre-squash installs had one, as an inline `UNIQUE(message_id, user_id, emoji)` / `UNIQUE(dm_message_id, user_id, emoji)` from the old hand-written statements. On installs created after the squash the same user's reaction could be stored several times (#393). Migration `0024_reaction_unique` first deletes the repeats, keeping per key the row with the lowest `created_at` and, of equally early rows, the lowest `rowid` (any one of equal rows would do; the rowid only makes the choice definite), then creates the two named unique indexes. On a pre-squash install there are no repeats, and the named index is created beside the inline constraint (`sqlite_autoindex_*`), which stays.
@@ -450,6 +501,15 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | gifApiKey | text | | Klipy API key |
 | bitrateMatrixOverrides | text | | JSON sparse overrides |
 | allowCustomBitrate | integer NOT NULL | 1 | |
+| cameraMode | text NOT NULL | `'fixed'` | `fixed` or `user-choice`; webcam publish policy |
+| cameraDefaultResolution | integer NOT NULL | 720 | Height in px |
+| cameraDefaultFramerate | integer NOT NULL | 30 | |
+| cameraDefaultBitrateKbps | integer NOT NULL | 2000 | |
+| cameraAllowedResolutions | text NOT NULL | `'540,720,1080'` | CSV |
+| cameraAllowedFramerates | text NOT NULL | `'30,60'` | CSV |
+| cameraMinBitrateKbps | integer NOT NULL | 300 | |
+| cameraMaxBitrateKbps | integer NOT NULL | 4000 | |
+| cameraAllowCustomBitrate | integer NOT NULL | 1 | |
 | maxUploadSizeBytes | integer | | null = use env |
 | federationRelayEnabled | integer NOT NULL | 1 | |
 | federationRelayTtlDays | integer NOT NULL | 30 | |

@@ -15,11 +15,11 @@ minute even though the global number is smaller. Read the per-route numbers
 below as the whole budget for that route, not as a second gate. **The key is
 the client address and nothing else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
 a route `preHandler`, so no user is attached to the request yet when the key is
-taken. Nothing in the HTTP limiter is per account; the only per-user budgets in
-the app are the two hand-written upload limits in `routes/files.ts` (30 upload
-creates and 1000 PATCHes per minute per user), which run inside the tus handler
-after auth, and the sticker upload limit in `routes/stickers.ts` (30 per minute
-per account, also counted after auth).
+taken. Message creates add a separate per-account budget of 5 per 5 seconds for
+both channel and DM messages, shared between REST and WebSocket. The hand-written upload limits in `routes/files.ts` (30 upload
+creates and 1000 PATCHes per minute per user) run inside the tus handler after
+auth, and the sticker upload limit in `routes/stickers.ts` is 30 per minute per
+account, also counted after auth.
 
 The address comes from Fastify's `trustProxy`, which is a **count of trusted
 hops**: the `TRUSTED_PROXY_HOPS` environment variable, default 1, read in
@@ -31,14 +31,14 @@ proxy, or with no proxy at all, sets a different number; see
 [deployment.md](deployment.md), "Server proxy-awareness".
 
 What an operator should take from that: **everyone sharing one public address
-shares one budget.** A school, an office behind a corporate proxy, a VPN exit
-or a household on CGNAT counts as a single client, and a busy client there can
-spend the minute's 200 for everybody at that address. The countermeasure is not
-in the app: give such a deployment its own address, or raise the limit.
+shares the global request budget.** A school, an office behind a corporate
+proxy, a VPN exit or a household on CGNAT counts as a single client for that
+200-per-minute ceiling. Message-create quotas themselves are per account, so
+one user's sticker spam does not consume another user's five-message window.
 
 Routes may tighten the limit for themselves with `config.rateLimit`; those
 overrides sit with their routes (`routes/auth.ts`, `routes/directory.ts`,
-`routes/explore.ts`, `routes/messages.ts`, `routes/dm.ts`, `routes/gif.ts`,
+`routes/explore.ts`, `routes/dm.ts`, `routes/gif.ts`,
 `routes/users.ts`, `routes/social.ts`), and they are keyed the same way, per
 address, for the same reason. The WebSocket `dm_message_create` event applies
 the DM create route's limit to the socket's address in a counter of its own
@@ -347,7 +347,29 @@ Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's nam
 | DELETE | `/api/stickers/:id` | JWT | Removes only the current user's entry |
 | GET | `/api/stickers/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it |
 
-Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 16,777,216 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
+Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 67,108,864 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
+
+Private albums, server packs, favorites, and approval-based sharing use the `/api/sticker-library`, `/api/private-sticker-packs`, `/api/spaces/:id/sticker-pack`, `/api/sticker-favorites`, and `/api/sticker-pack-shares` routes. Private albums allow 30 items and can be renamed with `PATCH /api/private-sticker-packs/:id` or deleted with `DELETE /api/private-sticker-packs/:id`; deletion clears pending shares and retains assets still named by older messages/favorites. Album items can be renamed with `PATCH /api/sticker-library/packs/:id/items/:itemId`. Each server owns at most one pack with 50 items, and sharing requires instance-admin or server `MANAGE_STICKERS` approval. Full contract: [stickers.md](stickers.md).
+
+## Bookmarks (`routes/bookmarks.ts`)
+
+Every route reads and writes the current user's own bookmarks. A bookmark lives on the instance that serves the message, so a client asks the instance of the conversation it is in. Model, statuses and file handling: [bookmarks.md](bookmarks.md).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/bookmarks?cursor=&limit=` | JWT | One page, newest first: `{ items: Bookmark[], nextCursor: string \| null }`. `limit` 1 to 100, default 30 |
+| GET | `/api/bookmarks/keys?kind=&channelId=` | JWT | `string[]`: the bookmarked message ids of one channel or DM |
+| PUT | `/api/bookmarks/:kind/:messageId` | JWT | Saves a copy of the message, or returns the bookmark already there. `201` created, `200` existed. Body: the `Bookmark` |
+| DELETE | `/api/bookmarks/:kind/:messageId` | JWT | Removes the bookmark and the files it owns. Idempotent: `{ success: true }` even when there was none |
+
+`kind` is `channel` or `dm`. A `Bookmark` (`packages/shared/src/bookmarks.ts`) carries the saved copy, the original's ids, `attachments[]` with a per-file `state` (`available` or `gone`) and `status` (`ok`, `edited`, `deleted`, `unavailable`), both worked out on each read. Refusals: `404 message_not_found` (no such message, or one the caller cannot read; the two are not told apart), `400 validation_failed` (a system message, an unknown `kind`, a cursor this server did not issue, a `limit` over 100). There is no bookmark limit. A create that made a bookmark and a removal that found one are pushed to the caller's own sockets as `bookmark_added` / `bookmark_removed` (websocket.md).
+
+## Game icons (`routes/gameIcons.ts`)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/game-icons` | JWT | `{image}`; canonical base64 of a PNG, JPEG or WebP of at most 512 KiB (`MAX_GAME_ICON_BYTES`). Re-encodes to a 256 px WebP, stores it content-addressed and records it for the account. Returns `{id, url}` with the absolute URL of the asset. 10 uploads per account per minute (`429 rate_limited`); `409 game_icon_collection_full` at 25,600 icons; `400 game_icon_invalid_image` for anything else |
+| GET | `/api/game-icons/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it. `404 game_icon_not_found` for an unknown id or a missing file |
 
 ## GIF (`routes/gif.ts`) — auth required
 ```
@@ -388,6 +410,8 @@ PATCH /settings/instance     (admin)       { instanceName?, registrationOpen?, f
                                              gifApiKey?, maxUploadSizeMb?,
                                              federationRelayEnabled?, federationRelayTtlDays? } → { settings }
 ```
+`InstanceStreamingLimits.camera` is an optional object (`mode`, `defaultResolution`, `defaultFramerate`, `defaultBitrateKbps`, `allowedResolutions`, `allowedFramerates`, `minBitrateKbps`, `maxBitrateKbps`, `allowCustomBitrate`). A peer whose version predates the field omits it, and readers fall back to the fixed defaults. `PATCH /settings/streaming` accepts a partial `camera` object and validates it as a whole after merging with the stored row: `400 camera_mode_invalid`, `camera_resolutions_invalid`, `camera_framerates_invalid`, `camera_bitrate_out_of_range`, `camera_default_not_allowed`, or `validation_failed` for a non-object. `fixed` publishes at the admin defaults; `user-choice` lets users pick from the allowlists in Voice & Video.
+
 `registrationOpen` and `federatedRegistrationOpen` are **independent** toggles. PATCH validates `federatedRegistrationOpen` is `boolean` if provided; rejects 400 otherwise. `registrationOpen` is stored as a nullable column (null = fall back to `config.registrationOpen` env default); `federatedRegistrationOpen` is NOT NULL with default 1.
 
 `directoryEnabled` (space directory, see [directory.md](directory.md)) must be a boolean (`400 field_not_boolean`) and needs discovery on: `directoryEnabled: true` while the resulting `discoveryEnabled` is off is `400 directory_requires_discovery`. Both PATCH routes enforce the invariant the other way round too: a write that leaves discovery off clears `directoryEnabled` in the same write, on `/settings/instance` and on `/settings/streaming` (which carries `discoveryEnabled` but not `directoryEnabled`). `directoryLastPingAt`, `directoryLastError` and `directoryListedSpaceCount` are read-only; the PATCH ignores them in the body. The count is the number of spaces that are public or request to join and have opted in to the directory, whatever `directoryEnabled` says. `InstanceStreamingLimits.directoryEnabled` is also carried on `GET /settings/streaming`, read-only there, so a non-admin's space settings can tell whether the instance allows listing. `directoryConfigured` rides with it, also read-only and also from configuration rather than the row (`config.directory.endpoint !== ''`, the same fact `GET /instance/info` reports). It is here because this is the one settings document any signed-in user may read **on any instance**: a space that lives on a peer is gated by that peer's endpoint, which the home instance's `/instance/info` cannot answer for. Neither field is accepted on either PATCH; a body carrying one is ignored, as `directoryLastPingAt` is. A change to `directoryEnabled`, `discoveryEnabled`, `instanceName` or `federatedRegistrationOpen` marks the directory dirty; repeating a stored value does not.

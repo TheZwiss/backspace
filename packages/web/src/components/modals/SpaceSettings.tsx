@@ -11,7 +11,7 @@ import { Toggle } from '../ui/Toggle';
 import { api } from '../../api/client';
 import { getApiForOrigin } from '../../utils/crossStoreResolvers';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SettingsPanelSuspense } from './lazySettingsPanels';
+import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SoundboardPanel, StickerPackPanel, SettingsPanelSuspense } from './lazySettingsPanels';
 import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
 import { ListInDirectoryConfirm } from './DirectoryConfirmations';
 import type { SpaceVisibility, JoinRequest, InstanceStreamingLimits } from '@backspace/shared';
@@ -169,7 +169,7 @@ function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlagsState 
  * space, that instance's own `GET /settings/streaming` for a remote one.
  */
 export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
@@ -492,7 +492,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 }
 
 function JoinRequestsSection({ spaceId }: { spaceId: string }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const f = useFormatters();
   const [loading, setLoading] = useState(true);
@@ -597,16 +597,16 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   );
 }
 
-type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans';
+type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans' | 'soundboard' | 'stickers';
 
-const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans'];
+const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans', 'soundboard', 'stickers'];
 
 function isSpaceSettingsTab(value: unknown): value is SpaceSettingsTab {
   return typeof value === 'string' && (SPACE_SETTINGS_TABS as readonly string[]).includes(value);
 }
 
 export function SpaceSettingsModal() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -624,6 +624,8 @@ export function SpaceSettingsModal() {
   const canManageSpace = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_SPACE);
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
   const canBanMembers = hasPermissionBit(mySpacePerms, PermissionBits.BAN_MEMBERS);
+  const canManageStickers = hasPermissionBit(mySpacePerms, PermissionBits.CREATE_STICKERS)
+    || hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_STICKERS);
 
   // Reset tab and mobile view when modal opens. A caller may name the tab
   // to open on (`openModal('spaceSettings', { tab: 'discovery' })`); a tab
@@ -634,6 +636,8 @@ export function SpaceSettingsModal() {
     if (!isOpen) return;
     const allowed: Record<SpaceSettingsTab, boolean> = {
       overview: true,
+      soundboard: true,
+      stickers: canManageStickers,
       discovery: canManageSpace,
       members: true,
       roles: canManageRoles,
@@ -683,6 +687,10 @@ export function SpaceSettingsModal() {
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
             <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+            <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+            {canManageStickers && (
+              <button onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+            )}
             {canManageSpace && (
               <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
@@ -720,6 +728,10 @@ export function SpaceSettingsModal() {
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
               <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+              <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+              {canManageStickers && (
+                <button onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+              )}
               {canManageSpace && (
                 <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
@@ -756,6 +768,8 @@ export function SpaceSettingsModal() {
               )}
               <SettingsPanelSuspense key={tab}>
                 {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
+                {tab === 'soundboard' && <SoundboardPanel spaceId={currentSpaceId} />}
+                {tab === 'stickers' && canManageStickers && <StickerPackPanel spaceId={currentSpaceId} />}
                 {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
                 {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
                 {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}

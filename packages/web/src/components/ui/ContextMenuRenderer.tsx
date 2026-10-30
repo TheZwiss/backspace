@@ -1,3 +1,4 @@
+import { useExitMotion } from '../../hooks/useExitMotion';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
@@ -360,6 +361,7 @@ interface DesktopMenuProps {
 
 function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  useExitMotion(menuRef);
   const portalContainer = usePortalContainer();
 
   // Viewport-aware positioning via direct DOM mutation
@@ -438,7 +440,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
         ref={menuRef}
         role="menu"
         tabIndex={-1}
-        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
+        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md motion-menu-enter max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
         style={{ left: position.x, top: position.y }}
         onKeyDown={handleKeyDown}
         onContextMenu={suppressNativeMenu}
@@ -502,6 +504,8 @@ interface MobileMenuProps {
 }
 
 function MobileMenu({ items, close }: MobileMenuProps) {
+  const exitRef = useRef<HTMLDivElement>(null);
+  useExitMotion(exitRef);
   const { t } = useTranslation('common');
   const [submenuStack, setSubmenuStack] = useState<ContextMenuSubmenu | null>(null);
   const portalContainer = usePortalContainer();
@@ -529,6 +533,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
       {/* Bottom sheet */}
       <div
         role="menu"
+        ref={exitRef}
         aria-label={submenuStack?.label}
         className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
         style={{ paddingBottom: 'var(--safe-bottom)' }}

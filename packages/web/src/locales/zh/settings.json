@@ -69,7 +69,16 @@
         "fallbackName": "摄像头 {{number}}",
         "detectedFallback": "检测到的摄像头",
         "currentlyUsing": "当前使用：{{label}}",
-        "none": "未检测到摄像头。"
+        "none": "未检测到摄像头。",
+        "quality": {
+          "label": "摄像头画质",
+          "managed": "摄像头画质由实例设置：{{resolution}}、{{fps}} fps、{{bitrate}}。",
+          "resolution": "分辨率",
+          "framerate": "帧率",
+          "bitrate": "码率",
+          "useDefault": "使用默认值",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "测试摄像头",
@@ -127,6 +136,7 @@
       "appearance": "外观",
       "voice": "语音与视频",
       "privacy": "隐私",
+      "stickers": "贴纸",
       "connections": "连接",
       "keybinds": "按键绑定",
       "desktop": "桌面端",
@@ -137,6 +147,26 @@
   },
   "appearance": {
     "title": "外观"
+  },
+  "stickers": {
+    "title": "我的贴纸库",
+    "description": "只有你能看到的私人贴纸相册。每个相册最多包含 30 个动态或静态贴纸。",
+    "packs": "私人相册",
+    "newPack": "新相册名称",
+    "createPack": "创建相册",
+    "favorites": "收藏",
+    "favoritesHint": "在聊天中右键点击贴纸，即可在这里保存本地副本。",
+    "noFavorites": "还没有收藏的贴纸。",
+    "share": "分享相册",
+    "instance": "此实例",
+    "requestShare": "申请批准",
+    "shareRequested": "分享申请已发送。",
+    "cropTitle": "将贴纸裁剪为正方形",
+    "itemName": "贴纸名称",
+    "deletePack": "删除相册",
+    "deletePackTitle": "删除“{{name}}”？",
+    "deletePackDescription": "相册及待处理的分享申请将被删除。已发送的贴纸仍可在聊天中查看。",
+    "deletePackSuccess": "相册已删除。"
   },
   "account": {
     "title": "我的账号",
@@ -267,7 +297,44 @@
     "activity": {
       "sectionTitle": "活动状态",
       "label": "分享活动状态",
-      "description": "允许他人查看您正在进行的活动，例如您正在玩的游戏或正在听的音乐。"
+      "description": "允许他人查看您正在进行的活动，例如您正在玩的游戏或正在听的音乐。",
+      "game": {
+        "label": "手动创建",
+        "description": "添加未被检测到的游戏。它会一直显示，直到你移除。",
+        "placeholder": "游戏名称",
+        "set": "设置",
+        "detectedLabel": "当前检测到",
+        "detectedDescription": "用另一个名称显示检测到的游戏，下次会记住。",
+        "renamePlaceholder": "显示为…",
+        "renameLabel": "将 {{name}} 显示为",
+        "renamedLabel": "已重命名的游戏",
+        "renamedItem": "{{detected}} → {{chosen}}",
+        "restore": "恢复",
+        "descriptionBound": "添加未被检测到的游戏：选择它的程序并命名。该程序运行期间会显示这个游戏。",
+        "programLabel": "程序",
+        "programPlaceholder": "选择正在运行的程序…",
+        "programHint": "请先启动游戏，再从列表中选择它的程序。",
+        "clearRename": "清除",
+        "unknownLabel": "未识别的 Wine 程序",
+        "unknownDescription": "这些程序正在运行，但不属于任何已知游戏。如果其中有你的游戏，可将其显示为你正在玩的游戏。",
+        "unknownUse": "添加到我的游戏",
+        "gamesLabel": "你的游戏",
+        "gamesDescription": "列表会显示排在第一位的游戏；移动游戏以设置优先级。隐藏的游戏不会向他人显示。",
+        "moveUp": "上移 {{name}}",
+        "moveDown": "下移 {{name}}",
+        "hide": "隐藏",
+        "show": "显示",
+        "hideGame": "隐藏 {{name}}",
+        "showGame": "显示 {{name}}",
+        "add": "添加",
+        "remove": "移除",
+        "statusName": "仅按名称显示",
+        "statusRunning": "运行中",
+        "statusWaiting": "等待 {{program}}",
+        "dragHandle": "拖动 {{name}} 以更改优先级",
+        "manualNameLabel": "{{name}} 的名称",
+        "save": "保存"
+      }
     }
   },
   "connections": {
@@ -292,6 +359,11 @@
       "pending": "正在连接到桌面门户。如果弹出系统对话框，请为您要使用的操作选择快捷键。",
       "ready": "Backspace 已注册。打开系统的键盘快捷键设置可更改或移除绑定。下方的列表为只读，当您切回 Backspace 时会自动刷新。",
       "unavailable": "门户不可用、权限被拒绝或会话已结束。需要全局快捷键门户后端支持。Wayland 下已禁用本地绑定。",
+      "missingDesktopEntry": "桌面门户找不到 Backspace 的应用程序条目。注册全局快捷键前，请先安装应用或将其集成到系统。",
+      "integrateAppImage": "集成 AppImage",
+      "integrationError": "无法创建应用程序条目。请检查用户应用程序目录的访问权限。",
+      "configure": "配置快捷键",
+      "configureError": "无法打开系统快捷键编辑器。请在系统快捷键设置中找到 Backspace。",
       "retry": "注册或重新连接快捷键",
       "assigned": "系统快捷键：{{shortcut}}",
       "notAssigned": "暂无有效的系统分配"
@@ -309,7 +381,8 @@
       "pushToTalk": "按键发言",
       "toggleCamera": "切换摄像头",
       "toggleScreenShare": "切换屏幕共享",
-      "disconnect": "断开连接"
+      "disconnect": "断开连接",
+      "dictationPushToTalk": "听写并发送语音（按住）"
     },
     "row": {
       "recordingPrompt": "请按下组合键…",

@@ -138,6 +138,7 @@ export function PictureInPicture() {
   const pipEnabled = useVoiceStore((s) => s.pipEnabled);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const callWindowOpen = useUIStore((s) => s.callWindowOpen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
   const setPipCollapsed = useUIStore((s) => s.setPipCollapsed);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
@@ -166,7 +167,7 @@ export function PictureInPicture() {
   // Visibility — split into wouldShow (ignores collapsed) and shouldShow (full check)
   const isInServerVoice = currentVoiceChannelId !== null && currentChannelId !== currentVoiceChannelId;
   const isInDmCall = activeDmCall !== null && currentChannelId !== dmCallChannel;
-  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && pipEnabled;
+  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && !callWindowOpen && pipEnabled;
   const shouldShow = wouldShow && !pipCollapsed;
 
   // Reset pipCollapsed when wouldShow transitions false → true

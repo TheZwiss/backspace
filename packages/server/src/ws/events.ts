@@ -28,8 +28,8 @@ import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
 import { ERROR_MESSAGES, errorText } from '../utils/httpErrors.js';
 import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
 import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
-import { consumeWsDmMessageCreate } from '../utils/dmMessageRateLimit.js';
-import { socketAddressOf } from './socketAddress.js';
+import { consumeDmMessageCreate } from '../utils/dmMessageRateLimit.js';
+import { consumeChannelMessageCreate } from '../utils/channelMessageRateLimit.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -231,7 +231,7 @@ export function handleClientEvent(
       handleVoiceDisconnect(event, userId);
       break;
     case 'activity_update':
-      handleActivityUpdate(event, userId);
+      handleActivityUpdate(event, userId, ws);
       break;
     default:
       connectionManager.sendToUser(userId, {
@@ -251,6 +251,11 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
   const channelId = event.channelId as string;
   const content = event.content as string;
   const replyToId = event.replyToId as string | undefined;
+
+  if (!consumeChannelMessageCreate(userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: errorText('rate_limited'), code: 'rate_limited' });
+    return;
+  }
 
   if (!channelId || typeof channelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
@@ -478,12 +483,8 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
   applyChosenStatus(userId, event.status);
 }
 
-function handleActivityUpdate(event: Record<string, unknown>, userId: string): void {
+function handleActivityUpdate(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   if (!connectionManager.getUserShowActivity(userId)) return;
-  if (!connectionManager.checkActivityRateLimit(userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'Activity update rate limited' });
-    return;
-  }
 
   const activities = validateActivities(event.activities);
   if (!activities) {
@@ -491,17 +492,25 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
     return;
   }
 
-  connectionManager.setUserActivities(userId, activities);
+  const removingPublishedActivities =
+    activities.length < connectionManager.getUserActivities(userId).length;
+  if (!connectionManager.checkActivityRateLimit(userId, removingPublishedActivities)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Activity update rate limited' });
+    return;
+  }
+
+  connectionManager.setUserActivities(userId, activities, ws);
+  const publishedActivities = connectionManager.getUserActivities(userId);
   const status = connectionManager.getUserStatus(userId);
 
-  const payload = presenceUpdateFor(userId, status, activities);
+  const payload = presenceUpdateFor(userId, status, publishedActivities);
   const targets = collectProfileBroadcastTargetIds(userId);
   for (const uid of targets) connectionManager.sendToUser(uid, payload);
   connectionManager.sendToUser(userId, payload);
 
   // S2S: broadcast to peers (activities + current status); see queueOutboxEvent.
   void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
-    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(activity) failed', e); }
+    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', publishedActivities); } catch (e) { console.warn('[ws] queuePresenceRelay(activity) failed', e); }
   });
 }
 
@@ -834,7 +843,7 @@ function refuseDmMessage(ws: WebSocket, code: ErrorCode, details?: ErrorDetails)
 function handleDmMessageCreate(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   // A socket accepted on /ws always has an address; a stand-in without one
   // counts under the user's row id rather than going uncounted.
-  if (!consumeWsDmMessageCreate(socketAddressOf(ws) ?? `user:${userId}`)) {
+  if (!consumeDmMessageCreate(userId)) {
     refuseDmMessage(ws, 'rate_limited');
     return;
   }
@@ -1806,13 +1815,13 @@ async function handleDmCallEnd(event: Record<string, unknown>, userId: string): 
     const room = connectionManager.getRoom(dmChannelId);
     if (room && room.roomType === 'dm') {
       const meta = room.metadata as DmRoomMeta;
-      if (meta.group) {
+      if (meta.group || meta.state === 'active') {
         // Hanging up or cancelling takes only the sender out of a group
         // call; it ends with the last one out. A member who is not in the
         // call changes nothing.
         if (connectionManager.leaveGroupDmCall(dmChannelId, userId) !== 'ended') return;
       } else {
-        connectionManager.endDmRoom(dmChannelId, 'dm_call_ended');
+        connectionManager.endDmRoom(dmChannelId, 'dm_call_ended', meta.callerId === userId ? 'cancelled' : undefined);
       }
       const fedIdEndRow = getDb().select({ federatedId: schema.dmChannels.federatedId })
         .from(schema.dmChannels).where(eq(schema.dmChannels.id, dmChannelId)).get();

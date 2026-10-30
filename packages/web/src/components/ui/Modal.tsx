@@ -1,10 +1,12 @@
-import React, { useEffect, useCallback } from 'react';
+import { useExitMotion } from '../../hooks/useExitMotion';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ModalProps {
+  targetDocument?: Document;
   isOpen: boolean;
   onClose: () => void;
   title?: string;
@@ -27,12 +29,14 @@ interface ModalProps {
  * appended after it.
  */
 export function Modal(props: ModalProps) {
-  const portalContainer = usePortalContainer();
+  const portalContainer = usePortalContainer(props.targetDocument ?? document);
   if (!props.isOpen) return null;
   return createPortal(<ModalSurface {...props} />, portalContainer);
 }
 
-function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default' }: ModalProps) {
+function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', targetDocument = document }: ModalProps) {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  useExitMotion(surfaceRef);
   const { t } = useTranslation('common');
   const isMobile = useUIStore((s) => s.isMobile);
   const closeLabel = size === 'settings' ? t('chrome.closeSettings') : t('actions.close');
@@ -44,14 +48,14 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   }, [onClose]);
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    targetDocument.addEventListener('keydown', handleKeyDown);
+    return () => targetDocument.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown, targetDocument]);
 
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
             {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
@@ -76,7 +80,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile bottom sheet style
   if (isMobile && mobileStyle === 'sheet') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -107,7 +111,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Settings size variant — large glass overlay for settings screens
   if (size === 'settings') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -131,7 +135,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
 
   // Default centered dialog (desktop and mobile default)
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={onClose}

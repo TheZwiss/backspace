@@ -231,9 +231,10 @@ Search results and reply previews share one jump path in `MessageList.tsx`. [mes
 ```
 1. User clicks search result in SearchPopover
      → onJumpToMessage(messageId) callback fires
-     → MainContent: setJumpToMessageId(id), setSearchOpen(false)
+     → MainContent: jumpStore.requestJump(current conversation, id), setSearchOpen(false)
+     → the conversation is already open, so useJumpNavigation changes nothing
 
-2. MessageList takes the request once (onJumpHandled clears it in MainContent)
+2. MessageList takes the request once (useActiveJump hands it over; onJumpHandled clears it in jumpStore)
      → jumpToMessage(id)
      → Loaded and rendered: scroll + highlight
      → Otherwise: loadMessagesAround(channelId, id) on the channel's origin

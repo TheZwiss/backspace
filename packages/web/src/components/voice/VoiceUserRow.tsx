@@ -1,3 +1,5 @@
+import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
+import { StreamLiveBadge } from './StreamLiveBadge';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '../ui/Avatar';
 
@@ -40,6 +42,7 @@ export function VoiceUserRow({
   size = 'default',
   className = '',
 }: VoiceUserRowProps) {
+  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.userIds.has(userId));
   const { t } = useTranslation(['voice', 'common']);
   const avatarSize = size === 'compact' ? 20 : 24;
 
@@ -59,7 +62,7 @@ export function VoiceUserRow({
         size={avatarSize}
         userId={userId}
         avatarColor={avatarColor}
-        className={isSpeaking ? 'rounded-full ring-2 ring-status-online' : ''}
+        className={isSoundboardPlaying ? 'rounded-full ring-2 ring-blue-500' : isSpeaking ? 'rounded-full ring-2 ring-status-online' : ''}
       />
       <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">
         {displayName}
@@ -130,7 +133,7 @@ export function VoiceUserRow({
         )}
         {/* Screen sharing LIVE badge */}
         {isScreenSharing && (
-          <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]">{t('voice:badges.live')}</span>
+          <StreamLiveBadge userId={userId} />
         )}
         {/* Locally muted — volume X icon */}
         {isLocallyMuted && (

@@ -33,6 +33,7 @@ export function usePointerReveal(
   targetRef: RefObject<HTMLElement | null>,
   active: boolean,
   idleMs: number = POINTER_REVEAL_IDLE_MS,
+  bottomOnly = false,
 ): boolean {
   const [revealed, setRevealed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,10 +68,13 @@ export function usePointerReveal(
 
     const handlePointerActivity = (event: Event): void => {
       clearIdleTimer();
+      const eventTarget = event.target as Element | null;
+      const overChrome = typeof eventTarget?.closest === 'function' && eventTarget.closest(`[${VOICE_CHROME_ATTR}]`) !== null;
+      if (bottomOnly && !overChrome && 'clientY' in event && (event as MouseEvent).clientY < target.getBoundingClientRect().bottom - 180) {
+        setRevealed(false);
+        return;
+      }
       setRevealed(true);
-
-      const overChrome =
-        event.target instanceof Element && event.target.closest(`[${VOICE_CHROME_ATTR}]`) !== null;
       if (overChrome) {
         // Leave no pending timer: the pointer is on the controls, and the
         // next event that moves it off them starts the countdown again.
@@ -91,7 +95,7 @@ export function usePointerReveal(
       target.removeEventListener('pointerdown', handlePointerActivity);
       clearIdleTimer();
     };
-  }, [active, idleMs, targetRef]);
+  }, [active, idleMs, targetRef, bottomOnly]);
 
   return revealed;
 }

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
@@ -21,6 +21,7 @@ import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { sendError } from '../utils/httpErrors.js';
 import { parseHistoryPage, selectHistoryPage, markHistoryPageHonoured } from '../utils/messagePaging.js';
 import { fetchEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
+import { consumeChannelMessageCreate } from '../utils/channelMessageRateLimit.js';
 
 /**
  * Fetch reactions for a set of message IDs.
@@ -315,19 +316,12 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/channels/:id/messages - Create a message
   app.post<{ Params: { id: string }; Body: CreateMessageRequest }>('/api/channels/:id/messages', {
     preHandler: authenticate,
-    config: {
-      rateLimit: {
-        max: 5,
-        timeWindow: '5 seconds',
-        // Per client address, like every limit in this app. A route limit runs
-        // on `onRequest` too, before `authenticate`, so there is no user on the
-        // request to key on. See docs/systems/api.md, "Rate limiting".
-        keyGenerator: (request: FastifyRequest) => request.ip,
-      },
-    },
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, attachments: attachmentIds, replyToId } = request.body;
+    if (!consumeChannelMessageCreate(request.userId)) {
+      return sendError(reply, 429, 'rate_limited');
+    }
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {

@@ -29,7 +29,7 @@ import { NotificationSettingsModal, type NotificationSettingsModalTarget } from 
 import { describeCodedError } from '../../i18n/errors';
 
 export function MobileSpacesScreen() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const spaces = useSpaceStore((s) => s.spaces);
   const channels = useSpaceStore((s) => s.channels);
   const categories = useSpaceStore((s) => s.categories);
@@ -342,6 +342,9 @@ export function MobileSpacesScreen() {
     const availableFolders = folders.filter(f => !f.spaceIds.includes(spaceId));
 
     const items: ContextMenuItem[] = [
+      { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { key: 'soundboard', type: 'action', label: t('voice:soundboard.title'), onClick: () => useUIStore.getState().openModal('soundboard', { spaceId }) },
+      { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',
         type: 'action',

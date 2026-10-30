@@ -44,6 +44,19 @@ export class AudioManager {
   // `requestMicPermission` retry path in `utils/voice.ts`) so a fresh user
   // gesture can re-attempt cleanly.
   private inputDenialError: Error | null = null;
+  private textInputOnly = false;
+
+  /** Replace hardware capture with synthetic speech without changing the call transport. */
+  setTextInputOnly(enabled: boolean): void {
+    if (enabled === this.textInputOnly) return;
+    this.textInputOnly = enabled;
+    this.releaseInputStream();
+  }
+
+  getSpeechInput(): AudioNode {
+    this.ensureContext();
+    return this.inputDestination!;
+  }
 
   // Subscribers notified when the *upstream* getUserMedia track ends unexpectedly
   // (hardware unplug, OS-level revoke, system audio service crash). Distinct from
@@ -231,6 +244,7 @@ export class AudioManager {
    * call short-circuits if the first already set the same device.
    */
   async setInputDevice(deviceId: string): Promise<MediaStream | null> {
+    if (this.textInputOnly) return null;
     const generation = this.inputReleaseGeneration;
     const job = this.inputSwitchChain.then(() => generation === this.inputReleaseGeneration
       ? this._setInputDeviceImpl(deviceId, generation) : null);
@@ -239,6 +253,7 @@ export class AudioManager {
   }
 
   private async _setInputDeviceImpl(deviceId: string, generation: number): Promise<MediaStream | null> {
+    if (this.textInputOnly) return null;
     if (!this.isInitialized) this.initContext();
 
     // Skip if already set and stream is active

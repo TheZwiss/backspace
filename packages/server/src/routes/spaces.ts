@@ -1,3 +1,4 @@
+import { cropAnimatedBanner, isBannerCrop } from '../utils/cropAnimatedBanner.js';
 import { MAX_OWNER_TITLE_LENGTH, normalizeOwnerTitle } from '@backspace/shared/src/constants.js';
 import { updateSpaceMemberRoutes, roleGrantRefusal } from './spaceMemberUpdate.js';
 import path from 'path';
@@ -518,7 +519,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, icon, banner, avatarColor, visibility, description, directoryListed, ownerTitle } = request.body;
+    const { name, icon, banner, bannerCrop, avatarColor, visibility, description, directoryListed, ownerTitle } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
@@ -609,6 +610,21 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 400, 'no_fields_to_update');
     }
 
+    if (bannerCrop !== undefined) {
+      if (!isBannerCrop(bannerCrop) || typeof banner !== 'string') return sendError(reply, 400, 'validation_failed');
+      const filename = banner.replace(/^\/api\/uploads\//, '');
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.gif$/i.test(filename)) return sendError(reply, 400, 'validation_failed');
+      const uploaded = db.select().from(schema.attachments).where(and(eq(schema.attachments.filename, filename), eq(schema.attachments.uploaderId, request.userId))).get();
+      if (!uploaded || uploaded.messageId || uploaded.dmMessageId) return sendError(reply, 403, 'forbidden');
+      const croppedFilename = `${generateSnowflake()}.gif`;
+      try {
+        await cropAnimatedBanner(path.join(config.uploadDir, filename), path.join(config.uploadDir, croppedFilename), bannerCrop);
+      } catch {
+        return sendError(reply, 400, 'validation_failed');
+      }
+      updates.banner = croppedFilename;
+    }
+
     db.update(schema.spaces).set(updates).where(eq(schema.spaces.id, id)).run();
 
     const listedAfter = (updates.directoryListed ?? server.directoryListed) === 1;
@@ -643,7 +659,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       const filePath = path.join(config.uploadDir, path.basename(icon));
       await resizeProfileImage(filePath, 'icon');
     }
-    if (banner && typeof banner === 'string' && !banner.startsWith('http')) {
+    if (banner && bannerCrop === undefined && typeof banner === 'string' && !banner.startsWith('http')) {
       const filePath = path.join(config.uploadDir, path.basename(banner));
       await resizeProfileImage(filePath, 'banner');
     }

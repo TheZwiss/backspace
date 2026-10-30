@@ -46,22 +46,6 @@ export interface ScreenShareBuildResult {
 }
 
 // ---------------------------------------------------------------------------
-// Camera preset (fixed 720p30 H264, decoupled from screen share)
-// ---------------------------------------------------------------------------
-
-export const CAMERA_PRESET = {
-  resolution: { width: 1280, height: 720 },
-  encoding: { maxBitrate: 2_000_000, maxFramerate: 30 },
-  codec: 'h264' as const,
-} as const;
-
-export const CAMERA_OVERDRIVE: OverdriveOptions = {
-  maxBitrate: 2_000_000,
-  maxFramerate: 30,
-  degradationPreference: 'maintain-framerate',
-};
-
-// ---------------------------------------------------------------------------
 // Screen share builder — three independent axes → computed result
 // ---------------------------------------------------------------------------
 
@@ -284,7 +268,19 @@ export async function applyOverdrive(
     params.encodings[idx]!.networkPriority = 'high';
     (params as any).degradationPreference = options.degradationPreference;
 
-    await sender.setParameters(params);
+    try {
+      await sender.setParameters(params);
+    } catch {
+      // Some Chromium versions reject changes to RTP priority. Retry with a
+      // fresh transaction while leaving the browser's priority values alone.
+      const retry = sender.getParameters();
+      if (!retry.encodings?.length) return false;
+      const top = retry.encodings[retry.encodings.length - 1]!;
+      top.maxBitrate = options.maxBitrate;
+      top.maxFramerate = options.maxFramerate;
+      retry.degradationPreference = options.degradationPreference;
+      await sender.setParameters(retry);
+    }
     return true;
   } catch (err) {
     console.warn('[ScreenShare] Failed to apply overdrive:', err);
@@ -361,7 +357,10 @@ export async function stageScreenCapture(): Promise<MediaStream> {
       ownFree?.stop();
       throw err;
     }
-    if (ownFree) stream.addTrack(ownFree);
+    if (ownFree) {
+      for (const track of stream.getAudioTracks()) { stream.removeTrack(track); track.stop(); }
+      stream.addTrack(ownFree);
+    }
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
     return stream;
@@ -747,9 +746,9 @@ function settleWithin<T>(promise: Promise<T>, ms: number, discard: (late: T) => 
 async function acquireScreenShareAudio(sourceId: string): Promise<MediaStreamTrack> {
   const api = getElectronAPI();
   if (!api?.preselectScreenSource) throw new DOMException('Source preselection is not available', 'NotSupportedError');
+  await api.preselectScreenSource(sourceId, true);
   const ownFree = await acquireAppExcludedSystemAudio();
   if (ownFree) return ownFree;
-  await api.preselectScreenSource(sourceId, true);
   const config = useVoiceStore.getState().screenShareConfig;
   const stream = await navigator.mediaDevices.getDisplayMedia(
     buildCaptureConstraints({ ...config, shareAudio: true }, buildScreenShareOptions(config)),

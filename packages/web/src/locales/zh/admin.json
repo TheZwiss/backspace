@@ -248,8 +248,11 @@
     "uploadLimit": {
       "label": "上传限制",
       "maxFileSize": "单文件大小上限",
+      "maxStickerSize": "单表情大小上限",
       "saved": "上传上限已设置为 {{limit}}",
-      "saveFailed": "更新上传上限失败"
+      "saveFailed": "更新上传上限失败",
+      "stickerSaved": "表情大小上限已设置为 {{limit}}",
+      "stickerSaveFailed": "更新表情大小上限失败"
     },
     "cleanup": {
       "label": "清理",
@@ -325,6 +328,32 @@
     "capWarning": {
       "title": "矩阵中的部分数值超过了全局上限。",
       "description": "部分码率设置超出了您配置的最大上限 {{max}}。在这些组合下推流的画质将被降级限制在您的上限之内。"
+    },
+    "camera": {
+      "label": "摄像头",
+      "description": "控制用户发布摄像头画面的画质。",
+      "mode": {
+        "label": "摄像头画质策略",
+        "fixed": "固定（当前行为）",
+        "userChoice": "用户自选",
+        "fixedHint": "所有人按下方画质发布。",
+        "userChoiceHint": "用户在“语音和视频”设置中从允许的值里选择。"
+      },
+      "defaults": {
+        "resolution": "默认分辨率",
+        "framerate": "默认帧率",
+        "bitrate": "默认码率（kbps）"
+      },
+      "quality": {
+        "resolutions": "允许的分辨率",
+        "framerates": "允许的帧率",
+        "bitrateRange": "码率范围（kbps）",
+        "min": "最小",
+        "max": "最大",
+        "allowCustom": "允许自定义码率",
+        "allowCustomHint": "用户可以在范围内设置任意码率。"
+      },
+      "highEndWarning": "较高的摄像头设置会消耗所有参与者的上传带宽和 CPU。"
     }
   },
   "updates": {

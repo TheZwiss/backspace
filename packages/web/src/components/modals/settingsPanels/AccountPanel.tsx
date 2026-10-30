@@ -1,3 +1,4 @@
+import { MotionMenu } from '../../ui/MotionMenu';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectMyChosenStatus, useAuthStore } from '../../../stores/authStore';
@@ -5,11 +6,14 @@ import { useUIStore } from '../../../stores/uiStore';
 import { useInstanceStore } from '../../../stores/instanceStore';
 import { useSpaceStore } from '../../../stores/spaceStore';
 import { Avatar } from '../../ui/Avatar';
+import { PresenceIndicator } from '../../ui/PresenceIndicator';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { DeleteAccountModal } from '../DeleteAccountModal';
 import { api } from '../../../api/client';
 import { useTransferStore } from '../../../stores/transferStore';
 import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
+import { isAnimatedImageFile, profileImageFileName } from '../../../utils/animatedImage';
+import { CHOSEN_STATUS_OPTIONS } from '../../../utils/statusOptions';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS, detachedHomeOf } from '@backspace/shared';
 import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
@@ -29,6 +33,7 @@ export function AccountPanel() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [customStatus, setCustomStatus] = useState(user?.customStatus ?? '');
   const [status, setStatus] = useState<ChosenUserStatus>(savedStatus);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [bio, setBio] = useState(user?.bio ?? '');
   const [accentColor, setAccentColor] = useState<string | null>(user?.accentColor ?? null);
   const [avatarColorState, setAvatarColorState] = useState<AvatarColor | null>(user?.avatarColor ?? null);
@@ -174,34 +179,54 @@ export function AccountPanel() {
       })();
 
   // ── File selection handlers ──
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //
+  // Animated files skip the crop step: the canvas in `cropImage` keeps one
+  // frame, so cropping would flatten the animation before it ever reaches the
+  // server (which does preserve every frame). They upload as-is and are framed
+  // by the avatar/banner containers.
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      const previewUrl = URL.createObjectURL(file);
+      setAvatarPreview(previewUrl);
+      setAvatarCropSrc(null);
+      setAvatarFilename(null);
+      await uploadAvatar(file, previewUrl);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setAvatarCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
-  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (bannerInputRef.current) bannerInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+      const previewUrl = URL.createObjectURL(file);
+      setBannerPreview(previewUrl);
+      setBannerCropSrc(null);
+      setBannerFilename(null);
+      await uploadBanner(file, previewUrl);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setBannerCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (bannerInputRef.current) bannerInputRef.current.value = '';
   };
 
-  // ── Crop complete handlers ──
-  const handleAvatarCropComplete = async (blob: Blob) => {
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-    const previewUrl = URL.createObjectURL(blob);
-    setAvatarPreview(previewUrl);
-    setAvatarCropSrc(null);
-    const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
+  const uploadAvatar = async (file: File, previewUrl: string) => {
     setUploadingAvatar(true);
     try {
-      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const uploadFile = new File([file], profileImageFileName('avatar', file), {
+        type: file.type || 'image/png',
+      });
+      const tid = await useTransferStore.getState().startUpload(uploadFile, { tray: false });
       const { filename } = await waitForTransferAttachment(tid);
       setAvatarFilename(filename);
     } catch {
@@ -213,15 +238,13 @@ export function AccountPanel() {
     }
   };
 
-  const handleBannerCropComplete = async (blob: Blob) => {
-    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
-    const previewUrl = URL.createObjectURL(blob);
-    setBannerPreview(previewUrl);
-    setBannerCropSrc(null);
-    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+  const uploadBanner = async (file: File, previewUrl: string) => {
     setUploadingBanner(true);
     try {
-      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const uploadFile = new File([file], profileImageFileName('banner', file), {
+        type: file.type || 'image/png',
+      });
+      const tid = await useTransferStore.getState().startUpload(uploadFile, { tray: false });
       const { filename } = await waitForTransferAttachment(tid);
       setBannerFilename(filename);
     } catch {
@@ -231,6 +254,25 @@ export function AccountPanel() {
     } finally {
       setUploadingBanner(false);
     }
+  };
+
+  // ── Crop complete handlers ──
+  const handleAvatarCropComplete = async (blob: Blob) => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setAvatarPreview(previewUrl);
+    setAvatarCropSrc(null);
+    const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
+    await uploadAvatar(file, previewUrl);
+  };
+
+  const handleBannerCropComplete = async (blob: Blob) => {
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setBannerPreview(previewUrl);
+    setBannerCropSrc(null);
+    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+    await uploadBanner(file, previewUrl);
   };
 
   const handleRemoveAvatar = () => {
@@ -348,7 +390,7 @@ export function AccountPanel() {
         <div className="rounded-lg overflow-hidden border border-white/[0.06] mb-4 bg-surface-channel">
           {/* Banner area */}
           <div
-            className="h-[80px]"
+            className="w-full h-[128px]"
             style={displayBannerSrc
               ? { backgroundImage: `url(${displayBannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
               : { background: bannerFallback }
@@ -455,7 +497,7 @@ export function AccountPanel() {
               type="button"
               onClick={() => bannerInputRef.current?.click()}
               disabled={uploadingBanner}
-              className="relative group w-full h-[72px] rounded-lg overflow-hidden border border-white/[0.06]"
+              className="relative group w-full h-[128px] rounded-lg overflow-hidden border border-white/[0.06]"
             >
               <div
                 className="w-full h-full"
@@ -539,7 +581,7 @@ export function AccountPanel() {
           {/* Banner Color */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.bannerColor.label')}</label>
-            <div className="grid grid-cols-7 gap-1.5 mb-2">
+            <div className="grid w-fit grid-cols-7 gap-2 mb-2">
               {[0, 1, 2].map((row) =>
                 BANNER_COLOR_PRESETS.map((family) => {
                   const color = family[row]!;
@@ -621,15 +663,40 @@ export function AccountPanel() {
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-4">
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.status.label')}</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as ChosenUserStatus)}
-              className="input-standard w-full appearance-none"
-            >
-              <option value="online">{t('common:states.online')}</option>
-              <option value="idle">{t('common:states.idle')}</option>
-              <option value="dnd">{t('common:states.doNotDisturb')}</option>
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={statusOpen}
+                onClick={() => setStatusOpen((open) => !open)}
+                className="input-standard w-full flex items-center justify-between text-left"
+              >
+                <span className="flex items-center gap-2">
+                  <PresenceIndicator status={status} size={15} />
+                  {t(CHOSEN_STATUS_OPTIONS.find((option) => option.value === status)!.labelKey)}
+                </span>
+                <svg className={`w-4 h-4 text-txt-tertiary transition-transform ${statusOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M5.22 7.22a.75.75 0 011.06 0L10 10.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 8.28a.75.75 0 010-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
+              {statusOpen && (
+                <MotionMenu role="listbox" aria-label={t('settings:account.details.status.label')} className="motion-menu-enter absolute z-20 mt-1 w-full rounded-md border border-border-hard bg-surface-channel p-1 shadow-lg">
+                  {CHOSEN_STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={status === option.value}
+                      onClick={() => { setStatus(option.value); setStatusOpen(false); }}
+                      className="w-full rounded px-2.5 py-2 flex items-center gap-2 text-left text-sm text-txt-primary hover:bg-white/[0.06]"
+                    >
+                      <PresenceIndicator status={option.value} size={15} />
+                      {t(option.labelKey)}
+                    </button>
+                  ))}
+                </MotionMenu>
+              )}
+            </div>
           </div>
 
           <div>
@@ -805,7 +872,7 @@ export function AccountPanel() {
         onCropComplete={handleBannerCropComplete}
         title={t('settings:account.profile.banner.cropTitle')}
         cropShape="rect"
-        aspectRatio={3}
+        aspectRatio={9 / 4}
         maxOutputDimension={1280}
       />
 

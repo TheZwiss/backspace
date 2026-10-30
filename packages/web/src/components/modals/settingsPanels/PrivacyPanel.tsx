@@ -4,6 +4,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useActivityStore } from '../../../stores/activityStore';
 import { api } from '../../../api/client';
 import { Toggle } from '../../ui/Toggle';
+import { ActivityGameSection } from './ActivityGameSection';
 
 export function PrivacyPanel() {
   const { t } = useTranslation(['settings', 'common']);
@@ -79,6 +80,7 @@ export function PrivacyPanel() {
               }}
             />
           </div>
+          {showActivity && <ActivityGameSection />}
         </div>
       </div>
     </div>

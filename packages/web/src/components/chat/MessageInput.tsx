@@ -3,6 +3,7 @@ import { useComposerMention } from './useComposerMention';
 import { MentionTextarea } from './MentionTextarea';
 import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -11,6 +12,8 @@ import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
+import { ChatDropOverlay } from './ChatDropOverlay';
+import { useFileDropZone } from '../../hooks/useFileDropZone';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -103,6 +106,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   // Undefined until the ready that lists the channel: nothing can be routed yet, so the composer stays locked.
   const isDm = useIsDmChannel(channelId);
   const canSendMessages = isDm === true || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
@@ -429,9 +433,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
   };
 
-  const handleDrop = (e: React.DragEvent): void => {
-    e.preventDefault();
-    const items = e.dataTransfer.items;
+  // Called from the region's native `drop` (useFileDropZone), which already
+  // prevented the default. Everything that needs the DataTransfer is read
+  // synchronously here: it is empty once the event has finished dispatching.
+  const handleDrop = (dataTransfer: DataTransfer): void => {
+    const items = dataTransfer.items;
     const useDndHandles = supportsDnDHandles();
 
     if (useDndHandles && items && items.length > 0) {
@@ -467,14 +473,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
 
     // Fallback: plain Files list (Firefox/Safari)
-    const droppedFiles = Array.from(e.dataTransfer.files);
+    const droppedFiles = Array.from(dataTransfer.files);
     for (const file of droppedFiles) {
       void enqueueFile({ file });
     }
-  };
-
-  const handleDragOver = (e: React.DragEvent): void => {
-    e.preventDefault();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
@@ -725,6 +727,18 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     setComposerEl(node);
   }, []);
 
+  // The whole chat region (the composer's parent: header, messages and composer)
+  // accepts dropped files, not just the input pill. An event on the pill bubbles
+  // to the region, so the pill carries no drop handlers of its own.
+  const dropRegion = composerEl?.parentElement ?? null;
+  const fileDragActive = useFileDropZone(dropRegion, {
+    enabled: canSendMessages && canAttachFiles,
+    onDrop: (dataTransfer) => {
+      handleDrop(dataTransfer);
+      textareaRef.current?.focus();
+    },
+  });
+
   if (!canSendMessages) {
     return (
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
@@ -740,6 +754,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   }
 
   return (
+    <>
+    {fileDragActive && dropRegion && createPortal(<ChatDropOverlay />, dropRegion)}
     <div
       ref={setComposerRef}
       data-pip-obstacle="bottom"
@@ -752,6 +768,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       {activePopover && (
         <InputPopover
           activeTab={activePopover}
+          spaceId={currentSpaceId}
           onClose={() => setActivePopover(null)}
           onEmojiSelect={handleEmojiSelect}
           onGifSelect={handleGifSelect}
@@ -782,8 +799,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       )}
       <div
         className={`relative ${chatReplyTo ? 'rounded-b-lg' : ''} overflow-visible`}
-        onDrop={canAttachFiles ? handleDrop : undefined}
-        onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
         {/* Mention autocomplete popover */}
         {mentionState && mentionMatches.length > 0 && (
@@ -907,6 +922,20 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             </svg>
           </button>
 
+          {/* Sticker button */}
+          <button
+            onClick={() => togglePopover('sticker')}
+            className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              activePopover === 'sticker' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+            }`}
+            title={t('chat:stickers.title')}
+            aria-label={t('chat:stickers.title')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+          </button>
+
           {/* Send button — appears when there's content/attachments to send */}
           {canSend && (
             <button
@@ -924,5 +953,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -23,6 +23,7 @@ import { getSpaceGradient } from '../../utils/gradients';
 import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { describeCodedError } from '../../i18n/errors';
+import { useStaticAvatar } from '../../utils/staticAvatar';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
@@ -38,6 +39,14 @@ const FOLDER_COLORS = [
   { name: 'rose', value: '#fda4af', labelKey: 'common:colors.rose' },
   { name: 'coral', value: '#fb7185', labelKey: 'common:colors.coral' },
 ] as const;
+
+export function SpaceIconImage({ icon, alt, className, animate = false }: { icon: string; alt: string; className: string; animate?: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  const src = icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`;
+  const displaySrc = useStaticAvatar(src, animate || hovered);
+  return <img src={displaySrc ?? undefined} alt={alt} className={className}
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} />;
+}
 
 // ─── SidebarItem ─────────────────────────────────────────────────────────
 
@@ -66,7 +75,7 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -133,11 +142,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
           </svg>
         )
       ) : icon ? (
-        <img
-          src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-          alt={name}
-          className="w-full h-full object-cover"
-        />
+        <SpaceIconImage icon={icon} alt={name} animate={isHovered} className="w-full h-full object-cover" />
       ) : (
         <span className="text-[15px] font-bold">{firstLetter}</span>
       )}
@@ -205,15 +210,11 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
 // ─── Mini space icon for collapsed folder ──────────────────────────────────
 
-function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
+function MiniSpaceIcon({ space, animate }: { space: TaggedSpace; animate: boolean }) {
   const icon = space.icon;
   if (icon) {
     return (
-      <img
-        src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-        alt=""
-        className="w-full h-full object-cover rounded-[3px]"
-      />
+      <SpaceIconImage icon={icon} alt="" animate={animate} className="w-full h-full object-cover rounded-[3px]" />
     );
   }
   const grad = getSpaceGradient(space.id, space.name, space.avatarColor);
@@ -243,7 +244,7 @@ function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpac
       <div className="grid grid-cols-2 gap-[2px] w-[28px] h-[28px] relative z-[1]">
         {display.map((s) => (
           <div key={s.id} className="w-[13px] h-[13px]">
-            <MiniSpaceIcon space={s} />
+            <MiniSpaceIcon space={s} animate={isHovered} />
           </div>
         ))}
         {display.length < 4 && Array.from({ length: 4 - display.length }).map((_, i) => (
@@ -300,6 +301,8 @@ function FolderFlyout({
     placement: 'right',
     offset: 12,
   });
+
+  const [hoveredSpaceId, setHoveredSpaceId] = useState<string | null>(null);
 
   // Intra-folder DnD state
   const [flyoutDrop, setFlyoutDrop] = useState<{
@@ -449,6 +452,8 @@ function FolderFlyout({
               } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
               style={{ width: 'calc(100% - 8px)' }}
               draggable
+              onMouseEnter={() => setHoveredSpaceId(space.id)}
+              onMouseLeave={() => setHoveredSpaceId(null)}
               onDragStart={(e) => onDragStart(e, space.id)}
               onDragOver={(e) => handleFlyoutDragOver(e, space.id)}
               onDrop={handleFlyoutDrop}
@@ -466,11 +471,7 @@ function FolderFlyout({
                 <SpaceUnreadBadge spaceId={space.id} />
                 <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
                   {icon ? (
-                    <img
-                      src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
+                    <SpaceIconImage icon={icon} alt="" animate={hoveredSpaceId === space.id} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
                   )}
@@ -538,7 +539,7 @@ function FolderSlot({
   onDrop: (e: React.DragEvent) => void;
   anchorRef: (el: HTMLDivElement | null) => void;
 }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
 
   const getPillHeight = () => {
@@ -599,7 +600,7 @@ function FolderSlot({
 // ─── SpaceSidebar (main component) ────────────────────────────────────────
 
 export function SpaceSidebar() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
@@ -646,6 +647,9 @@ export function SpaceSidebar() {
     const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
 
     const items: ContextMenuItem[] = [
+      { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { key: 'soundboard', type: 'action', label: t('voice:soundboard.title'), onClick: () => useUIStore.getState().openModal('soundboard', { spaceId }) },
+      { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',
         type: 'action',

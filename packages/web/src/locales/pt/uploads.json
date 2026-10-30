@@ -15,6 +15,8 @@
   },
   "crop": {
     "title": "Recortar imagem",
-    "applying": "Aplicando…"
+    "applying": "Aplicando…",
+    "hint": "Arraste a imagem para ajustar o enquadramento e use o zoom para aproximar.",
+    "zoom": "Zoom da imagem"
   }
 }

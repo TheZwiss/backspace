@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Stub heavy / side-effectful imports pulled in transitively by utils/voice.
 const audio = vi.hoisted(() => ({
-  clearInputDenial: vi.fn(),
+  setTextInputOnly: vi.fn(), clearInputDenial: vi.fn(),
   resumeContext: vi.fn(() => Promise.resolve()),
   setInputDevice: vi.fn(() => Promise.resolve(null)),
 }));

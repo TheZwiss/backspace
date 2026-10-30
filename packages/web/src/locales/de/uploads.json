@@ -14,6 +14,8 @@
   },
   "crop": {
     "title": "Bild zuschneiden",
-    "applying": "Wird übernommen…"
+    "applying": "Wird übernommen…",
+    "hint": "Verschiebe das Bild für den Ausschnitt und passe den Zoom an.",
+    "zoom": "Bildzoom"
   }
 }

@@ -1,4 +1,8 @@
+import { TextVoiceButton } from './TextVoice';
+import { SoundboardButton } from './Soundboard';
 import React, { useEffect, useState, useRef } from 'react';
+import { isElectron } from '../../platform/platform';
+import { openDetachedCallWindow } from './DetachedCallWindow';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -6,7 +10,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
+import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleScreenShareActionForWindow, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
@@ -19,15 +23,18 @@ const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surf
  * watches the voice container the pointer actually moves over. It is ignored
  * while docked, where plain hover on the voice panel is the right model.
  */
-export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
+export function VoiceControlBar({ revealed = false, variant = 'floating', detached = false, detachedFullscreen = false, onDetachedFullscreenToggle }: { revealed?: boolean; variant?: 'floating' | 'docked'; detached?: boolean; detachedFullscreen?: boolean; onDetachedFullscreenToggle?: () => void }) {
   const { t } = useTranslation(['voice', 'common']);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
+  const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
-  const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const toggleVoiceChatFocus = useUIStore((s) => s.toggleVoiceChatFocus);
+  const mainFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const voiceFullscreen = detached ? detachedFullscreen : mainFullscreen;
   const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const myUser = useAuthStore((s) => s.user);
@@ -53,9 +60,11 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const fullscreenVisibility = revealed || shareMenuOpen
     ? 'opacity-100'
     : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
-  const containerClassName = voiceFullscreen
-    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
-    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
+  const containerClassName = variant === 'docked'
+    ? 'relative z-20 h-20 flex items-center justify-center border-t border-border-soft bg-surface-chat flex-shrink-0'
+    : voiceFullscreen
+      ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
+      : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
 
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
@@ -72,7 +81,11 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
       setShareMenuOpen((open) => !open);
       return;
     }
-    handleScreenShareAction();
+    if (detached && shareBtnRef.current) {
+      void handleScreenShareActionForWindow(shareBtnRef.current.ownerDocument);
+    } else {
+      void handleScreenShareAction();
+    }
   };
 
   const handleStopSharing = () => {
@@ -89,7 +102,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const handleDisconnect = () => handleDisconnectAction();
 
   const handleFullscreen = () => {
-    toggleVoiceFullscreen();
+    if (detached) onDetachedFullscreenToggle?.();
+    else toggleVoiceFullscreen();
   };
 
   useEffect(() => {
@@ -98,9 +112,10 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
         useUIStore.getState().setVoiceFullscreen(false);
       }
     };
+    if (detached) return;
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [voiceFullscreen]);
+  }, [voiceFullscreen, detached]);
 
   return (
     <div
@@ -109,6 +124,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
       {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
     >
       <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
+        <TextVoiceButton />
+        <SoundboardButton />
         {/* Mute */}
         <button
           onClick={handleMute}
@@ -196,6 +213,7 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
         {/* Separator */}
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
 
+        {!detached && <>
         {/* Chat Toggle */}
         <button
           onClick={toggleVoiceChat}
@@ -209,6 +227,29 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
           </svg>
         </button>
+
+        {/* Chat focus */}
+        <button
+          onClick={toggleVoiceChatFocus}
+          aria-pressed={voiceChatFocus}
+          className={voiceChatFocus
+            ? `${btnBase} bg-surface-channel text-txt-primary`
+            : btnDefault
+          }
+          title={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')}
+        >
+          {voiceChatFocus ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm0 2v10h10V7H4Zm12 0v10h4V7h-4Z" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v12h11V6H4Zm13 0v12h3V6h-3ZM9 8l4 4-4 4v-3H6v-2h3V8Z" />
+            </svg>
+          )}
+        </button>
+
+        </>}
 
         {/* Fullscreen Toggle */}
         <button
@@ -229,6 +270,16 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
             </svg>
           )}
         </button>
+
+        {!detached && isElectron() && (
+          <button onClick={() => {
+            if (!openDetachedCallWindow()) useUIStore.getState().addToast(t('voice:controls.callWindowFailed'), 'warning');
+          }} className={btnDefault} title={t('voice:controls.openCallWindow')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 5h10v2H4v11h14v-8h2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm12-2h6v6h-2V6.4l-5.3 5.3-1.4-1.4L18.6 5H16V3Z" />
+            </svg>
+          </button>
+        )}
 
         {/* Separator */}
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />

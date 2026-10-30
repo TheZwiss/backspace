@@ -1,7 +1,66 @@
 {
+  "textVoice": {
+    "title": "Text voice",
+    "enable": "Use text voice",
+    "description": "Type to speak in Brazilian Portuguese. This mode replaces your microphone with a synthesized voice.",
+    "micOff": "Your original microphone is never transmitted. It is opened only for dictation to recognize speech locally.",
+    "voice": "Brazilian voice",
+    "speed": "Speed",
+    "placeholder": "Type what you want to say…",
+    "enterHint": "Enter to speak · Shift+Enter for a new line",
+    "checking": "Preparing speech on this device…",
+    "unavailable": "Click Prepare voice to download or load the local model.",
+    "speaking": "Preparing or speaking…",
+    "muted": "Join a call and unmute to speak. Server restrictions also apply.",
+    "ready": "Ready to speak in Brazilian Portuguese.",
+    "speak": "Speak in call",
+    "preview": "Listen privately",
+    "stop": "Stop speaking",
+    "privacy": "Text becomes speech on this device. Only audio goes to the call; text is not sent to the server or posted in chat.",
+    "quick": {
+      "hello": "Hello, everyone!",
+      "wait": "One moment, please.",
+      "repeat": "Could you repeat that?"
+    },
+    "processing": "Local processing",
+    "automatic": "Automatic",
+    "prepare": "Prepare voice",
+    "backendActive": "Processing: {{backend}}",
+    "gpuUnavailable": "GPU is unavailable on this device. Select CPU.",
+    "localError": "Could not prepare or generate speech. Try again or select CPU.",
+    "downloadProgress": "Downloading model: {{progress}}",
+    "downloadHint": "First use: approximately 95 MB for CPU or 330 MB for GPU. The model stays on this device.",
+    "unsupported": "To prepare speech, use HTTPS or the updated Electron client. Your real microphone remains off in this mode."
+  },
+  "soundboard": {
+    "frequentEmpty": "Play sounds to see your favorites here.",
+    "noResults": "No sounds found.",
+    "frequent": "Frequently used",
+    "title": "Soundboard",
+    "description": "Play a short effect for everyone in your call. Choose sounds from servers you belong to.",
+    "pack": "Server pack",
+    "empty": "No sound packs yet.",
+    "count_one": "{{count}} of 40 sounds",
+    "count_other": "{{count}} of 40 sounds",
+    "refresh": "Refresh",
+    "volume": "Your soundboard volume",
+    "play": "Play in call",
+    "preview": "Listen locally",
+    "confirmDelete": "Delete the sound “{{name}}”?",
+    "search": "Search sounds",
+    "add": "Add sound",
+    "uploadHint": "Up to 5.2 seconds, 5 MB source file. Maximum 40 sounds per server.",
+    "name": "Sound name",
+    "audioFile": "Audio file",
+    "clipVolume": "Effect volume",
+    "permissionHint": "A role with Create soundboard sounds permission is required to add effects.",
+    "invalidAudio": "Choose a valid audio file up to 5.2 seconds and 5 MB."
+  },
   "chatPanel": {
     "title": "Chat",
-    "close": "Close Chat"
+    "close": "Close Chat",
+    "expand": "Expand chat",
+    "collapse": "Collapse chat"
   },
   "badges": {
     "mutedNoPermission": "Muted (No Speak Permission)",
@@ -104,9 +163,18 @@
     "kind": {
       "monitor": "Screen",
       "window": "Window"
-    }
+    },
+    "audioApplication": "Application audio",
+    "chooseAudioApplication": "Select the audio application",
+    "audioApplicationHint": "Play audio in the application to list it, then select the window to share.",
+    "allAudioExceptBackspace": "All system audio except Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Stream preview",
+    "previewNormal": "Normal",
+    "previewBlurred": "Blurred",
+    "previewHidden": "No image",
+    "previewHint": "Controls the thumbnail shown before watching. Does not change the stream video.",
     "title": "Stream Settings",
     "hostLimits": "Limits set by {{host}}",
     "resolution": "Resolution",
@@ -179,6 +247,9 @@
   },
   "channelDuration": "Channel active for {{duration}}",
   "controls": {
+    "callWindowFailed": "Could not open the call window.",
+    "callInWindow": "Call is in a separate window — click to show",
+    "openCallWindow": "Open call in a separate window",
     "spaceMutedSelfMuted": "Space Muted (self-muted)",
     "unmuteShortcut": "Unmute (M)",
     "muteShortcut": "Mute (M)",
@@ -199,7 +270,9 @@
     "disconnect": "Disconnect",
     "connectionInfo": "Connection Info",
     "noiseSuppressionOff": "Disable AI Noise Suppression",
-    "noiseSuppressionOn": "Enable AI Noise Suppression"
+    "noiseSuppressionOn": "Enable AI Noise Suppression",
+    "focusChat": "Focus chat",
+    "unfocusChat": "Show the call"
   },
   "status": {
     "dmCall": "DM Call",
@@ -270,5 +343,54 @@
     "stillDenied": "Microphone access is still denied. Allow it for this site in your browser or device settings.",
     "notFound": "No microphone detected.",
     "failed": "Could not access the microphone."
+  },
+  "callOngoing": "Call in progress",
+  "callWaiting": "Waiting for the other person · ends in {{remaining}}",
+  "rejoinCall": "Rejoin call",
+  "history": {
+    "startedBy": "{{actor}} started the call",
+    "from": "From:",
+    "to": "To:",
+    "status": {
+      "ringing": "Calling…",
+      "active": "Call in progress",
+      "ended": "Call ended",
+      "missed": "Missed call",
+      "rejected": "Call declined",
+      "interrupted": "Call interrupted",
+      "cancelled": "Call cancelled"
+    },
+    "duration": "Duration"
+  },
+  "dictation": {
+    "title": "Voice dictation · Brazilian Portuguese",
+    "model": "Recognition model",
+    "size": "Download: {{size}} MiB",
+    "installed": "Downloaded",
+    "delete": "Delete model",
+    "download": "Download model",
+    "deleteConfirm": "Delete the copy of {{model}} downloaded by Backspace? You will need to download it again to use it. Other models and files will remain untouched.",
+    "cancel": "Cancel",
+    "dictate": "Dictate text",
+    "finish": "Finish dictation",
+    "hold": "Hold to speak and send",
+    "release": "Release to transcribe and send",
+    "recording": "Recording for transcription only…",
+    "downloading": "Downloading model: {{progress}}",
+    "transcribing": "Processing on your device…",
+    "hint": "On release: transcribe → generate voice → send to call. Your original microphone audio is never transmitted. Maximum 60 seconds.",
+    "shortcut": "Keyboard: {{shortcut}}. Configure “Dictate and send voice (hold)” in Settings → Keybinds.",
+    "unassigned": "no shortcut assigned",
+    "monitor": "Monitor · hear my synthesized voice",
+    "missing": "Download the selected model before dictating.",
+    "downloadError": "Could not download the model. Check your connection and available storage, then try again.",
+    "micError": "Could not record. Allow microphone access and check the selected device.",
+    "noSpeech": "No speech detected. Try recording again.",
+    "limit": "Recording reached 60 seconds and was cancelled. Record a shorter phrase.",
+    "storageError": "Could not access local model storage.",
+    "failed": "Could not complete dictation. Try CPU or a smaller model. Any recognized text remains in the box.",
+    "secureContext": "Dictation needs microphone access over HTTPS, localhost, or the updated Electron client.",
+    "callHint": "Join a call and unmute synthesized voice to send automatically. You can still dictate to fill the text box.",
+    "gpuError": "GPU unavailable for this model. Use CPU or Automatic."
   }
 }

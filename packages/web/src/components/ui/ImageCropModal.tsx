@@ -1,4 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
+import React, { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -14,6 +16,10 @@ interface ImageCropModalProps {
   cropShape?: 'round' | 'rect';
   maxOutputDimension?: number;
   outputType?: string;
+  onCropSelection?: (pixels: Area, percentage: Area) => void | Promise<void>;
+  extraContent?: ReactNode;
+  applyDisabled?: boolean;
+  error?: string;
 }
 
 export function ImageCropModal({
@@ -26,15 +32,22 @@ export function ImageCropModal({
   cropShape = 'round',
   maxOutputDimension,
   outputType,
+  onCropSelection,
+  extraContent,
+  applyDisabled = false,
+  error,
 }: ImageCropModalProps) {
   const { t } = useTranslation(['uploads', 'common']);
+  const portalContainer = usePortalContainer();
   const heading = title ?? t('uploads:crop.title');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCropComplete = useCallback((_croppedArea: Area, croppedPixels: Area) => {
+  const handleCropComplete = useCallback((percentage: Area, croppedPixels: Area) => {
+    setCroppedArea(percentage);
     setCroppedAreaPixels(croppedPixels);
   }, []);
 
@@ -42,6 +55,11 @@ export function ImageCropModal({
     if (!croppedAreaPixels) return;
     setIsProcessing(true);
     try {
+      if (onCropSelection && croppedArea) {
+        await onCropSelection(croppedAreaPixels, croppedArea);
+        onClose();
+        return;
+      }
       const blob = await cropImage(imageSrc, croppedAreaPixels, outputType ?? 'image/webp', {
         maxDimension: maxOutputDimension,
         outputType,
@@ -61,6 +79,7 @@ export function ImageCropModal({
       setCrop({ x: 0, y: 0 });
       setZoom(1);
       setCroppedAreaPixels(null);
+      setCroppedArea(null);
       setIsProcessing(false);
     }
   }, [isOpen, imageSrc]);
@@ -76,7 +95,7 @@ export function ImageCropModal({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
       <div className="relative max-w-md w-full mx-4 bg-surface-elevated rounded-lg shadow-xl animate-slide-up">
@@ -94,6 +113,7 @@ export function ImageCropModal({
           </button>
         </div>
 
+        <p className="px-4 mt-2 text-xs text-txt-tertiary">{t('uploads:crop.hint')}</p>
         {/* Crop area */}
         {/* react-easy-crop mixes DOM rect/client coordinates with CSS pixels.
             Keep only its interactive canvas at effective 100%; dialog controls
@@ -120,6 +140,7 @@ export function ImageCropModal({
           </svg>
           <input
             type="range"
+            aria-label={t('uploads:crop.zoom')}
             min={1}
             max={3}
             step={0.05}
@@ -128,6 +149,9 @@ export function ImageCropModal({
             className="flex-1 min-w-0 h-1.5 rounded-full appearance-none bg-surface-input accent-accent-primary cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-primary"
           />
         </div>
+
+        {extraContent && <div className="px-4 pt-3">{extraContent}</div>}
+        {error && <p role="alert" className="mx-4 mt-3 rounded-lg bg-accent-rose/10 px-3 py-2 text-xs text-txt-danger">{error}</p>}
 
         {/* Actions */}
         <div className="flex gap-3 p-4">
@@ -141,13 +165,14 @@ export function ImageCropModal({
           <button
             type="button"
             onClick={handleApply}
-            disabled={isProcessing || !croppedAreaPixels}
+            disabled={isProcessing || !croppedAreaPixels || applyDisabled}
             className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
             {isProcessing ? t('uploads:crop.applying') : t('common:actions.apply')}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }

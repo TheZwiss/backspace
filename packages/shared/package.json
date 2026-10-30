@@ -1,6 +1,6 @@
 {
   "name": "@backspace/shared",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "Jannis Braun",
@@ -21,6 +21,10 @@
     "./src/dmSystemEvents.js": "./src/dmSystemEvents.ts",
     "./src/stickers": "./src/stickers.ts",
     "./src/stickers.js": "./src/stickers.ts",
+    "./src/bookmarks": "./src/bookmarks.ts",
+    "./src/bookmarks.js": "./src/bookmarks.ts",
+    "./src/gameIcons": "./src/gameIcons.ts",
+    "./src/gameIcons.js": "./src/gameIcons.ts",
     "./src/channelSystemEvents": "./src/channelSystemEvents.ts",
     "./src/channelSystemEvents.js": "./src/channelSystemEvents.ts",
     "./src/mentions": "./src/mentions.ts",

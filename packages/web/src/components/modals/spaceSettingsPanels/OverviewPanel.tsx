@@ -1,3 +1,5 @@
+import type { Area } from 'react-easy-crop';
+import type { UpdateSpaceRequest } from '@backspace/shared';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { ImageCropModal } from '../../ui/ImageCropModal';
@@ -15,6 +17,7 @@ import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 import { describeError } from '../../../i18n/errors';
 import { useAvatarColorNames } from './spaceOptions';
+import { profileImageFileName } from '../../../utils/animatedImage';
 
 interface OverviewPanelProps {
   spaceId: string;
@@ -52,6 +55,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [bannerCropSrc, setBannerCropSrc] = useState<string | null>(null);
+  const bannerAnimatedFileRef = useRef<File | null>(null);
+  const [bannerCropRegion, setBannerCropRegion] = useState<Area | null>(null);
+  const [bannerCropPercent, setBannerCropPercent] = useState<Area | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
   const [avatarColorState, setAvatarColorState] = useState<AvatarColor | null>(space?.avatarColor ?? null);
@@ -80,6 +86,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         setIconPreview(null);
       }
       setBannerFilename(null);
+      setBannerCropRegion(null);
+      setBannerCropPercent(null);
       if (bannerPreview) {
         URL.revokeObjectURL(bannerPreview);
         setBannerPreview(null);
@@ -124,9 +132,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   // ─── Icon handlers ────────────────────────────────────────────────────────
 
-  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIconSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.type.toLowerCase() === 'image/gif' || (!file.type && /\.gif$/i.test(file.name))) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await handleCropComplete(file);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
@@ -139,7 +152,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setIconPreview(previewUrl);
     setCropSrc(null);
 
-    const file = new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
+    const file = blob instanceof File
+      ? new File([blob], profileImageFileName('avatar', blob).replace(/^avatar/, 'icon'), { type: blob.type || 'image/gif' })
+      : new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
     setUploadingIcon(true);
     try {
       const tid = await useTransferStore.getState().startUpload(file, {
@@ -165,9 +180,10 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   // ─── Banner handlers ──────────────────────────────────────────────────────
 
-  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    bannerAnimatedFileRef.current = file.type.toLowerCase() === 'image/gif' || (!file.type && /\.gif$/i.test(file.name)) ? file : null;
     const reader = new FileReader();
     reader.onload = () => setBannerCropSrc(reader.result as string);
     reader.readAsDataURL(file);
@@ -175,12 +191,15 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   };
 
   const handleBannerCropComplete = async (blob: Blob) => {
+    if (!(blob instanceof File)) { setBannerCropRegion(null); setBannerCropPercent(null); }
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     const previewUrl = URL.createObjectURL(blob);
     setBannerPreview(previewUrl);
     setBannerCropSrc(null);
 
-    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
+    const file = blob instanceof File
+      ? new File([blob], profileImageFileName('banner', blob), { type: blob.type || 'image/gif' })
+      : new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
       const tid = await useTransferStore.getState().startUpload(file, {
@@ -191,6 +210,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
       setBannerFilename(filename);
     } catch {
       setSaveError(t('spaces:settings.overview.bannerUploadFailed'));
+      setBannerFilename(null);
+      setBannerCropRegion(null);
+      setBannerCropPercent(null);
       setBannerPreview(null);
       URL.revokeObjectURL(previewUrl);
     } finally {
@@ -202,6 +224,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     setBannerPreview(null);
     setBannerFilename('');
+    setBannerCropRegion(null);
+    setBannerCropPercent(null);
   };
 
   // ─── Save / Discard / Delete ──────────────────────────────────────────────
@@ -210,13 +234,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setSaving(true);
     setSaveError('');
     try {
-      const updates: { name?: string; icon?: string; banner?: string; avatarColor?: string } = {};
+      const updates: UpdateSpaceRequest = {};
       if (hasNameChange) updates.name = spaceName.trim();
       if (hasIconChange) {
         updates.icon = iconFilename === '' ? '' : iconFilename!;
       }
       if (hasBannerChange) {
         updates.banner = bannerFilename === '' ? '' : bannerFilename!;
+        if (bannerCropRegion && bannerFilename) updates.bannerCrop = bannerCropRegion;
       }
       if (hasAvatarColorChange) {
         updates.avatarColor = avatarColorState ?? '';
@@ -249,6 +274,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
       setIconPreview(null);
     }
     setBannerFilename(null);
+    setBannerCropRegion(null);
+    setBannerCropPercent(null);
     if (bannerPreview) {
       URL.revokeObjectURL(bannerPreview);
       setBannerPreview(null);
@@ -403,13 +430,15 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               type="button"
               onClick={() => canManageSpace && bannerFileInputRef.current?.click()}
               disabled={!canManageSpace || uploadingBanner}
-              className={`relative w-full h-24 rounded-lg bg-surface-input border-2 border-dashed border-border-soft flex items-center justify-center overflow-hidden group ${
+              className={`relative w-full aspect-[9/4] rounded-lg bg-surface-input border-2 border-dashed border-border-soft flex items-center justify-center overflow-hidden group ${
                 canManageSpace ? 'hover:border-accent-primary cursor-pointer' : 'cursor-default'
               } transition-colors`}
             >
               {displayBannerSrc ? (
                 <>
-                  <img src={displayBannerSrc} alt={t('spaces:settings.overview.bannerAlt')} className="w-full h-full object-cover" />
+                  <img src={displayBannerSrc} alt={t('spaces:settings.overview.bannerAlt')}
+                    className={bannerPreview && bannerCropPercent ? 'absolute max-w-none' : 'absolute inset-0 w-full h-full object-cover'}
+                    style={bannerPreview && bannerCropPercent ? { width: `${10000 / bannerCropPercent.width}%`, height: `${10000 / bannerCropPercent.height}%`, left: `${-100 * bannerCropPercent.x / bannerCropPercent.width}%`, top: `${-100 * bannerCropPercent.y / bannerCropPercent.height}%` } : undefined} />
                   {canManageSpace && (
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -634,12 +663,19 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
       <ImageCropModal
         isOpen={bannerCropSrc !== null}
-        onClose={() => setBannerCropSrc(null)}
+        onClose={() => { setBannerCropSrc(null); bannerAnimatedFileRef.current = null; }}
         imageSrc={bannerCropSrc ?? ''}
         onCropComplete={handleBannerCropComplete}
+        onCropSelection={bannerAnimatedFileRef.current ? async (pixels, percentage) => {
+          const file = bannerAnimatedFileRef.current;
+          if (!file) return;
+          setBannerCropRegion(pixels);
+          setBannerCropPercent(percentage);
+          await handleBannerCropComplete(file);
+        } : undefined}
         title={t('spaces:settings.overview.cropBannerTitle')}
         cropShape="rect"
-        aspectRatio={16 / 9}
+        aspectRatio={9 / 4}
         maxOutputDimension={1280}
       />
     </>

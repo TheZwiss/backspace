@@ -17,6 +17,8 @@ let testDb: ReturnType<typeof drizzle<typeof schema>>;
 let app: FastifyInstance;
 let currentUserId = 'owner';
 const sendToSpace = vi.fn();
+const cropAnimated = vi.hoisted(() => vi.fn());
+vi.mock('../utils/cropAnimatedBanner.js', async (original) => ({ ...(await original<typeof import('../utils/cropAnimatedBanner.js')>()), cropAnimatedBanner: cropAnimated }));
 vi.mock('../db/index.js', () => ({ getDb: () => testDb, getRawDb: () => sqlite, schema }));
 vi.mock('../utils/auth.js', () => ({ authenticate: async (req: { userId?: string }) => { req.userId = currentUserId; } }));
 vi.mock('../ws/handler.js', () => ({ connectionManager: { announceSpaceAccessChange: vi.fn(), sendToSpace: (...args: unknown[]) => sendToSpace(...args) } }));
@@ -31,6 +33,7 @@ beforeEach(async () => {
   testDb = drizzle(sqlite, { schema });
   currentUserId = 'owner';
   sendToSpace.mockClear();
+  cropAnimated.mockReset().mockResolvedValue(undefined);
   for (const id of ['owner', 'manager', 'member', 'outsider']) {
     testDb.insert(schema.users).values({ id, username: id, passwordHash: 'x', createdAt: 1 }).run();
   }
@@ -122,3 +125,32 @@ describe('space owner title', () => {
 });
 
 vi.mock('../ws/events.js', () => ({ checkVoicePermissions: vi.fn() }));
+
+describe('animated banner crop request', () => {
+  const crop = { x: 40, y: 8, width: 160, height: 90 };
+  function upload(uploaderId: string) {
+    testDb.insert(schema.attachments).values({ id: 'gif', filename: 'banner.gif', originalName: 'banner.gif', mimetype: 'image/gif', size: 1000, uploaderId, createdAt: 1 }).run();
+  }
+  it('requires ownership of the uploaded GIF even with space management permission', async () => {
+    upload('member');
+    const response = await app.inject({ method: 'PATCH', url: '/api/spaces/space', payload: { banner: 'banner.gif', bannerCrop: crop } });
+    expect(response.statusCode).toBe(403);
+    expect(cropAnimated).not.toHaveBeenCalled();
+    expect(stored().banner).toBeNull();
+  });
+  it('saves the new cropped filename and leaves the original upload unchanged', async () => {
+    upload('owner');
+    const response = await app.inject({ method: 'PATCH', url: '/api/spaces/space', payload: { banner: 'banner.gif', bannerCrop: crop } });
+    expect(response.statusCode).toBe(200);
+    expect(cropAnimated).toHaveBeenCalledWith(expect.stringMatching(/banner\.gif$/), expect.stringMatching(/\d+\.gif$/), crop);
+    expect(stored().banner).not.toBe('banner.gif');
+    expect(stored().banner).toMatch(/^\d+\.gif$/);
+    expect(testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'gif')).get()?.filename).toBe('banner.gif');
+  });
+  it.each(['../banner.gif', 'https://peer.example/banner.gif'])('refuses nonlocal filenames %s', async (banner) => {
+    const response = await app.inject({ method: 'PATCH', url: '/api/spaces/space', payload: { banner, bannerCrop: crop } });
+    expect(response.statusCode).toBe(400);
+    expect(cropAnimated).not.toHaveBeenCalled();
+    expect(stored().banner).toBeNull();
+  });
+});

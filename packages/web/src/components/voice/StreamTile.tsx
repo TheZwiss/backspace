@@ -1,3 +1,5 @@
+import { useStreamPreviews } from '../../utils/streamPreviews';
+import { StreamLiveBadge } from './StreamLiveBadge';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
@@ -24,6 +26,8 @@ interface StreamTileProps {
   tile: StreamTileType;
   large?: boolean;
   stats: TrackStatsSnapshot | null;
+  borderless?: boolean;
+  chromeRevealed?: boolean;
 }
 
 const STREAM_HEALTH_KEYS = {
@@ -201,7 +205,7 @@ function handleViewerWatchToggle(sharer: StreamWatchTarget, watching: boolean): 
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
-export function StreamTile({ tile, large, stats }: StreamTileProps) {
+export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -209,6 +213,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
 
   const { participant } = tile;
   const isLocal = participant.isLocal;
+  const preview = useStreamPreviews((state) => state.images[participant.identity]?.image);
   const userId = participant.userId;
   const avatarUserId = participant.homeUserId ?? userId;
   const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
@@ -420,7 +425,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
   return (
     <div
       data-context-menu
-      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
+      className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
       onContextMenu={handleContextMenu}
@@ -434,8 +439,9 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
           className="w-full h-full object-contain bg-black"
         />
       ) : (
-        <div data-testid="stream-tile-placeholder" className={`w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
-          <div className={large ? 'flex flex-col items-center gap-3 min-w-0' : 'flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
+        <div data-testid="stream-tile-placeholder" className={`relative w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
+          {preview && <><img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/65" /></>}
+          <div className={large ? 'relative flex flex-col items-center gap-3 min-w-0' : 'relative flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
             <div className="relative flex-shrink-0">
               <Avatar src={avatar} name={displayName} size={large ? 80 : 44} userId={avatarUserId} user={user ?? undefined} />
             </div>
@@ -458,13 +464,13 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* LIVE badge — top left */}
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-        {t('voice:badges.live')}
-      </div>
+      {(!borderless || chromeRevealed) && <div className="absolute top-2 left-2">
+        <StreamLiveBadge userId={userId} large />
+      </div>}
 
       {/* Stream status — in focus mode this is the visual peer of the Grid
           action: same top edge, height, radius, and surface treatment. */}
-      {(healthWarning || (qualityBadge && hasVideo)) && (
+      {(!borderless || chromeRevealed) && (healthWarning || (qualityBadge && hasVideo)) && (
         <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none`}>
           {healthWarning && (
             <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-[10px] leading-[15px] text-white/90 truncate`}>
@@ -483,7 +489,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* Bottom overlay */}
-      {hasVideo && isWatching && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      {hasVideo && isWatching && (!borderless || chromeRevealed) && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
         <div className="flex items-center gap-1.5 min-w-0">
           {/* Screen icon */}
           <svg

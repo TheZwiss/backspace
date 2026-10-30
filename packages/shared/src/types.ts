@@ -1,4 +1,5 @@
 import type { ErrorCode, ErrorDetails } from './errors.js';
+import type { Bookmark, BookmarkKind } from './bookmarks.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -557,6 +558,7 @@ export interface Embed {
 // ─── Active Call Types ───────────────────────────────────────────────────────
 
 export interface ActiveCallInfo {
+  waitingUntil?: number;
   dmChannelId: string | null;
   federatedCallId?: string;
   callerId: string;
@@ -640,6 +642,16 @@ export interface ActivityTimestamps {
   end?: number;
 }
 
+/**
+ * Playback progress independent of the sender's wall clock. Receivers anchor
+ * this position to their own clock when the activity arrives, so devices with
+ * skewed clocks still show the same elapsed playback.
+ */
+export interface ActivityPlayback {
+  positionMs: number;
+  durationMs?: number;
+}
+
 export interface ActivityAssets {
   largeImage?: string;
   largeText?: string;
@@ -653,6 +665,7 @@ export interface Activity {
   details?: string;
   state?: string;
   timestamps?: ActivityTimestamps;
+  playback?: ActivityPlayback;
   assets?: ActivityAssets;
   url?: string;
 }
@@ -765,6 +778,7 @@ export type ServerEvent =
   // `dmChannelId` is null and `federatedCallId` set when the instance holds a
   // federated call with no local copy of the DM (Path B, voice.md).
   | { type: 'dm_call_rejected'; dmChannelId: string | null; federatedCallId?: string }
+  | { type: 'dm_call_waiting'; dmChannelId: string; endsAt: number | null }
   | { type: 'dm_call_ended'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; phase: DmCallPhase; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
@@ -802,6 +816,13 @@ export type ServerEvent =
   // any of their sessions here). A setting with level null and not muted was
   // cleared. See docs/systems/websocket.md.
   | { type: 'notification_settings_updated'; setting: NotificationSetting }
+  // The user saved a message on this instance (from any of their sessions here).
+  // Sent to the user's own sockets only, never relayed. `bookmark` is the same
+  // object `PUT /api/bookmarks/:kind/:messageId` returns. See docs/systems/websocket.md.
+  | { type: 'bookmark_added'; bookmark: Bookmark }
+  // A bookmark of this instance was removed from the user's list. Idempotent
+  // removals that found nothing send no event.
+  | { type: 'bookmark_removed'; kind: BookmarkKind; channelId: string; messageId: string }
   | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
@@ -887,6 +908,7 @@ export interface UpdateChannelRequest {
 }
 
 export interface UpdateSpaceRequest {
+  bannerCrop?: { x: number; y: number; width: number; height: number };
   ownerTitle?: string | null;
   name?: string;
   icon?: string;
@@ -1134,6 +1156,7 @@ export interface InstanceAdminSettings {
   gifApiKey?: string;
   gifEnabled?: boolean;
   maxUploadSizeMb: number;
+  maxStickerSizeMb: number;
   federationRelayEnabled: boolean;
   federationRelayTtlDays: number;
   defaultAutoRotateIntervalDays: number;
@@ -1189,6 +1212,28 @@ export interface InstanceStreamingLimits {
   directoryConfigured: boolean;
   bitrateMatrixOverrides: Record<string, number> | null;
   allowCustomBitrate: boolean;
+  /**
+   * Webcam publish policy. Optional on the wire: an instance that predates
+   * this field (or a peer that has not upgraded) omits it, and readers treat
+   * that as the fixed default rather than guessing from the screen-share
+   * limits, which describe a different surface.
+   */
+  camera?: CameraStreamingLimits;
+}
+
+export type CameraQualityMode = 'fixed' | 'user-choice';
+
+export interface CameraStreamingLimits {
+  /** `fixed` keeps the 720p30/H.264 preset regardless of the user's saved choice. */
+  mode: CameraQualityMode;
+  defaultResolution: number;
+  defaultFramerate: number;
+  defaultBitrateKbps: number;
+  allowedResolutions: number[];
+  allowedFramerates: number[];
+  minBitrateKbps: number;
+  maxBitrateKbps: number;
+  allowCustomBitrate: boolean;
 }
 
 // ─── Federation Types ──────────────────────────────────────────────────────
@@ -1229,6 +1274,10 @@ export interface InstanceInfoResponse {
   // page. It only hides that card in the web client and changes nothing the
   // server does.
   supportCardEnabled: boolean;
+  /**
+   * Maximum custom sticker / emoji upload size in megabytes.
+   */
+  maxStickerSizeMb?: number;
 }
 
 /**
@@ -2121,3 +2170,21 @@ export type FederationRejectedReason =
 
 /** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
 export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;
+
+
+export interface SoundboardSound {
+  id: string;
+  spaceId: string;
+  name: string;
+  assetId: string;
+  creatorId: string;
+  durationMs: number;
+  volume: number;
+}
+export interface SoundboardPack {
+  spaceId: string;
+  name: string;
+  canCreate: boolean;
+  canManage: boolean;
+  sounds: SoundboardSound[];
+}

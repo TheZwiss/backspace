@@ -1,3 +1,6 @@
+import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { useUIStore } from '../../stores/uiStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { useTranslation } from 'react-i18next';
 import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
@@ -33,7 +36,8 @@ interface DmListItemProps {
 }
 
 export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, onLeave, onContextMenu }: DmListItemProps) {
-  const { t } = useTranslation('dm');
+  const { t } = useTranslation(['dm', 'voice']);
+  const callRunning = useVoiceStore((s) => (s.voiceUsers.get(dm.id)?.length ?? 0) > 0);
   const viewer = useDmViewer(dm.id);
   const otherMembers = dm.members.filter(m => !isMine(m, viewer.origin, viewer.self));
   const isGroup = !!dm.ownerId;
@@ -72,6 +76,17 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   const handleContextMenu = onContextMenu
     ? (e: React.MouseEvent) => onContextMenu(e, dm.id)
     : undefined;
+
+  const handlePrivateContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!firstOther) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    useContextMenuStore.getState().open({ x: event.clientX, y: event.clientY }, [
+      { key: 'profile', type: 'action', label: t('dm:memberRow.viewProfile'), onClick: () => useUIStore.getState().openUserProfile(firstOther, viewer.origin, rect, 'right') },
+      { key: 'close-dm', type: 'action', label: t('dm:list.close'), onClick: () => onClose(dm.id) },
+    ]);
+  };
 
   // ── State-driven classes ──────────────────────────────────────────────
   // Container: 6px radius (up from 4px), 44px height (up from 42px)
@@ -121,7 +136,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   // sender prefix for group user-messages. We only need to provide the
   // empty-group fallback ourselves.
   const preview = formatDmSidebarPreview(dm, viewer);
-  const previewText = preview ?? (isGroup ? `${dm.members.length} Members` : null);
+  const previewText = callRunning ? `☎ ${t('voice:callOngoing')}` : preview ?? (isGroup ? `${dm.members.length} Members` : null);
 
   const itemJsx = (
     <div
@@ -213,5 +228,5 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
     return <div onContextMenu={handleContextMenu}>{itemJsx}</div>;
   }
 
-  return itemJsx;
+  return <div onContextMenu={handlePrivateContextMenu}>{itemJsx}</div>;
 }

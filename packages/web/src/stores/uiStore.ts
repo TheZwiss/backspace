@@ -11,6 +11,7 @@ type ModalType =
   | 'invite'
   | 'userSettings'
   | 'spaceSettings'
+  | 'soundboard' | 'spaceProfile'
   | 'channelSettings'
   | 'categorySettings'
   | 'imagePreview'
@@ -20,6 +21,7 @@ type ModalType =
   | 'userProfile'
   | 'connectAndJoin'
   | 'memberRoles'
+  | 'bookmarks'
   | null;
 
 /**
@@ -89,9 +91,14 @@ interface UIState {
   lastChannelPerSpace: Record<string, string>;
   setLastChannel: (spaceId: string, channelId: string) => void;
   voiceChatOpen: boolean;
+  voiceChatFocus: boolean;
   voiceFullscreen: boolean;
+  callWindowOpen: boolean;
+  setCallWindowOpen: (open: boolean) => void;
   pipCollapsed: boolean;
   toggleVoiceChat: () => void;
+  toggleVoiceChatFocus: () => void;
+  setVoiceChatFocus: (focus: boolean) => void;
   toggleVoiceFullscreen: () => void;
   setVoiceFullscreen: (fullscreen: boolean) => void;
   setPipCollapsed: (collapsed: boolean) => void;
@@ -195,9 +202,22 @@ export const useUIStore = create<UIState>()(
       })),
 
       voiceChatOpen: false,
+      voiceChatFocus: false,
       voiceFullscreen: false,
+      callWindowOpen: false,
+      setCallWindowOpen: (open) => set({ callWindowOpen: open }),
       pipCollapsed: false,
-      toggleVoiceChat: () => set((state) => ({ voiceChatOpen: !state.voiceChatOpen })),
+      toggleVoiceChat: () => set((state) => {
+        const open = !state.voiceChatOpen;
+        return { voiceChatOpen: open, voiceChatFocus: open ? state.voiceChatFocus : false };
+      }),
+      toggleVoiceChatFocus: () => set((state) => ({
+        voiceChatFocus: !state.voiceChatFocus,
+        voiceChatOpen: true,
+      })),
+      setVoiceChatFocus: (focus) => set(focus
+        ? { voiceChatFocus: true, voiceChatOpen: true }
+        : { voiceChatFocus: false }),
       toggleVoiceFullscreen: () => set((state) => ({ voiceFullscreen: !state.voiceFullscreen })),
       setVoiceFullscreen: (fullscreen) => set({ voiceFullscreen: fullscreen }),
       setPipCollapsed: (collapsed) => set({ pipCollapsed: collapsed }),

@@ -12,6 +12,7 @@ import { expireOutboxQueues } from './federationOutboxQueue.js';
 import { sweepAppliedEvents } from './federationAppliedEvents.js';
 import { sweepSubjectClocks } from './federationSubjectClock.js';
 import { cleanupUnusedStickerAssets } from './stickerAssets.js';
+import { cleanupGameIconAssets } from './gameIconAssets.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -140,6 +141,17 @@ function getReferencedFilenames(): Set<string> {
     .where(isNotNull(schema.attachments.thumbnailFilename))
     .all();
   for (const row of thumbRows) {
+    if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
+  }
+
+  // Files a bookmark owns (its own copies, never the originals' files). Without
+  // this the orphan phase would delete them.
+  const bookmarkRows = db.select({
+    filename: schema.bookmarkAttachments.filename,
+    thumbnailFilename: schema.bookmarkAttachments.thumbnailFilename,
+  }).from(schema.bookmarkAttachments).all();
+  for (const row of bookmarkRows) {
+    if (row.filename) referenced.add(path.basename(row.filename));
     if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
   }
 
@@ -375,6 +387,13 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
   deletedFiles += stickers.deletedFiles;
   freedBytes += stickers.freedBytes;
   errors.push(...stickers.errors);
+
+  // Phase 5: Game icons nobody renewed for a year, and their orphaned files
+  // (utils/gameIconAssets.ts).
+  const gameIcons = cleanupGameIconAssets(dryRun);
+  deletedFiles += gameIcons.deletedFiles;
+  freedBytes += gameIcons.freedBytes;
+  errors.push(...gameIcons.errors);
 
   return {
     dryRun,

@@ -45,6 +45,7 @@ import {
 import { useAuthStore, getMyUserIdForOrigin, isMe } from './authStore';
 import { useChatStore } from './chatStore';
 import { useNotificationSettingsStore } from './notificationSettingsStore';
+import { useBookmarkStore } from './bookmarkStore';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
@@ -1408,9 +1409,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
   removeInstanceSpaces: (origin: string) => {
     // The instance is gone: the id its `ready` gave the user says nothing now,
-    // and neither do the notification settings it stored.
+    // and neither do the notification settings or bookmarks it stored.
     useAuthStore.getState().forgetMyRow(origin);
     useNotificationSettingsStore.getState().forgetOrigin(origin);
+    useBookmarkStore.getState().forgetOrigin(origin);
 
     // Collect channel IDs before set() for chatStore cleanup
     const currentState = get();

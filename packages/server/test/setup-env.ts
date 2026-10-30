@@ -10,5 +10,14 @@
 // every test that transitively imports a server module aborts during import.
 // `??=` keeps a value the shell exported deliberately.
 
+import { beforeEach } from 'vitest';
+import { _resetChannelMessageCreateLimit } from '../src/utils/channelMessageRateLimit.js';
+import { _resetDmMessageCreateLimit } from '../src/utils/dmMessageRateLimit.js';
+
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET ??= 'test-only-jwt-secret-not-for-production-use!!';
+
+beforeEach(() => {
+  _resetChannelMessageCreateLimit();
+  _resetDmMessageCreateLimit();
+});

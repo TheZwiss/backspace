@@ -206,8 +206,11 @@ Profile images (avatars, banners, space icons) use the general upload pipeline b
 **Behavior:**
 - Uses sharp with `{ animated: true }` to preserve GIF animation
 - No-op if image width is already <= max dimension
-- Writes to temp file (`filepath + '.tmp'`), then atomically renames (`fs.renameSync`) to avoid corruption
+- Writes to temp file (`filepath + '.tmp' + ext`), then atomically renames (`fs.renameSync`) to avoid corruption
+- Skips the resize for animations with more than `MAX_ANIMATED_PAGES` (120) frames and keeps the original; decoding every frame unbounded can stall the server
 - Non-fatal: on error, original file is preserved, temp file cleaned up
+
+**Animated profile images skip the browser crop.** `AccountPanel` asks `utils/animatedImage.ts` before opening `ImageCropModal`; a GIF (and a WebP/APNG whose `ImageDecoder` frame count is above one) is uploaded with its real extension instead. The crop path paints a single frame into a canvas, which would flatten the animation before the server ever sees it. The avatar and banner containers frame the full image with `object-cover` / `background-size: cover`; the server resize keeps every frame. The upload filename must carry the real extension because `files.ts` derives the served MIME type from it.
 
 ### Profile Upload Lifecycle
 
@@ -379,6 +382,7 @@ Idempotent: no-op if no record exists.
 - Space banners (`spaces.banner` where not null)
 - Attachment filenames (`attachments.filename`)
 - Attachment thumbnails (`attachments.thumbnailFilename` where not null)
+- Files a bookmark owns (`bookmark_attachments.filename` and `thumbnailFilename` where not null): its own copies, never the originals' files (see [bookmarks.md](bookmarks.md))
 
 All values are `path.basename()`-normalized.
 
@@ -519,6 +523,14 @@ Three stores with strict separation of concerns:
 | `transferStore` | `packages/web/src/stores/transferStore.ts` | Every byte transfer (uploads + downloads). Source of truth for the global tray. Persists transfer metadata via `transferStore@v1`. Tus uploads route the bearer token through `getTokenForOrigin(origin)` so federated uploads use the per-instance JWT, not the home-instance one. |
 | `composerStore` | `packages/web/src/stores/composerStore.ts` | Per-channel staged transfer IDs + draft text + replyTo. Replaces `MessageInput` component-local state. Persists via `composerStore@v1`. |
 | `pendingMessageStore` | `packages/web/src/stores/pendingMessageStore.ts` | Composed-but-not-yet-sent attachment-bearing bubbles, keyed by `clientId`. Persists via `pendingMessageStore@v1`. Text-only messages are out of scope -- they keep the existing `chatStore.sendMessage` `temp_*` optimistic path. |
+
+### Attaching Files to the Composer
+
+Three entry points feed `MessageInput.enqueueFile` (eager `startUpload`, then `composerStore.attach`): the attach button, paste of an image, and drag-and-drop.
+
+**Drop zone.** The drop target is the whole chat region, not the input pill: the composer's parent element (the channel or DM column, the voice-channel chat panel), found as `composerEl.parentElement`, the same element that already receives `--composer-clearance`. `hooks/useFileDropZone.ts` attaches native `dragenter`/`dragover`/`dragleave`/`drop` listeners to it and returns whether a file drag is over it. Only drags whose `dataTransfer.types` contain `Files` count, so selected text and in-app drags (channel reordering, voice user moves) neither show the overlay nor are consumed. While one is over the region, `ChatDropOverlay` is portaled into that element: a `.drop-scrim` (blur plus tint, `z-[140]`, above the composer at `z-[110]`) with a dashed frame and a `.glass-bubble` label (`chat:composer.dropTitle` / `dropHint`). The overlay takes no pointer events, and enter/leave are counted, so crossing child elements does not flicker. The overlay stays up for as long as the drag is over the region, however still the pointer is (`dragover` is not repeated on every platform, so nothing expires on a timer); it goes on `dragleave` of the region, on `drop`, or on a window `dragend`/`drop` for a drag that ends elsewhere.
+
+The zone is enabled only when the user may send and attach (`SEND_MESSAGES` and `ATTACH_FILES`, always in DMs); otherwise no listener is attached and the browser's default drop behaviour is unchanged. The pill carries no drop handlers of its own: an event on it bubbles to the region, and a second handler would attach every file twice. The drop handler reads `DataTransfer.items` synchronously (Chromium upgrades them to `FileSystemFileHandle` for resume-across-reload; other browsers fall back to `files`), then focuses the textarea. Dropped folders are not filtered out: they take the same path as before this change.
 
 ### Optimistic Bubble Lifecycle
 
@@ -726,9 +738,11 @@ The client reads `isStickerMessage` and `messageTextForPreview` from `utils/stic
 `POST /api/stickers` takes `{ name, image }`, the image as canonical base64 inside the JSON body of the authenticated API client (not tus: stickers are small and are stored once per content hash). The route:
 
 1. refuses a name `normalizeStickerName` refuses (`sticker_name_invalid` with `details.max`: blank, over 100 characters after trimming, a line break, a control or bidirectional character, or nothing visible; the name is stored trimmed), more than 30 uploads per account per minute (`429 rate_limited`, a fixed window keyed on the row id, so each federated account counts on its own) and a full collection (`409 sticker_collection_full`, 200 entries, `MAX_PERSONAL_STICKERS`);
-2. decodes the bytes with sharp: at most 5 MiB in, at most 16,777,216 decoded pixels across all frames, PNG, JPEG, WebP or GIF only (SVG and anything else is `400 sticker_invalid_image` with `details.max`, the limit in MB);
+2. decodes the bytes with sharp: at most 5 MiB in, at most 67,108,864 decoded pixels across all frames, PNG, JPEG, WebP or GIF only (SVG and anything else is `400 sticker_invalid_image` with `details.max`, the limit in MB);
 3. re-encodes to WebP, keeping animation and frame delays, fitting every frame into 512 x 512 without enlarging, and refuses a result larger than 5 MiB. Metadata and any bytes outside the image are dropped;
-4. names the asset by the SHA-256 of the encoded bytes, writes (or makes fresh again) its `sticker_assets` row, writes the file to a temporary name and renames it into place, then adds the collection entry.
+4. names the asset by the SHA-256 of the encoded bytes, writes (or makes fresh again) its `sticker_assets` row, writes the file to a temporary name and renames it into place unless that content-addressed file already exists, reuses an existing preview, then adds the collection entry.
+
+Sticker tokens remain the wire value in `messages.content`, `dm_messages.content`, `reactions.emoji` and `dm_reactions.emoji`. Migration `0040_moaning_black_knight` adds an indexed `sticker_asset_id` column to each table, backfills existing tokens, and triggers keep it synchronized with inserts and edits. This gives cleanup and future queries a compact asset reference without changing the federation protocol or client payloads.
 
 `POST /api/stickers/:id/collect` takes `{ token, name }` and adds an existing local asset: the token must be exactly this instance's token for that id (`400 sticker_not_local` otherwise) and the asset must exist (`404 sticker_not_found`). The client sends a localized default name. Collecting is idempotent: an entry already in the collection is returned unchanged, even when the collection is full. `PATCH /api/stickers/:id` takes `{ name }` and renames only the caller's entry (`404 sticker_not_found` when the caller has none for that id); another account's entry for the same asset keeps its own name, and messages and reactions are unaffected because they carry the token, not the name. Collect and rename apply the same name rule as upload. `DELETE /api/stickers/:id` removes only the caller's entry; the asset stays for messages and reactions that use it. No WebSocket event follows any of these; the picker reads the collection each time it opens.
 
@@ -756,6 +770,21 @@ A sticker message or reaction crosses instances as its token, through the existi
 - The cleanup above counts only rows on its own instance. A sticker used only in a space on another instance stops rendering there once its owner removes it from their collection and no local message or reaction uses it.
 - "Add to my stickers" on another instance's sticker makes a copy in the home collection (see Upload and collection). The copy no longer depends on the other instance: it keeps rendering after the original owner removes theirs.
 - What an older version shows: a 1.10.0 or older client shows the token as a line of text with a link, and a sticker reaction as a pill holding that text. A current instance resolves no embed for a token (embeds.md, `extractUrls`). A space hosted on a 1.10.0 or older instance does: a sticker sent there gets an image embed of its asset URL, so that instance's own clients see the text and the image, and a current client hides the embed and draws the sticker once. A relayed DM gets no embed on any version, because the receiving side of the relay resolves none.
+
+---
+
+## 15. Game Icons
+
+The activity a game reports can carry an icon, and that icon comes from the player's own machine: the desktop client extracts it locally (Steam's `appcache/librarycache`, Flatpak's exported hicolor icons, GOG's `support/icon.png`, an AppImage mount's `.DirIcon`, `.desktop` entries and their theme icons — `packages/desktop/src/gameIcons.ts`) and the renderer uploads it to the user's own instance. No external art service is contacted: the protocol's Discord asset keys are dropped at normalization rather than resolved against a third-party CDN.
+
+`POST /api/game-icons` takes `{ image }`, canonical base64 in the JSON body of the authenticated API client, and mirrors the sticker route's shape:
+
+1. more than 10 uploads per account per minute are refused (`429 rate_limited`), as is a full set (`409 game_icon_collection_full`, 25,600 distinct icons per account, `MAX_GAME_ICONS_PER_USER`);
+2. sharp decodes at most 512 KiB (`MAX_GAME_ICON_BYTES`) of PNG, JPEG or WebP and re-encodes to a still WebP fitting 256 x 256 without enlarging (`game_icon_invalid_image` otherwise);
+3. the asset is stored content-addressed (`game-icons/<sha256>.webp` under the upload directory, written atomically), the row upserted in `game_icon_assets`, and the account's entry recorded in `game_icons`. The same bytes from another machine or account deduplicate to the same file;
+4. the response is `{ id, url }` with the absolute instance URL (`/api/game-icons/assets/<sha256>.webp`), which the renderer attaches to the activity's `assets.largeImage` and caches by game name (`localStorage`), so one upload serves every later activity for that game.
+
+`GET /api/game-icons/assets/<id>.webp` is public with the same sandbox headers as a sticker asset (immutable cache, `default-src 'none'`), so a federated peer's browser loads it the way it loads any image embed. **Retention.** `game_icons.created_at` means "last uploaded": an upload of bytes the account already holds renews it. Phase 5 of the storage janitor (`cleanupGameIconAssets`, `utils/gameIconAssets.ts`) drops claims not renewed for a year (`GAME_ICON_RETENTION_MS`), then deletes assets no remaining claim names once they are older than 24 hours (`GAME_ICON_ASSET_GRACE_MS`; an upload writes its asset row before its file and claim), files no asset row names, and stale `.tmp` files, honouring dry run. The desktop client uploads a played game's icon again once its last upload is 30 days old (`backspace_game_icons_seen` in `localStorage`; a cache from before that key counts as due), so only an icon nobody used for a year goes; an icon that expires while still shown on a profile is a missing image until its owner next plays the game. There is no removal route, and account deletion removes only the claims (the janitor then removes the assets). The per-account quota stays the bound on what one account can store (25,600 icons of normally a few dozen KiB each; the 10 uploads per minute make filling it a matter of days); a byte budget is open work.
 
 ---
 

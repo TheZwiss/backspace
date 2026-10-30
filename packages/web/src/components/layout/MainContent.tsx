@@ -1,12 +1,15 @@
+import { DmCallStatus } from '../voice/DmCallStatus';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useActiveJump, useJumpStore } from '../../stores/jumpStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { VoiceGrid } from '../voice/VoiceGrid';
+import { openDetachedCallWindow } from '../voice/DetachedCallWindow';
 import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
 import { FriendsPage } from '../chat/FriendsPage';
@@ -18,6 +21,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { canStartDmCall, startDmCall, cancelOutgoingDmCall, isDmCallRunning, joinDmCall } from '../../utils/voiceActions';
 import { useActiveDmCall } from '../../hooks/useActiveDmCall';
 import { MemberListToggleButton } from './MemberListToggleButton';
+import { BookmarksButton } from './BookmarksButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isMine, isFederationGlobeApplicable, userDisplayName } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
@@ -59,12 +63,15 @@ function voiceHeaderClassName(fullscreen: boolean, revealed: boolean): string {
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const channels = useSpaceStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
+  const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
+  const setVoiceChatFocus = useUIStore((s) => s.setVoiceChatFocus);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const callWindowOpen = useUIStore((s) => s.callWindowOpen);
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
   const participants = useVoiceStore((s) => s.participants);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
@@ -87,11 +94,26 @@ export function MainContent() {
   // pointer goes still. It cannot be `group-hover`: fullscreen makes this
   // container the whole viewport, so hover is true wherever the pointer is
   // and the chrome would never leave. See usePointerReveal.
-  const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen);
+  const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
+  const chromeRevealed = usePointerReveal(voiceContainerRef, voiceFullscreen, undefined, !!focusedParticipantId?.endsWith(':stream'));
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
-  const clearJumpRequest = useCallback(() => setJumpToMessageId(null), []);
+  // A jump to a message (search result, bookmark) is a request in `jumpStore`;
+  // this list takes it once its conversation is the open one.
+  const jumpToMessageId = useActiveJump(currentChannelId);
+  const clearJumpRequest = useJumpStore((s) => s.clearJump);
+  const requestJump = useJumpStore((s) => s.requestJump);
+  const jumpFromSearch = useCallback((messageId: string) => {
+    if (currentChannelId) {
+      requestJump(
+        currentSpaceId
+          ? { kind: 'channel', spaceId: currentSpaceId, channelId: currentChannelId }
+          : { kind: 'dm', channelId: currentChannelId },
+        messageId,
+      );
+    }
+    setSearchOpen(false);
+  }, [currentChannelId, currentSpaceId, requestJump]);
 
   // Resolve the DM header's "first other" member through the canonical view
   // cache. The hook must be called unconditionally at the component top, so we
@@ -106,6 +128,11 @@ export function MainContent() {
   useEffect(() => {
     setSearchOpen(false);
   }, [currentChannelId]);
+
+  // Leaving or switching a call must not leave the next one in chat-only mode.
+  useEffect(() => {
+    setVoiceChatFocus(false);
+  }, [currentVoiceChannelId, setVoiceChatFocus]);
 
   // Handle actual browser fullscreen API.
   //
@@ -271,17 +298,26 @@ export function MainContent() {
               )}
             </div>
             <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
+              <BookmarksButton />
               <TransferIndicator />
               <MemberListToggleButton />
             </div>
           </div>
 
+          {!voiceFullscreen && <DmCallStatus channelId={currentChannelId} />}
           <div className="flex-1 flex overflow-hidden min-h-0">
-            <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-              <VoiceGrid participants={participants} />
-              <VoiceControlBar revealed={chromeRevealed} />
-            </div>
-            {voiceChatOpen && !voiceFullscreen && (
+            {!voiceChatFocus && (
+              <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+                {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
+                <VoiceControlBar revealed={chromeRevealed} />
+              </div>
+            )}
+            {voiceChatFocus ? (
+              <div className="flex-1 min-w-0 flex flex-col bg-surface-chat">
+                <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
+                <VoiceControlBar variant="docked" />
+              </div>
+            ) : voiceChatOpen && !voiceFullscreen && (
               <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
             )}
           </div>
@@ -415,11 +451,13 @@ export function MainContent() {
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
+            <BookmarksButton />
             <TransferIndicator />
             <div className="w-[1px] h-5 bg-border-soft mx-1" />
             <MemberListToggleButton />
           </div>
         </div>
+        <DmCallStatus channelId={currentChannelId} />
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />
         {dmPartnerDeleted
           ? <DmDeletedNotice />
@@ -430,7 +468,7 @@ export function MainContent() {
           anchorRef={searchButtonRef}
           channelId={currentChannelId}
           isDm={true}
-          onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+          onJumpToMessage={jumpFromSearch}
         />
       </div>
     );
@@ -442,6 +480,7 @@ export function MainContent() {
         <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard">
           <span className="text-txt-tertiary">{t('spaces:main.selectChannel')}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <BookmarksButton />
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
@@ -467,6 +506,7 @@ export function MainContent() {
               <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <BookmarksButton />
               <TransferIndicator />
               <MemberListToggleButton />
             </div>
@@ -515,17 +555,25 @@ export function MainContent() {
             )}
           </div>
           <div className={`flex items-center gap-1 flex-shrink-0 ${voiceFullscreen ? 'pointer-events-auto mr-24' : ''}`}>
+            <BookmarksButton />
             <TransferIndicator />
             <MemberListToggleButton />
           </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden min-h-0">
-          <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-            <VoiceGrid participants={participants} />
-            <VoiceControlBar revealed={chromeRevealed} />
-          </div>
-          {voiceChatOpen && !voiceFullscreen && (
+          {!voiceChatFocus && (
+            <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
+              {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
+              <VoiceControlBar revealed={chromeRevealed} />
+            </div>
+          )}
+          {voiceChatFocus ? (
+            <div className="flex-1 min-w-0 flex flex-col bg-surface-chat">
+              <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
+              <VoiceControlBar variant="docked" />
+            </div>
+          ) : voiceChatOpen && !voiceFullscreen && (
             <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
           )}
         </div>
@@ -555,6 +603,7 @@ export function MainContent() {
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
+          <BookmarksButton />
           <TransferIndicator />
           <div className="w-[1px] h-5 bg-border-soft mx-1" />
           <MemberListToggleButton />
@@ -568,7 +617,7 @@ export function MainContent() {
         anchorRef={searchButtonRef}
         channelId={currentChannelId}
         isDm={false}
-        onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+        onJumpToMessage={jumpFromSearch}
       />
     </div>
   );

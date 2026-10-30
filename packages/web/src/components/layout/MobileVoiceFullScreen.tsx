@@ -1,3 +1,5 @@
+import { TextVoiceButton } from '../voice/TextVoice';
+import { SoundboardButton } from '../voice/Soundboard';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -380,13 +382,14 @@ export function MobileVoiceFullScreen() {
 
       {/* Control bar */}
       <div
-        className="glass-bubble mx-2 mb-2 rounded-2xl flex items-center justify-center gap-4 px-4 py-3 shrink-0"
+        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 sm:gap-4 sm:px-4 shrink-0"
         style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
+        <div className="flex w-full justify-center gap-2 sm:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
         {/* Mute */}
         <button
           onClick={toggleMuteFromControl}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
             isMuted
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -418,7 +421,7 @@ export function MobileVoiceFullScreen() {
         {/* Deafen */}
         <button
           onClick={toggleDeafenFromControl}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
             isDeafened
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -454,7 +457,7 @@ export function MobileVoiceFullScreen() {
         <div className="relative" ref={cameraPickerAnchorRef}>
           <button
             onClick={handleCameraAction}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
               isCameraOn
                 ? 'bg-accent-mint/20 text-accent-mint'
                 : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -516,7 +519,7 @@ export function MobileVoiceFullScreen() {
             only the boolean and never started capture. */}
         <button
           onClick={handleScreenShareAction}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
             isScreenSharing
               ? 'bg-accent-mint/20 text-accent-mint'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -543,7 +546,7 @@ export function MobileVoiceFullScreen() {
         {/* Disconnect */}
         <button
           onClick={handleDisconnect}
-          className="w-12 h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
+          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
           aria-label={t('voice:mobileCall.disconnect')}
         >
           <svg

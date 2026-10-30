@@ -52,6 +52,31 @@ afterEach(() => {
 });
 
 describe('GlobalShortcuts portal lifecycle', () => {
+  it('reports a missing desktop entry when host registration is rejected', async () => {
+    const { bus, client, status } = setup();
+    bus.call.mockRejectedValueOnce(new Error("Could not register app ID: App info not found for 'io.github.TheZwiss.backspace'"));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await client.start();
+    expect(status).toHaveBeenLastCalledWith({ state: 'unavailable', shortcuts: {}, reason: 'missingDesktopEntry' });
+  });
+  it('opens the desktop shortcut editor only for a bound session', async () => {
+    const { bus, client } = setup();
+    expect(await client.configure()).toBe(false);
+    await client.start();
+    expect(await client.configure()).toBe(true);
+    const call = bus.call.mock.calls.find(([message]) => message.member === 'ConfigureShortcuts')![0];
+    expect(call.signature).toBe('osa{sv}');
+    expect(call.body).toEqual([SESSION, '', {}]);
+  });
+  it('reports an unavailable editor without discarding the active session', async () => {
+    const { bus, client, status } = setup();
+    await client.start();
+    bus.call.mockRejectedValueOnce(new Error('unsupported'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await client.configure()).toBe(false);
+    expect(status).toHaveBeenLastCalledWith({ state: 'ready', shortcuts: { pushToTalk: 'Ctrl+V' } });
+    expect(bus.disconnect).not.toHaveBeenCalled();
+  });
   it('registers at startup when the backend exposes saved assignments only after binding', async () => {
     const { bus, client, status, action } = setup();
     bus.emptyBeforeBind = true;
@@ -98,7 +123,7 @@ describe('GlobalShortcuts portal lifecycle', () => {
     const bind = bus.call.mock.calls.find(([message]) => message.member === 'BindShortcuts')![0];
     expect(bind.signature).toBe('oa(sa{sv})sa{sv}');
     expect(bind.body[1].map((entry: [string, unknown]) => entry[0])).toEqual([
-      'toggleMute', 'toggleDeafen', 'pushToTalk', 'toggleCamera', 'toggleScreenShare', 'disconnect',
+      'dictationPushToTalk', 'toggleMute', 'toggleDeafen', 'pushToTalk', 'toggleCamera', 'toggleScreenShare', 'disconnect',
     ]);
     for (const entry of bind.body[1]) expect(entry[1]).not.toHaveProperty('preferred_trigger');
     await client.start();

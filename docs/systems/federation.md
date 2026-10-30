@@ -1800,7 +1800,7 @@ Native users' status (and optional rich activities) is projected to peers via th
 **Payload:** `FederationPresenceUpdatePayload`:
 - `homeUserId`, `homeInstance`
 - `status: 'online' | 'idle' | 'dnd' | 'offline'`
-- `activities?: Activity[]`. Current senders always include it (`[]` for none). The receiver reads a list as the full set and an absent field as "unchanged": peers that predate this send status-only relays on every connect and in their activation snapshot, also while the user is playing.
+- `activities?: Activity[]` (items may carry `playback`; `validateActivities` on the receiving side bounds it exactly as for a local `activity_update`, and a peer that predates the field simply ignores it). Current senders always include it (`[]` for none). The receiver reads a list as the full set and an absent field as "unchanged": peers that predate this send status-only relays on every connect and in their activation snapshot, also while the user is playing.
 - `ts: number` — emitter clock (last-write-wins per stub if needed)
 
 **Outbox-only — never written to mutation log.** Presence is ephemeral. Replaying old presence on peer activation would be wrong (stale state). The outbox queues directly without `appendMutationLog`. Stale entries that fail delivery beyond retry budget are dropped.

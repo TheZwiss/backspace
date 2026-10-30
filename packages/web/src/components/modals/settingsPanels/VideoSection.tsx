@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Track } from 'livekit-client';
-import { useVoiceStore } from '../../../stores/voiceStore';
+import { useVoiceStore, type CameraConfig } from '../../../stores/voiceStore';
+import type { CameraStreamingLimits } from '@backspace/shared';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { getActiveRoom } from '../../../hooks/useLiveKit';
+import { useStreamHostLimits } from '../../../utils/streamHostLimits';
+import { effectiveCameraConfig, resolveCameraLimits } from '../../../utils/camera';
+import { RESOLUTION_LABELS, type Resolution } from '@backspace/shared/src/constants';
 import { isElectron, getElectronAPI } from '../../../platform/platform';
 
 /**
@@ -77,10 +82,18 @@ function buildDisplayLabels(
 }
 
 export function VideoSection() {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'common']);
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const cameraConfig = useVoiceStore((s) => s.cameraConfig);
+  const setCameraConfig = useVoiceStore((s) => s.setCameraConfig);
+  const { limits: hostLimits } = useStreamHostLimits();
+  const homeLimits = useSettingsStore((s) => s.streamingLimits);
+
+  const policyLimits = hostLimits ?? homeLimits;
+  const cameraLimits = policyLimits ? resolveCameraLimits(policyLimits) : null;
+  const effectiveCamera = policyLimits ? effectiveCameraConfig(cameraConfig, policyLimits) : null;
 
   const [permState, setPermState] = useState<PermissionStatus>('unknown');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -433,6 +446,14 @@ export function VideoSection() {
 
   // ── Render ────────────────────────────────────────────────────────────
 
+  const qualityControls = cameraLimits && effectiveCamera && (
+    <CameraQualityControls
+      cameraLimits={cameraLimits}
+      effectiveCamera={effectiveCamera}
+      setCameraConfig={setCameraConfig}
+    />
+  );
+
   if (permState === 'unknown') {
     return (
       <div>
@@ -466,6 +487,7 @@ export function VideoSection() {
             {t('voice.video.accessDenied.retry')}
           </button>
         </div>
+        {qualityControls}
       </div>
     );
   }
@@ -492,6 +514,7 @@ export function VideoSection() {
             {t('voice.video.permissionPrompt.enable')}
           </button>
         </div>
+        {qualityControls}
       </div>
     );
   }
@@ -618,7 +641,113 @@ export function VideoSection() {
         {devices.length === 0 && (
           <div className="text-xs text-txt-tertiary mt-1">{t('voice.video.camera.none')}</div>
         )}
+        {qualityControls}
       </div>
+    </div>
+  );
+}
+
+function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig }: {
+  cameraLimits: CameraStreamingLimits;
+  effectiveCamera: CameraConfig;
+  setCameraConfig: (config: Partial<CameraConfig>) => void;
+}) {
+  const { t } = useTranslation(['settings', 'common']);
+  return (
+    <div className="mt-4 pt-3 border-t border-white/[0.06]">
+      <div className="text-[13px] font-medium text-txt-primary mb-1.5">
+        {t('voice.video.camera.quality.label')}
+      </div>
+      {cameraLimits.mode === 'fixed' ? (
+        <div className="text-xs text-txt-tertiary">
+          {t('voice.video.camera.quality.managed', {
+            resolution: RESOLUTION_LABELS[effectiveCamera.height as Resolution],
+            fps: effectiveCamera.fps,
+            bitrate: t('common:units.kbps', { value: cameraLimits.defaultBitrateKbps }),
+          })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              {t('voice.video.camera.quality.resolution')}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {cameraLimits.allowedResolutions.map((height) => (
+                <button
+                  key={height}
+                  type="button"
+                  onClick={() => setCameraConfig({ height })}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    effectiveCamera.height === height
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-base text-txt-secondary hover:bg-interactive-hover'
+                  }`}
+                >
+                  {RESOLUTION_LABELS[height as Resolution]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              {t('voice.video.camera.quality.framerate')}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {cameraLimits.allowedFramerates.map((fps) => (
+                <button
+                  key={fps}
+                  type="button"
+                  onClick={() => setCameraConfig({ fps })}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    effectiveCamera.fps === fps
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-base text-txt-secondary hover:bg-interactive-hover'
+                  }`}
+                >
+                  {t('voice.video.camera.quality.fps', { value: fps })}
+                </button>
+              ))}
+            </div>
+          </div>
+          {cameraLimits.allowCustomBitrate ? (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-txt-secondary">
+                  {t('voice.video.camera.quality.bitrate')}
+                </span>
+                <span className="text-xs text-txt-tertiary">
+                  {t('common:units.kbps', {
+                    value: effectiveCamera.customBitrateKbps ?? cameraLimits.defaultBitrateKbps,
+                  })}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={cameraLimits.minBitrateKbps}
+                max={cameraLimits.maxBitrateKbps}
+                step={100}
+                value={effectiveCamera.customBitrateKbps ?? cameraLimits.defaultBitrateKbps}
+                onChange={(e) => setCameraConfig({ customBitrateKbps: Number(e.target.value) })}
+                className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full"
+              />
+              {effectiveCamera.customBitrateKbps != null && (
+                <button
+                  type="button"
+                  onClick={() => setCameraConfig({ customBitrateKbps: null })}
+                  className="mt-1 text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  {t('voice.video.camera.quality.useDefault')}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-txt-tertiary">
+              {t('common:units.kbps', { value: cameraLimits.defaultBitrateKbps })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

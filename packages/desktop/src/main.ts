@@ -1,3 +1,5 @@
+import { WindowsProcessAudio } from './windowsProcessAudio';
+import { LocalTextVoice, type TextVoiceDevice } from './textVoice';
 import {
   app,
   BrowserWindow,
@@ -15,8 +17,29 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { pathToFileURL } from 'url';
-import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
+import {
+  startActivityDetection,
+  stopActivityDetection,
+  getAllCurrentActivities,
+  applyIpcActivity,
+  listKnownGameNames,
+  listRunningPrograms,
+  getUnknownWinePrograms,
+  setManualBinding,
+  setManualBindings,
+} from './activityDetector';
+import type { Activity } from './activityDetector';
+import { resolveGameIcon } from './gameIcons';
+import { startRichPresenceIpcServer, stopRichPresenceIpcServer } from './richPresenceIpc';
+import {
+  startMediaDetection,
+  stopMediaDetection,
+  getCurrentMediaActivity,
+  type MediaSetupHint,
+} from './mediaDetector';
+import { loadActivitySettings, parseActivitySettingsUpdate, saveActivitySettings } from './activitySettings';
 import { KeybindManager } from './keybindManager';
+import { integrateAppImage } from './appImageIntegration';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
 import {
   loadInstanceUrl,
@@ -51,7 +74,7 @@ import {
   type RecoveryState,
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
-import { isNavigationAllowed } from './navigationPolicy';
+import { isCallWindowRequest, isNavigationAllowed } from './navigationPolicy';
 import { NotificationRetainer } from './notificationRetention';
 import {
   screenSharePickerMode,
@@ -85,6 +108,10 @@ app.setName('Backspace');
 }
 
 let mainWindow: BrowserWindow | null = null;
+const localTextVoice = new LocalTextVoice(path.join(app.getPath('userData'), 'text-voice'), (status) => {
+  mainWindow?.webContents.send('local-text-voice-status', status);
+});
+let callWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -366,8 +393,10 @@ function createWindow(): void {
     minHeight: 500,
     title: 'Backspace',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(process.platform !== 'darwin' ? {
+    ...(process.platform === 'linux' ? { frame: false } : {
+      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    }),
+    ...(process.platform === 'win32' ? {
       titleBarOverlay: {
         color: '#0b0b10',
         symbolColor: '#d8d8de',
@@ -460,14 +489,14 @@ function createWindow(): void {
   // download, and the page that keeps running may be sharing. `did-navigate` fires for a
   // committed cross-document main-frame load; `did-fail-load` for the main frame is the error
   // page that replaced it (-3, ERR_ABORTED, is a cancelled navigation that replaced nothing).
-  mainWindow.webContents.on('render-process-gone', () => systemAudio.stop());
-  mainWindow.webContents.on('did-navigate', () => systemAudio.stop());
+  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
+  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) systemAudio.stop();
+    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); }
   });
 
   mainWindow.on('closed', () => {
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop();
     setMainWindow(null);
     mainWindow = null;
     // Clear recovery state so macOS dock-activate (which calls createWindow again)
@@ -487,7 +516,15 @@ function createWindow(): void {
 
   // Intercept own-instance /join/* URLs so they open in-app instead of the
   // system browser. Other URLs continue to open externally.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isCallWindowRequest(url, frameName)) {
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        width: 960, height: 640, minWidth: 480, minHeight: 320,
+        title: 'Backspace — Call', backgroundColor: '#111116',
+        ...(process.platform === 'linux' ? { frame: false } : {}),
+        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      } };
+    }
     try {
       const u = new URL(url);
       if (
@@ -503,6 +540,12 @@ function createWindow(): void {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('did-create-window', (child) => {
+    callWindow = child;
+    child.on('closed', () => { if (callWindow === child) callWindow = null; });
+    child.webContents.on('will-navigate', (event) => event.preventDefault());
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
 
   // Deny foreign top-level navigations. See navigationPolicy.ts for the
@@ -580,6 +623,22 @@ interface SerializedScreenSource {
 }
 
 let pendingScreenSelection: PendingScreenSelection | null = null;
+let audioCaptureSourceId = '';
+let audioTargetId: string | undefined;
+const windowsAudioExecutable = app.isPackaged
+    ? path.join(process.resourcesPath, 'process-audio', process.arch, 'backspace-process-audio.exe')
+    : path.join(__dirname, '..', 'native', 'process-audio', 'bin', process.arch, 'backspace-process-audio.exe');
+const windowsProcessAudio = new WindowsProcessAudio(
+  windowsAudioExecutable,
+  (data) => mainWindow?.webContents.send('process-audio-data', data),
+  () => mainWindow?.webContents.send('process-audio-ended'),
+  (message) => {
+    console.warn('[WindowsProcessAudio]', message);
+    try {
+      fs.appendFileSync(path.join(app.getPath('userData'), 'windows-process-audio.log'), `${new Date().toISOString()} ${message}\n`);
+    } catch { /* Logging must not interrupt capture cleanup. */ }
+  },
+);
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;
 
@@ -590,7 +649,9 @@ const systemAudio = createSystemAudioController({
   platform: process.platform,
   // Optional, Linux-only native module: a static import would fail to load elsewhere.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  loadModule: () => require('@vencord/venmic') as PatchBayModule,
+  loadModule: () => (app.isPackaged
+    ? require(path.join(process.resourcesPath, 'venmic', 'node-napi-v7.node'))
+    : require('@vencord/venmic')) as PatchBayModule,
   getPids: () => app.getAppMetrics().map((metric) => metric.pid),
   executablePath: process.execPath,
   isSandboxed,
@@ -634,6 +695,16 @@ function takePendingScreenSelection(): PendingScreenSelection | null {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle('local-text-voice-status', (event) => event.sender === mainWindow?.webContents ? localTextVoice.getStatus() : null);
+  ipcMain.handle('local-text-voice-prepare', (event, device: TextVoiceDevice) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.prepare(device);
+  });
+  ipcMain.handle('local-text-voice-speech', (event, data: unknown) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.speech(data);
+  });
+  ipcMain.handle('local-text-voice-release', (event) => { if (event.sender === mainWindow?.webContents) localTextVoice.release(); });
   ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const sender = event.sender;
@@ -654,6 +725,15 @@ function registerIpcHandlers(): void {
     if (app.setBadgeCount) {
       app.setBadgeCount(count);
     }
+  });
+
+  ipcMain.on('call-window-control', (event, action: unknown) => {
+    if (event.sender !== mainWindow?.webContents || !callWindow || callWindow.isDestroyed()) return;
+    if (action === 'minimize') callWindow.minimize();
+    else if (action === 'maximize') {
+      if (callWindow.isMaximized()) callWindow.unmaximize();
+      else callWindow.maximize();
+    } else if (action === 'close') callWindow.close();
   });
 
   ipcMain.on('minimize-window', () => {
@@ -820,6 +900,7 @@ function registerIpcHandlers(): void {
   // (the call) to viewers; the stream settings say so before it is turned on.
   ipcMain.handle('get-system-audio-capability', (event, clientUsesSource: unknown) => {
     if (event.sender !== mainWindow?.webContents) return 'unknown';
+    if (process.platform === 'win32' && clientUsesSource === true) return fs.existsSync(windowsAudioExecutable) ? 'excluded' : 'unavailable';
     return withSystemAudioSource(
       ownAudioInSystemAudio(process.platform, process.getSystemVersion()),
       clientUsesSource,
@@ -829,21 +910,34 @@ function registerIpcHandlers(): void {
   // The virtual source that carries every other app's playback (Linux). The
   // renderer opens it like a microphone and calls stop when the share, or its
   // audio, ends.
-  ipcMain.handle('system-audio-start', (event) => {
+  ipcMain.handle('system-audio-target', (event, targetId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'linux') return;
+    audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    audioCaptureSourceId = targetId === 'system' ? 'screen:portal' : 'window:portal';
+  });
+  ipcMain.handle('system-audio-targets', (event) => event.sender === mainWindow?.webContents ? systemAudio.targets() : []);
+  ipcMain.handle('system-audio-start', async (event) => {
     if (event.sender !== mainWindow?.webContents) return { ok: false, reason: 'unsupported-platform' };
-    return systemAudio.start();
+    if (process.platform === 'win32') {
+      const ok = await windowsProcessAudio.start(audioCaptureSourceId, process.pid);
+      return ok ? { ok: true, pcm: true } : { ok: false, reason: 'process-capture-failed' };
+    }
+    if (audioCaptureSourceId.startsWith('window:') && !audioTargetId) return { ok: false, reason: 'audio-target-required' };
+    return systemAudio.start(audioCaptureSourceId.startsWith('window:') ? audioTargetId : undefined);
   });
   ipcMain.handle('system-audio-stop', (event) => {
     if (event.sender !== mainWindow?.webContents) return;
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop();
   });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
   // back to the prompted flow, and leave this armed to hijack the next share.
-  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean) => {
+  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean, targetId?: unknown) => {
     if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId !== 'string' || !sourceId) return;
+    if (sourceId !== audioCaptureSourceId || targetId !== undefined) audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    audioCaptureSourceId = sourceId;
     pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
   });
   // System-picker sessions have no tile to preselect; the renderer only tells
@@ -947,6 +1041,12 @@ function registerIpcHandlers(): void {
     return keybindManager.getPortalStatus();
   });
   ipcMain.on('keybind-portal-retry', () => keybindManager.retryPortal());
+  ipcMain.handle('keybind-portal-configure', () => keybindManager.configurePortal());
+  ipcMain.handle('keybind-appimage-integrate', () => {
+    const result = integrateAppImage(process.env.APPIMAGE);
+    if (result) keybindManager.retryPortal();
+    return result;
+  });
 
   ipcMain.handle('check-accessibility', () => {
     return keybindManager.checkAccessibility();
@@ -1237,6 +1337,10 @@ if (process.platform === 'win32') {
  */
 export function requestQuit(): void {
   isQuitting = true;
+  stopMediaDetection();
+  stopActivityDetection();
+  mainWindow?.webContents.send('activities-detected', []);
+  mainWindow?.webContents.send('activity-detected', null);
   app.quit();
 }
 
@@ -1273,6 +1377,7 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
+    localTextVoice.registerProtocol();
     // Development runs inside the stock Electron.app bundle, whose Dock icon
     // macOS caches per bundle, so the copied icns in the dev script does not
     // show. Set it at runtime; packaged builds carry the icon in their own
@@ -1476,12 +1581,105 @@ if (!gotTheLock) {
 
     initAutoUpdater();
 
-    // ─── Activity Detection ────────────────────────────────────────────────
-    startActivityDetection((activity) => {
-      mainWindow?.webContents.send('activity-detected', activity);
+    // ─── Activity & Media Detection ────────────────────────────────────────
+    let latestProcessActivities: Activity[] = getAllCurrentActivities();
+    let latestMediaActivity = getCurrentMediaActivity();
+    let currentMediaSetupHint: MediaSetupHint | null = null;
+
+    const buildEffectiveActivities = (): Activity[] => {
+      const activities: Activity[] = [];
+      for (const proc of latestProcessActivities) {
+        // Media players running in the background are not activities unless actively playing via mediaDetector.
+        // Prevent background processes (e.g. cloudmusic.exe in tray) from injecting fake media activities.
+        if (proc.type === 'listening' || proc.type === 'watching') continue;
+        activities.push(proc);
+      }
+      if (latestMediaActivity) {
+        const now = Date.now();
+        const start = latestMediaActivity.timestamps?.start;
+        const durationMs = latestMediaActivity.playback?.durationMs;
+        if (typeof start === 'number' && latestMediaActivity.playback) {
+          const positionMs = durationMs !== undefined
+            ? Math.min(durationMs, Math.max(0, now - start))
+            : Math.max(0, now - start);
+          activities.push({
+            ...latestMediaActivity,
+            playback: {
+              ...latestMediaActivity.playback,
+              positionMs,
+            },
+          });
+        } else {
+          activities.push(latestMediaActivity);
+        }
+      }
+      return activities;
+    };
+
+    const broadcastActivities = () => {
+      const activities = buildEffectiveActivities();
+      mainWindow?.webContents.send('activities-detected', activities);
+      mainWindow?.webContents.send('activity-detected', activities[0] || null);
+    };
+
+    startActivityDetection(
+      () => {
+        // legacy single activity callback maintained
+      },
+      (activities) => {
+        latestProcessActivities = activities;
+        broadcastActivities();
+      },
+    );
+
+    startMediaDetection(
+      (media) => {
+        latestMediaActivity = media;
+        broadcastActivities();
+      },
+      (hint) => {
+        currentMediaSetupHint = hint;
+        mainWindow?.webContents.send('media-setup-hint', hint);
+      },
+    );
+
+    // Rich presence IPC server: games (osu!lazer & co.) push richer
+    // activity that overlays process detection
+    startRichPresenceIpcServer({
+      onActivity: (push) => applyIpcActivity(push),
+    }).catch((err) => {
+      console.warn('[main] Rich presence IPC server failed to start:', err);
     });
 
-    ipcMain.handle('get-current-activity', () => getCurrentActivity());
+    ipcMain.handle('get-current-activity', () => {
+      const activities = buildEffectiveActivities();
+      return activities[0] || null;
+    });
+    ipcMain.handle('get-current-activities', () => buildEffectiveActivities());
+    ipcMain.handle('get-media-setup-hint', () => currentMediaSetupHint);
+    ipcMain.handle('get-activity-settings', () => loadActivitySettings());
+    ipcMain.handle('set-activity-settings', (event, settings: unknown) => {
+      if (event.sender !== mainWindow?.webContents) return;
+      const update = parseActivitySettingsUpdate(settings);
+      if (!update) return;
+      saveActivitySettings({ ...loadActivitySettings(), ...update });
+    });
+    ipcMain.handle('list-known-games', () => listKnownGameNames());
+    ipcMain.handle('list-running-programs', () => listRunningPrograms());
+    ipcMain.handle('get-unknown-wine-programs', () => getUnknownWinePrograms());
+    ipcMain.handle('set-manual-game-binding', (_event, binding: unknown) => { setManualBinding(binding); });
+    ipcMain.handle('set-manual-game-bindings', (_event, bindings: unknown) => { setManualBindings(bindings); });
+
+    // The renderer uploads the icon to the user's instance itself (it holds
+    // the session); main only hands over the bytes it extracted locally.
+    ipcMain.handle('get-game-icon', async (_event, name: unknown) => {
+      if (typeof name !== 'string' || name.length === 0 || name.length > 256) return null;
+      // Waits for a lookup in flight, and starts one for a game nothing warmed
+      // (a name the player typed by hand)
+      const icon = await resolveGameIcon(name);
+      if (!icon) return null;
+      return { data: icon.bytes.toString('base64'), mime: icon.mime };
+    });
 
     // Linux/AppImage path-refresh ONLY. On Windows and macOS the OS is the source
     // of truth for openAtLogin (Task 4) and we must not override user changes made
@@ -1538,9 +1736,14 @@ if (!gotTheLock) {
   });
 
   app.on('before-quit', () => {
-    systemAudio.stop();
+    localTextVoice.release();
+    systemAudio.stop(); windowsProcessAudio.stop();
     isQuitting = true;
     stopActivityDetection();
+    stopRichPresenceIpcServer();
+    stopMediaDetection();
     keybindManager.stop();
+    mainWindow?.webContents.send('activities-detected', []);
+    mainWindow?.webContents.send('activity-detected', null);
   });
 }

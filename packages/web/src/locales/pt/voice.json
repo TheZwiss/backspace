@@ -1,7 +1,67 @@
 {
+  "textVoice": {
+    "title": "Voz por texto",
+    "enable": "Usar voz por texto",
+    "description": "Digite para falar em português brasileiro. Este modo substitui o microfone por uma voz sintetizada.",
+    "micOff": "O microfone original não é transmitido. Ele só é aberto ao usar o ditado, para reconhecer a fala localmente.",
+    "voice": "Voz brasileira",
+    "speed": "Velocidade",
+    "placeholder": "Digite o que você quer falar…",
+    "enterHint": "Enter para falar · Shift+Enter para nova linha",
+    "checking": "Preparando a voz neste dispositivo…",
+    "unavailable": "Clique em Preparar voz para baixar ou carregar o modelo local.",
+    "speaking": "Preparando ou falando…",
+    "muted": "Entre em uma chamada e desative o mute para falar. Restrições do servidor também se aplicam.",
+    "ready": "Pronto para conversar em pt-BR.",
+    "speak": "Falar na chamada",
+    "preview": "Ouvir só para mim",
+    "stop": "Parar de falar",
+    "privacy": "O texto é transformado em voz neste dispositivo. Somente o áudio vai para a chamada; o texto não é enviado ao servidor nem publicado no chat.",
+    "quick": {
+      "hello": "Olá, pessoal!",
+      "wait": "Um momento, por favor.",
+      "repeat": "Pode repetir, por favor?"
+    },
+    "processing": "Processamento local",
+    "automatic": "Automático",
+    "prepare": "Preparar voz",
+    "backendActive": "Processamento: {{backend}}",
+    "gpuUnavailable": "A GPU não está disponível neste dispositivo. Selecione CPU.",
+    "localError": "Não foi possível preparar ou gerar a voz. Tente novamente ou selecione CPU.",
+    "downloadProgress": "Baixando o modelo: {{progress}}",
+    "downloadHint": "No primeiro uso: aproximadamente 95 MB em CPU ou 330 MB em GPU. O modelo fica salvo neste dispositivo.",
+    "unsupported": "Para preparar a voz, use HTTPS ou o cliente Electron atualizado. O microfone real continua desligado neste modo."
+  },
+  "soundboard": {
+    "frequentEmpty": "Toque sons para ver seus favoritos aqui.",
+    "noResults": "Nenhum som encontrado.",
+    "frequent": "Usados com frequência",
+    "title": "Efeitos sonoros",
+    "description": "Toque um efeito para todos na chamada. Use sons dos servidores dos quais você é membro.",
+    "pack": "Pacote do servidor",
+    "empty": "Ainda não há pacotes de sons.",
+    "count_one": "{{count}} de 40 sons",
+    "count_other": "{{count}} de 40 sons",
+    "count_many": "{{count}} de 40 sons",
+    "refresh": "Atualizar",
+    "volume": "Volume dos efeitos para você",
+    "play": "Tocar na chamada",
+    "preview": "Ouvir só para mim",
+    "confirmDelete": "Excluir o efeito “{{name}}”?",
+    "search": "Buscar efeitos",
+    "add": "Adicionar efeito",
+    "uploadHint": "Até 5,2 segundos e arquivo original de até 5 MB. Máximo de 40 efeitos por servidor.",
+    "name": "Nome do efeito",
+    "audioFile": "Arquivo de áudio",
+    "clipVolume": "Volume do efeito",
+    "permissionHint": "É necessário um cargo com a permissão Criar efeitos sonoros para adicionar sons.",
+    "invalidAudio": "Escolha um áudio válido de até 5,2 segundos e 5 MB."
+  },
   "chatPanel": {
     "title": "Chat",
-    "close": "Fechar chat"
+    "close": "Fechar chat",
+    "expand": "Expandir chat",
+    "collapse": "Recolher chat"
   },
   "badges": {
     "mutedNoPermission": "Silenciado (sem permissão para falar)",
@@ -104,9 +164,18 @@
     "kind": {
       "monitor": "Tela",
       "window": "Janela"
-    }
+    },
+    "audioApplication": "Áudio do aplicativo",
+    "chooseAudioApplication": "Selecione o aplicativo de áudio",
+    "audioApplicationHint": "Reproduza algum som no aplicativo para ele aparecer. Depois escolha a janela para transmitir.",
+    "allAudioExceptBackspace": "Todo o sistema, exceto o Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Prévia da transmissão",
+    "previewNormal": "Normal",
+    "previewBlurred": "Desfocada",
+    "previewHidden": "Sem imagem",
+    "previewHint": "Define a miniatura exibida antes de assistir. Não altera o vídeo da transmissão.",
     "title": "Configurações da transmissão",
     "hostLimits": "Limites definidos por {{host}}",
     "resolution": "Resolução",
@@ -179,6 +248,9 @@
   },
   "channelDuration": "Canal ativo há {{duration}}",
   "controls": {
+    "callWindowFailed": "Não foi possível abrir a janela da chamada.",
+    "callInWindow": "A chamada está em outra janela — clique para mostrar",
+    "openCallWindow": "Abrir chamada em outra janela",
     "spaceMutedSelfMuted": "Silenciado no espaço (você também se silenciou)",
     "unmuteShortcut": "Reativar microfone (M)",
     "muteShortcut": "Silenciar (M)",
@@ -199,7 +271,9 @@
     "disconnect": "Desconectar",
     "connectionInfo": "Informações da conexão",
     "noiseSuppressionOff": "Desativar supressão de ruído com IA",
-    "noiseSuppressionOn": "Ativar supressão de ruído com IA"
+    "noiseSuppressionOn": "Ativar supressão de ruído com IA",
+    "focusChat": "Focar no chat",
+    "unfocusChat": "Mostrar a chamada"
   },
   "status": {
     "dmCall": "Chamada em DM",
@@ -272,5 +346,54 @@
     "stillDenied": "O acesso ao microfone continua negado. Permita-o para este site nas configurações do navegador ou do dispositivo.",
     "notFound": "Nenhum microfone encontrado.",
     "failed": "Não foi possível acessar o microfone."
+  },
+  "callOngoing": "Chamada em andamento",
+  "callWaiting": "Aguardando a outra pessoa · encerra em {{remaining}}",
+  "rejoinCall": "Voltar à chamada",
+  "history": {
+    "startedBy": "{{actor}} iniciou a chamada",
+    "from": "Início:",
+    "to": "Fim:",
+    "status": {
+      "ringing": "Chamando…",
+      "active": "Chamada em andamento",
+      "ended": "Chamada encerrada",
+      "missed": "Chamada não atendida",
+      "rejected": "Chamada recusada",
+      "interrupted": "Chamada interrompida",
+      "cancelled": "Chamada cancelada"
+    },
+    "duration": "Duração"
+  },
+  "dictation": {
+    "title": "Ditado por voz · Português (Brasil)",
+    "model": "Modelo de reconhecimento",
+    "size": "Tamanho do download: {{size}} MiB",
+    "installed": "Baixado",
+    "delete": "Apagar modelo",
+    "download": "Baixar modelo",
+    "deleteConfirm": "Apagar a cópia de {{model}} baixada pelo Backspace? Para usar novamente, será necessário baixar de novo. Outros modelos e arquivos não serão alterados.",
+    "cancel": "Cancelar",
+    "dictate": "Ditar texto",
+    "finish": "Concluir ditado",
+    "hold": "Segure para falar e enviar",
+    "release": "Solte para transcrever e enviar",
+    "recording": "Gravando somente para transcrição…",
+    "downloading": "Baixando modelo: {{progress}}",
+    "transcribing": "Processando no seu dispositivo…",
+    "hint": "Ao soltar: transcrever → gerar voz → enviar à chamada. O microfone original não é transmitido. Limite de 60 segundos.",
+    "shortcut": "Teclado: {{shortcut}}. Configure “Ditar e enviar voz (segurar)” em Configurações → Atalhos.",
+    "unassigned": "atalho não definido",
+    "monitor": "Monitor · ouvir minha voz sintetizada",
+    "missing": "Baixe o modelo selecionado antes de ditar.",
+    "downloadError": "Não foi possível baixar o modelo. Verifique a conexão e o espaço disponível e tente novamente.",
+    "micError": "Não foi possível gravar. Permita acesso ao microfone e confira o dispositivo selecionado.",
+    "noSpeech": "Não foi detectada fala. Tente gravar novamente.",
+    "limit": "A gravação atingiu 60 segundos e foi cancelada. Grave uma frase menor.",
+    "storageError": "Não foi possível acessar o armazenamento local dos modelos.",
+    "failed": "Não foi possível concluir o ditado. Tente CPU ou um modelo menor. O texto reconhecido, se houver, permanece na caixa.",
+    "secureContext": "O ditado precisa de acesso ao microfone em HTTPS, localhost ou no cliente Electron atualizado.",
+    "callHint": "Para enviar automaticamente, entre em uma chamada e desmute a voz sintetizada. Você ainda pode ditar para preencher a caixa.",
+    "gpuError": "A GPU não está disponível para este modelo. Use CPU ou Automático."
   }
 }

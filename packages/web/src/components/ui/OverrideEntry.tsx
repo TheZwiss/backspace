@@ -22,6 +22,12 @@ export interface PermissionDef {
 export function usePermissionNames(): Record<PermissionKey, string> {
   const { t } = useTranslation(['spaces']);
   return useMemo(() => ({
+    CREATE_SOUNDBOARD: t('spaces:permissions.names.createSoundboard'),
+    MANAGE_SOUNDBOARD: t('spaces:permissions.names.manageSoundboard'),
+    USE_SOUNDBOARD: t('spaces:permissions.names.useSoundboard'),
+    CREATE_STICKERS: t('spaces:permissions.names.createStickers'),
+    MANAGE_STICKERS: t('spaces:permissions.names.manageStickers'),
+    USE_EXTERNAL_SOUNDS: t('spaces:permissions.names.useExternalSounds'),
     ADMINISTRATOR: t('spaces:permissions.names.administrator'),
     VIEW_CHANNEL: t('spaces:permissions.names.viewChannel'),
     MANAGE_CHANNELS: t('spaces:permissions.names.manageChannels'),

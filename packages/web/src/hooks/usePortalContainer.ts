@@ -11,21 +11,13 @@ import { useSyncExternalStore } from 'react';
 // otherwise. This hook provides a reactive container that reflects the current
 // fullscreen state and re-renders subscribers on every `fullscreenchange`.
 
-function subscribe(onChange: () => void): () => void {
-  document.addEventListener('fullscreenchange', onChange);
-  return () => document.removeEventListener('fullscreenchange', onChange);
-}
-
-function getSnapshot(): Element {
-  return document.fullscreenElement ?? document.body;
-}
-
-function getServerSnapshot(): Element {
-  // Vite SPA — never invoked, but useSyncExternalStore requires a server snapshot
-  // for type completeness. Return body so SSR-style renders never crash.
-  return document.body;
-}
-
-export function usePortalContainer(): Element {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+export function usePortalContainer(targetDocument: Document = document): Element {
+  return useSyncExternalStore(
+    (onChange) => {
+      targetDocument.addEventListener('fullscreenchange', onChange);
+      return () => targetDocument.removeEventListener('fullscreenchange', onChange);
+    },
+    () => targetDocument.fullscreenElement ?? targetDocument.body,
+    () => targetDocument.body,
+  );
 }

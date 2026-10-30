@@ -12,6 +12,13 @@ let ffmpegAvailable: boolean | null = null;
 const PROFILE_LIMITS = { avatar: 256, icon: 256, banner: 1280 } as const;
 
 /**
+ * Animated GIF/WebP decode keeps every frame in memory. A profile image past
+ * this many frames is left at its original size rather than risking a decode
+ * that could stall or exhaust the server.
+ */
+const MAX_ANIMATED_PAGES = 120;
+
+/**
  * Resize a profile image (avatar, icon, or banner) to the target max dimension.
  * Preserves animated GIF frames. No-op if the image is already small enough.
  * Writes to a temp file then atomically renames to avoid corruption.
@@ -21,12 +28,20 @@ export async function resizeProfileImage(
   type: 'avatar' | 'icon' | 'banner',
 ): Promise<void> {
   const maxDim = PROFILE_LIMITS[type];
+  const tmpPath = `${filepath}.tmp${path.extname(filepath)}`;
   try {
-    const image = sharp(filepath, { animated: true });
-    const metadata = await image.metadata();
+    const metadata = await sharp(filepath, { animated: true }).metadata();
     if (!metadata.width || metadata.width <= maxDim) return;
+    if ((metadata.pages ?? 1) > MAX_ANIMATED_PAGES) {
+      console.warn(
+        'Profile image resize skipped (non-fatal) for %s: %d frames exceeds %d',
+        path.basename(filepath),
+        metadata.pages,
+        MAX_ANIMATED_PAGES,
+      );
+      return;
+    }
 
-    const tmpPath = filepath + '.tmp';
     await sharp(filepath, { animated: true })
       .resize({ width: maxDim, withoutEnlargement: true })
       .toFile(tmpPath);
@@ -35,7 +50,7 @@ export async function resizeProfileImage(
     // Non-fatal — the original file is still intact
     console.error('Profile image resize failed (non-fatal) for %s:', path.basename(filepath), err);
     // Clean up temp file if it was partially written
-    try { fs.unlinkSync(filepath + '.tmp'); } catch { /* ignore */ }
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
   }
 }
 

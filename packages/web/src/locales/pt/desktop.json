@@ -1,4 +1,13 @@
 {
+  "mediaSetup": {
+    "neteaseSmtc": {
+      "title": "Ative o SMTC no NetEase Cloud Music",
+      "body": "Abra o NetEase Cloud Music → Configurações → Sistema → Ativar SMTC e reinicie o aplicativo. O Backspace precisa disso para detectar reprodução, pausa e progresso com precisão.",
+      "gotIt": "Entendi",
+      "dontRemind": "Não lembrar novamente",
+      "dismiss": "Dispensar esta dica"
+    }
+  },
   "update": {
     "laterHint": "Você pode instalar depois em Configurações, Desktop",
     "dismiss": "Dispensar esta atualização",

@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus, InstanceUpdateStatus } from '@backspace/shared';
+import type { CameraStreamingLimits, InstanceStreamingLimits, InstanceAdminSettings, TelemetryPayload, TelemetryStatus, InstanceUpdateStatus } from '@backspace/shared';
 import { api } from '../api/client';
 import { describeError } from '../i18n/errors';
 import { EMPTY_ACK, readUpdateAck, writeUpdateAck, pendingUpdateVersion, type UpdateAck } from '../utils/updateAck';
 import { clearDismissal } from '../utils/telemetryAsk';
 import { getApiForOrigin } from '../utils/crossStoreResolvers';
+import { invalidateHomeInstanceInfo } from '../hooks/useHomeInstanceInfo';
 
 interface SettingsState {
   /** Home's streaming document. Also carries home's discovery flags. */
@@ -45,6 +46,24 @@ interface SettingsState {
   resetUpdateState: () => void;
 }
 
+export const DEFAULT_CAMERA_LIMITS: CameraStreamingLimits = {
+  mode: 'fixed',
+  defaultResolution: 720,
+  defaultFramerate: 30,
+  defaultBitrateKbps: 2000,
+  allowedResolutions: [540, 720, 1080],
+  allowedFramerates: [30, 60],
+  minBitrateKbps: 300,
+  maxBitrateKbps: 4000,
+  allowCustomBitrate: true,
+};
+
+export function resolveCameraLimits(
+  limits: InstanceStreamingLimits | null | undefined,
+): CameraStreamingLimits {
+  return limits?.camera ?? DEFAULT_CAMERA_LIMITS;
+}
+
 export const DEFAULT_STREAMING_LIMITS: InstanceStreamingLimits = {
   maxBitrateKbps: 20000,
   minBitrateKbps: 500,
@@ -60,6 +79,7 @@ export const DEFAULT_STREAMING_LIMITS: InstanceStreamingLimits = {
   directoryConfigured: false,
   bitrateMatrixOverrides: null,
   allowCustomBitrate: true,
+  camera: DEFAULT_CAMERA_LIMITS,
 };
 
 /**
@@ -158,6 +178,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateInstanceSettings: async (data: Partial<InstanceAdminSettings>) => {
     const updated = await api.settings.updateInstance(data);
     set({ instanceSettings: updated });
+    invalidateHomeInstanceInfo();
     // The space settings DiscoveryPanel reads both flags from streamingLimits,
     // the document any signed-in user may fetch. Mirror them from the server's
     // answer rather than from the request: turning discovery off clears the

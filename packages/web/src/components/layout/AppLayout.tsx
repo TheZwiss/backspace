@@ -1,6 +1,9 @@
+import { SoundboardManagerModal } from '../voice/Soundboard';
+import { useNavigationMotion } from '../../hooks/useNavigationMotion';
+import { SpaceProfileModal } from '../modals/SpaceProfileModal';
 import React, { useEffect } from 'react';
 import { isMobileViewport } from '../../platform/interfaceScale';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { SpaceSidebar } from './SpaceSidebar';
@@ -22,10 +25,12 @@ import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { GroupDmSettings } from '../modals/GroupDmSettings';
 import { UserProfileModal } from '../modals/UserProfileModal';
+import { BookmarksModal } from '../modals/BookmarksModal';
 import { ConnectAndJoinModal } from '../modals/ConnectAndJoinModal';
 import { MemberRolesModal } from '../modals/MemberRolesModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
+import { DetachedCallWindow } from '../voice/DetachedCallWindow';
 import { SoundController } from '../voice/SoundController';
 import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
 import { NotificationController } from '../NotificationController';
@@ -33,6 +38,7 @@ import { UserProfilePopoutLayer } from '../ui/UserProfilePopoutLayer';
 import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
 import { InstanceUpdateToast } from '../ui/InstanceUpdateToast';
+import { MediaSetupHint } from '../ui/MediaSetupHint';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { useAuth } from '../../hooks/useAuth';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -45,6 +51,7 @@ import { initActivityBridge, teardownActivityBridge } from '../../platform/activ
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useJumpNavigation } from '../../hooks/useJumpNavigation';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
 import { isAppSystemAudioSource, userDevicesSignature } from '../../utils/systemAudioSource';
@@ -53,6 +60,7 @@ export function AppLayout() {
   const { t } = useTranslation('common');
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
+  useJumpNavigation();
   
   // Global interaction handler to resume AudioContext
   useEffect(() => {
@@ -233,6 +241,7 @@ export function AppLayout() {
 
   const { user, isLoading } = useAuth();
   const showBootSkeleton = useDelayedLoading(isLoading);
+  const { pathname } = useLocation();
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
@@ -242,6 +251,7 @@ export function AppLayout() {
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
+  const navigationRef = useNavigationMotion(`${pathname}:${isMobile}:${!!user && !showBootSkeleton}`);
   
   const channels = useSpaceStore((s) => s.channels);
 
@@ -418,12 +428,15 @@ export function AppLayout() {
         <InviteModal />
         {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
         <SpaceSettingsModal />
+        <SpaceProfileModal />
+      <SoundboardManagerModal />
         <ChannelSettingsModal />
         <CategorySettingsModal />
         <NewDmModal />
         <AddDmMemberModal />
         <GroupDmSettings />
         <UserProfileModal />
+        <BookmarksModal />
         <ConnectAndJoinModal />
         {/* MemberRolesModal is desktop-only: it opens from the profile card's
             Edit Roles, and its two-pane layout has no mobile form. */}
@@ -441,6 +454,7 @@ export function AppLayout() {
         <NotificationController />
         <UpdateToast />
         <InstanceUpdateToast />
+        <MediaSetupHint />
         <ToastContainer />
         <ContextMenuRenderer />
       </>
@@ -457,7 +471,7 @@ export function AppLayout() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-w-0 min-h-0 bg-surface-chat relative">
+      <div ref={navigationRef} className="flex-1 flex min-w-0 min-h-0 bg-surface-chat relative">
         <MainContent />
         <RightPanel />
       </div>
@@ -470,17 +484,21 @@ export function AppLayout() {
       <InviteModal />
       <UserSettingsModal />
       <SpaceSettingsModal />
+      <SpaceProfileModal />
+      <SoundboardManagerModal />
       <ChannelSettingsModal />
       <CategorySettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
       <GroupDmSettings />
       <UserProfileModal />
+      <BookmarksModal />
       <ConnectAndJoinModal />
       <MemberRolesModal />
       <IncomingCallModal />
       <ImagePreview />
       <PictureInPicture />
+      <DetachedCallWindow />
       <SoundController />
       <GlobalAudioRenderer />
       <NotificationController />
@@ -492,6 +510,7 @@ export function AppLayout() {
           useFederationToasts() hook above); this also mounts the instance
           update toast. */}
       <InstanceUpdateToast />
+      <MediaSetupHint />
       <ToastContainer />
       <ContextMenuRenderer />
     </div>

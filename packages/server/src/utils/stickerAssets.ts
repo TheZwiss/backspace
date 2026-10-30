@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { inArray, like, lt } from 'drizzle-orm';
-import { stickerIdOf } from '@backspace/shared/src/stickers.js';
+import { eq, inArray, isNotNull, lt } from 'drizzle-orm';
+import { MAX_STICKER_BYTES } from '@backspace/shared/src/stickers.js';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
 
@@ -19,6 +19,24 @@ export function stickerAssetPath(id: string): string {
   return path.join(stickerAssetDir(), `${id}.webp`);
 }
 
+export function stickerPreviewPath(id: string): string {
+  return path.join(stickerAssetDir(), `${id}_preview.webp`);
+}
+
+/**
+ * Effective sticker byte limit configured by the instance admin, falling back
+ * to the deployment-wide setting and then to the shared built-in default.
+ */
+export function getMaxStickerSizeBytes(): number {
+  try {
+    const row = getDb().select({ maxStickerSizeBytes: schema.instanceSettings.maxStickerSizeBytes })
+      .from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    return row?.maxStickerSizeBytes ?? config.maxStickerSize ?? MAX_STICKER_BYTES;
+  } catch {
+    return config.maxStickerSize ?? MAX_STICKER_BYTES;
+  }
+}
+
 /**
  * An asset younger than this is never removed. `sticker_assets.created_at` is
  * set again by every upload of the same bytes before the file is written, so
@@ -31,9 +49,10 @@ const STICKER_TEMP_FILE_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Asset ids that something stored on this instance still names: a collection
- * entry, a channel or DM message whose content is a sticker token, or a
- * channel or DM reaction that is one. A token from another instance that
- * happens to carry the same hash counts too, which only ever keeps a file.
+ * entry, a sticker pack item, a sticker pack cover, a channel or DM message
+ * whose content is a sticker token, or a channel or DM reaction that is one.
+ * A token from another instance that happens to carry the same hash counts too,
+ * which only ever keeps a file.
  */
 export function getReferencedStickerIds(): Set<string> {
   const db = getDb();
@@ -41,18 +60,30 @@ export function getReferencedStickerIds(): Set<string> {
   for (const row of db.select({ id: schema.personalStickers.stickerId }).from(schema.personalStickers).all()) {
     ids.add(row.id);
   }
-  const values = [
-    ...db.select({ value: schema.messages.content }).from(schema.messages)
-      .where(like(schema.messages.content, 'sticker:%')).all(),
-    ...db.select({ value: schema.dmMessages.content }).from(schema.dmMessages)
-      .where(like(schema.dmMessages.content, 'sticker:%')).all(),
-    ...db.select({ value: schema.reactions.emoji }).from(schema.reactions)
-      .where(like(schema.reactions.emoji, 'sticker:%')).all(),
-    ...db.select({ value: schema.dmReactions.emoji }).from(schema.dmReactions)
-      .where(like(schema.dmReactions.emoji, 'sticker:%')).all(),
+  for (const row of db.select({ id: schema.stickerFavorites.assetId }).from(schema.stickerFavorites).all()) {
+    ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems)
+    .where(eq(schema.stickerPackItems.status, 'active')).all()) {
+    ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPacks.coverAssetId }).from(schema.stickerPacks).where(isNotNull(schema.stickerPacks.coverAssetId)).all()) {
+    if (row.id) ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId }).from(schema.stickerPackVersions).where(isNotNull(schema.stickerPackVersions.coverAssetId)).all()) {
+    if (row.id) ids.add(row.id);
+  }
+  const assetReferences = [
+    ...db.select({ id: schema.messages.stickerAssetId }).from(schema.messages)
+      .where(isNotNull(schema.messages.stickerAssetId)).all(),
+    ...db.select({ id: schema.dmMessages.stickerAssetId }).from(schema.dmMessages)
+      .where(isNotNull(schema.dmMessages.stickerAssetId)).all(),
+    ...db.select({ id: schema.reactions.stickerAssetId }).from(schema.reactions)
+      .where(isNotNull(schema.reactions.stickerAssetId)).all(),
+    ...db.select({ id: schema.dmReactions.stickerAssetId }).from(schema.dmReactions)
+      .where(isNotNull(schema.dmReactions.stickerAssetId)).all(),
   ];
-  for (const { value } of values) {
-    const id = value ? stickerIdOf(value) : null;
+  for (const { id } of assetReferences) {
     if (id) ids.add(id);
   }
   return ids;
@@ -97,13 +128,19 @@ export function cleanupUnusedStickerAssets(dryRun: boolean, now: number = Date.n
 
   for (const id of candidates) {
     const filePath = stickerAssetPath(id);
-    const size = fileSize(filePath);
+    const pPath = stickerPreviewPath(id);
+    const size = fileSize(filePath) + fileSize(pPath);
     if (!dryRun) {
       try {
         fs.rmSync(filePath, { force: true });
       } catch (err) {
         result.errors.push(`Failed to delete sticker ${id}: ${(err as Error).message}`);
         continue;
+      }
+      try {
+        fs.rmSync(pPath, { force: true });
+      } catch {
+        // Preview file might not exist
       }
     }
     if (size > 0) result.deletedFiles += 1;

@@ -1,6 +1,8 @@
 export interface PortalKeybindStatus {
   state: 'idle' | 'pending' | 'ready' | 'unavailable';
   shortcuts: Record<string, string>;
+  reason?: 'missingDesktopEntry';
+  canIntegrateAppImage?: boolean;
 }
 
 export function isWayland(platform = process.platform, env = process.env): boolean {

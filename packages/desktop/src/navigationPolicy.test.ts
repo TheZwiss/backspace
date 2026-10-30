@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isNavigationAllowed } from './navigationPolicy';
+import { isCallWindowRequest, isNavigationAllowed } from './navigationPolicy';
+
+it('allows only the dedicated blank call popup', () => {
+  expect(isCallWindowRequest('about:blank', 'backspace-voice-call')).toBe(true);
+  expect(isCallWindowRequest('https://example.com', 'backspace-voice-call')).toBe(false);
+  expect(isCallWindowRequest('about:blank', 'other')).toBe(false);
+});
 
 const PICKER_URL = 'file:///Applications/Backspace.app/Contents/Resources/resources/instance-picker.html';
 

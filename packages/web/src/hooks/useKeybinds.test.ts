@@ -4,9 +4,11 @@ import { useKeybindStore } from '../stores/keybindStore';
 import { useKeybinds } from './useKeybinds';
 
 const mock = vi.hoisted(() => ({
-  voice: { currentVoiceChannelId: 'voice', spaceMutedUserIds: new Set(), spaceDeafenedUserIds: new Set(),
+  voice: { currentVoiceChannelId: 'voice' as string | null, activeDmCall: null as object | null, spaceMutedUserIds: new Set(), spaceDeafenedUserIds: new Set(),
     setMuted: vi.fn(), setPttActive: vi.fn(), pttActive: false },
   mute: vi.fn(),
+  deafen: vi.fn(),
+  camera: vi.fn(),
 }));
 vi.mock('../stores/voiceStore', () => ({ useVoiceStore: Object.assign(
   (selector: (state: typeof mock.voice) => unknown) => selector(mock.voice), { getState: () => mock.voice },
@@ -15,9 +17,10 @@ vi.mock('../stores/spaceStore', () => ({
   getChannelOrigin: () => 'local', getMyUserIdForOrigin: () => 'me',
   useSpaceStore: { getState: () => ({ channelToSpaceMap: new Map() }) },
 }));
+vi.mock('../utils/dictation', () => ({ pressDictation: vi.fn(), releaseDictation: vi.fn(), cancelDictation: vi.fn() }));
 vi.mock('../utils/voice', () => ({ broadcastVoiceStatus: vi.fn() }));
 vi.mock('../utils/voiceActions', () => ({
-  handleMuteAction: mock.mute, handleDeafenAction: vi.fn(), handleCameraAction: vi.fn(),
+  toggleMuteFromControl: mock.mute, toggleDeafenFromControl: mock.deafen, handleCameraAction: mock.camera,
   handleScreenShareAction: vi.fn(), handleDisconnectAction: vi.fn(),
 }));
 vi.mock('../platform/platform', () => ({ isElectron: () => !!window.backspace }));
@@ -34,6 +37,8 @@ const sync = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mock.voice.currentVoiceChannelId = 'voice';
+  mock.voice.activeDmCall = null;
   sync.mockResolvedValue(true);
   useKeybindStore.setState({ keybinds: [binding] });
   window.backspace = {
@@ -141,4 +146,44 @@ describe('global shortcut renderer bridge', () => {
     });
     expect(mock.voice.setMuted.mock.calls).toEqual([[false], [true]]);
   });
+  it('toggles microphone and sound outside a call, but ignores camera and push-to-talk', () => {
+    mock.voice.currentVoiceChannelId = null;
+    renderHook(() => useKeybinds());
+    act(() => statusListener({ state: 'ready', shortcuts: { toggleMute: 'F8', toggleDeafen: 'F9' } }));
+    act(() => {
+      actionListener({ actionId: 'toggleMute', pressed: true });
+      actionListener({ actionId: 'toggleMute', pressed: false });
+      actionListener({ actionId: 'toggleDeafen', pressed: true });
+      actionListener({ actionId: 'toggleCamera', pressed: true });
+      actionListener({ actionId: 'pushToTalk', pressed: true });
+    });
+    expect(mock.mute).toHaveBeenCalledOnce();
+    expect(mock.deafen).toHaveBeenCalledOnce();
+    expect(mock.camera).not.toHaveBeenCalled();
+    expect(mock.voice.setMuted).not.toHaveBeenCalled();
+  });
+
+  it('treats a private call as a call for camera and push-to-talk', () => {
+    mock.voice.currentVoiceChannelId = null;
+    mock.voice.activeDmCall = {};
+    renderHook(() => useKeybinds());
+    act(() => statusListener({ state: 'ready', shortcuts: {} }));
+    act(() => {
+      actionListener({ actionId: 'toggleCamera', pressed: true });
+      actionListener({ actionId: 'pushToTalk', pressed: true });
+    });
+    expect(mock.camera).toHaveBeenCalledOnce();
+    expect(mock.voice.setMuted).toHaveBeenCalledWith(false);
+  });
+});
+
+it('routes dictation holds through the native bridge without unmuting the hardware microphone', async () => {
+  const dictation = await import('../utils/dictation');
+  useKeybindStore.setState({ keybinds: [{ ...binding, actionId: 'dictationPushToTalk' }] });
+  renderHook(() => useKeybinds());
+  mock.voice.setMuted.mockClear();
+  act(() => { actionListener({ actionId: 'dictationPushToTalk', pressed: true }); actionListener({ actionId: 'dictationPushToTalk', pressed: false }); });
+  expect(dictation.pressDictation).toHaveBeenCalledWith(true);
+  expect(dictation.releaseDictation).toHaveBeenCalled();
+  expect(mock.voice.setMuted).not.toHaveBeenCalled();
 });

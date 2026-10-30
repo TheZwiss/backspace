@@ -92,8 +92,10 @@ export class KeybindManager {
   }
 
   refreshPortal(): void { void this.portal?.refresh(); }
+  async configurePortal(): Promise<boolean> { return this.portal?.configure() ?? false; }
 
   private sendPortalStatus = (status: PortalKeybindStatus): void => {
+    if (status.reason === 'missingDesktopEntry' && process.env.APPIMAGE) status = { ...status, canIntegrateAppImage: true };
     if (status.state === 'ready' && !this.portalRegistered) {
       try {
         // Only remember opt-in; the desktop remains responsible for assignments.

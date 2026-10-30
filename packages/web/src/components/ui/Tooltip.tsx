@@ -6,7 +6,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useDismissOnEscape } from '../../hooks/useDismissOnEscape';
 
 interface TooltipProps {
-  content: string;
+  content: React.ReactNode;
   children: React.ReactNode;
   position?: 'top' | 'right' | 'bottom' | 'left';
   delay?: number;

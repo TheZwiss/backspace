@@ -91,7 +91,8 @@
     "justNow": "Gerade eben",
     "minutesShort": "{{minutes}} Min.",
     "hoursMinutesShort": "{{hours}} Std. {{minutes}} Min.",
-    "elapsed": "Seit {{duration}}"
+    "elapsed": "Seit {{duration}}",
+    "left": "Noch {{duration}}"
   },
   "units": {
     "ms": "{{value}} ms",

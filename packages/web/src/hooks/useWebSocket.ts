@@ -9,7 +9,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, FederatedIdentity, User } from '@backspace/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo, FederatedIdentity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { dmCallCredentialsFrom, dmCallIds, dmCallOrigin, dmCallRefFrom, dmCallRoomKey } from '../utils/dmCall';
@@ -26,7 +26,9 @@ import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
 import { notePendingOriginReady } from '../stores/pendingMessageRehydrate';
 import { useNotificationSettingsStore } from '../stores/notificationSettingsStore';
+import { useBookmarkStore } from '../stores/bookmarkStore';
 import { detectClientKind } from '../platform/clientKind';
+import { fetchCurrentActivities } from '../platform/activityBridge';
 import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
 // ─── Rejected peer origins (for unreachable member indicators) ───────────────
@@ -314,6 +316,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // This instance's notification settings for the spaces it hosts, read
       // by the alert filter (docs/systems/sounds.md).
       void useNotificationSettingsStore.getState().load(origin);
+      // Bookmark events sent while the socket was down were missed: what was
+      // read from this instance is read again on next use.
+      useBookmarkStore.getState().resync(origin);
 
       // The user's own chosen status (utils/selfStatus.ts): take it from this
       // socket when it is the owner's report (the true home, for a session on
@@ -437,12 +442,17 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Re-push local Electron activities after reconnect (sleep/wake, network blip, etc.)
       // The process scanner keeps running but onActivityDetected only fires on change,
       // so if the same app was active before and after sleep, nothing would re-push.
-      if (isHome && window.backspace?.getCurrentActivity) {
-        window.backspace.getCurrentActivity().then((activity: unknown) => {
-          if (activity) {
-            useActivityStore.getState().pushActivities([activity as Activity]);
+      if (isHome && (window.backspace?.getCurrentActivities || window.backspace?.getCurrentActivity)) {
+        fetchCurrentActivities().then((activities) => {
+          if (activities.length > 0) {
+            useActivityStore.getState().pushActivities(activities);
+          } else {
+            // Nothing detected: a game the player named themselves still stands
+            useActivityStore.getState().republish();
           }
         }).catch(() => {});
+      } else if (isHome) {
+        useActivityStore.getState().republish();
       }
 
       // Re-push current activities to newly connected instances so their
@@ -557,6 +567,12 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       {
         const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, disconnectFn } = useVoiceStore.getState();
         const myId = event.user.id;
+        useVoiceStore.setState((state) => {
+          const waiting = new Map(state.dmWaitingUntil);
+          for (const dm of event.dmChannels ?? []) waiting.delete(dm.id);
+          for (const call of event.activeCalls ?? []) if (call.dmChannelId && call.waitingUntil) waiting.set(call.dmChannelId, call.waitingUntil);
+          return { dmWaitingUntil: waiting };
+        });
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
             // For federated calls, check membership via token presence (participants may be empty)
@@ -900,6 +916,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       if ((event.message as any).user) upsertUserView((event.message as any).user, origin);
       if ((event.message as any).replyTo?.user) upsertUserView((event.message as any).replyTo.user, origin);
       updateMessage(event.message as any);
+      useSpaceStore.getState().patchDmCopy(event.message.dmChannelId, (dm) => dm.lastMessage?.id === event.message.id ? { ...dm, lastMessage: event.message } : dm);
       break;
 
     case 'federation_file_rejected': {
@@ -1205,11 +1222,25 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       break;
     }
 
+    case 'dm_call_waiting': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
+      useVoiceStore.setState((state) => {
+        const waiting = new Map(state.dmWaitingUntil);
+        if (event.endsAt === null) waiting.delete(event.dmChannelId);
+        else waiting.set(event.dmChannelId, event.endsAt);
+        return { dmWaitingUntil: waiting };
+      });
+      break;
+    }
+
     case 'dm_call_ended': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
       // The call is over: nobody is in it any more, whatever leave events an
       // older server did not send.
-      if (event.dmChannelId) setVoiceUsers(event.dmChannelId, []);
+      if (event.dmChannelId) {
+        setVoiceUsers(event.dmChannelId, []);
+        useVoiceStore.setState((state) => { const waiting = new Map(state.dmWaitingUntil); waiting.delete(event.dmChannelId!); return { dmWaitingUntil: waiting }; });
+      }
       if (dmCallEventIsOurs(event)) teardownDmCall();
       break;
     }
@@ -1359,6 +1390,18 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Settings live on the instance that hosts the space, so the socket
       // that delivered the change is the origin they belong to.
       useNotificationSettingsStore.getState().apply(origin, event.setting);
+      break;
+    }
+
+    case 'bookmark_added': {
+      // Bookmarks live on the instance that serves the message, so the socket
+      // that delivered the event is the origin the bookmark belongs to.
+      useBookmarkStore.getState().applyAdded(origin, event.bookmark);
+      break;
+    }
+
+    case 'bookmark_removed': {
+      useBookmarkStore.getState().applyRemoved(origin, event.kind, event.channelId, event.messageId);
       break;
     }
 

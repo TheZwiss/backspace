@@ -591,7 +591,7 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 
 ## Voice Fullscreen
 
-The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active, except when `voiceChatFocus` is on (see "Call chat focus").
 
 **Fullscreen chrome:** the channel header and call controls are positioned over the video instead of reserving rows. Their overlay bands use `pointer-events: none`, and only the actual buttons opt back into hit testing, so transparent chrome never steals tile or Grid-button clicks. The header actions leave the top-right Grid corner clear.
 
@@ -612,6 +612,19 @@ The docked (non-fullscreen) layout keeps plain `group-hover/voice` and ignores `
 When neither native API is available the effect returns without throwing; the `voiceFullscreen` flag still applies `h-screen` to `voiceContainerRef`, which acts as the in-page maximize fallback (chat panel hides, header fades, control bar stays). The exit path mirrors this with `document.exitFullscreen()` → `document.webkitExitFullscreen()` → no-op. Both paths are wrapped in try/catch so a Promise rejection (e.g. user cancels via Esc mid-transition) does not surface as an unhandled error. The `fullscreenchange` listener is registered for both `fullscreenchange` and `webkitfullscreenchange`. Before this fallback, calling the missing API directly threw `TypeError: requestFullscreen is not a function` on iPhone Safari, which surfaced as a full-screen error overlay when an iPhone user crossed the 768 px desktop breakpoint in landscape mode.
 
 **Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenShareSetup`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
+
+---
+
+## Call Chat Focus
+
+Both call branches in `MainContent` (`isInDmCall` and the voice-channel branch) render the stage and the chat from the same `voiceChatFocus` flag in `uiStore`:
+
+- `voiceChatFocus: false` is the original layout: `VoiceGrid` plus the floating `VoiceControlBar`, with `VoiceChatPanel` as a 340 px right column when `voiceChatOpen`.
+- `voiceChatFocus: true` unmounts `VoiceGrid` and renders `VoiceChatPanel` as the full-width column, with `VoiceControlBar variant="docked"` as a real footer row. The docked bar is not absolute, so it never covers `MessageInput`; it is also the way the controls stay reachable in fullscreen.
+- `toggleVoiceChatFocus` opens the chat when it is closed, and unfocusing leaves it as the side panel. `toggleVoiceChat` closing the panel clears the focus. `MainContent` clears the focus whenever `currentVoiceChannelId` changes, so a later call never starts in chat-only mode.
+- The panel header and the control bar both expose the toggle; `Escape` closes the panel through the existing path. Mobile's `MobileVoiceFullScreen` does not implement focus mode (the mobile chat is reachable through the normal navigation).
+
+Unmounting `VoiceGrid` only detaches the tile elements; it does not publish or stop tracks, so returning to the stage reattaches the same publications.
 
 ---
 
@@ -663,7 +676,7 @@ poller only while it is open. Publisher CPU attribution is available on the
 publisher from outbound stats; viewers receive the publisher's LiveKit
 connection-quality signal but cannot infer a remote encoder's CPU limitation.
 
-**Camera preset:** 1280x720, 2Mbps, 30fps, H.264
+**Camera quality:** the published camera is H.264 with simulcast. Its resolution, frame rate and bitrate come from the instance policy (`InstanceStreamingLimits.camera`): in `fixed` mode the admin's defaults apply to everyone (the historical 720p30/2 Mbps preset is the default configuration); in `user-choice` mode the user picks from the allowed values in **Settings → Voice & Video → Video**, persisted as `voiceStore.cameraConfig` (height, fps, custom bitrate). The effective choice is always fitted to the limits of the instance that issued the LiveKit token (`getStreamHostLimits()`), never to the page instance, and is never written back. `utils/camera.ts` builds the capture and publish options (`buildCameraOptions`) and applies a live change with `MediaStreamTrack.applyConstraints` plus `applyOverdrive` on `Track.Source.Camera`, re-asserting once after 5 s; if constraints fail it republishes the camera with the new options.
 
 ### Capture lifecycle on leave — `AudioManager.releaseInputStream()`
 
@@ -747,7 +760,7 @@ Users pick a camera in **User Settings → Voice & Video → Video**. Selection 
 - Sister action: `pruneStaleDevices()` — sweeps mic, speaker, and camera persisted IDs, resetting any that aren't present in `enumerateDevices()`. Skips a kind whose enumerated set has no non-empty deviceIds (Firefox/Safari pre-permission obscures IDs and we cannot distinguish stale from obscured). Called from `AppLayout` mount and on every `devicechange` event.
 
 ### Camera enable path (canonical)
-`utils/voiceActions.handleCameraAction()` is the **sole** camera-toggle path — voice-bar button, mobile button, and keybind all call it. It applies `CAMERA_PRESET` (720p30 H.264) and injects `cameraDeviceId` into `VideoCaptureOptions.deviceId` when non-null.
+`utils/voiceActions.handleCameraAction()` is the **sole** camera-toggle path — voice-bar button, mobile button, and keybind all call it. It builds capture and publish options with `buildCameraOptions()` (host camera policy, `cameraConfig`) and injects `cameraDeviceId` into `VideoCaptureOptions.deviceId` when non-null. A `cameraConfig` change while the camera is live is picked up by a `useLiveKit` effect that calls `requestCameraQuality(room)`; the helper serializes calls and only the newest schedules the 5 s re-assert.
 
 ### Hot-swap mid-call
 `useLiveKit`'s `syncCamera` effect watches `cameraDeviceId`, `isCameraOn`, `isConnected`. When the published track's actual `getSettings().deviceId` differs from the store target (and target is non-null), it calls `room.switchActiveDevice('videoinput', targetId)` — an in-place source swap, no re-publish. Failure path: try to restore the previous deviceId in store (if its track is still live), else disable the camera entirely; toast `"Could not switch camera"`. The `null` ("Auto") target is intentionally a no-op: no force-switch of an already-live publication.
@@ -760,7 +773,7 @@ On `RoomEvent.LocalTrackPublished` for the camera, the underlying `MediaStreamTr
 2. Else re-probe `getUserMedia({video:{deviceId}})` to distinguish causes: `NotAllowedError` → `"Camera permission was revoked"` (macOS Privacy revoke); `NotFoundError` → `"Camera disconnected"` (unplug); other → `"Camera unavailable"`.
 3. Tear down camera state via the unified path: `markIntentionalCameraOff()` → `setCameraEnabled(false)` → `isCameraOn = false` → `broadcastVoiceStatus()` → toast.
 
-The `_intentionalCameraOff` module-level flag in `voiceActions.ts` is the gate. Producers: `handleCameraAction` disable branch, `syncCamera` rollback, the track-end handler's own teardown. Consumer: the track-end handler.
+The `intentionalCameraOff` module-level flag in `utils/cameraFlags.ts` is the gate (kept out of `voiceActions` so `utils/camera.ts` can mark a quality republish without a module cycle). Producers: `handleCameraAction` disable branch, `syncCamera` rollback, the quality fallback's republish, the track-end handler's own teardown. Consumer: the track-end handler.
 
 ### Two-mode preview (in `VideoSection.tsx`)
 | Mode | Triggered when | Source |

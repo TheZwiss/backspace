@@ -1,20 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const wsSend = vi.hoisted(() => vi.fn());
+const captureInput = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 vi.mock('../hooks/useWebSocket', () => ({ wsSend }));
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: {
     getInstance: () => ({
-      clearInputDenial: vi.fn(),
+      setTextInputOnly: vi.fn(), clearInputDenial: vi.fn(),
       resumeContext: vi.fn().mockResolvedValue(undefined),
-      setInputDevice: vi.fn().mockResolvedValue(null),
+      setInputDevice: captureInput,
     }),
   },
 }));
 
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSpaceStore } from '../stores/spaceStore';
-import { broadcastVoiceStatus, joinVoiceChannel } from './voice';
+import { broadcastVoiceStatus, joinVoiceChannel, preArmMicrophone } from './voice';
 
 describe('voice status resume', () => {
   beforeEach(() => {
@@ -117,4 +118,13 @@ describe('joining a voice channel while in a DM call through another instance', 
 
     expect(wsSend).not.toHaveBeenCalledWith({ type: 'voice_leave' }, expect.anything());
   });
+});
+
+it('keeps the physical microphone off when text mode is enabled even without a local runtime', () => {
+  const previous = useVoiceStore.getState().textVoiceEnabled;
+  captureInput.mockClear();
+  useVoiceStore.setState({ textVoiceEnabled: true });
+  preArmMicrophone();
+  expect(captureInput).not.toHaveBeenCalled();
+  useVoiceStore.setState({ textVoiceEnabled: previous });
 });

@@ -6,27 +6,10 @@ import { wsSend } from '../hooks/useWebSocket';
 import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit, preArmMicrophone } from './voice';
 import { dmCallOrigin, dmCallRoomKey, sendDmCallEnd } from './dmCall';
-import { CAMERA_PRESET, stopScreenShare } from './screenShare';
+import { stopScreenShare } from './screenShare';
+import { buildCameraOptions } from './camera';
+import { consumeIntentionalCameraOff, markIntentionalCameraOff } from './cameraFlags';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
-
-/**
- * One-shot flag used to distinguish user-initiated camera-off from unexpected
- * track-end events (hardware unplug, OS permission revoke). Set right before
- * `setCameraEnabled(false)` in any deliberate disable path; consumed-and-cleared
- * by the camera-track `ended` handler in useLiveKit. Module-level by design:
- * never persisted, never on the store, single producer + single consumer.
- */
-let _intentionalCameraOff = false;
-
-export function markIntentionalCameraOff(): void {
-  _intentionalCameraOff = true;
-}
-
-export function consumeIntentionalCameraOff(): boolean {
-  const v = _intentionalCameraOff;
-  _intentionalCameraOff = false;
-  return v;
-}
 
 /**
  * Toggle mute. Respects space-mute/deafen guards.
@@ -95,20 +78,13 @@ export async function handleCameraAction(): Promise<void> {
     const willEnable = !isCameraOn;
     if (willEnable) {
       const cameraDeviceId = useVoiceStore.getState().cameraDeviceId;
+      const options = buildCameraOptions();
       const captureOpts: VideoCaptureOptions = {
-        resolution: CAMERA_PRESET.resolution,
-        frameRate: CAMERA_PRESET.encoding.maxFramerate,
+        resolution: options.capture,
+        frameRate: options.capture.frameRate,
       };
       if (cameraDeviceId) captureOpts.deviceId = cameraDeviceId;
-      await room.localParticipant.setCameraEnabled(
-        true,
-        captureOpts,
-        {
-          videoCodec: CAMERA_PRESET.codec,
-          videoEncoding: CAMERA_PRESET.encoding,
-          simulcast: true,
-        }
-      );
+      await room.localParticipant.setCameraEnabled(true, captureOpts, options.publish);
     } else {
       // Mark this disable as intentional so the track-`ended` handler skips
       // its unplug/permission-revoke probe + toast.
@@ -137,10 +113,14 @@ export async function handleCameraAction(): Promise<void> {
  * new voice status itself, so neither is repeated here.
  */
 export async function handleScreenShareAction(): Promise<void> {
+  return handleScreenShareActionForWindow();
+}
+
+export async function handleScreenShareActionForWindow(targetDocument?: Document): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
   if (!useVoiceStore.getState().isScreenSharing) {
-    openScreenShareSetup();
+    openScreenShareSetup(targetDocument);
     return;
   }
   try {

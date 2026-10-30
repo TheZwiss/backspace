@@ -1,6 +1,9 @@
 import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
+import { useUIStore } from '../../stores/uiStore';
+import type { User } from '@backspace/shared';
+import { getCanonicalUserView } from '../../utils/userViewLookup';
 import { useSelfIdInChannel } from '../../utils/channelUser';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
@@ -63,7 +66,7 @@ interface VoiceChannelProps {
 
 /** Wrapper component for the volume slider so it can use hooks (useState). */
 export function VoiceChannel({ channelId, channelName, onClick, locked, canManage, onSettingsClick, voiceUserHandlers, dropZone }: VoiceChannelProps) {
-  const { t } = useTranslation(['voice', 'common']);
+  const { t } = useTranslation(['voice', 'common', 'spaces']);
   const serverVoiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
@@ -104,15 +107,21 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
   const openContextMenu = useContextMenuStore((s) => s.open);
 
   const handleContextMenu = useCallback(
-    (e: React.MouseEvent, userId: string) => {
+    (e: React.MouseEvent, userId: string, user: User | undefined, spaceId: string | undefined) => {
       if (userId === myIdHere) return;
       e.preventDefault();
       e.stopPropagation();
 
+      const anchor = e.currentTarget.getBoundingClientRect();
+      const items: ContextMenuItem[] = user ? [{
+        key: 'profile', type: 'action', label: t('spaces:members.menu.profile'),
+        onClick: () => useUIStore.getState().openUserProfile(user, getChannelOrigin(channelId), anchor, 'right', spaceId ? { spaceId, userId } : undefined),
+      }] : [];
       // Build moderation items
       const modItems = buildVoiceModMenuItems(userId, channelId);
 
-      const items: ContextMenuItem[] = [...modItems];
+      if (items.length && modItems.length) items.push({ key: 'profile-sep', type: 'separator' });
+      items.push(...modItems);
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -140,7 +149,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [myIdHere, channelId, openContextMenu],
+    [myIdHere, channelId, openContextMenu, t],
   );
 
   return (
@@ -208,8 +217,10 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
           {voiceUsers.map((userId) => {
             const member = members.find(m => m.userId === userId);
             const participant = participants.find(p => p.userId === userId);
+            const rawUser = member?.user ?? participant?.cachedUser ?? undefined;
+            const profileUser = rawUser ? getCanonicalUserView(rawUser, getChannelOrigin(channelId)) : undefined;
             const displayName = member?.user.displayName ?? member?.user.username ?? participant?.username ?? userId;
-            const avatar = member?.user.avatar ?? null;
+            const avatar = profileUser?.avatar ?? null;
             const avatarColor = member?.user.avatarColor;
             const wsStatus = voiceUserStates.get(userId);
             const isParticipantDeafened = userId === currentUserId
@@ -250,9 +261,18 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${isBeingDragged ? 'opacity-50' : ''}`}
                 draggable={isDraggable}
+                role={profileUser ? 'button' : undefined}
+                tabIndex={profileUser ? 0 : undefined}
+                onClick={profileUser ? (e) => useUIStore.getState().openUserProfile(profileUser, getChannelOrigin(channelId), e.currentTarget.getBoundingClientRect(), 'right', spaceId ? { spaceId, userId } : undefined) : undefined}
+                onKeyDown={profileUser ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    useUIStore.getState().openUserProfile(profileUser, getChannelOrigin(channelId), e.currentTarget.getBoundingClientRect(), 'right', spaceId ? { spaceId, userId } : undefined);
+                  }
+                } : undefined}
                 onDragStart={isDraggable ? userDrag!.onDragStart : undefined}
                 onDragEnd={isDraggable ? userDrag!.onDragEnd : undefined}
-                onContextMenu={(e) => handleContextMenu(e, userId)}
+                onContextMenu={(e) => handleContextMenu(e, userId, profileUser, spaceId)}
               >
                 <VoiceUserRow
                   userId={member?.user.homeUserId ?? userId}

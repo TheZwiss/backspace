@@ -78,10 +78,25 @@ interface DesktopUpdateSnapshot {
   status: DesktopUpdateStatus;
 }
 
+interface LocalTextVoiceStatus {
+  phase: 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
+  device?: 'auto' | 'cpu' | 'gpu';
+  backend?: 'cpu' | 'webgpu';
+  progress?: number;
+  adapter?: { vendor: string; architecture: string; description: string } | null;
+  error?: string;
+}
+
 interface BackspaceElectronAPI {
+  getTextVoiceStatus?: () => Promise<LocalTextVoiceStatus>;
+  prepareTextVoice?: (device: 'auto' | 'cpu' | 'gpu') => Promise<LocalTextVoiceStatus>;
+  synthesizeTextVoice?: (text: string, voice: string, speed: number) => Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }>;
+  releaseTextVoice?: () => Promise<void>;
+  onTextVoiceStatus?: (callback: (status: LocalTextVoiceStatus) => void) => () => void;
   // Platform info
   platform: NodeJS.Platform;
   // Window controls
+  controlCallWindow?: (action: 'minimize' | 'maximize' | 'close') => void;
   minimize: () => void;
   maximize: () => void;
   close: () => void;
@@ -132,7 +147,7 @@ interface BackspaceElectronAPI {
    * (getDisplayMedia → onScreenShareSources → selectScreenSource).
    */
   getScreenSources?: () => Promise<ElectronScreenSource[]>;
-  preselectScreenSource?: (sourceId: string, shareAudio?: boolean) => Promise<void>;
+  preselectScreenSource?: (sourceId: string, shareAudio?: boolean, targetId?: string) => Promise<void>;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the
    * renderer shows a "choose" card that triggers the portal on click instead
@@ -151,9 +166,13 @@ interface BackspaceElectronAPI {
    * renderer opens as a microphone (`label` names the device). Optional: only
    * desktop builds that ship it have it.
    */
+  setSystemAudioTarget?: (targetId: string) => Promise<void>;
+  getSystemAudioTargets?: () => Promise<Array<{ id: string; name: string }>>;
+  onProcessAudio?: (onData: (data: Uint8Array) => void, onEnded: () => void) => () => void;
   startSystemAudio?: () => Promise<
-    | { ok: true; label: string }
-    | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' }
+    | { ok: true; label: string; pcm?: false }
+    | { ok: true; pcm: true }
+    | { ok: false; reason: 'unsupported-platform' | 'sandboxed' | 'module-missing' | 'no-pipewire' | 'link-failed' | 'process-capture-failed' | 'audio-target-required' }
   >;
   stopSystemAudio?: () => Promise<void>;
 
@@ -174,11 +193,35 @@ interface BackspaceElectronAPI {
   // Activity detection (game/app process scanning)
   onActivityDetected: (callback: (activity: unknown) => void) => (() => void);
   getCurrentActivity: () => Promise<unknown>;
+  /** Every game running at once. Absent in desktop builds that predate multi-game detection. */
+  onActivitiesDetected?: (callback: (activities: unknown) => void) => (() => void);
+  getCurrentActivities?: () => Promise<unknown>;
+  /** Game names for the manual-game picker (dictionary + installed games); absent on older desktops. */
+  listKnownGames?: () => Promise<string[]>;
+  /** Programs the player can tie their game to. Absent in desktop builds that predate the binding. */
+  listRunningPrograms?: () => Promise<Array<{ label: string; process: string }>>;
+  /** Running Wine programs no detected game owns. Absent in desktop builds that predate it. */
+  getUnknownWinePrograms?: () => Promise<Array<{ label: string; process: string }>>;
+  setManualGameBindings?: (bindings: Array<{ name: string; process: string }>) => Promise<void>;
+  setManualGameBinding?: (binding: { name: string; process: string } | null) => Promise<void>;
+  /**
+   * Locally extracted game icon (Steam library cache, .desktop entries,
+   * AppImage/GOG directories) as base64, or null when none was found. The
+   * renderer uploads it to the user's instance and attaches the instance's
+   * URL to the activity it sends.
+   */
+  getGameIcon?: (name: string) => Promise<{ data: string; mime: string } | null>;
+  getActivitySettings?: () => Promise<{ enablePreemption: boolean }>;
+  setActivitySettings?: (settings: { enablePreemption?: boolean }) => Promise<{ enablePreemption: boolean }>;
+  getMediaSetupHint?: () => Promise<string | null>;
+  onMediaSetupHint?: (callback: (hint: string) => void) => (() => void);
 
   // Keybind support
   getKeybindPortalStatus?: () => Promise<KeybindPortalStatus | null>;
   onKeybindPortalStatus?: (callback: (status: KeybindPortalStatus) => void) => () => void;
   retryKeybindPortal?: () => void;
+  configureKeybindPortal?: () => Promise<boolean>;
+  integrateKeybindAppImage?: () => Promise<boolean>;
   // Older installed shells use send-based IPC and return void.
   syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => Promise<boolean> | void;
   onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => (() => void);
@@ -200,4 +243,6 @@ interface Window {
 interface KeybindPortalStatus {
   state: 'idle' | 'pending' | 'ready' | 'unavailable';
   shortcuts: Record<string, string>;
+  reason?: 'missingDesktopEntry';
+  canIntegrateAppImage?: boolean;
 }

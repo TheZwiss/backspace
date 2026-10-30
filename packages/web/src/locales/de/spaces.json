@@ -436,6 +436,12 @@
   "permissions": {
     "title": "Berechtigungen",
     "names": {
+      "createSoundboard": "Soundeffekte erstellen",
+      "manageSoundboard": "Soundeffekte verwalten",
+      "createStickers": "Server-Sticker erstellen",
+      "manageStickers": "Server-Sticker verwalten",
+      "useSoundboard": "Soundeffekte verwenden",
+      "useExternalSounds": "Sounds anderer Server verwenden",
       "administrator": "Administrator",
       "viewChannel": "Kanäle sehen",
       "manageChannels": "Kanäle verwalten",
@@ -557,7 +563,12 @@
       "undeafen": "Ton einschalten",
       "spaceMuted": "Im Space stummgeschaltet",
       "spaceDeafened": "Ton im Space ausgeschaltet",
-      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)"
+      "permissionMuted": "Stummgeschaltet (keine Sprechberechtigung)",
+      "statusMenu": "Status",
+      "customStatus": "Benutzerdefinierter Status",
+      "customStatusPlaceholder": "Was machst du gerade?",
+      "editProfile": "Profil bearbeiten",
+      "statusUpdateFailed": "Status konnte nicht aktualisiert werden"
     },
     "dmUnreadMessages_one": "{{count}} ungelesene Direktnachricht",
     "dmUnreadMessages_other": "{{count}} ungelesene Direktnachrichten",
@@ -694,5 +705,26 @@
     "suppressRoles": "Rollenerwähnungen unterdrücken",
     "massHeading": "Gruppenerwähnungen",
     "massNote": "@here erreicht dieselben Mitglieder wie @everyone. Erwähnungen von dir mit Namen benachrichtigen dich immer."
+  },
+  "stickers": {
+    "title": "Server-Sticker",
+    "description": "Ein gemeinsames Sticker-Paket für diesen Server mit bis zu 50 statischen oder animierten Stickern.",
+    "empty": "Dieser Server hat noch kein Sticker-Paket.",
+    "create": "Server-Paket erstellen",
+    "add": "Sticker hinzufügen",
+    "pendingShares": "Alben zur Freigabe",
+    "sharePending": "Möchte ein privates Album mit diesem Server teilen.",
+    "approve": "Genehmigen",
+    "reject": "Ablehnen"
+  },
+  "profile": {
+    "title": "Serverprofil",
+    "view": "Serverprofil ansehen",
+    "viewIcon": "Serverbild ansehen",
+    "viewBanner": "Serverbanner ansehen",
+    "bannerAlt": "Banner von {{name}}",
+    "server": "Server",
+    "noDescription": "Dieser Server hat noch keine Beschreibung.",
+    "createdAt": "Erstellt am"
   }
 }
