@@ -28,8 +28,8 @@ import { canActOnMemberInSpace } from '../utils/roleHierarchy.js';
 import { ERROR_MESSAGES, errorText } from '../utils/httpErrors.js';
 import type { ErrorCode, ErrorDetails } from '@backspace/shared/src/errors';
 import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
-import { consumeWsDmMessageCreate } from '../utils/dmMessageRateLimit.js';
-import { socketAddressOf } from './socketAddress.js';
+import { consumeDmMessageCreate } from '../utils/dmMessageRateLimit.js';
+import { consumeChannelMessageCreate } from '../utils/channelMessageRateLimit.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -251,6 +251,11 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
   const channelId = event.channelId as string;
   const content = event.content as string;
   const replyToId = event.replyToId as string | undefined;
+
+  if (!consumeChannelMessageCreate(userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: errorText('rate_limited'), code: 'rate_limited' });
+    return;
+  }
 
   if (!channelId || typeof channelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
@@ -838,7 +843,7 @@ function refuseDmMessage(ws: WebSocket, code: ErrorCode, details?: ErrorDetails)
 function handleDmMessageCreate(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   // A socket accepted on /ws always has an address; a stand-in without one
   // counts under the user's row id rather than going uncounted.
-  if (!consumeWsDmMessageCreate(socketAddressOf(ws) ?? `user:${userId}`)) {
+  if (!consumeDmMessageCreate(userId)) {
     refuseDmMessage(ws, 'rate_limited');
     return;
   }

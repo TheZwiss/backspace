@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { and, count, desc, eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import {
   MAX_PERSONAL_STICKERS, MAX_STICKER_NAME_LENGTH, STICKER_ID_PATTERN, STICKER_PREFIX,
@@ -95,23 +95,40 @@ export async function saveStickerAsset(encoded: Buffer): Promise<string> {
   const now = Date.now();
   getDb().insert(schema.stickerAssets).values({ id, createdAt: now })
     .onConflictDoUpdate({ target: schema.stickerAssets.id, set: { createdAt: now } }).run();
-  await mkdir(path.dirname(assetPath(id)), { recursive: true });
-  const temporaryPath = `${assetPath(id)}.${randomUUID()}.tmp`;
-  await writeFile(temporaryPath, encoded);
-  await rename(temporaryPath, assetPath(id));
 
-  // Also pre-generate compressed preview file
-  try {
-    const previewEncoded = await encodeStickerPreview(encoded);
-    const previewTemp = `${stickerPreviewPath(id)}.${randomUUID()}.tmp`;
-    await writeFile(previewTemp, previewEncoded);
-    await rename(previewTemp, stickerPreviewPath(id));
-  } catch (err) {
-    // Non-fatal if preview generation fails on save; on-demand will generate or fallback
-    console.error('Failed to pre-generate sticker preview:', err);
+  const storedPath = assetPath(id);
+  if (!(await fileExists(storedPath))) {
+    await mkdir(path.dirname(storedPath), { recursive: true });
+    const temporaryPath = `${storedPath}.${randomUUID()}.tmp`;
+    await writeFile(temporaryPath, encoded);
+    await rename(temporaryPath, storedPath);
+  }
+
+  // A repeated upload refreshes the DB lease but reuses both immutable files.
+  const previewPath = stickerPreviewPath(id);
+  if (!(await fileExists(previewPath))) {
+    try {
+      const previewEncoded = await encodeStickerPreview(encoded);
+      const previewTemp = `${previewPath}.${randomUUID()}.tmp`;
+      await writeFile(previewTemp, previewEncoded);
+      await rename(previewTemp, previewPath);
+    } catch (err) {
+      // Non-fatal if preview generation fails on save; on-demand will generate or fallback
+      console.error('Failed to pre-generate sticker preview:', err);
+    }
   }
 
   return id;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 /**

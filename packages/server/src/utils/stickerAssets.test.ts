@@ -69,6 +69,21 @@ describe('cleanupUnusedStickerAssets', () => {
     expect(fs.existsSync(stickerAssetPath(idOf(7)))).toBe(false);
     expect(fs.existsSync(stickerPreviewPath(idOf(7)))).toBe(false);
     expect(db.select().from(schema.stickerAssets).all().map(row => row.id).sort()).toEqual([1, 2, 3, 4, 5, 6].map(idOf));
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM messages WHERE id = 'm1'").get()).toEqual({ id: idOf(2) });
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM dm_messages WHERE id = 'd1'").get()).toEqual({ id: idOf(3) });
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM reactions WHERE id = 'r1'").get()).toEqual({ id: idOf(4) });
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM dm_reactions WHERE id = 'r2'").get()).toEqual({ id: idOf(5) });
+  });
+
+  it('keeps the structured sticker reference in sync when content changes', () => {
+    sqlite.prepare("INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ('edited', 'channel', 'alice', 'ordinary text', 1)").run();
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM messages WHERE id = 'edited'").get()).toEqual({ id: null });
+
+    sqlite.prepare("UPDATE messages SET content = ? WHERE id = 'edited'").run(tokenOf(idOf(1)));
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM messages WHERE id = 'edited'").get()).toEqual({ id: idOf(1) });
+
+    sqlite.prepare("UPDATE messages SET content = 'no longer a sticker' WHERE id = 'edited'").run();
+    expect(sqlite.prepare("SELECT sticker_asset_id AS id FROM messages WHERE id = 'edited'").get()).toEqual({ id: null });
   });
 
   it('leaves assets inside the grace period alone', () => {

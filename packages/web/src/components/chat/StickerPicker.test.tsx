@@ -188,6 +188,7 @@ describe('sticker controls', () => {
     expect(preview).toHaveBeenCalledWith(sticker.token.slice('sticker:'.length));
     expect(screen.queryByRole('button', { name: 'Add to my stickers' })).not.toBeInTheDocument();
     expect(screen.getByRole('img')).toHaveAttribute('data-sticker-source', sticker.token);
+    expect(screen.getByRole('img')).toHaveClass('max-h-[144px]', 'max-w-[144px]');
   });
 
   it('filters stickers by custom name via search input within the picker panel', async () => {

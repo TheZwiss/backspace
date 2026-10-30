@@ -15,11 +15,11 @@ minute even though the global number is smaller. Read the per-route numbers
 below as the whole budget for that route, not as a second gate. **The key is
 the client address and nothing else.** The limiter runs on Fastify's `onRequest` hook while `authenticate` is
 a route `preHandler`, so no user is attached to the request yet when the key is
-taken. Nothing in the HTTP limiter is per account; the only per-user budgets in
-the app are the two hand-written upload limits in `routes/files.ts` (30 upload
-creates and 1000 PATCHes per minute per user), which run inside the tus handler
-after auth, and the sticker upload limit in `routes/stickers.ts` (30 per minute
-per account, also counted after auth).
+taken. Message creates add a separate per-account budget of 5 per 5 seconds for
+both channel and DM messages, shared between REST and WebSocket. The hand-written upload limits in `routes/files.ts` (30 upload
+creates and 1000 PATCHes per minute per user) run inside the tus handler after
+auth, and the sticker upload limit in `routes/stickers.ts` is 30 per minute per
+account, also counted after auth.
 
 The address comes from Fastify's `trustProxy`, which is a **count of trusted
 hops**: the `TRUSTED_PROXY_HOPS` environment variable, default 1, read in
@@ -31,14 +31,14 @@ proxy, or with no proxy at all, sets a different number; see
 [deployment.md](deployment.md), "Server proxy-awareness".
 
 What an operator should take from that: **everyone sharing one public address
-shares one budget.** A school, an office behind a corporate proxy, a VPN exit
-or a household on CGNAT counts as a single client, and a busy client there can
-spend the minute's 200 for everybody at that address. The countermeasure is not
-in the app: give such a deployment its own address, or raise the limit.
+shares the global request budget.** A school, an office behind a corporate
+proxy, a VPN exit or a household on CGNAT counts as a single client for that
+200-per-minute ceiling. Message-create quotas themselves are per account, so
+one user's sticker spam does not consume another user's five-message window.
 
 Routes may tighten the limit for themselves with `config.rateLimit`; those
 overrides sit with their routes (`routes/auth.ts`, `routes/directory.ts`,
-`routes/explore.ts`, `routes/messages.ts`, `routes/dm.ts`, `routes/gif.ts`,
+`routes/explore.ts`, `routes/dm.ts`, `routes/gif.ts`,
 `routes/users.ts`, `routes/social.ts`), and they are keyed the same way, per
 address, for the same reason. The WebSocket `dm_message_create` event applies
 the DM create route's limit to the socket's address in a counter of its own
@@ -347,7 +347,7 @@ Served `Cache-Control: public, max-age=31536000, immutable`: a stored file's nam
 | DELETE | `/api/stickers/:id` | JWT | Removes only the current user's entry |
 | GET | `/api/stickers/assets/:id.webp` | Public | Immutable WebP; anyone holding the link can read it |
 
-Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 16,777,216 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
+Upload, collect and rename return `{id, name, token}`. The id is the SHA-256 of the re-encoded WebP bytes; the token is `sticker:<canonical absolute asset URL>`. Names follow `normalizeStickerName` (packages/shared/src/stickers.ts): trimmed, 1 to 100 characters, one line, at least one visible character, no control or bidirectional characters. Uploads accept PNG, JPEG, WebP and GIF up to 5 MiB with a 67,108,864 decoded-pixel cap across frames, stored within 512 x 512; the JSON body limit allows for base64. Refusals: `400 sticker_name_invalid` (`details.max`, a name the rule above refuses), `400 validation_failed` (base64 that is not canonical), `400 sticker_invalid_image` (`details.max`, in MB), `409 sticker_collection_full` (`details.max`, 200 entries), `429 rate_limited` (30 uploads per account per minute, counted in the route after auth, next to the per-address limit), `400 sticker_not_local` (a collect token that is not this instance's), `404 sticker_not_found` (unknown asset, a rename of an entry the caller does not have, or a lost file on the asset route). No WebSocket event follows a collection change; the picker reads the collection each time it opens. Collection is idempotent, and removal never deletes a shared asset; unused assets are removed by the storage cleanup. Full description: [uploads.md](uploads.md#14-personal-stickers).
 
 Private albums, server packs, favorites, and approval-based sharing use the `/api/sticker-library`, `/api/private-sticker-packs`, `/api/spaces/:id/sticker-pack`, `/api/sticker-favorites`, and `/api/sticker-pack-shares` routes. Private albums allow 30 items, each server owns at most one pack with 50 items, and sharing requires instance-admin or server `MANAGE_STICKERS` approval. Full contract: [stickers.md](stickers.md).
 

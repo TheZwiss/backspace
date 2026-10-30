@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -142,6 +142,22 @@ describe('personal stickers', () => {
     await upload();
     const row = sqlite.prepare('SELECT created_at AS createdAt FROM sticker_assets WHERE id = ?').get(id) as { createdAt: number };
     expect(row.createdAt).toBeGreaterThan(1);
+  });
+
+  it('reuses an existing content-addressed file and preview on repeat upload', async () => {
+    const first = (await upload()).json() as { id: string };
+    const storedPath = path.join(settings.uploadDir, 'stickers', `${first.id}.webp`);
+    const previewPath = path.join(settings.uploadDir, 'stickers', `${first.id}_preview.webp`);
+    const fixed = new Date('2020-01-02T03:04:05.000Z');
+    await utimes(storedPath, fixed, fixed);
+    await utimes(previewPath, fixed, fixed);
+
+    const second = await upload();
+
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ id: first.id });
+    expect((await stat(storedPath)).mtimeMs).toBe(fixed.getTime());
+    expect((await stat(previewPath)).mtimeMs).toBe(fixed.getTime());
   });
 
   it('limits uploads per account per minute', async () => {

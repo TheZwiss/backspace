@@ -118,6 +118,8 @@ export const messages = sqliteTable('messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  /** SHA-256 named by a sticker token in `content`; NULL for ordinary text. */
+  stickerAssetId: text('sticker_asset_id'),
   type: text('type', { enum: ['user', 'system'] }).notNull().default('user'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
@@ -128,6 +130,7 @@ export const messages = sqliteTable('messages', {
   }).onDelete('set null'),
   channelIdx: index('idx_messages_channel_id').on(table.channelId),
   userIdx: index('idx_messages_user_id').on(table.userId),
+  stickerAssetIdx: index('idx_messages_sticker_asset_id').on(table.stickerAssetId),
   // Unread counts (ws/channelUnreadCounts.ts): the messages of a channel after
   // a read cursor, compared as numbers, with the author to leave out the
   // reader's own and the type to leave out system rows, so a count reads the
@@ -220,6 +223,8 @@ export const dmMessages = sqliteTable('dm_messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  /** SHA-256 named by a sticker token in `content`; NULL for ordinary text. */
+  stickerAssetId: text('sticker_asset_id'),
   type: text('type').notNull().default('user'),
   editedAt: integer('edited_at'),
   sourceInstance: text('source_instance'),
@@ -233,6 +238,7 @@ export const dmMessages = sqliteTable('dm_messages', {
   }).onDelete('set null'),
   channelIdx: index('idx_dm_messages_dm_channel_id').on(table.dmChannelId),
   userIdx: index('idx_dm_messages_user_id').on(table.userId),
+  stickerAssetIdx: index('idx_dm_messages_sticker_asset_id').on(table.stickerAssetId),
   // Unread counts, as idx_messages_channel_unread above.
   unreadIdx: index('idx_dm_messages_channel_unread').on(table.dmChannelId, sql`CAST(id AS INTEGER)`, table.userId),
   sourceUniqueIdx: uniqueIndex('idx_dm_messages_source_unique')
@@ -268,9 +274,12 @@ export const reactions = sqliteTable('reactions', {
   messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
+  /** SHA-256 when `emoji` is a sticker token; NULL for a native emoji reaction. */
+  stickerAssetId: text('sticker_asset_id'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   messageIdx: index('idx_reactions_message_id').on(table.messageId),
+  stickerAssetIdx: index('idx_reactions_sticker_asset_id').on(table.stickerAssetId),
   // One reaction per user, emoji and message. A repeat insert is refused.
   messageUserEmojiIdx: uniqueIndex('idx_reactions_message_user_emoji').on(table.messageId, table.userId, table.emoji),
 }));
@@ -280,9 +289,12 @@ export const dmReactions = sqliteTable('dm_reactions', {
   dmMessageId: text('dm_message_id').notNull().references(() => dmMessages.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
+  /** SHA-256 when `emoji` is a sticker token; NULL for a native emoji reaction. */
+  stickerAssetId: text('sticker_asset_id'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   dmMessageIdx: index('idx_dm_reactions_dm_message_id').on(table.dmMessageId),
+  stickerAssetIdx: index('idx_dm_reactions_sticker_asset_id').on(table.stickerAssetId),
   // One reaction per user, emoji and message. A repeat insert is refused.
   dmMessageUserEmojiIdx: uniqueIndex('idx_dm_reactions_message_user_emoji').on(table.dmMessageId, table.userId, table.emoji),
 }));

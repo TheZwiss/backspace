@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { eq, inArray, isNotNull, like, lt } from 'drizzle-orm';
-import { MAX_STICKER_BYTES, stickerIdOf } from '@backspace/shared/src/stickers.js';
+import { eq, inArray, isNotNull, lt } from 'drizzle-orm';
+import { MAX_STICKER_BYTES } from '@backspace/shared/src/stickers.js';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
 
@@ -72,18 +72,17 @@ export function getReferencedStickerIds(): Set<string> {
   for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId }).from(schema.stickerPackVersions).where(isNotNull(schema.stickerPackVersions.coverAssetId)).all()) {
     if (row.id) ids.add(row.id);
   }
-  const values = [
-    ...db.select({ value: schema.messages.content }).from(schema.messages)
-      .where(like(schema.messages.content, 'sticker:%')).all(),
-    ...db.select({ value: schema.dmMessages.content }).from(schema.dmMessages)
-      .where(like(schema.dmMessages.content, 'sticker:%')).all(),
-    ...db.select({ value: schema.reactions.emoji }).from(schema.reactions)
-      .where(like(schema.reactions.emoji, 'sticker:%')).all(),
-    ...db.select({ value: schema.dmReactions.emoji }).from(schema.dmReactions)
-      .where(like(schema.dmReactions.emoji, 'sticker:%')).all(),
+  const assetReferences = [
+    ...db.select({ id: schema.messages.stickerAssetId }).from(schema.messages)
+      .where(isNotNull(schema.messages.stickerAssetId)).all(),
+    ...db.select({ id: schema.dmMessages.stickerAssetId }).from(schema.dmMessages)
+      .where(isNotNull(schema.dmMessages.stickerAssetId)).all(),
+    ...db.select({ id: schema.reactions.stickerAssetId }).from(schema.reactions)
+      .where(isNotNull(schema.reactions.stickerAssetId)).all(),
+    ...db.select({ id: schema.dmReactions.stickerAssetId }).from(schema.dmReactions)
+      .where(isNotNull(schema.dmReactions.stickerAssetId)).all(),
   ];
-  for (const { value } of values) {
-    const id = value ? stickerIdOf(value) : null;
+  for (const { id } of assetReferences) {
     if (id) ids.add(id);
   }
   return ids;

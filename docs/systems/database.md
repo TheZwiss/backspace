@@ -103,13 +103,14 @@ PK: (spaceId, userId)
 | userId | text NOT NULL | FK → users.id |
 | replyToId | text | FK → messages.id SET NULL |
 | content | text | For a system row, JSON (`channelSystemEvents.ts`) |
+| stickerAssetId | text | SHA-256 named by a complete sticker token in `content`; maintained by migration `0040` triggers and indexed for cleanup/querying |
 | type | text NOT NULL, default `'user'` | `user` (a member wrote it) or `system` (the instance wrote it; a poke is the only one so far, websocket.md "Channel pokes"). Migration `0029_persistent_channel_pokes` |
 | editedAt | integer | |
 | createdAt | integer NOT NULL | |
 
 A system row's `userId` is the member who acted (the poker). `userWrittenMessages()` in `db/userWrittenMessages.ts` is the one condition for "a message a member wrote": the unread counts, the last message id in `ready`, channel search and the reply target check all take it, so a system row is never unread, never found by a search and never replied to.
 
-Indexes: `idx_messages_channel_id` (channelId); `idx_messages_user_id` (userId); `idx_messages_channel_unread` (channelId, `CAST(id AS INTEGER)`, userId, type), created by migration `0027_unread_count_indexes` and given `type` by `0029_persistent_channel_pokes`. The last one serves the unread counts (websocket.md, "Unread counts"): the messages members wrote in a channel after a read cursor, compared as numbers, without reading the table. SQLite uses an expression index only when the query spells the expression the same way, type name case included, so the count writes `CAST(... AS INTEGER)`; the index names the column unqualified because SQLite refuses a qualified one there.
+Indexes: `idx_messages_channel_id` (channelId); `idx_messages_user_id` (userId); `idx_messages_sticker_asset_id` (stickerAssetId); `idx_messages_channel_unread` (channelId, `CAST(id AS INTEGER)`, userId, type), created by migration `0027_unread_count_indexes` and given `type` by `0029_persistent_channel_pokes`. The last one serves the unread counts (websocket.md, "Unread counts"): the messages members wrote in a channel after a read cursor, compared as numbers, without reading the table. SQLite uses an expression index only when the query spells the expression the same way, type name case included, so the count writes `CAST(... AS INTEGER)`; the index names the column unqualified because SQLite refuses a qualified one there.
 
 ### attachments
 | Column | Type | Default | Notes |
@@ -222,9 +223,10 @@ PK: id
 | messageId | text NOT NULL | FK → messages.id CASCADE |
 | userId | text NOT NULL | FK → users.id CASCADE |
 | emoji | text NOT NULL | |
+| stickerAssetId | text | SHA-256 when `emoji` is a sticker token; NULL for native emoji |
 | createdAt | integer NOT NULL | |
 
-Indexes: `idx_reactions_message_id` (messageId); `idx_reactions_message_user_emoji` UNIQUE (messageId, userId, emoji), one reaction per user and emoji on a message. Writers insert with `ON CONFLICT DO NOTHING` and treat no row written as "already reacted" (`reaction_add` in `ws/events.ts`). See "Reaction uniqueness (0024)" below.
+Indexes: `idx_reactions_message_id` (messageId); `idx_reactions_sticker_asset_id` (stickerAssetId); `idx_reactions_message_user_emoji` UNIQUE (messageId, userId, emoji), one reaction per user and emoji on a message. Writers insert with `ON CONFLICT DO NOTHING` and treat no row written as "already reacted" (`reaction_add` in `ws/events.ts`). See "Reaction uniqueness (0024)" below.
 
 ---
 
@@ -261,6 +263,7 @@ PK: (dmChannelId, userId)
 | userId | text NOT NULL | | FK → users.id |
 | replyToId | text | | FK → dm_messages.id SET NULL |
 | content | text | | |
+| stickerAssetId | text | SHA-256 named by a complete sticker token in `content`; maintained by migration `0040` triggers |
 | type | text NOT NULL | `'user'` | user/system |
 | editedAt | integer | | |
 | sourceInstance | text | | Federation source origin |
@@ -268,7 +271,7 @@ PK: (dmChannelId, userId)
 | encryptionVersion | integer | 0 | |
 | createdAt | integer NOT NULL | | |
 
-Indexes: `idx_dm_messages_dm_channel_id` (dmChannelId); `idx_dm_messages_user_id` (userId); `idx_dm_messages_source_unique` UNIQUE (sourceInstance, sourceMessageId) where sourceInstance is set; `idx_dm_messages_channel_unread` (dmChannelId, `CAST(id AS INTEGER)`, userId), migration `0027_unread_count_indexes`, as `idx_messages_channel_unread` above.
+Indexes: `idx_dm_messages_dm_channel_id` (dmChannelId); `idx_dm_messages_user_id` (userId); `idx_dm_messages_sticker_asset_id` (stickerAssetId); `idx_dm_messages_source_unique` UNIQUE (sourceInstance, sourceMessageId) where sourceInstance is set; `idx_dm_messages_channel_unread` (dmChannelId, `CAST(id AS INTEGER)`, userId), migration `0027_unread_count_indexes`, as `idx_messages_channel_unread` above.
 
 ### dm_reactions
 PK: id
@@ -278,9 +281,10 @@ PK: id
 | dmMessageId | text NOT NULL | FK → dm_messages.id CASCADE |
 | userId | text NOT NULL | FK → users.id CASCADE |
 | emoji | text NOT NULL | |
+| stickerAssetId | text | SHA-256 when `emoji` is a sticker token; NULL for native emoji |
 | createdAt | integer NOT NULL | |
 
-Indexes: `idx_dm_reactions_dm_message_id` (dmMessageId); `idx_dm_reactions_message_user_emoji` UNIQUE (dmMessageId, userId, emoji). Both writers, the local `reaction_add` and the relayed one (`processReactionAddEvent`, live delivery and the catch-up pull alike), insert with `ON CONFLICT DO NOTHING`; a relayed add that writes nothing is accepted as already held.
+Indexes: `idx_dm_reactions_dm_message_id` (dmMessageId); `idx_dm_reactions_sticker_asset_id` (stickerAssetId); `idx_dm_reactions_message_user_emoji` UNIQUE (dmMessageId, userId, emoji). Both writers, the local `reaction_add` and the relayed one (`processReactionAddEvent`, live delivery and the catch-up pull alike), insert with `ON CONFLICT DO NOTHING`; a relayed add that writes nothing is accepted as already held.
 
 #### Reaction uniqueness (0024)
 The squashed baseline (0000) created both reaction tables without a unique key; only pre-squash installs had one, as an inline `UNIQUE(message_id, user_id, emoji)` / `UNIQUE(dm_message_id, user_id, emoji)` from the old hand-written statements. On installs created after the squash the same user's reaction could be stored several times (#393). Migration `0024_reaction_unique` first deletes the repeats, keeping per key the row with the lowest `created_at` and, of equally early rows, the lowest `rowid` (any one of equal rows would do; the rowid only makes the choice definite), then creates the two named unique indexes. On a pre-squash install there are no repeats, and the named index is created beside the inline constraint (`sqlite_autoindex_*`), which stays.

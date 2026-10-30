@@ -15,8 +15,8 @@ import { errorBody } from '../utils/httpErrors.js';
 import { recordSocketAddress } from './socketAddress.js';
 import {
   DM_MESSAGE_CREATE_RATE_LIMIT,
-  _resetWsDmMessageCreateLimit,
-  consumeWsDmMessageCreate,
+  _resetDmMessageCreateLimit,
+  consumeDmMessageCreate,
 } from '../utils/dmMessageRateLimit.js';
 
 // #420: the WebSocket create, edit and delete paths for DM messages follow
@@ -236,7 +236,7 @@ beforeEach(() => {
   seedDm(LEFT_GROUP, ['bob'], 'bob');
 
   currentUserId = 'alice';
-  _resetWsDmMessageCreateLimit();
+  _resetDmMessageCreateLimit();
   sendToUser.mockClear();
   sendToWs.mockClear();
   queueDmRelay.mockClear();
@@ -469,28 +469,29 @@ describe('every other refusal on the WS DM message paths carries a code', () => 
 describe('the WS dm_message_create rate limit', () => {
   const { max } = DM_MESSAGE_CREATE_RATE_LIMIT;
 
-  async function createFrom(address: string, userId = 'alice', dmChannelId = LIVE): Promise<void> {
+  async function createAs(userId = 'alice', dmChannelId = LIVE): Promise<void> {
     sendToWs.mockClear();
-    await send({ type: 'dm_message_create', dmChannelId, content: 'hi' }, userId, address);
+    await send({ type: 'dm_message_create', dmChannelId, content: 'hi' }, userId);
   }
 
-  it('admits the limit of creates from one address, then refuses with rate_limited and stores nothing', async () => {
-    for (let i = 0; i < max; i += 1) await createFrom('198.51.100.7');
+  it('admits the limit of creates from one account, then refuses with rate_limited and stores nothing', async () => {
+    for (let i = 0; i < max; i += 1) await createAs();
     expect(messagesIn(LIVE)).toHaveLength(max);
     expect(sendToWs).not.toHaveBeenCalled();
 
     sendToUser.mockClear();
     queueDmRelay.mockClear();
-    await createFrom('198.51.100.7');
+    await createAs();
 
     expectOnlyRefusal('rate_limited');
     expect(messagesIn(LIVE)).toHaveLength(max);
     expect(queueDmRelay).not.toHaveBeenCalled();
   });
 
-  it('counts by address, not by user or socket, and counts before the checks', async () => {
-    // Two users on one address share the budget, as on the REST route.
-    for (let i = 0; i < max; i += 1) await createFrom('198.51.100.7', i % 2 === 0 ? 'alice' : 'bob');
+  it('counts by account across addresses, not by client address, and counts before the checks', async () => {
+    for (let i = 0; i < max; i += 1) {
+      await send({ type: 'dm_message_create', dmChannelId: LIVE, content: 'hi' }, 'alice', `198.51.100.${i + 1}`);
+    }
 
     sendToUser.mockClear();
     sendToWs.mockClear();
@@ -498,8 +499,9 @@ describe('the WS dm_message_create rate limit', () => {
     await send({ type: 'dm_message_create', dmChannelId: DEAD_LOCAL, content: 'x' }, 'alice', '198.51.100.7');
     expectOnlyRefusal('rate_limited');
 
-    // Another address has its own budget.
-    await createFrom('203.0.113.9', 'bob');
+    // Bob has his own budget even on the same address.
+    sendToWs.mockClear();
+    await send({ type: 'dm_message_create', dmChannelId: LIVE, content: 'hi' }, 'bob', '198.51.100.7');
     expect(sendToWs).not.toHaveBeenCalled();
     expect(messagesIn(LIVE)).toHaveLength(max + 1);
   });
@@ -510,7 +512,7 @@ describe('the WS dm_message_create rate limit', () => {
       await send({ type: 'dm_message_edit', messageId: id, content: `edit ${i}` }, 'alice', '198.51.100.7');
     }
     sendToWs.mockClear();
-    await createFrom('198.51.100.7');
+    await createAs();
     expect(sendToWs).not.toHaveBeenCalled();
   });
 });
@@ -524,15 +526,15 @@ describe('the WS DM create limiter', () => {
 
   it('opens again when the window that started at the first create ends', () => {
     const start = 1_000_000;
-    for (let i = 0; i < max; i += 1) expect(consumeWsDmMessageCreate('a', start + i)).toBe(true);
-    expect(consumeWsDmMessageCreate('a', start + windowMs - 1)).toBe(false);
-    expect(consumeWsDmMessageCreate('a', start + windowMs)).toBe(true);
+    for (let i = 0; i < max; i += 1) expect(consumeDmMessageCreate('a', start + i)).toBe(true);
+    expect(consumeDmMessageCreate('a', start + windowMs - 1)).toBe(false);
+    expect(consumeDmMessageCreate('a', start + windowMs)).toBe(true);
   });
 
   it('admits everything when DISABLE_RATE_LIMITS is set', () => {
     vi.stubEnv('DISABLE_RATE_LIMITS', '1');
     try {
-      for (let i = 0; i < max * 3; i += 1) expect(consumeWsDmMessageCreate('a', 1)).toBe(true);
+      for (let i = 0; i < max * 3; i += 1) expect(consumeDmMessageCreate('a', 1)).toBe(true);
     } finally {
       vi.unstubAllEnvs();
     }
