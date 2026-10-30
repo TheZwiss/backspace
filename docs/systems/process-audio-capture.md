@@ -167,3 +167,21 @@ Limits, stated rather than hidden: a window on top of the shared one is inside
 the crop (as it is in Discord's), the crop follows moves and resizes but a
 window dragged to another display ends the track instead of showing the wrong
 monitor, and a minimized window freezes the last frame.
+
+### End-to-end, two clients (2026-10-30)
+
+Alice on the Windows desktop app shared a Notepad window while Bob watched from
+Chrome in the same voice channel:
+
+- the published video track was `SCREEN_SHARE`, VP9, 856×720 (the crop of a
+  600×500 window fitted to 720p);
+- `SCREEN_SHARE_AUDIO` was published alongside it once System Audio was on —
+  the share had gone out silent in the first run only because the persisted
+  `shareAudio` preference was still `false` from an earlier session;
+- Bob's `<video>` played the share: `currentTime` advanced 8.87 s → 10.37 s
+  while `paused` stayed false;
+- yellow pixels around the shared window's screen rectangle: 39 before the
+  capture and 39 during it.
+
+The setup screen's own polling was exercised by the same run: the window list
+was enumerated when the screen opened and refreshed while it stayed open.
