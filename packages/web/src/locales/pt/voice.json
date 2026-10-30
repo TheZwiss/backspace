@@ -133,6 +133,7 @@
     "remoteParticipant": "Remoto"
   },
   "screenPicker": {
+    "streamPaused": "Transmissão pausada",
     "title": "Compartilhar sua tela",
     "tabs": {
       "screens": "Telas",

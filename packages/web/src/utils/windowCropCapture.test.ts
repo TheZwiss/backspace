@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCropRegion, computeDestinationSize, isWindowSourceId } from './windowCropCapture';
+import { computeCropRegion, computeDestinationSize, isCaptureActive, isWindowSourceId } from './windowCropCapture';
 
 describe('isWindowSourceId', () => {
   it('accepts window ids and rejects screens', () => {
@@ -45,5 +45,18 @@ describe('computeDestinationSize', () => {
       .toEqual({ width: 1080, height: 1080 });
     expect(computeDestinationSize({ x: 0, y: 0, width: 1600, height: 900 }, { width: 1280, height: 720 }))
       .toEqual({ width: 1280, height: 720 });
+  });
+});
+describe('isCaptureActive', () => {
+  it('shows the window while it is the focused one', () => {
+    expect(isCaptureActive({ foreground: true, minimized: false })).toBe(true);
+  });
+
+  it('pauses when another window took focus', () => {
+    expect(isCaptureActive({ foreground: false, minimized: false })).toBe(false);
+  });
+
+  it('pauses when the window is minimized', () => {
+    expect(isCaptureActive({ foreground: true, minimized: true })).toBe(false);
   });
 });

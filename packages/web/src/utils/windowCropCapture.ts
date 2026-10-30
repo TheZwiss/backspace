@@ -1,4 +1,5 @@
 import { getElectronAPI } from '../platform/platform';
+import i18n from '../i18n';
 
 /**
  * Borderless window sharing on Windows.
@@ -28,6 +29,22 @@ export interface WindowCaptureTarget {
   monitor: { width: number; height: number };
   crop: { x: number; y: number; width: number; height: number };
   minimized: boolean;
+  /** True while the shared window is the one the user is working in. */
+  foreground: boolean;
+}
+
+/**
+ * Whether viewers should see the window's pixels.
+ *
+ * The capture is the display behind the window, so a window that lost focus is
+ * the one case where drawing it would show whatever is on top — the app the
+ * user switched to. While the share is live, that frame is replaced by a paused
+ * card; the audio is a separate track and keeps flowing. Before the share is
+ * published (the setup screen) this is ignored: the app is focused then, so
+ * every preview would be the card instead of the window the user is choosing.
+ */
+export function isCaptureActive(target: Pick<WindowCaptureTarget, 'foreground' | 'minimized'>): boolean {
+  return target.foreground && !target.minimized;
 }
 
 export interface CropRect {
@@ -99,6 +116,15 @@ export function computeDestinationSize(
 /** A cropped-window track, which carries its own resize hook. */
 export interface WindowCropTrack extends MediaStreamTrack {
   setDestination?: (size: { width: number; height: number } | undefined) => void;
+  setLive?: (live: boolean) => void;
+}
+
+/** Tell a cropped-window track that its share is published, if it is one. */
+export function setWindowCropLive(track: MediaStreamTrack, live: boolean): boolean {
+  const crop = track as WindowCropTrack;
+  if (typeof crop.setLive !== 'function') return false;
+  crop.setLive(live);
+  return true;
 }
 
 /** Resize a cropped-window track, if it is one. Returns whether it was. */
@@ -112,8 +138,12 @@ export function setWindowCropResolution(
   return true;
 }
 
-/** How often the window's place on the display is re-read while it is shared. */
-const GEOMETRY_POLL_MS = 1_000;
+/**
+ * How often the window's place on the display and its focus are re-read while
+ * it is shared. Focus is what decides between the window and the paused card,
+ * so this is short enough to feel like a reaction to clicking away.
+ */
+const GEOMETRY_POLL_MS = 500;
 /** A window that cannot produce a first frame in this time is not worth waiting for. */
 const FIRST_FRAME_TIMEOUT_MS = 5_000;
 
@@ -145,6 +175,7 @@ export async function openWindowCropTrack(
 
   let current = target;
   let destination = options.destination;
+  let live = false;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let frameRequest: number | null = null;
@@ -173,13 +204,42 @@ export async function openWindowCropTrack(
     if (canvas.height !== size.height) canvas.height = size.height;
   };
 
+  /**
+   * What viewers see while the shared window is not the focused one: a dark card
+   * with a pause mark and the localized label, drawn on the same canvas so the
+   * published track carries it. The audio track is untouched.
+   */
+  const drawPaused = (): void => {
+    const width = canvas.width;
+    const height = canvas.height;
+    if (!width || !height) return;
+    context.fillStyle = '#13131a';
+    context.fillRect(0, 0, width, height);
+    const icon = Math.max(24, Math.round(height * 0.16));
+    const barWidth = Math.max(6, Math.round(icon * 0.22));
+    const gap = Math.max(6, Math.round(icon * 0.2));
+    const iconWidth = barWidth * 2 + gap;
+    const iconX = Math.round((width - iconWidth) / 2);
+    const iconY = Math.round(height * 0.42 - icon / 2);
+    context.fillStyle = '#7c6cf6';
+    context.fillRect(iconX, iconY, barWidth, icon);
+    context.fillRect(iconX + barWidth + gap, iconY, barWidth, icon);
+    const fontSize = Math.max(12, Math.round(height * 0.05));
+    context.fillStyle = '#c9c9d4';
+    context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    context.fillText(i18n.t('voice:screenPicker.streamPaused'), width / 2, iconY + icon + Math.round(fontSize * 0.8));
+  };
+
   const draw = (): void => {
     if (stopped) return;
+    if (canvas.width === 0 || canvas.height === 0) fitCanvas();
+    if (live && !isCaptureActive(current)) { drawPaused(); return; }
     if (current.minimized) return;
     const frame = { width: video.videoWidth, height: video.videoHeight };
     if (!frame.width || !frame.height) return;
     const region = computeCropRegion(current.crop, current.monitor, frame);
-    if (canvas.width === 0 || canvas.height === 0) fitCanvas();
     context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
   };
 
@@ -232,9 +292,12 @@ export async function openWindowCropTrack(
       }
       const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
         || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
-        || next.minimized !== current.minimized;
+        || next.minimized !== current.minimized || next.foreground !== current.foreground;
       current = next;
-      if (moved) fitCanvas();
+      if (moved) {
+        fitCanvas();
+        draw();
+      }
     }).catch(() => { /* a failed poll keeps the last known rectangle */ });
   }, GEOMETRY_POLL_MS);
 
@@ -244,6 +307,11 @@ export async function openWindowCropTrack(
   (track as WindowCropTrack).setDestination = (size) => {
     destination = size;
     fitCanvas();
+  };
+  // Published: from here on a window that loses focus shows the paused card.
+  (track as WindowCropTrack).setLive = (value) => {
+    live = value;
+    if (value) draw();
   };
 
   const stopTrack = track.stop.bind(track);

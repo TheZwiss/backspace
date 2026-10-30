@@ -119,14 +119,20 @@ int wmain(int argc, wchar_t** argv) {
         MONITORINFO info{};
         info.cbSize = sizeof(info);
         if (!GetMonitorInfoW(monitor, &info)) return 3;
+        // Whether the window is the one the user is working in. A window that is
+        // not focused is where the share shows a paused card instead of the
+        // pixels on top of it (the capture is of the display, see
+        // windowCropCapture.ts).
+        const bool foreground = GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
         std::fprintf(stdout,
-            "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s}\n",
+            "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s}\n",
             static_cast<long>(frame.left), static_cast<long>(frame.top),
             static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
             static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
             static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
             static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
-            IsIconic(hwnd) ? "true" : "false");
+            IsIconic(hwnd) ? "true" : "false",
+            foreground ? "true" : "false");
         return 0;
     }
     if (argc != 3) return 2;

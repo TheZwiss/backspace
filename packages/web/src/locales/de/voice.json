@@ -132,6 +132,7 @@
     "remoteParticipant": "Gegenstelle"
   },
   "screenPicker": {
+    "streamPaused": "Übertragung pausiert",
     "title": "Bildschirm teilen",
     "tabs": {
       "screens": "Bildschirme",

@@ -131,6 +131,7 @@
     "remoteParticipant": "远端参与者"
   },
   "screenPicker": {
+    "streamPaused": "直播已暂停",
     "title": "共享屏幕",
     "tabs": {
       "screens": "屏幕",

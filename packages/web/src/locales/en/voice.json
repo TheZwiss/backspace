@@ -132,6 +132,7 @@
     "remoteParticipant": "Remote"
   },
   "screenPicker": {
+    "streamPaused": "Stream paused",
     "title": "Share Your Screen",
     "tabs": {
       "screens": "Screens",

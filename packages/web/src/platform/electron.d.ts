@@ -169,6 +169,8 @@ interface BackspaceElectronAPI {
     monitor: { width: number; height: number };
     crop: { x: number; y: number; width: number; height: number };
     minimized: boolean;
+    /** False while another window is focused: the share shows a paused card. */
+    foreground: boolean;
   } | null>;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the

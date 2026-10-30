@@ -15,6 +15,7 @@ import {
   canCropCaptureWindow,
   isWindowSourceId,
   openWindowCropTrack,
+  setWindowCropLive,
   setWindowCropResolution,
   type WindowCaptureTarget,
 } from './windowCropCapture';
@@ -573,6 +574,9 @@ export async function publishScreenShare(
       } : {}),
     });
     videoPublished = true;
+    // From this moment the share is what viewers see, so a cropped window that
+    // loses focus shows the paused card instead of the window on top of it.
+    setWindowCropLive(videoTrack, true);
     if (audioToPublish) await publishScreenShareAudioTrack(room, audioToPublish);
 
     _requestedPublishedScreenShareCodec = opts.publish.videoCodec;

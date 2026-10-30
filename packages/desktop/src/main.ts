@@ -708,6 +708,8 @@ interface WindowGeometry {
   window: [number, number, number, number];
   monitor: [number, number, number, number];
   minimized: boolean;
+  /** Whether this window is the one the user is working in. */
+  foreground: boolean;
 }
 
 /**
@@ -981,6 +983,7 @@ function registerIpcHandlers(): void {
       monitor: { width: mw, height: mh },
       crop: { x: left - mx, y: top - my, width: right - left, height: bottom - top },
       minimized: geometry.minimized === true,
+      foreground: geometry.foreground === true,
     };
   });
   ipcMain.handle('get-screen-share-picker-mode', (event) => {

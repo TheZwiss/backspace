@@ -163,6 +163,13 @@ while a 900×620 Notepad was shared:
 | Window capture (WGC) | 694 |
 | Display capture cropped to the window | 203 |
 
+When the shared window is not the foreground window, the renderer draws a paused
+card (pause mark and the localized label) instead of the crop, and keeps the
+audio track publishing. The `geometry` line carries `foreground` for this
+(`GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT)`), polled every 500 ms
+while a share is live; before publishing, the crop is shown regardless, because
+the setup screen itself holds focus.
+
 Limits, stated rather than hidden: a window on top of the shared one is inside
 the crop (as it is in Discord's), the crop follows moves and resizes but a
 window dragged to another display ends the track instead of showing the wrong
