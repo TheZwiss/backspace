@@ -195,7 +195,10 @@ export function ScreenShareSetup() {
         return;
       }
       replaceStaged(stream);
-      setStagedShareAudio(shareAudioAtStage);
+      // What the capture actually carries, not what was asked for: a share whose
+      // system audio could not be captured is staged silent (with a warning),
+      // and the ready bar must not claim otherwise.
+      setStagedShareAudio(shareAudioAtStage && stream.getAudioTracks().some((track) => track.readyState === 'live'));
     } catch (err) {
       if (generation !== stageGenerationRef.current) return;
       replaceStaged(null);

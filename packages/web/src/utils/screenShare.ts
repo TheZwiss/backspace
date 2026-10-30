@@ -380,11 +380,34 @@ export async function stageScreenCapture(
   try {
     // Where the desktop app can build the system audio without Backspace's own
     // playback, that track stands in for the loopback one.
-    const ownFree = config.shareAudio ? await acquireAppExcludedSystemAudio() : null;
+    let ownFree: MediaStreamTrack | null = null;
+    let withAudio = config.shareAudio;
+    if (config.shareAudio) {
+      try {
+        ownFree = await acquireAppExcludedSystemAudio();
+      } catch (err) {
+        // The process-audio helper could not start (binary missing, activation
+        // refused). That costs the audio, not the share: the video goes out
+        // silent and the System Audio toggle can retry, which is what the
+        // warning says. Asking Chromium for loopback instead would put
+        // Backspace's own call into the stream on Windows 10, so this falls
+        // back to no audio rather than to the wrong audio.
+        if (!(err instanceof Error) || err.message !== 'process-capture-failed') throw err;
+        withAudio = false;
+        useUIStore.getState().addToast(
+          i18n.t('voice:streamSettings.systemAudioAddFailed'),
+          'warning',
+          8000,
+        );
+      }
+    }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia(
-        buildCaptureConstraints(ownFree || cropTarget ? { ...config, shareAudio: false } : config, opts),
+        buildCaptureConstraints(
+          ownFree || cropTarget ? { ...config, shareAudio: false } : { ...config, shareAudio: withAudio },
+          opts,
+        ),
       );
     } catch (err) {
       ownFree?.stop();
