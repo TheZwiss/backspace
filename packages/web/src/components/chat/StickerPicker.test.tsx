@@ -62,9 +62,9 @@ describe('server and private sticker collections', () => {
       privatePacks: [privatePack],
       favorites: [{ ...sticker, id: sticker.id, createdAt: 1 }],
       spaces: [
-        { spaceId: 'space-1', name: 'Server One', canCreate: false, canManage: false, pack: serverPack },
-        { spaceId: 'space-2', name: 'Server Two', canCreate: false, canManage: true, pack: secondServerPack },
-        { spaceId: 'space-3', name: 'Empty Server', canCreate: true, canManage: true, pack: null },
+        { spaceId: 'space-1', name: 'Server One', icon: null, avatarColor: 'rose', canCreate: false, canManage: false, pack: serverPack },
+        { spaceId: 'space-2', name: 'Server Two', icon: null, avatarColor: 'sky', canCreate: false, canManage: true, pack: secondServerPack },
+        { spaceId: 'space-3', name: 'Empty Server', icon: null, avatarColor: 'teal', canCreate: true, canManage: true, pack: null },
       ],
     });
 
@@ -90,7 +90,9 @@ describe('server and private sticker collections', () => {
     expect(onSelect).toHaveBeenCalledWith(second.token);
 
     fireEvent.click(within(serverRail).getByRole('button', { name: 'Server Two' }));
-    expect(within(serverRail).getByRole('button', { name: 'Server Two' })).toHaveAttribute('aria-current', 'page');
+    const serverTwo = within(serverRail).getByRole('button', { name: 'Server Two' });
+    expect(serverTwo).toHaveAttribute('aria-current', 'page');
+    expect(serverTwo.getAttribute('style')).toContain('linear-gradient');
     fireEvent.click(screen.getByRole('button', { name: 'Second Server Dog' }));
     expect(onSelect).toHaveBeenLastCalledWith(second.token);
 

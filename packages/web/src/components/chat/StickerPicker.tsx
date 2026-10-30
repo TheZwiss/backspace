@@ -15,6 +15,7 @@ import { StickerRenameForm } from './StickerRenameForm';
 import { StickerGrid } from './StickerGrid';
 import { StickerStoreModal } from './StickerStoreModal';
 import { describeError } from '../../i18n/errors';
+import { getSpaceGradient } from '../../utils/gradients';
 import './stickers.css';
 
 /** Entries whose name holds the query, ignoring case. A blank query keeps every entry. */
@@ -207,6 +208,9 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
   const activeSpace = activeTab.startsWith('space:')
     ? library?.spaces.find((space) => space.spaceId === activeTab.slice(6)) ?? null
     : null;
+  const activeSpaceGradient = activeSpace
+    ? getSpaceGradient(activeSpace.spaceId, activeSpace.name, activeSpace.avatarColor)
+    : null;
 
   const startUpload = () => {
     setError('');
@@ -233,7 +237,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
   return (
     <div
       ref={rootRef}
-      className={`relative flex flex-col min-h-0 pl-10 text-txt-primary ${mobile ? 'w-full flex-1' : 'w-[352px] max-w-[calc(100*var(--app-vw)-24px)] h-[456px]'}`}
+      className={`relative flex flex-col min-h-0 pl-12 text-txt-primary ${mobile ? 'w-full flex-1' : 'w-[352px] max-w-[calc(100*var(--app-vw)-24px)] h-[456px]'}`}
       onKeyDown={event => {
         // Keys stay in the picker, so Enter never reaches the composer. Escape
         // belongs to the picker's host (pickerEscape.tsx), which gives it to
@@ -241,23 +245,43 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
         if (event.key !== 'Escape') event.stopPropagation();
       }}
     >
-      <nav aria-label={t('stickers.servers')} className="absolute bottom-12 left-1 top-11 z-10 flex w-8 flex-col gap-1 overflow-y-auto scrollbar-none">
+      <nav
+        aria-label={t('stickers.servers')}
+        className="absolute bottom-12 left-0 top-0 z-10 flex w-11 flex-col gap-1.5 overflow-y-auto scrollbar-none border-r border-white/[0.06] bg-surface-base/35 px-1.5 py-3"
+      >
         {library?.spaces.map((space) => {
           const selected = activeTab === `space:${space.spaceId}`;
+          const gradient = getSpaceGradient(space.spaceId, space.name, space.avatarColor);
+          const icon = space.icon
+            ? (space.icon.startsWith('http') || space.icon.startsWith('/') ? space.icon : `/api/uploads/${space.icon}`)
+            : null;
           return (
-          <button
-            key={space.spaceId}
-            type="button"
-            onClick={() => setActiveTab(`space:${space.spaceId}`)}
-            aria-label={space.name}
-            title={space.name}
-            aria-current={selected ? 'page' : undefined}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold ${selected ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
-          >
-            {space.icon
-              ? <img src={space.icon} alt="" className="h-6 w-6 object-contain" />
-              : <span aria-hidden="true">{space.name.slice(0, 2).toUpperCase()}</span>}
-          </button>
+            <div key={space.spaceId} className="group relative flex shrink-0 justify-center">
+              <span
+                aria-hidden="true"
+                className={`absolute -left-1 top-1/2 w-1 -translate-y-1/2 rounded-full bg-txt-primary transition-all duration-150 ${
+                  selected ? 'h-7 opacity-100' : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-70'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setActiveTab(`space:${space.spaceId}`)}
+                aria-label={space.name}
+                title={space.name}
+                aria-current={selected ? 'page' : undefined}
+                className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-[11px] font-bold text-white shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
+                  selected
+                    ? 'rounded-[11px] ring-1 ring-white/30'
+                    : 'rounded-[16px] opacity-80 hover:-translate-y-0.5 hover:rounded-[11px] hover:opacity-100'
+                }`}
+                style={icon ? undefined : { background: gradient.gradient }}
+              >
+                {icon
+                  ? <img src={icon} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  : <span aria-hidden="true">{space.name.slice(0, 2).toUpperCase()}</span>}
+                <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-b from-white/10 to-transparent" />
+              </button>
+            </div>
           );
         })}
       </nav>
@@ -408,12 +432,62 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               )}
             </>
           ) : activeTab === 'favorites' ? (
-            <TokenStickerGrid items={library?.favorites ?? []} onSelect={onSelect} />
+            <>
+              <div className="flex shrink-0 items-center gap-2.5 px-4 pb-2 pt-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-[11px] bg-accent-amber/15 text-base text-accent-amber">★</span>
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold">{t('stickers.favoritesTitle')}</h3>
+                  <p className="text-[11px] text-txt-tertiary">{t('stickers.stickersCount', { count: library?.favorites.length ?? 0 })}</p>
+                </div>
+              </div>
+              <TokenStickerGrid items={library?.favorites ?? []} onSelect={onSelect} />
+            </>
           ) : currentPackDetail ? (
-            <PackStickerGrid pack={currentPackDetail} onSelect={onSelect} />
+            <>
+              <div className="flex shrink-0 items-center gap-2.5 px-4 pb-2 pt-3">
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[11px] text-[10px] font-bold text-white shadow-sm"
+                  style={activeSpace?.icon ? undefined : { background: activeSpaceGradient?.gradient }}
+                >
+                  {activeSpace?.icon
+                    ? (
+                      <img
+                        src={activeSpace.icon.startsWith('http') || activeSpace.icon.startsWith('/') ? activeSpace.icon : `/api/uploads/${activeSpace.icon}`}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    )
+                    : (activeSpace?.name.slice(0, 2).toUpperCase() ?? '::')}
+                </span>
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-semibold">{currentPackDetail.name}</h3>
+                  <p className="truncate text-[11px] text-txt-tertiary">
+                    {activeSpace?.name ?? t('stickers.packs')} · {t('stickers.stickersCount', { count: currentPackDetail.items.length })}
+                  </p>
+                </div>
+              </div>
+              <PackStickerGrid pack={currentPackDetail} onSelect={onSelect} />
+            </>
           ) : activeSpace ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-sm font-medium text-txt-secondary">{t('stickers.serverEmpty')}</p>
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
+              <span
+                className="flex h-14 w-14 items-center justify-center rounded-[18px] text-base font-bold text-white shadow-lg"
+                style={activeSpace.icon ? undefined : { background: activeSpaceGradient?.gradient }}
+              >
+                {activeSpace.icon
+                  ? (
+                    <img
+                      src={activeSpace.icon.startsWith('http') || activeSpace.icon.startsWith('/') ? activeSpace.icon : `/api/uploads/${activeSpace.icon}`}
+                      alt=""
+                      className="h-full w-full rounded-[18px] object-cover"
+                    />
+                  )
+                  : activeSpace.name.slice(0, 2).toUpperCase()}
+              </span>
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-txt-primary">{activeSpace.name}</h3>
+                <p className="text-sm font-medium text-txt-secondary">{t('stickers.serverEmpty')}</p>
+              </div>
               <p className="max-w-56 text-xs leading-5 text-txt-tertiary">{t('stickers.serverEmptyHint')}</p>
             </div>
           ) : (
@@ -439,7 +513,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 aria-label={t('stickers.title')}
                 className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
                   activeTab === 'personal'
-                    ? 'bg-interactive-active text-accent-primary shadow-sm'
+                    ? 'bg-white/[0.08] text-accent-primary shadow-sm ring-1 ring-inset ring-accent-primary/40'
                     : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary'
                 }`}
               >
@@ -456,7 +530,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   aria-label={t('stickers.favoritesTitle')}
                   className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-sm transition-colors ${
                     activeTab === 'favorites'
-                      ? 'bg-interactive-active text-accent-primary shadow-sm'
+                      ? 'bg-accent-amber/10 text-accent-amber shadow-sm ring-1 ring-inset ring-accent-amber/30'
                       : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary'
                   }`}
                 >
@@ -473,7 +547,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   aria-label={pack.name}
                   className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold transition-colors ${
                     activeTab === `user:${pack.id}`
-                      ? 'bg-interactive-active ring-1 ring-inset ring-accent-primary text-accent-primary'
+                      ? 'bg-white/[0.08] ring-1 ring-inset ring-accent-primary/50 text-accent-primary'
                       : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
                   }`}
                 >
@@ -492,7 +566,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   aria-label={space.pack.name}
                   className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[11px] font-bold transition-colors ${
                     activeTab === `space:${space.spaceId}`
-                      ? 'bg-interactive-active ring-1 ring-inset ring-accent-primary text-accent-primary'
+                      ? 'bg-white/[0.08] ring-1 ring-inset ring-accent-primary/50 text-accent-primary'
                       : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
                   }`}
                 >
