@@ -111,3 +111,20 @@ describe('easeCrop', () => {
     expect(easeCrop({ x: 0, y: 0, width: 100, height: 100 }, to, 0.5)).toEqual(to);
   });
 });
+describe('applyWindowGeometry while minimized', () => {
+  const target = {
+    screenSourceId: 'screen:0:0',
+    monitor: { x: 0, y: 0, width: 1920, height: 1080 },
+    crop: { x: 100, y: 100, width: 800, height: 600 },
+    minimized: false,
+    foreground: true,
+  };
+
+  it('keeps the share and pauses, even when the monitor is reported differently', () => {
+    const next = applyWindowGeometry(target, { window: [10, 10, 10, 10], monitor: [1920, 0, 1920, 1080], minimized: true, foreground: false });
+    expect(next).not.toBeNull();
+    expect(next?.minimized).toBe(true);
+    expect(next?.foreground).toBe(false);
+    expect(next?.crop).toEqual(target.crop);
+  });
+});

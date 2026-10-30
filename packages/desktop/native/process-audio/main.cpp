@@ -92,6 +92,16 @@ static bool printGeometry(HWND hwnd) {
         && !GetWindowRect(hwnd, &frame)) {
         return false;
     }
+    // A minimized window has no on-screen rectangle: its DWM bounds are empty
+    // or parked far off-screen. Report the rectangle it will be restored to, so
+    // minimizing pauses the share (the renderer's card) instead of ending it —
+    // only a closed window ends it.
+    const bool minimized = IsIconic(hwnd) != FALSE;
+    if (minimized) {
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(hwnd, &placement)) frame = placement.rcNormalPosition;
+    }
     HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
@@ -107,7 +117,7 @@ static bool printGeometry(HWND hwnd) {
         static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
         static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
         static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
-        IsIconic(hwnd) ? "true" : "false",
+        minimized ? "true" : "false",
         foreground ? "true" : "false");
     std::fflush(stdout);
     return true;

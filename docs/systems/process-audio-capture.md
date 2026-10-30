@@ -173,7 +173,7 @@ the setup screen itself holds focus.
 Limits, stated rather than hidden: a window on top of the shared one is inside
 the crop (as it is in Discord's), the crop follows moves and resizes but a
 window dragged to another display ends the track instead of showing the wrong
-monitor, and a minimized window freezes the last frame.
+monitor, and a minimized window shows the paused card and keeps the share alive — the helper reports the rectangle it will be restored to, and only a closed window ends the track (the helper exits).
 
 ### End-to-end, two clients (2026-10-30)
 

@@ -52,6 +52,13 @@ export function applyWindowGeometry(current: WindowCaptureTarget, snapshot: unkn
   const geometry = snapshot as WindowGeometrySnapshot;
   if (!Array.isArray(geometry.window) || geometry.window.length !== 4) return null;
   if (!Array.isArray(geometry.monitor) || geometry.monitor.length !== 4) return null;
+  // A minimized window keeps the share alive: it shows the paused card until it
+  // is restored, and only closing it ends the track (the helper stops, the
+  // renderer gets 'ended'). Its monitor can also be reported differently while
+  // it has no screen presence, so the last rectangle is kept as it is.
+  if (geometry.minimized === true) {
+    return { ...current, minimized: true, foreground: false };
+  }
   const [monitorX, monitorY, monitorWidth, monitorHeight] = geometry.monitor;
   if (monitorX !== current.monitor.x || monitorY !== current.monitor.y
     || monitorWidth !== current.monitor.width || monitorHeight !== current.monitor.height) {
@@ -66,7 +73,7 @@ export function applyWindowGeometry(current: WindowCaptureTarget, snapshot: unkn
   return {
     ...current,
     crop: { x: left - monitorX, y: top - monitorY, width: right - left, height: bottom - top },
-    minimized: geometry.minimized === true,
+    minimized: false,
     foreground: geometry.foreground === true,
   };
 }
