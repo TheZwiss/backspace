@@ -166,12 +166,17 @@ interface BackspaceElectronAPI {
    */
   getWindowCaptureTarget?: (sourceId: string) => Promise<{
     screenSourceId: string;
-    monitor: { width: number; height: number };
+    monitor: { x: number; y: number; width: number; height: number };
     crop: { x: number; y: number; width: number; height: number };
     minimized: boolean;
     /** False while another window is focused: the share shows a paused card. */
     foreground: boolean;
   } | null>;
+  /** Follow a shared window's rectangle while it is captured (one helper process). */
+  startWindowGeometry?: (sourceId: string) => Promise<void>;
+  stopWindowGeometry?: () => Promise<void>;
+  /** A snapshot every 100 ms, or null when the window is gone. */
+  onWindowGeometry?: (callback: (geometry: unknown | null) => void) => () => void;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the
    * renderer shows a "choose" card that triggers the portal on click instead

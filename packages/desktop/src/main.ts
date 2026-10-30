@@ -16,7 +16,7 @@ import {
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { pathToFileURL } from 'url';
 import {
   startActivityDetection,
@@ -490,14 +490,14 @@ function createWindow(): void {
   // download, and the page that keeps running may be sharing. `did-navigate` fires for a
   // committed cross-document main-frame load; `did-fail-load` for the main frame is the error
   // page that replaced it (-3, ERR_ABORTED, is a cancelled navigation that replaced nothing).
-  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
-  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); });
+  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); });
+  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); }
+    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); }
   });
 
   mainWindow.on('closed', () => {
-    systemAudio.stop(); windowsProcessAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
     setMainWindow(null);
     mainWindow = null;
     // Clear recovery state so macOS dock-activate (which calls createWindow again)
@@ -640,6 +640,61 @@ const windowsProcessAudio = new WindowsProcessAudio(
     } catch { /* Logging must not interrupt capture cleanup. */ }
   },
 );
+/**
+ * One long-lived helper process per shared window, printing the window's
+ * rectangle every 100 ms. The renderer used to spawn the helper per poll, which
+ * is fine at 1 Hz and too expensive to run fast enough for a window being
+ * dragged; this keeps the crop following smoothly at one process.
+ */
+let geometryWatcher: ReturnType<typeof spawn> | null = null;
+
+function stopWindowGeometryWatch(): void {
+  const child = geometryWatcher;
+  geometryWatcher = null;
+  child?.kill();
+}
+
+function startWindowGeometryWatch(sourceId: string): void {
+  stopWindowGeometryWatch();
+  if (process.platform !== 'win32' || !fs.existsSync(windowsAudioExecutable)) return;
+  const match = /^window:(\d+):\d+$/.exec(sourceId);
+  if (!match) return;
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(windowsAudioExecutable, ['geometry-watch', match[1]!, '100'], { windowsHide: true });
+  } catch (err) {
+    console.warn('[WindowGeometry] could not start the watch:', err);
+    return;
+  }
+  geometryWatcher = child;
+  let buffered = '';
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => {
+    buffered += chunk;
+    for (;;) {
+      const newline = buffered.indexOf('\n');
+      if (newline < 0) break;
+      const line = buffered.slice(0, newline).trim();
+      buffered = buffered.slice(newline + 1);
+      if (!line) continue;
+      try {
+        mainWindow?.webContents.send('window-geometry', JSON.parse(line) as WindowGeometry);
+      } catch {
+        // A torn line is dropped; the next one is a complete snapshot.
+      }
+    }
+  });
+  child.on('exit', () => {
+    if (geometryWatcher !== child) return;
+    geometryWatcher = null;
+    mainWindow?.webContents.send('window-geometry-ended');
+  });
+  child.on('error', (err: Error) => {
+    console.warn('[WindowGeometry] watch failed:', err.message);
+    if (geometryWatcher === child) geometryWatcher = null;
+  });
+}
+
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;
 
@@ -980,11 +1035,21 @@ function registerIpcHandlers(): void {
     if (right - left < 16 || bottom - top < 16) return null;
     return {
       screenSourceId: source.id,
-      monitor: { width: mw, height: mh },
+      monitor: { x: mx, y: my, width: mw, height: mh },
       crop: { x: left - mx, y: top - my, width: right - left, height: bottom - top },
       minimized: geometry.minimized === true,
       foreground: geometry.foreground === true,
     };
+  });
+  // One helper process follows the shared window and streams its rectangle
+  // here (startWindowGeometryWatch); the renderer gets a line every 100 ms and
+  // an 'ended' event when the window is gone.
+  ipcMain.handle('start-window-geometry', (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    if (typeof sourceId === 'string') startWindowGeometryWatch(sourceId);
+  });
+  ipcMain.handle('stop-window-geometry', (event) => {
+    if (event.sender === mainWindow?.webContents) stopWindowGeometryWatch();
   });
   ipcMain.handle('get-screen-share-picker-mode', (event) => {
     if (event.sender !== mainWindow?.webContents) return 'app';
@@ -1021,7 +1086,7 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle('system-audio-stop', (event) => {
     if (event.sender !== mainWindow?.webContents) return;
-    systemAudio.stop(); windowsProcessAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
   });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
@@ -1834,7 +1899,7 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     localTextVoice.release();
-    systemAudio.stop(); windowsProcessAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
     isQuitting = true;
     stopActivityDetection();
     stopRichPresenceIpcServer();

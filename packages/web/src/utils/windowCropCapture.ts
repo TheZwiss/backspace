@@ -26,11 +26,65 @@ import i18n from '../i18n';
 /** Where the window is, in physical display pixels (the helper's units). */
 export interface WindowCaptureTarget {
   screenSourceId: string;
-  monitor: { width: number; height: number };
+  /** The display being captured, in physical pixels. */
+  monitor: { x: number; y: number; width: number; height: number };
   crop: { x: number; y: number; width: number; height: number };
   minimized: boolean;
   /** True while the shared window is the one the user is working in. */
   foreground: boolean;
+}
+
+/** One line of `geometry-watch`: physical pixels, the helper's own units. */
+interface WindowGeometrySnapshot {
+  window: [number, number, number, number];
+  monitor: [number, number, number, number];
+  minimized: boolean;
+  foreground: boolean;
+}
+
+/**
+ * Fold a geometry snapshot into the capture target, or null when the window can
+ * no longer be shown from this capture (it left the display that is being
+ * captured, or is too small to be worth a frame).
+ */
+export function applyWindowGeometry(current: WindowCaptureTarget, snapshot: unknown): WindowCaptureTarget | null {
+  if (!snapshot || typeof snapshot !== 'object') return null;
+  const geometry = snapshot as WindowGeometrySnapshot;
+  if (!Array.isArray(geometry.window) || geometry.window.length !== 4) return null;
+  if (!Array.isArray(geometry.monitor) || geometry.monitor.length !== 4) return null;
+  const [monitorX, monitorY, monitorWidth, monitorHeight] = geometry.monitor;
+  if (monitorX !== current.monitor.x || monitorY !== current.monitor.y
+    || monitorWidth !== current.monitor.width || monitorHeight !== current.monitor.height) {
+    return null;
+  }
+  const [windowX, windowY, windowWidth, windowHeight] = geometry.window;
+  const left = Math.max(monitorX, windowX);
+  const top = Math.max(monitorY, windowY);
+  const right = Math.min(monitorX + monitorWidth, windowX + windowWidth);
+  const bottom = Math.min(monitorY + monitorHeight, windowY + windowHeight);
+  if (right - left < 16 || bottom - top < 16) return null;
+  return {
+    ...current,
+    crop: { x: left - monitorX, y: top - monitorY, width: right - left, height: bottom - top },
+    minimized: geometry.minimized === true,
+    foreground: geometry.foreground === true,
+  };
+}
+
+/**
+ * One step of exponential smoothing towards the target rectangle, so a window
+ * being dragged does not make the crop jump between 100 ms snapshots. A jump
+ * too large to be a drag (a restore, a display change) snaps instead of sliding
+ * through the pixels in between.
+ */
+export function easeCrop(from: CropRect, to: CropRect, factor = 0.35): CropRect {
+  if (Math.abs(to.x - from.x) + Math.abs(to.y - from.y) > 240) return to;
+  return {
+    x: from.x + (to.x - from.x) * factor,
+    y: from.y + (to.y - from.y) * factor,
+    width: from.width + (to.width - from.width) * factor,
+    height: from.height + (to.height - from.height) * factor,
+  };
 }
 
 /**
@@ -176,6 +230,9 @@ export async function openWindowCropTrack(
   let current = target;
   let destination = options.destination;
   let live = false;
+  /** The rectangle actually drawn, chased towards the target so moves look smooth. */
+  let drawnRegion: CropRect | null = null;
+  let stopGeometry: (() => void) | null = null;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let frameRequest: number | null = null;
@@ -192,6 +249,8 @@ export async function openWindowCropTrack(
     }
     video.srcObject = null;
     source.stop();
+    stopGeometry?.();
+    void api?.stopWindowGeometry?.().catch(() => undefined);
     output?.getTracks().forEach((track) => track.stop());
   };
 
@@ -239,8 +298,13 @@ export async function openWindowCropTrack(
     if (current.minimized) return;
     const frame = { width: video.videoWidth, height: video.videoHeight };
     if (!frame.width || !frame.height) return;
-    const region = computeCropRegion(current.crop, current.monitor, frame);
-    context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
+    const targetRegion = computeCropRegion(current.crop, current.monitor, frame);
+    drawnRegion = drawnRegion ? easeCrop(drawnRegion, targetRegion) : targetRegion;
+    const x = Math.round(drawnRegion.x);
+    const y = Math.round(drawnRegion.y);
+    const width = Math.max(2, Math.round(drawnRegion.width));
+    const height = Math.max(2, Math.round(drawnRegion.height));
+    context.drawImage(video, x, y, width, height, 0, 0, canvas.width, canvas.height);
   };
 
   const schedule = (): void => {
@@ -276,30 +340,56 @@ export async function openWindowCropTrack(
   const track = output.getVideoTracks()[0];
   if (!track) { teardown(); return null; }
 
-  // Keep the crop following the window: it can be moved, resized, or minimized
-  // while the share runs. A window that moved to another display cannot be
-  // followed by this capture (the display was fixed when it started), so the
-  // track ends and the UI reports the share as stopped rather than showing a
-  // rectangle of the wrong monitor.
-  timer = setInterval(() => {
-    void api.getWindowCaptureTarget!(options.sourceId).then((next) => {
+  const endTrack = (): void => {
+    track.stop();
+    teardown();
+    track.dispatchEvent(new Event('ended'));
+  };
+
+  const applySnapshot = (snapshot: unknown): void => {
+    const next = applyWindowGeometry(current, snapshot);
+    // A window that left this display cannot be followed by this capture (the
+    // display was fixed when it started): end the track instead of showing a
+    // rectangle of the wrong monitor.
+    if (!next) { endTrack(); return; }
+    const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
+      || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
+      || next.minimized !== current.minimized || next.foreground !== current.foreground;
+    current = next;
+    if (moved) {
+      fitCanvas();
+      draw();
+    }
+  };
+
+  // Keep the crop following the window: it can be moved, resized, minimized, or
+  // focused and unfocused while the share runs. The desktop app streams the
+  // rectangle from one long-lived helper process at 10 Hz, which is what lets a
+  // dragged window follow smoothly; a build without that stream falls back to
+  // asking for one snapshot on a timer.
+  if (api.startWindowGeometry && api.onWindowGeometry) {
+    stopGeometry = api.onWindowGeometry((snapshot) => {
       if (stopped) return;
-      if (!next || next.screenSourceId !== current.screenSourceId) {
-        track.stop();
-        teardown();
-        track.dispatchEvent(new Event('ended'));
-        return;
-      }
-      const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
-        || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
-        || next.minimized !== current.minimized || next.foreground !== current.foreground;
-      current = next;
-      if (moved) {
-        fitCanvas();
-        draw();
-      }
-    }).catch(() => { /* a failed poll keeps the last known rectangle */ });
-  }, GEOMETRY_POLL_MS);
+      if (snapshot === null) { endTrack(); return; }
+      applySnapshot(snapshot);
+    });
+    void api.startWindowGeometry(options.sourceId).catch(() => undefined);
+  } else {
+    timer = setInterval(() => {
+      void api.getWindowCaptureTarget!(options.sourceId).then((next) => {
+        if (stopped) return;
+        if (!next || next.screenSourceId !== current.screenSourceId) { endTrack(); return; }
+        const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
+          || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
+          || next.minimized !== current.minimized || next.foreground !== current.foreground;
+        current = next;
+        if (moved) {
+          fitCanvas();
+          draw();
+        }
+      }).catch(() => { /* a failed poll keeps the last known rectangle */ });
+    }, GEOMETRY_POLL_MS);
+  }
 
   // The quality drawer can change the resolution while the setup screen is
   // open. A canvas track has no capture constraints to renegotiate, so the new

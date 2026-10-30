@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCropRegion, computeDestinationSize, isCaptureActive, isWindowSourceId } from './windowCropCapture';
+import { applyWindowGeometry, computeCropRegion, computeDestinationSize, easeCrop, isCaptureActive, isWindowSourceId } from './windowCropCapture';
 
 describe('isWindowSourceId', () => {
   it('accepts window ids and rejects screens', () => {
@@ -58,5 +58,56 @@ describe('isCaptureActive', () => {
 
   it('pauses when the window is minimized', () => {
     expect(isCaptureActive({ foreground: true, minimized: true })).toBe(false);
+  });
+});
+describe('applyWindowGeometry', () => {
+  const target = {
+    screenSourceId: 'screen:0:0',
+    monitor: { x: 0, y: 0, width: 1920, height: 1080 },
+    crop: { x: 100, y: 100, width: 800, height: 600 },
+    minimized: false,
+    foreground: true,
+  };
+  const snapshot = (window, extra = {}) => ({ window, monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, ...extra });
+
+  it('moves the crop with the window', () => {
+    const next = applyWindowGeometry(target, snapshot([300, 200, 800, 600]));
+    expect(next?.crop).toEqual({ x: 300, y: 200, width: 800, height: 600 });
+  });
+
+  it('clamps a window hanging off the display', () => {
+    const next = applyWindowGeometry(target, snapshot([1800, 1000, 400, 400]));
+    expect(next?.crop).toEqual({ x: 1800, y: 1000, width: 120, height: 80 });
+  });
+
+  it('carries focus and minimized', () => {
+    const next = applyWindowGeometry(target, snapshot([100, 100, 800, 600], { foreground: false, minimized: true }));
+    expect(next?.foreground).toBe(false);
+    expect(next?.minimized).toBe(true);
+  });
+
+  it('gives up when the window moved to another display', () => {
+    expect(applyWindowGeometry(target, { window: [2100, 100, 800, 600], monitor: [1920, 0, 1920, 1080], minimized: false, foreground: true })).toBeNull();
+  });
+
+  it('gives up on a window too small to show', () => {
+    expect(applyWindowGeometry(target, snapshot([100, 100, 10, 10]))).toBeNull();
+  });
+
+  it('rejects a malformed line', () => {
+    expect(applyWindowGeometry(target, { window: [1, 2], monitor: [0, 0, 1920, 1080] })).toBeNull();
+    expect(applyWindowGeometry(target, null)).toBeNull();
+  });
+});
+
+describe('easeCrop', () => {
+  it('moves part of the way towards the target', () => {
+    const eased = easeCrop({ x: 0, y: 0, width: 100, height: 100 }, { x: 100, y: 0, width: 100, height: 100 }, 0.5);
+    expect(eased).toEqual({ x: 50, y: 0, width: 100, height: 100 });
+  });
+
+  it('snaps a jump too large to be a drag', () => {
+    const to = { x: 600, y: 0, width: 100, height: 100 };
+    expect(easeCrop({ x: 0, y: 0, width: 100, height: 100 }, to, 0.5)).toEqual(to);
   });
 });

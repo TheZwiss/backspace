@@ -120,6 +120,20 @@ contextBridge.exposeInMainWorld('backspace', {
   // Where a window is: the renderer captures that display and crops to it, so
   // the share has no Windows Graphics Capture border (windowCropCapture.ts).
   getWindowCaptureTarget: (sourceId: string) => ipcRenderer.invoke('get-window-capture-target', sourceId),
+  // A 100 ms stream of the shared window's rectangle (one helper process),
+  // so the crop follows a window being dragged without polling from here.
+  startWindowGeometry: (sourceId: string) => ipcRenderer.invoke('start-window-geometry', sourceId),
+  stopWindowGeometry: () => ipcRenderer.invoke('stop-window-geometry'),
+  onWindowGeometry: (callback: (geometry: unknown | null) => void) => {
+    const snapshot = (_event: Electron.IpcRendererEvent, geometry: unknown): void => callback(geometry);
+    const ended = (): void => callback(null);
+    ipcRenderer.on('window-geometry', snapshot);
+    ipcRenderer.on('window-geometry-ended', ended);
+    return () => {
+      ipcRenderer.removeListener('window-geometry', snapshot);
+      ipcRenderer.removeListener('window-geometry-ended', ended);
+    };
+  },
   getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
   // `true` from a web client that opens the system-audio source (startSystemAudio)
   // itself; an older client passes nothing and gets the loopback's answer.

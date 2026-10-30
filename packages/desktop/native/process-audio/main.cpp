@@ -81,6 +81,38 @@ static void enablePerMonitorDpiAwareness() {
     if (setContext) setContext(reinterpret_cast<DPI_AWARENESS_CONTEXT>(static_cast<INT_PTR>(-4)));
 }
 
+// One JSON line: the window's physical rectangle, its monitor's, and the two
+// flags the share needs. False when the window or its monitor is gone.
+static bool printGeometry(HWND hwnd) {
+    if (!IsWindow(hwnd)) return false;
+    RECT frame{};
+    // The extended frame bounds are the visible window without the invisible
+    // resize border, which is what a viewer expects to see.
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))
+        && !GetWindowRect(hwnd, &frame)) {
+        return false;
+    }
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) return false;
+    // Whether the window is the one the user is working in. A window that is
+    // not focused is where the share shows a paused card instead of the pixels
+    // on top of it (the capture is of the display, see windowCropCapture.ts).
+    const bool foreground = GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
+    std::fprintf(stdout,
+        "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s}\n",
+        static_cast<long>(frame.left), static_cast<long>(frame.top),
+        static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
+        static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
+        static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
+        static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
+        IsIconic(hwnd) ? "true" : "false",
+        foreground ? "true" : "false");
+    std::fflush(stdout);
+    return true;
+}
+
 int wmain(int argc, wchar_t** argv) {
     enablePerMonitorDpiAwareness();
     if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) {
@@ -102,37 +134,24 @@ int wmain(int argc, wchar_t** argv) {
     // is the one way to share a single window on Windows 10 without the yellow
     // capture border (Windows Graphics Capture draws it; display capture does
     // not). Physical pixels, JSON on stdout, one line.
-    if (argc == 3 && wcscmp(argv[1], L"geometry") == 0) {
+    if (argc == 3 && (wcscmp(argv[1], L"geometry") == 0 || wcscmp(argv[1], L"geometry-watch") == 0)) {
         auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
-        if (!IsWindow(hwnd)) {
+        if (!printGeometry(hwnd)) {
             std::fprintf(stderr, "ERROR stage=geometry reason=invalid-window\n");
             return 3;
         }
-        RECT frame{};
-        // The extended frame bounds are the visible window without the invisible
-        // resize border, which is what a viewer expects to see.
-        if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))
-            && !GetWindowRect(hwnd, &frame)) {
-            return 3;
-        }
-        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO info{};
-        info.cbSize = sizeof(info);
-        if (!GetMonitorInfoW(monitor, &info)) return 3;
-        // Whether the window is the one the user is working in. A window that is
-        // not focused is where the share shows a paused card instead of the
-        // pixels on top of it (the capture is of the display, see
-        // windowCropCapture.ts).
-        const bool foreground = GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
-        std::fprintf(stdout,
-            "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s}\n",
-            static_cast<long>(frame.left), static_cast<long>(frame.top),
-            static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
-            static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
-            static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
-            static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
-            IsIconic(hwnd) ? "true" : "false",
-            foreground ? "true" : "false");
+        return 0;
+    }
+    // The same line, repeating while the window exists: one process for the
+    // whole share instead of one spawn per poll, so the crop can follow a
+    // window being dragged without the process cost of doing that at 10 Hz.
+    if (argc == 4 && wcscmp(argv[1], L"geometry-watch") == 0) {
+        auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
+        long interval = wcstol(argv[3], nullptr, 10);
+        if (interval < 16) interval = 16;
+        while (printGeometry(hwnd)) Sleep(static_cast<DWORD>(interval));
+        std::fprintf(stderr, "GONE\n");
+        std::fflush(stderr);
         return 0;
     }
     if (argc != 3) return 2;
