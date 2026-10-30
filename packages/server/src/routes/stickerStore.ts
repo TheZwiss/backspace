@@ -826,8 +826,22 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const now = Date.now();
-    db.update(schema.stickerPacks).set({ status: 'deleted', updatedAt: now })
-      .where(eq(schema.stickerPacks.id, pack.id)).run();
+    db.transaction((tx) => {
+      const versionIds = tx.select({ id: schema.stickerPackVersions.id })
+        .from(schema.stickerPackVersions)
+        .where(eq(schema.stickerPackVersions.packId, pack.id)).all().map((row) => row.id);
+      if (versionIds.length > 0) {
+        tx.update(schema.stickerPackItems).set({ status: 'deleted' })
+          .where(inArray(schema.stickerPackItems.versionId, versionIds)).run();
+      }
+      tx.update(schema.stickerPackVersions)
+        .set({ status: 'deleted', coverAssetId: null })
+        .where(eq(schema.stickerPackVersions.packId, pack.id)).run();
+      tx.update(schema.stickerPacks)
+        .set({ status: 'deleted', coverAssetId: null, updatedAt: now })
+        .where(eq(schema.stickerPacks.id, pack.id)).run();
+      tx.delete(schema.userInstalledPacks).where(eq(schema.userInstalledPacks.packId, pack.id)).run();
+    });
 
     return { success: true };
   });

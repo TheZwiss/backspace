@@ -63,7 +63,8 @@ export function getReferencedStickerIds(): Set<string> {
   for (const row of db.select({ id: schema.stickerFavorites.assetId }).from(schema.stickerFavorites).all()) {
     ids.add(row.id);
   }
-  for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems).all()) {
+  for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems)
+    .where(eq(schema.stickerPackItems.status, 'active')).all()) {
     ids.add(row.id);
   }
   for (const row of db.select({ id: schema.stickerPacks.coverAssetId }).from(schema.stickerPacks).where(isNotNull(schema.stickerPacks.coverAssetId)).all()) {

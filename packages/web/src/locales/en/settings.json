@@ -162,7 +162,11 @@
     "requestShare": "Request approval",
     "shareRequested": "Share request sent for approval.",
     "cropTitle": "Crop sticker to a square",
-    "itemName": "Sticker name"
+    "itemName": "Sticker name",
+    "deletePack": "Delete album",
+    "deletePackTitle": "Delete “{{name}}”?",
+    "deletePackDescription": "The album and its pending share requests will be removed. Stickers already sent remain available in chat.",
+    "deletePackSuccess": "Album deleted."
   },
   "account": {
     "title": "My Account",

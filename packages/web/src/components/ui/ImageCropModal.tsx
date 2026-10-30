@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -17,6 +17,9 @@ interface ImageCropModalProps {
   maxOutputDimension?: number;
   outputType?: string;
   onCropSelection?: (pixels: Area, percentage: Area) => void | Promise<void>;
+  extraContent?: ReactNode;
+  applyDisabled?: boolean;
+  error?: string;
 }
 
 export function ImageCropModal({
@@ -30,6 +33,9 @@ export function ImageCropModal({
   maxOutputDimension,
   outputType,
   onCropSelection,
+  extraContent,
+  applyDisabled = false,
+  error,
 }: ImageCropModalProps) {
   const { t } = useTranslation(['uploads', 'common']);
   const portalContainer = usePortalContainer();
@@ -144,6 +150,9 @@ export function ImageCropModal({
           />
         </div>
 
+        {extraContent && <div className="px-4 pt-3">{extraContent}</div>}
+        {error && <p role="alert" className="mx-4 mt-3 rounded-lg bg-accent-rose/10 px-3 py-2 text-xs text-txt-danger">{error}</p>}
+
         {/* Actions */}
         <div className="flex gap-3 p-4">
           <button
@@ -156,7 +165,7 @@ export function ImageCropModal({
           <button
             type="button"
             onClick={handleApply}
-            disabled={isProcessing || !croppedAreaPixels}
+            disabled={isProcessing || !croppedAreaPixels || applyDisabled}
             className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
             {isProcessing ? t('uploads:crop.applying') : t('common:actions.apply')}

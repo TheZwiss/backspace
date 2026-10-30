@@ -162,7 +162,11 @@
     "requestShare": "Freigabe anfordern",
     "shareRequested": "Freigabeanfrage gesendet.",
     "cropTitle": "Sticker quadratisch zuschneiden",
-    "itemName": "Sticker-Name"
+    "itemName": "Sticker-Name",
+    "deletePack": "Album löschen",
+    "deletePackTitle": "„{{name}}“ löschen?",
+    "deletePackDescription": "Das Album und ausstehende Freigabeanfragen werden entfernt. Bereits gesendete Sticker bleiben im Chat verfügbar.",
+    "deletePackSuccess": "Album gelöscht."
   },
   "account": {
     "title": "Mein Konto",

@@ -200,6 +200,7 @@
     "cancel": "Abbrechen",
     "replace": "Bild ersetzen",
     "name": "Stickername",
+    "invalidName": "Wähle einen sichtbaren Namen mit höchstens 100 Zeichen.",
     "dropImage": "Bild hierher ziehen oder auswählen",
     "pasteHint": "Du kannst auch ein Bild aus der Zwischenablage einfügen",
     "uploading": "Sticker wird hinzugefügt…",

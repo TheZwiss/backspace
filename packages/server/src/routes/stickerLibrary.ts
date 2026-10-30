@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import {
   MAX_PRIVATE_STICKERS_PER_PACK,
@@ -265,6 +265,54 @@ export async function stickerLibraryRoutes(app: FastifyInstance): Promise<void> 
     return reply.code(201).send(packView(pack, request.userId!));
   });
 
+  app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/private-sticker-packs/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const db = getDb();
+    const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
+    if (!pack || pack.scopeType !== 'user' || pack.status === 'deleted') return sendError(reply, 404, 'sticker_pack_not_found');
+    if (pack.creatorId !== request.userId) return sendError(reply, 403, 'forbidden');
+    const name = normalizeStickerName(request.body?.name);
+    if (!name) return sendError(reply, 400, 'sticker_name_invalid', { max: MAX_STICKER_NAME_LENGTH });
+    const now = Date.now();
+    db.transaction((tx) => {
+      tx.update(schema.stickerPacks).set({ name, updatedAt: now }).where(eq(schema.stickerPacks.id, pack.id)).run();
+      tx.update(schema.stickerPackVersions).set({ name }).where(and(
+        eq(schema.stickerPackVersions.packId, pack.id),
+        eq(schema.stickerPackVersions.version, pack.currentVersion),
+      )).run();
+    });
+    const updated = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, pack.id)).get()!;
+    return packView(updated, request.userId!);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/private-sticker-packs/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const db = getDb();
+    const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
+    if (!pack || pack.scopeType !== 'user' || pack.status === 'deleted') return sendError(reply, 404, 'sticker_pack_not_found');
+    if (pack.creatorId !== request.userId) return sendError(reply, 403, 'forbidden');
+    const now = Date.now();
+    db.transaction((tx) => {
+      const versionIds = tx.select({ id: schema.stickerPackVersions.id })
+        .from(schema.stickerPackVersions)
+        .where(eq(schema.stickerPackVersions.packId, pack.id)).all().map((row) => row.id);
+      if (versionIds.length > 0) {
+        tx.update(schema.stickerPackItems).set({ status: 'deleted' })
+          .where(inArray(schema.stickerPackItems.versionId, versionIds)).run();
+      }
+      tx.update(schema.stickerPackVersions)
+        .set({ status: 'deleted', coverAssetId: null })
+        .where(eq(schema.stickerPackVersions.packId, pack.id)).run();
+      tx.update(schema.stickerPacks)
+        .set({ status: 'deleted', coverAssetId: null, updatedAt: now })
+        .where(eq(schema.stickerPacks.id, pack.id)).run();
+      tx.delete(schema.stickerPackShares).where(eq(schema.stickerPackShares.packId, pack.id)).run();
+    });
+    return { success: true };
+  });
+
   app.post<{ Params: { spaceId: string } }>('/api/spaces/:spaceId/sticker-pack', {
     preHandler: authenticate,
   }, async (request, reply) => {
@@ -339,6 +387,25 @@ export async function stickerLibraryRoutes(app: FastifyInstance): Promise<void> 
     if (!item || item.packId !== pack.id) return sendError(reply, 404, 'sticker_not_found');
     db.update(schema.stickerPackItems).set({ status: 'deleted' }).where(eq(schema.stickerPackItems.id, item.id)).run();
     return { success: true };
+  });
+
+  app.patch<{ Params: { id: string; itemId: string }; Body: { name: string } }>('/api/sticker-library/packs/:id/items/:itemId', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const db = getDb();
+    const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
+    if (!pack || pack.status === 'deleted') return sendError(reply, 404, 'sticker_pack_not_found');
+    if (!canManagePack(pack, request.userId!)) return sendError(reply, 403, 'forbidden');
+    const item = db.select().from(schema.stickerPackItems).where(eq(schema.stickerPackItems.id, request.params.itemId)).get();
+    if (!item || item.packId !== pack.id || item.status !== 'active') return sendError(reply, 404, 'sticker_not_found');
+    const name = normalizeStickerName(request.body?.name);
+    if (!name) return sendError(reply, 400, 'sticker_name_invalid', { max: MAX_STICKER_NAME_LENGTH });
+    const now = Date.now();
+    db.transaction((tx) => {
+      tx.update(schema.stickerPackItems).set({ name }).where(eq(schema.stickerPackItems.id, item.id)).run();
+      tx.update(schema.stickerPacks).set({ updatedAt: now }).where(eq(schema.stickerPacks.id, pack.id)).run();
+    });
+    return { ...item, name };
   });
 
   app.post<{ Body: { name: string; image: string; crop?: unknown } }>('/api/sticker-favorites', {

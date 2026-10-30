@@ -200,6 +200,7 @@
     "cancel": "Cancel",
     "replace": "Replace image",
     "name": "Sticker name",
+    "invalidName": "Choose a visible name with up to 100 characters.",
     "dropImage": "Click or drop an image here",
     "pasteHint": "You can also paste an image from your clipboard",
     "uploading": "Adding sticker…",

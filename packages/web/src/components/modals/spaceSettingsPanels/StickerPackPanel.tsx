@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { Area } from 'react-easy-crop';
 import {
   MAX_SPACE_STICKERS,
+  MAX_STICKER_NAME_LENGTH,
+  normalizeStickerName,
   stickerPreviewUrl,
   stickerUrl,
   type StickerCrop,
@@ -17,6 +19,7 @@ import { describeError } from '../../../i18n/errors';
 interface PendingImage {
   file: File;
   preview: string;
+  name: string;
 }
 
 function imageData(file: File): Promise<string> {
@@ -40,6 +43,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
   const [canCreate, setCanCreate] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [pending, setPending] = useState<PendingImage | null>(null);
+  const [renamingItem, setRenamingItem] = useState<{ id: string; name: string } | null>(null);
   const [shares, setShares] = useState<Array<StickerPackShare & { pack: StickerPackDetail | null }>>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -84,16 +88,31 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
   const chooseFile = (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
+    setError('');
+    setNotice('');
     const max = (home?.maxStickerSizeMb ?? 5) * 1024 * 1024;
-    if (!file.size || file.size > max || !/^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
+    if (!file.size || file.size > max) {
+      setError(t('chat:stickers.invalidSize'));
+      return;
+    }
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
       setError(t('chat:stickers.invalidType'));
       return;
     }
-    setPending({ file, preview: URL.createObjectURL(file) });
+    setPending({
+      file,
+      preview: URL.createObjectURL(file),
+      name: file.name.replace(/\.[^.]+$/, '').slice(0, MAX_STICKER_NAME_LENGTH),
+    });
   };
 
   const upload = async (_pixels: Area, percentage: Area) => {
     if (!pack || !pending) return;
+    const name = normalizeStickerName(pending.name);
+    if (!name) {
+      setError(t('chat:stickers.invalidName'));
+      throw new Error('invalid sticker name');
+    }
     setBusy(true);
     setError('');
     try {
@@ -104,13 +123,34 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
         height: percentage.height / 100,
       };
       await api.stickerLibrary.addItem(pack.id, {
-        name: pending.file.name.replace(/\.[^.]+$/, '').slice(0, 100),
+        name,
         image: await imageData(pending.file),
         crop,
       });
       URL.revokeObjectURL(pending.preview);
       setPending(null);
       setNotice(t('chat:stickers.saved'));
+      await load();
+    } catch (err) {
+      setError(describeError(err));
+      throw err;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const renameItem = async () => {
+    if (!pack || !renamingItem) return;
+    const name = normalizeStickerName(renamingItem.name);
+    if (!name) {
+      setError(t('chat:stickers.invalidName'));
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api.stickerLibrary.renameItem(pack.id, renamingItem.id, name);
+      setRenamingItem(null);
       await load();
     } catch (err) {
       setError(describeError(err));
@@ -137,7 +177,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
         <h2 className="text-lg font-semibold text-txt-primary">{t('spaces:stickers.title')}</h2>
         <p className="mt-1 text-sm text-txt-secondary">{t('spaces:stickers.description')}</p>
       </div>
-      {error && <p role="alert" className="rounded-lg bg-accent-rose/10 px-3 py-2 text-sm text-txt-danger">{error}</p>}
+      {error && !pending && <p role="alert" className="rounded-lg bg-accent-rose/10 px-3 py-2 text-sm text-txt-danger">{error}</p>}
       {notice && <p role="status" className="rounded-lg bg-accent-mint/10 px-3 py-2 text-sm text-txt-positive">{notice}</p>}
 
       {!pack ? (
@@ -177,22 +217,56 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
               event.target.value = '';
             }}
           />
+          {renamingItem && (
+            <form
+              className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-border-soft bg-surface-base/50 p-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void renameItem();
+              }}
+            >
+              <input
+                autoFocus
+                value={renamingItem.name}
+                maxLength={MAX_STICKER_NAME_LENGTH}
+                onChange={(event) => setRenamingItem({ ...renamingItem, name: event.target.value })}
+                aria-label={t('settings:stickers.itemName')}
+                className="input-standard min-w-48 flex-1"
+              />
+              <button type="submit" disabled={busy || !normalizeStickerName(renamingItem.name)} className="sticker-primary-button">
+                {t('chat:stickers.save')}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setRenamingItem(null)} className="sticker-secondary-button">
+                {t('chat:stickers.cancel')}
+              </button>
+            </form>
+          )}
           <div className="mt-4 grid grid-cols-4 gap-3 desktop:grid-cols-6">
             {pack.items.map((item) => (
               <div key={item.id} className="group relative aspect-square rounded-xl bg-surface-base p-2">
                 <img src={stickerImage(item.token)} alt={item.name} className="h-full w-full object-contain" />
                 {pack.canManage && (
-                  <button
-                    type="button"
-                    onClick={() => void (async () => {
-                      await api.stickerLibrary.removeItem(pack.id, item.id);
-                      await load();
-                    })().catch((err) => setError(describeError(err)))}
-                    className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-0 group-hover:opacity-100"
-                    aria-label={t('chat:stickers.remove')}
-                  >
-                    ×
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setRenamingItem({ id: item.id, name: item.name })}
+                      className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                      aria-label={t('chat:stickers.renameNamed', { name: item.name })}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void (async () => {
+                        await api.stickerLibrary.removeItem(pack.id, item.id);
+                        await load();
+                      })().catch((err) => setError(describeError(err)))}
+                      className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                      aria-label={t('chat:stickers.remove')}
+                    >
+                      ×
+                    </button>
+                  </>
                 )}
               </div>
             ))}
@@ -227,6 +301,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
       <ImageCropModal
         isOpen={!!pending}
         onClose={() => {
+          if (busy) return;
           if (pending) URL.revokeObjectURL(pending.preview);
           setPending(null);
         }}
@@ -236,6 +311,20 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
         aspectRatio={1}
         onCropComplete={() => {}}
         onCropSelection={upload}
+        error={pending ? error : undefined}
+        applyDisabled={!pending || !normalizeStickerName(pending.name)}
+        extraContent={pending ? (
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-txt-secondary">{t('settings:stickers.itemName')}</span>
+            <input
+              autoFocus
+              value={pending.name}
+              maxLength={MAX_STICKER_NAME_LENGTH}
+              onChange={(event) => setPending({ ...pending, name: event.target.value })}
+              className="input-standard w-full"
+            />
+          </label>
+        ) : null}
       />
     </section>
   );

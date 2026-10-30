@@ -521,8 +521,11 @@ export class BackspaceApiClient {
       favorites: FavoriteSticker[];
     }>;
     createPrivatePack: (data: { name: string; description?: string }) => Promise<StickerPackDetail>;
+    renamePrivatePack: (packId: string, name: string) => Promise<StickerPackDetail>;
+    deletePrivatePack: (packId: string) => Promise<{ success: boolean }>;
     createSpacePack: (spaceId: string) => Promise<StickerPackDetail>;
     addItem: (packId: string, data: { name: string; image: string; crop?: StickerCrop }) => Promise<StickerPackItem>;
+    renameItem: (packId: string, itemId: string, name: string) => Promise<StickerPackItem>;
     removeItem: (packId: string, itemId: string) => Promise<{ success: boolean }>;
     favorite: (data: { name: string; image: string; crop?: StickerCrop }) => Promise<FavoriteSticker>;
     unfavorite: (assetId: string) => Promise<{ success: boolean }>;
@@ -658,8 +661,11 @@ export class BackspaceApiClient {
     this.stickerLibrary = {
       get: () => request('GET', '/sticker-library'),
       createPrivatePack: (data) => request('POST', '/private-sticker-packs', data),
+      renamePrivatePack: (packId, name) => request('PATCH', `/private-sticker-packs/${encodeURIComponent(packId)}`, { name }),
+      deletePrivatePack: (packId) => request('DELETE', `/private-sticker-packs/${encodeURIComponent(packId)}`),
       createSpacePack: (spaceId) => request('POST', `/spaces/${encodeURIComponent(spaceId)}/sticker-pack`),
       addItem: (packId, data) => request('POST', `/sticker-library/packs/${encodeURIComponent(packId)}/items`, data),
+      renameItem: (packId, itemId, name) => request('PATCH', `/sticker-library/packs/${encodeURIComponent(packId)}/items/${encodeURIComponent(itemId)}`, { name }),
       removeItem: (packId, itemId) => request('DELETE', `/sticker-library/packs/${encodeURIComponent(packId)}/items/${encodeURIComponent(itemId)}`),
       favorite: (data) => request('POST', '/sticker-favorites', data),
       unfavorite: (assetId) => request('DELETE', `/sticker-favorites/${encodeURIComponent(assetId)}`),

@@ -196,6 +196,7 @@
     "cancel": "取消",
     "replace": "更换图片",
     "name": "表情名称",
+    "invalidName": "请选择最多 100 个字符的可见名称。",
     "dropImage": "点击选择，或将图片拖到这里",
     "pasteHint": "也可以直接粘贴剪贴板中的图片",
     "uploading": "正在添加表情…",

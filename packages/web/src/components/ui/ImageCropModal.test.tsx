@@ -24,4 +24,20 @@ describe('image crop editor', () => {
     fireEvent.click(screen.getByText('common:actions.apply'));
     await waitFor(() => expect(complete).toHaveBeenCalledWith(blob));
   });
+  it('shows naming content and can hold Apply while the name is invalid', () => {
+    render(
+      <ImageCropModal
+        isOpen
+        imageSrc="test.png"
+        onClose={vi.fn()}
+        onCropComplete={vi.fn()}
+        extraContent={<label>Name<input defaultValue="" /></label>}
+        error="Name is required"
+        applyDisabled
+      />,
+    );
+    expect(screen.getByText('Name')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Name is required');
+    expect(screen.getByText('common:actions.apply')).toBeDisabled();
+  });
 });

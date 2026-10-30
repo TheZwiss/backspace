@@ -14,6 +14,8 @@ Personal collections (`personal_stickers`) remain the legacy flat 200-item colle
 
 `stickerPacks` with `scopeType = 'user'` and `stickerPacks.creatorId` are private. The owner creates an album under **User Settings → Stickers**, adds images, and can remove items. Images use the same validation and WebP encoding as the rest of the sticker pipeline. Animated PNG/WebP/GIF frames are preserved.
 
+The owner can rename or delete an album. Deleting is a soft delete of the album/version and its items, clears both cover references, removes share requests for that album, and leaves the immutable content-addressed files for any message or favorite that still names them.
+
 Cropping is square. The browser obtains the crop rectangle from `react-easy-crop`; for animated input it sends the original bytes and normalized crop coordinates instead of painting a single canvas frame. The server applies `sharp.extract` to all frames before resizing. Static uploads follow the same route so there is one behavior.
 
 ## Server pack
@@ -45,8 +47,11 @@ Share rows are pending, approved, or rejected. Re-requesting a rejected target r
 |---|---|---|
 | `GET /api/sticker-library` | user | private albums, server packs, and favorites |
 | `POST /api/private-sticker-packs` | user | create a private album |
+| `PATCH /api/private-sticker-packs/:id` | album owner | rename a private album |
+| `DELETE /api/private-sticker-packs/:id` | album owner | soft-delete an album and its pending shares |
 | `POST /api/spaces/:spaceId/sticker-pack` | CREATE/MANAGE_STICKERS | create or return the one server pack |
 | `POST /api/sticker-library/packs/:id/items` | owner or CREATE_STICKERS | add a cropped image |
+| `PATCH /api/sticker-library/packs/:id/items/:itemId` | owner or MANAGE_STICKERS | rename an item |
 | `DELETE /api/sticker-library/packs/:id/items/:itemId` | owner or MANAGE_STICKERS | remove an item |
 | `POST /api/sticker-favorites` | user | copy an image into favorites |
 | `DELETE /api/sticker-favorites/:assetId` | user | remove a favorite |

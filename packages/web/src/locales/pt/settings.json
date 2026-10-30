@@ -162,7 +162,11 @@
     "requestShare": "Solicitar aprovação",
     "shareRequested": "Solicitação enviada para aprovação.",
     "cropTitle": "Recortar figurinha em formato quadrado",
-    "itemName": "Nome da figurinha"
+    "itemName": "Nome da figurinha",
+    "deletePack": "Apagar álbum",
+    "deletePackTitle": "Apagar “{{name}}”?",
+    "deletePackDescription": "O álbum e as solicitações de compartilhamento pendentes serão removidos. Figurinhas já enviadas continuam disponíveis no chat.",
+    "deletePackSuccess": "Álbum apagado."
   },
   "account": {
     "title": "Minha conta",

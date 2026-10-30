@@ -162,7 +162,11 @@
     "requestShare": "申请批准",
     "shareRequested": "分享申请已发送。",
     "cropTitle": "将贴纸裁剪为正方形",
-    "itemName": "贴纸名称"
+    "itemName": "贴纸名称",
+    "deletePack": "删除相册",
+    "deletePackTitle": "删除“{{name}}”？",
+    "deletePackDescription": "相册及待处理的分享申请将被删除。已发送的贴纸仍可在聊天中查看。",
+    "deletePackSuccess": "相册已删除。"
   },
   "account": {
     "title": "我的账号",

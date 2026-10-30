@@ -20,6 +20,10 @@ import './stickers.css';
 
 /** Entries whose name holds the query, ignoring case. A blank query keeps every entry. */
 export function filterStickers(items: PersonalSticker[], query: string): PersonalSticker[] {
+  return filterByName(items, query);
+}
+
+function filterByName<T extends { name: string }>(items: T[], query: string): T[] {
   const needle = query.trim().toLowerCase();
   return needle ? items.filter(item => item.name.toLowerCase().includes(needle)) : items;
 }
@@ -31,11 +35,13 @@ interface StickerPickerProps {
   spaceId?: string | null;
 }
 
-function PackStickerGrid({ pack, onSelect }: { pack: StickerPackDetail; onSelect: (token: string) => void }) {
+function PackStickerGrid({ pack, query, onSelect }: { pack: StickerPackDetail; query: string; onSelect: (token: string) => void }) {
+  const items = filterByName(pack.items, query);
+  if (items.length === 0) return <StickerSearchEmpty />;
   return (
     <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3">
       <div className="grid grid-cols-4 gap-1.5">
-        {pack.items.map(item => (
+        {items.map(item => (
           <button
             key={item.id}
             type="button"
@@ -58,14 +64,17 @@ function PackStickerGrid({ pack, onSelect }: { pack: StickerPackDetail; onSelect
   );
 }
 
-function TokenStickerGrid({ items, onSelect }: {
+function TokenStickerGrid({ items, query, onSelect }: {
   items: Array<{ name: string; token: string }>;
+  query: string;
   onSelect: (token: string) => void;
 }) {
+  const visible = filterByName(items, query);
+  if (visible.length === 0) return <StickerSearchEmpty />;
   return (
     <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3">
       <div className="grid grid-cols-4 gap-1.5">
-        {items.map((item) => (
+        {visible.map((item) => (
           <button
             key={item.token}
             type="button"
@@ -84,6 +93,60 @@ function TokenStickerGrid({ items, onSelect }: {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function StickerSearchEmpty() {
+  const { t } = useTranslation('chat');
+  return (
+    <p role="status" className="flex flex-1 items-center justify-center px-4 text-center text-xs text-txt-tertiary">
+      {t('stickers.noResults')}
+    </p>
+  );
+}
+
+function StickerSearchInput({ value, onChange, className = 'mx-4 mb-3' }: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation(['chat', 'common']);
+  return (
+    <div className={`relative ${className} flex shrink-0 items-center`}>
+      <svg
+        className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-txt-tertiary"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.35-4.35" />
+      </svg>
+      <input
+        type="text"
+        role="searchbox"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        placeholder={t('stickers.search')}
+        aria-label={t('stickers.search')}
+        maxLength={100}
+        className="input-search w-full pl-8 pr-8 text-xs"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label={t('common:actions.clear')}
+          className="absolute right-1.5 flex h-6 w-6 items-center justify-center rounded-md text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -177,6 +240,10 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
     });
     return () => { active = false; };
   }, [activeTab, spaceId, library]);
+
+  useEffect(() => {
+    setSearch('');
+  }, [activeTab]);
 
   useEffect(() => {
     const targets = focusAfterForm.current;
@@ -353,41 +420,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 </p>
               )}
               {items.length > 0 && (
-                <div className="relative mx-4 mb-3 flex shrink-0 items-center">
-                  <svg
-                    className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-txt-tertiary"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.35-4.35" />
-                  </svg>
-                  <input
-                    type="text"
-                    role="searchbox"
-                    value={search}
-                    onChange={event => setSearch(event.target.value)}
-                    placeholder={t('stickers.search')}
-                    aria-label={t('stickers.search')}
-                    maxLength={100}
-                    className="input-search w-full pl-8 pr-8 text-xs"
-                  />
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch('')}
-                      aria-label={t('common:actions.clear')}
-                      className="absolute right-1.5 flex h-6 w-6 items-center justify-center rounded-md text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="M18 6 6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+                <StickerSearchInput value={search} onChange={setSearch} />
               )}
               {error && <p role="alert" className="mx-4 mb-3 rounded-lg bg-accent-rose/10 px-3 py-2 text-xs text-txt-danger">{error}</p>}
               {notice && <p role="status" className="mx-4 mb-2 text-xs text-txt-positive">{notice}</p>}
@@ -440,7 +473,8 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   <p className="text-[11px] text-txt-tertiary">{t('stickers.stickersCount', { count: library?.favorites.length ?? 0 })}</p>
                 </div>
               </div>
-              <TokenStickerGrid items={library?.favorites ?? []} onSelect={onSelect} />
+              {(library?.favorites.length ?? 0) > 0 && <StickerSearchInput value={search} onChange={setSearch} />}
+              <TokenStickerGrid items={library?.favorites ?? []} query={search} onSelect={onSelect} />
             </>
           ) : currentPackDetail ? (
             <>
@@ -466,7 +500,8 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   </p>
                 </div>
               </div>
-              <PackStickerGrid pack={currentPackDetail} onSelect={onSelect} />
+              {currentPackDetail.items.length > 0 && <StickerSearchInput value={search} onChange={setSearch} />}
+              <PackStickerGrid pack={currentPackDetail} query={search} onSelect={onSelect} />
             </>
           ) : activeSpace ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">

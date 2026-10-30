@@ -578,6 +578,74 @@ describe('Federated Sticker Store', () => {
     expect(explored.json().map((entry: { id: string }) => entry.id)).toContain(pack.id);
   });
 
+  it('renames and deletes private albums without breaking sent stickers', async () => {
+    const image = await makeTestImage('orange');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/private-sticker-packs',
+      headers: { authorization: 'alice' },
+      payload: { name: 'Before rename' },
+    });
+    const pack = created.json();
+    const item = await app.inject({
+      method: 'POST',
+      url: `/api/sticker-library/packs/${pack.id}/items`,
+      headers: { authorization: 'alice' },
+      payload: { name: 'Before item rename', image },
+    });
+    expect(item.statusCode).toBe(201);
+
+    const renamedPack = await app.inject({
+      method: 'PATCH',
+      url: `/api/private-sticker-packs/${pack.id}`,
+      headers: { authorization: 'alice' },
+      payload: { name: 'After rename' },
+    });
+    expect(renamedPack.statusCode).toBe(200);
+    expect(renamedPack.json()).toMatchObject({ name: 'After rename' });
+
+    const renamedItem = await app.inject({
+      method: 'PATCH',
+      url: `/api/sticker-library/packs/${pack.id}/items/${item.json().id}`,
+      headers: { authorization: 'alice' },
+      payload: { name: 'After item rename' },
+    });
+    expect(renamedItem.statusCode).toBe(200);
+    expect(renamedItem.json()).toMatchObject({ name: 'After item rename' });
+
+    const share = await app.inject({
+      method: 'POST',
+      url: `/api/private-sticker-packs/${pack.id}/shares`,
+      headers: { authorization: 'alice' },
+      payload: { targetType: 'instance' },
+    });
+    expect(share.statusCode).toBe(201);
+
+    const forbidden = await app.inject({
+      method: 'DELETE',
+      url: `/api/private-sticker-packs/${pack.id}`,
+      headers: { authorization: 'bob' },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/private-sticker-packs/${pack.id}`,
+      headers: { authorization: 'alice' },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(db.select().from(schema.schema.stickerPacks).where(eq(schema.schema.stickerPacks.id, pack.id)).get()?.status).toBe('deleted');
+    expect(db.select().from(schema.schema.stickerPackShares).where(eq(schema.schema.stickerPackShares.packId, pack.id)).all()).toEqual([]);
+    expect(db.select().from(schema.schema.stickerPackItems).where(eq(schema.schema.stickerPackItems.packId, pack.id)).get()?.status).toBe('deleted');
+
+    const library = await app.inject({
+      method: 'GET',
+      url: '/api/sticker-library',
+      headers: { authorization: 'alice' },
+    });
+    expect(library.json().privatePacks).toEqual([]);
+  });
+
   it('has one server pack, enforces its permissions and accepts approved album shares', async () => {
     const now = Date.now();
     db.insert(schema.schema.spaces).values({

@@ -204,6 +204,7 @@
     "cancel": "Cancelar",
     "replace": "Substituir imagem",
     "name": "Nome da figurinha",
+    "invalidName": "Escolha um nome visível com até 100 caracteres.",
     "dropImage": "Clique ou arraste uma imagem para cá",
     "pasteHint": "Você também pode colar uma imagem da área de transferência",
     "uploading": "Adicionando figurinha…",

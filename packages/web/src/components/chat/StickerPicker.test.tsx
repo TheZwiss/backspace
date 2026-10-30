@@ -81,6 +81,10 @@ describe('server and private sticker collections', () => {
     fireEvent.click(within(collectionBar).getByRole('button', { name: 'Favorite stickers' }));
     fireEvent.click(screen.getByRole('button', { name: 'Happy' }));
     expect(onSelect).toHaveBeenCalledWith(sticker.token);
+    const favoriteSearch = screen.getByRole('searchbox', { name: 'Search stickers' });
+    fireEvent.change(favoriteSearch, { target: { value: 'missing' } });
+    expect(screen.getByText('No stickers found')).toBeInTheDocument();
+    fireEvent.change(favoriteSearch, { target: { value: '' } });
     fireEvent.click(within(collectionBar).getByRole('button', { name: 'Cat Album' }));
     fireEvent.click(screen.getByRole('button', { name: 'Private Cat' }));
     expect(onSelect).toHaveBeenCalledWith(second.token);
@@ -93,6 +97,10 @@ describe('server and private sticker collections', () => {
     const serverTwo = within(serverRail).getByRole('button', { name: 'Server Two' });
     expect(serverTwo).toHaveAttribute('aria-current', 'page');
     expect(serverTwo.getAttribute('style')).toContain('linear-gradient');
+    const serverSearch = screen.getByRole('searchbox', { name: 'Search stickers' });
+    fireEvent.change(serverSearch, { target: { value: 'Second' } });
+    expect(screen.getByRole('button', { name: 'Second Server Dog' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Server Dog' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Second Server Dog' }));
     expect(onSelect).toHaveBeenLastCalledWith(second.token);
 
