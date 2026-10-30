@@ -181,6 +181,8 @@
     "title": "Minhas figurinhas",
     "collections": "Coleções de figurinhas",
     "servers": "Servidores",
+    "serverEmpty": "Este servidor ainda não tem um pacote de figurinhas",
+    "serverEmptyHint": "Um administrador pode criar o pacote em Configurações do servidor → Figurinhas do servidor.",
     "favoritesTitle": "Figurinhas favoritas",
     "favorite": "Favoritar figurinha",
     "favorited": "Figurinha adicionada às favoritas",

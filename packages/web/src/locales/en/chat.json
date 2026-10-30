@@ -177,6 +177,8 @@
     "title": "My stickers",
     "collections": "Sticker collections",
     "servers": "Servers",
+    "serverEmpty": "This server has no sticker pack yet",
+    "serverEmptyHint": "A server manager can add one in Server Settings → Server stickers.",
     "favoritesTitle": "Favorite stickers",
     "favorite": "Favorite sticker",
     "favorited": "Sticker added to favorites",

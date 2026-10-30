@@ -177,6 +177,8 @@
     "title": "Meine Sticker",
     "collections": "Sticker-Sammlungen",
     "servers": "Server",
+    "serverEmpty": "Dieser Server hat noch kein Sticker-Paket",
+    "serverEmptyHint": "Ein Server-Administrator kann es in den Servereinstellungen unter Server-Sticker anlegen.",
     "favoritesTitle": "Favorisierte Sticker",
     "favorite": "Sticker favorisieren",
     "favorited": "Sticker zu Favoriten hinzugefügt",

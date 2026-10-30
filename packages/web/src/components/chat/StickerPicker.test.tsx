@@ -54,10 +54,18 @@ describe('server and private sticker collections', () => {
     const serverPack = {
       ...privatePack, id: 'server-pack', name: 'Server Pack', items: [serverSticker], scopeType: 'space' as const, spaceId: 'space-1',
     };
+    const secondServerSticker = { ...serverSticker, id: 'server-item-2', name: 'Second Server Dog', packId: 'server-pack-2' };
+    const secondServerPack = {
+      ...serverPack, id: 'server-pack-2', name: 'Second Server Pack', items: [secondServerSticker], spaceId: 'space-2',
+    };
     vi.mocked(api.stickerLibrary.get).mockResolvedValue({
       privatePacks: [privatePack],
       favorites: [{ ...sticker, id: sticker.id, createdAt: 1 }],
-      spaces: [{ spaceId: 'space-1', name: 'Server One', canCreate: false, canManage: false, pack: serverPack }],
+      spaces: [
+        { spaceId: 'space-1', name: 'Server One', canCreate: false, canManage: false, pack: serverPack },
+        { spaceId: 'space-2', name: 'Server Two', canCreate: false, canManage: true, pack: secondServerPack },
+        { spaceId: 'space-3', name: 'Empty Server', canCreate: true, canManage: true, pack: null },
+      ],
     });
 
     render(<StickerPicker onSelect={onSelect} />);
@@ -80,6 +88,15 @@ describe('server and private sticker collections', () => {
     expect(within(collectionBar).getByRole('button', { name: 'Server Pack' })).toHaveAttribute('aria-label', 'Server Pack');
     fireEvent.click(screen.getByRole('button', { name: 'Server Dog' }));
     expect(onSelect).toHaveBeenCalledWith(second.token);
+
+    fireEvent.click(within(serverRail).getByRole('button', { name: 'Server Two' }));
+    expect(within(serverRail).getByRole('button', { name: 'Server Two' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('button', { name: 'Second Server Dog' }));
+    expect(onSelect).toHaveBeenLastCalledWith(second.token);
+
+    fireEvent.click(within(serverRail).getByRole('button', { name: 'Empty Server' }));
+    expect(within(serverRail).getByRole('button', { name: 'Empty Server' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('This server has no sticker pack yet')).toBeInTheDocument();
   });
 });
 

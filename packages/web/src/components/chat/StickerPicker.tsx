@@ -204,6 +204,9 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
 
   const full = items.length >= MAX_PERSONAL_STICKERS;
   const visible = filterStickers(items, search);
+  const activeSpace = activeTab.startsWith('space:')
+    ? library?.spaces.find((space) => space.spaceId === activeTab.slice(6)) ?? null
+    : null;
 
   const startUpload = () => {
     setError('');
@@ -245,12 +248,11 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
           <button
             key={space.spaceId}
             type="button"
-            disabled={!space.pack}
             onClick={() => setActiveTab(`space:${space.spaceId}`)}
             aria-label={space.name}
             title={space.name}
             aria-current={selected ? 'page' : undefined}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold disabled:opacity-30 ${selected ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold ${selected ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
           >
             {space.icon
               ? <img src={space.icon} alt="" className="h-6 w-6 object-contain" />
@@ -409,6 +411,11 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
             <TokenStickerGrid items={library?.favorites ?? []} onSelect={onSelect} />
           ) : currentPackDetail ? (
             <PackStickerGrid pack={currentPackDetail} onSelect={onSelect} />
+          ) : activeSpace ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-sm font-medium text-txt-secondary">{t('stickers.serverEmpty')}</p>
+              <p className="max-w-56 text-xs leading-5 text-txt-tertiary">{t('stickers.serverEmptyHint')}</p>
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center p-4">
               <p className="text-xs text-txt-tertiary">{t('stickers.empty')}</p>
