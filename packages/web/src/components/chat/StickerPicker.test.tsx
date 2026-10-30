@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StickerPicker } from './StickerPicker';
 import { StickerMessage } from './StickerMessage';
 import { api } from '../../api/client';
@@ -41,7 +41,7 @@ beforeEach(() => {
 });
 
 describe('server and private sticker collections', () => {
-  it('shows private albums, favorites and every joined server in the left rail', async () => {
+  it('keeps servers in the left rail and packages in the bottom collection bar', async () => {
     const onSelect = vi.fn();
     const second = { ...sticker, id: 'b'.repeat(64), name: 'Private Cat', token: `sticker:https://chat.test/api/stickers/assets/${'b'.repeat(64)}.webp` };
     const serverSticker = { id: 'server-item', name: 'Server Dog', token: second.token, packId: 'server-pack', versionId: 'v1', assetId: second.id, sortOrder: 0, status: 'active' as const, createdAt: 1 };
@@ -61,13 +61,23 @@ describe('server and private sticker collections', () => {
     });
 
     render(<StickerPicker onSelect={onSelect} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Favorite stickers' }));
+    const serverRail = await screen.findByRole('navigation', { name: 'Servers' });
+    const collectionBar = screen.getByRole('navigation', { name: 'Sticker collections' });
+
+    expect(within(serverRail).getByRole('button', { name: 'Server One' })).toBeInTheDocument();
+    expect(within(serverRail).queryByRole('button', { name: 'Favorite stickers' })).not.toBeInTheDocument();
+    expect(within(serverRail).queryByRole('button', { name: 'Cat Album' })).not.toBeInTheDocument();
+    expect(within(collectionBar).getByRole('button', { name: 'Favorite stickers' })).toBeInTheDocument();
+    expect(within(collectionBar).getByRole('button', { name: 'Cat Album' })).toBeInTheDocument();
+
+    fireEvent.click(within(collectionBar).getByRole('button', { name: 'Favorite stickers' }));
     fireEvent.click(screen.getByRole('button', { name: 'Happy' }));
     expect(onSelect).toHaveBeenCalledWith(sticker.token);
-    fireEvent.click(screen.getByRole('button', { name: 'Cat Album' }));
+    fireEvent.click(within(collectionBar).getByRole('button', { name: 'Cat Album' }));
     fireEvent.click(screen.getByRole('button', { name: 'Private Cat' }));
     expect(onSelect).toHaveBeenCalledWith(second.token);
-    fireEvent.click(screen.getByRole('button', { name: 'Server One' }));
+    fireEvent.click(within(serverRail).getByRole('button', { name: 'Server One' }));
+    expect(within(collectionBar).getByRole('button', { name: 'Server Pack' })).toHaveAttribute('aria-label', 'Server Pack');
     fireEvent.click(screen.getByRole('button', { name: 'Server Dog' }));
     expect(onSelect).toHaveBeenCalledWith(second.token);
   });

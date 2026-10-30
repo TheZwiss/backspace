@@ -238,17 +238,10 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
         if (event.key !== 'Escape') event.stopPropagation();
       }}
     >
-      <nav aria-label={t('stickers.collections')} className="absolute bottom-12 left-1 top-11 z-10 flex w-8 flex-col gap-1 overflow-y-auto scrollbar-none">
-        <button type="button" onClick={() => setActiveTab('personal')} aria-label={t('stickers.title')} title={t('stickers.title')} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activeTab === 'personal' ? 'bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>♥</button>
-        {library && library.favorites.length > 0 && (
-          <button type="button" onClick={() => setActiveTab('favorites')} aria-label={t('stickers.favoritesTitle')} title={t('stickers.favoritesTitle')} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${activeTab === 'favorites' ? 'bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>★</button>
-        )}
-        {library?.privatePacks.map((pack) => (
-          <button key={pack.id} type="button" onClick={() => setActiveTab(`user:${pack.id}`)} aria-label={pack.name} title={pack.name} className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold ${activeTab === `user:${pack.id}` ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>
-            {pack.items[0] ? <img src={stickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-6 w-6 object-contain" /> : pack.name.slice(0, 1)}
-          </button>
-        ))}
-        {library?.spaces.map((space) => (
+      <nav aria-label={t('stickers.servers')} className="absolute bottom-12 left-1 top-11 z-10 flex w-8 flex-col gap-1 overflow-y-auto scrollbar-none">
+        {library?.spaces.map((space) => {
+          const selected = activeTab === `space:${space.spaceId}`;
+          return (
           <button
             key={space.spaceId}
             type="button"
@@ -256,15 +249,15 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
             onClick={() => setActiveTab(`space:${space.spaceId}`)}
             aria-label={space.name}
             title={space.name}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold disabled:opacity-30 ${activeTab === `space:${space.spaceId}` ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
+            aria-current={selected ? 'page' : undefined}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold disabled:opacity-30 ${selected ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
           >
             {space.icon
               ? <img src={space.icon} alt="" className="h-6 w-6 object-contain" />
-              : space.pack?.items[0]
-                ? <img src={stickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-6 w-6 object-contain" />
-                : space.name.slice(0, 2).toUpperCase()}
+              : <span aria-hidden="true">{space.name.slice(0, 2).toUpperCase()}</span>}
           </button>
-        ))}
+          );
+        })}
       </nav>
       {uploading ? (
         <StickerUploadForm
@@ -427,7 +420,10 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
 
           {/* Bottom Tabs & Store Button */}
           <div className="shrink-0 flex items-center justify-between border-t border-border-soft px-3 py-1.5 bg-surface-base/50">
-            <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 px-1">
+            <nav
+              aria-label={t('stickers.collections')}
+              className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 px-1"
+            >
               {/* Personal Stickers tab */}
               <button
                 type="button"
@@ -444,6 +440,60 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                 </svg>
               </button>
+
+              {library && library.favorites.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('favorites')}
+                  title={t('stickers.favoritesTitle')}
+                  aria-label={t('stickers.favoritesTitle')}
+                  className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-sm transition-colors ${
+                    activeTab === 'favorites'
+                      ? 'bg-interactive-active text-accent-primary shadow-sm'
+                      : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-primary'
+                  }`}
+                >
+                  ★
+                </button>
+              )}
+
+              {library?.privatePacks.map(pack => (
+                <button
+                  key={pack.id}
+                  type="button"
+                  onClick={() => setActiveTab(`user:${pack.id}`)}
+                  title={pack.name}
+                  aria-label={pack.name}
+                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold transition-colors ${
+                    activeTab === `user:${pack.id}`
+                      ? 'bg-interactive-active ring-1 ring-inset ring-accent-primary text-accent-primary'
+                      : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
+                  }`}
+                >
+                  {pack.items[0]
+                    ? <img src={stickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
+                    : pack.name.slice(0, 1)}
+                </button>
+              ))}
+
+              {library?.spaces.map(space => space.pack && (
+                <button
+                  key={`pack:${space.spaceId}`}
+                  type="button"
+                  onClick={() => setActiveTab(`space:${space.spaceId}`)}
+                  title={space.pack.name}
+                  aria-label={space.pack.name}
+                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[11px] font-bold transition-colors ${
+                    activeTab === `space:${space.spaceId}`
+                      ? 'bg-interactive-active ring-1 ring-inset ring-accent-primary text-accent-primary'
+                      : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
+                  }`}
+                >
+                  {space.pack.items[0]
+                    ? <img src={stickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
+                    : space.pack.name.slice(0, 1)}
+                </button>
+              ))}
 
               {/* Installed packs tabs */}
               {installedPacks.map(pack => {
@@ -475,7 +525,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   </button>
                 );
               })}
-            </div>
+            </nav>
 
             {/* Sticker Store modal button */}
             {manageable && (
