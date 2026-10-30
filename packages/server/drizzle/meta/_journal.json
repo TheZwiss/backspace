@@ -267,6 +267,20 @@
       "when": 1793312795938,
       "tag": "0037_game_icons",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1793318000759,
+      "tag": "0038_sticker_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1793318412865,
+      "tag": "0039_sticker_pack_space_unique",
+      "breakpoints": true
     }
   ]
 }

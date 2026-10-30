@@ -136,6 +136,7 @@
       "appearance": "Appearance",
       "voice": "Voice & Video",
       "privacy": "Privacy",
+      "stickers": "Stickers",
       "connections": "Connections",
       "keybinds": "Keybinds",
       "desktop": "Desktop",
@@ -146,6 +147,22 @@
   },
   "appearance": {
     "title": "Appearance"
+  },
+  "stickers": {
+    "title": "My sticker library",
+    "description": "Private sticker albums only you can see. Each album holds up to 30 animated or static stickers.",
+    "packs": "Private albums",
+    "newPack": "New album name",
+    "createPack": "Create album",
+    "favorites": "Favorites",
+    "favoritesHint": "Right-click a sticker in chat to save a local copy here.",
+    "noFavorites": "No favorite stickers yet.",
+    "share": "Share album",
+    "instance": "This instance",
+    "requestShare": "Request approval",
+    "shareRequested": "Share request sent for approval.",
+    "cropTitle": "Crop sticker to a square",
+    "itemName": "Sticker name"
   },
   "account": {
     "title": "My Account",

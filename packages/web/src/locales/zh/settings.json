@@ -136,6 +136,7 @@
       "appearance": "外观",
       "voice": "语音与视频",
       "privacy": "隐私",
+      "stickers": "贴纸",
       "connections": "连接",
       "keybinds": "按键绑定",
       "desktop": "桌面端",
@@ -146,6 +147,22 @@
   },
   "appearance": {
     "title": "外观"
+  },
+  "stickers": {
+    "title": "我的贴纸库",
+    "description": "只有你能看到的私人贴纸相册。每个相册最多包含 30 个动态或静态贴纸。",
+    "packs": "私人相册",
+    "newPack": "新相册名称",
+    "createPack": "创建相册",
+    "favorites": "收藏",
+    "favoritesHint": "在聊天中右键点击贴纸，即可在这里保存本地副本。",
+    "noFavorites": "还没有收藏的贴纸。",
+    "share": "分享相册",
+    "instance": "此实例",
+    "requestShare": "申请批准",
+    "shareRequested": "分享申请已发送。",
+    "cropTitle": "将贴纸裁剪为正方形",
+    "itemName": "贴纸名称"
   },
   "account": {
     "title": "我的账号",

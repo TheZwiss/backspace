@@ -213,7 +213,7 @@ describe('sticker reaction menu', () => {
   it('offers the image menu a sticker message gets', () => {
     const menu = openMenu(remoteToken);
     expect(menu.position).toEqual({ x: 100, y: 200 });
-    expect(menu.items.map(i => i.key)).toEqual(['collect-sticker', 'save-image', 'copy-image', 'image-sep']);
+    expect(menu.items.map(i => i.key)).toEqual(['collect-sticker', 'favorite-sticker', 'save-image', 'copy-image', 'image-sep']);
   });
 
   it('collects a sticker from this instance by reference', async () => {

@@ -435,6 +435,8 @@
     "names": {
       "createSoundboard": "创建音效",
       "manageSoundboard": "管理音效",
+      "createStickers": "创建服务器贴纸",
+      "manageStickers": "管理服务器贴纸",
       "useSoundboard": "使用音效",
       "useExternalSounds": "使用其他服务器的音效",
       "administrator": "管理员",
@@ -690,6 +692,17 @@
     "suppressRoles": "屏蔽 @身份组 提醒",
     "massHeading": "群组提及",
     "massNote": "@here 与 @everyone 通知的成员相同。直接提及你的消息始终会通知你。"
+  },
+  "stickers": {
+    "title": "服务器贴纸",
+    "description": "此服务器共享一个贴纸包，最多包含 50 个静态或动态贴纸。",
+    "empty": "此服务器还没有贴纸包。",
+    "create": "创建服务器贴纸包",
+    "add": "添加贴纸",
+    "pendingShares": "待审核相册",
+    "sharePending": "请求将此私人相册分享到服务器。",
+    "approve": "批准",
+    "reject": "拒绝"
   },
   "profile": {
     "title": "服务器资料",

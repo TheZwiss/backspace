@@ -171,6 +171,11 @@
   },
   "stickers": {
     "title": "我的表情",
+    "collections": "表情收藏",
+    "favoritesTitle": "收藏的表情",
+    "favorite": "收藏贴纸",
+    "favorited": "贴纸已加入收藏",
+    "sharePending": "请求在当前实例发布私人相册。",
     "upload": "上传图片",
     "limits": "PNG、JPEG、WebP 或 GIF · 单张最大 5 MB",
     "loading": "处理中…",

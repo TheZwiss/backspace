@@ -27,6 +27,7 @@ interface StickerPickerProps {
   onSelect: (token: string) => void;
   mobile?: boolean;
   manageable?: boolean;
+  spaceId?: string | null;
 }
 
 function PackStickerGrid({ pack, onSelect }: { pack: StickerPackDetail; onSelect: (token: string) => void }) {
@@ -56,7 +57,37 @@ function PackStickerGrid({ pack, onSelect }: { pack: StickerPackDetail; onSelect
   );
 }
 
-export function StickerPicker({ onSelect, mobile = false, manageable = true }: StickerPickerProps) {
+function TokenStickerGrid({ items, onSelect }: {
+  items: Array<{ name: string; token: string }>;
+  onSelect: (token: string) => void;
+}) {
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3">
+      <div className="grid grid-cols-4 gap-1.5">
+        {items.map((item) => (
+          <button
+            key={item.token}
+            type="button"
+            onClick={() => onSelect(item.token)}
+            title={item.name}
+            aria-label={item.name}
+            className="sticker-tile w-full p-2"
+          >
+            <img
+              src={stickerPreviewUrl(item.token) || stickerUrl(item.token) || ''}
+              alt={item.name}
+              className="aspect-square w-full object-contain"
+              loading="lazy"
+            />
+            <span className="mt-1 block truncate text-[10px] text-txt-tertiary">{item.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function StickerPicker({ onSelect, mobile = false, manageable = true, spaceId = null }: StickerPickerProps) {
   const { t } = useTranslation(['chat', 'common']);
   const userId = useAuthStore(s => s.user?.id);
   const [items, setItems] = useState<PersonalSticker[]>([]);
@@ -75,6 +106,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
   const [activeTab, setActiveTab] = useState<string>('personal');
   const [showStore, setShowStore] = useState(false);
   const [currentPackDetail, setCurrentPackDetail] = useState<StickerPackDetail | null>(null);
+  const [library, setLibrary] = useState<Awaited<ReturnType<typeof api.stickerLibrary.get>> | null>(null);
 
   /**
    * Where focus goes once a form closed and the grid is drawn again, the
@@ -88,7 +120,15 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
     api.stickerStore.myPacks()
       .then(packs => {
         setInstalledPacks(packs);
-        setActiveTab(prev => (prev === 'personal' || packs.some(p => p.id === prev) ? prev : 'personal'));
+        setActiveTab(prev => (
+          prev === 'personal'
+          || prev === 'favorites'
+          || prev.startsWith('user:')
+          || prev.startsWith('space:')
+          || packs.some((pack) => `store:${pack.id}` === prev)
+            ? prev
+            : 'personal'
+        ));
       })
       .catch(() => {});
   };
@@ -107,22 +147,35 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
       .catch((err: unknown) => { if (active) setError(describeError(err)); })
       .finally(() => { if (active) setLoading(false); });
     loadInstalledPacks();
+    if (api.stickerLibrary?.get) {
+      api.stickerLibrary.get().then((next) => { if (active) setLibrary(next); }).catch(() => {});
+    }
     return () => { active = false; };
   }, [userId]);
 
   useEffect(() => {
-    if (activeTab === 'personal') {
+    if (activeTab === 'personal' || activeTab === 'favorites') {
       setCurrentPackDetail(null);
       return;
     }
+    if (activeTab.startsWith('user:')) {
+      setCurrentPackDetail(library?.privatePacks.find((pack) => pack.id === activeTab.slice(5)) ?? null);
+      return;
+    }
+    if (activeTab.startsWith('space:')) {
+      const spaceId = activeTab.slice(6);
+      setCurrentPackDetail(library?.spaces.find((entry) => entry.spaceId === spaceId)?.pack ?? null);
+      return;
+    }
+    const storeId = activeTab.startsWith('store:') ? activeTab.slice(6) : activeTab;
     let active = true;
-    api.stickerStore.getPack(activeTab).then(detail => {
+    api.stickerStore.getPack(storeId, spaceId ?? undefined).then(detail => {
       if (active) setCurrentPackDetail(detail);
     }).catch(() => {
       if (active) setCurrentPackDetail(null);
     });
     return () => { active = false; };
-  }, [activeTab]);
+  }, [activeTab, spaceId, library]);
 
   useEffect(() => {
     const targets = focusAfterForm.current;
@@ -177,7 +230,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
   return (
     <div
       ref={rootRef}
-      className={`flex flex-col min-h-0 text-txt-primary ${mobile ? 'w-full flex-1' : 'w-[352px] max-w-[calc(100*var(--app-vw)-24px)] h-[456px]'}`}
+      className={`relative flex flex-col min-h-0 pl-10 text-txt-primary ${mobile ? 'w-full flex-1' : 'w-[352px] max-w-[calc(100*var(--app-vw)-24px)] h-[456px]'}`}
       onKeyDown={event => {
         // Keys stay in the picker, so Enter never reaches the composer. Escape
         // belongs to the picker's host (pickerEscape.tsx), which gives it to
@@ -185,6 +238,34 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
         if (event.key !== 'Escape') event.stopPropagation();
       }}
     >
+      <nav aria-label={t('stickers.collections')} className="absolute bottom-12 left-1 top-11 z-10 flex w-8 flex-col gap-1 overflow-y-auto scrollbar-none">
+        <button type="button" onClick={() => setActiveTab('personal')} aria-label={t('stickers.title')} title={t('stickers.title')} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activeTab === 'personal' ? 'bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>♥</button>
+        {library && library.favorites.length > 0 && (
+          <button type="button" onClick={() => setActiveTab('favorites')} aria-label={t('stickers.favoritesTitle')} title={t('stickers.favoritesTitle')} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm ${activeTab === 'favorites' ? 'bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>★</button>
+        )}
+        {library?.privatePacks.map((pack) => (
+          <button key={pack.id} type="button" onClick={() => setActiveTab(`user:${pack.id}`)} aria-label={pack.name} title={pack.name} className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold ${activeTab === `user:${pack.id}` ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}>
+            {pack.items[0] ? <img src={stickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-6 w-6 object-contain" /> : pack.name.slice(0, 1)}
+          </button>
+        ))}
+        {library?.spaces.map((space) => (
+          <button
+            key={space.spaceId}
+            type="button"
+            disabled={!space.pack}
+            onClick={() => setActiveTab(`space:${space.spaceId}`)}
+            aria-label={space.name}
+            title={space.name}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold disabled:opacity-30 ${activeTab === `space:${space.spaceId}` ? 'ring-1 ring-accent-primary bg-accent-primary/15 text-accent-primary' : 'bg-surface-base/80 text-txt-tertiary'}`}
+          >
+            {space.icon
+              ? <img src={space.icon} alt="" className="h-6 w-6 object-contain" />
+              : space.pack?.items[0]
+                ? <img src={stickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-6 w-6 object-contain" />
+                : space.name.slice(0, 2).toUpperCase()}
+          </button>
+        ))}
+      </nav>
       {uploading ? (
         <StickerUploadForm
           key={userId}
@@ -331,6 +412,8 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
                 />
               )}
             </>
+          ) : activeTab === 'favorites' ? (
+            <TokenStickerGrid items={library?.favorites ?? []} onSelect={onSelect} />
           ) : currentPackDetail ? (
             <PackStickerGrid pack={currentPackDetail} onSelect={onSelect} />
           ) : (
@@ -369,12 +452,13 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
                   stickerPreviewUrl(pack.coverUrl) ||
                   pack.coverUrl ||
                   (firstItemToken ? stickerPreviewUrl(firstItemToken) || stickerUrl(firstItemToken) : null);
-                const isActive = activeTab === pack.id;
+                const tabId = `store:${pack.id}`;
+                const isActive = activeTab === tabId;
                 return (
                   <button
                     key={pack.id}
                     type="button"
-                    onClick={() => setActiveTab(pack.id)}
+                    onClick={() => setActiveTab(tabId)}
                     title={pack.name}
                     aria-label={pack.name}
                     className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg overflow-hidden transition-colors ${
@@ -414,6 +498,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true }: S
 
           {showStore && (
             <StickerStoreModal
+              spaceId={spaceId ?? undefined}
               onClose={() => setShowStore(false)}
               onPacksChanged={loadInstalledPacks}
             />

@@ -193,6 +193,17 @@ describe('personal stickers', () => {
     expect([metadata.width, metadata.pageHeight]).toEqual([512, 512]);
   });
 
+  it('crops animation frames without flattening them', async () => {
+    const frames = Buffer.alloc(16 * 32 * 4, 255);
+    frames.fill(0, 16 * 16 * 4);
+    const gif = await sharp(frames, { raw: { width: 16, height: 32, channels: 4, pageHeight: 16 } })
+      .gif({ delay: [100, 200], loop: 0 }).toBuffer();
+    const cropped = await encodeSticker(gif, undefined, { x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+    const metadata = await sharp(cropped, { animated: true }).metadata();
+    expect(metadata.pages).toBe(2);
+    expect([metadata.width, metadata.pageHeight]).toEqual([8, 8]);
+  });
+
   it('renames a sticker in the user collection and rejects invalid names or unknown stickers', async () => {
     const uploaded = (await upload()).json();
     const renamed = await app.inject({

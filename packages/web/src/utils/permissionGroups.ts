@@ -28,6 +28,8 @@ export const PERMISSION_GROUPS: { id: PermissionGroupId; perms: PermDef[] }[] = 
       { bit: PermissionBits.MANAGE_SPACE, key: 'MANAGE_SPACE' },
       { bit: PermissionBits.CREATE_SOUNDBOARD, key: 'CREATE_SOUNDBOARD' },
       { bit: PermissionBits.MANAGE_SOUNDBOARD, key: 'MANAGE_SOUNDBOARD' },
+      { bit: PermissionBits.CREATE_STICKERS, key: 'CREATE_STICKERS' },
+      { bit: PermissionBits.MANAGE_STICKERS, key: 'MANAGE_STICKERS' },
       { bit: PermissionBits.CREATE_INVITE, key: 'CREATE_INVITE' },
       { bit: PermissionBits.KICK_MEMBERS, key: 'KICK_MEMBERS' },
       { bit: PermissionBits.BAN_MEMBERS, key: 'BAN_MEMBERS' },

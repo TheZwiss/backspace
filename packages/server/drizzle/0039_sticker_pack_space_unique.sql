@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `idx_sticker_packs_one_space_pack` ON `sticker_packs` (`space_id`) WHERE "sticker_packs"."scope_type" = 'space';

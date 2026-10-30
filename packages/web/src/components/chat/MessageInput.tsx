@@ -106,6 +106,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   // Undefined until the ready that lists the channel: nothing can be routed yet, so the composer stays locked.
   const isDm = useIsDmChannel(channelId);
   const canSendMessages = isDm === true || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
@@ -767,6 +768,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       {activePopover && (
         <InputPopover
           activeTab={activePopover}
+          spaceId={currentSpaceId}
           onClose={() => setActivePopover(null)}
           onEmojiSelect={handleEmojiSelect}
           onGifSelect={handleGifSelect}
@@ -917,6 +919,20 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+            </svg>
+          </button>
+
+          {/* Sticker button */}
+          <button
+            onClick={() => togglePopover('sticker')}
+            className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              activePopover === 'sticker' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+            }`}
+            title={t('chat:stickers.title')}
+            aria-label={t('chat:stickers.title')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
           </button>
 

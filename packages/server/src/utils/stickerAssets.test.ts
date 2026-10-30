@@ -51,25 +51,24 @@ describe('cleanupUnusedStickerAssets', () => {
     sqlite.prepare("INSERT INTO dm_messages (id, dm_channel_id, user_id, content, created_at) VALUES ('d1', 'dm', 'alice', ?, 1)").run(tokenOf(idOf(3), 'https://peer.test'));
     sqlite.prepare("INSERT INTO reactions (id, message_id, user_id, emoji, created_at) VALUES ('r1', 'm1', 'alice', ?, 1)").run(tokenOf(idOf(4)));
     sqlite.prepare("INSERT INTO dm_reactions (id, dm_message_id, user_id, emoji, created_at) VALUES ('r2', 'd1', 'alice', ?, 1)").run(tokenOf(idOf(5)));
+    db.insert(schema.stickerFavorites).values({ userId: 'alice', assetId: idOf(6), name: 'Favorite', createdAt: 1 }).run();
     // Text that mentions an asset URL is not a sticker and keeps nothing.
-    sqlite.prepare("INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ('m2', 'channel', 'alice', ?, 1)").run(`look ${tokenOf(idOf(6))}`);
+    sqlite.prepare("INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ('m2', 'channel', 'alice', ?, 1)").run(`look ${tokenOf(idOf(7))}`);
 
     const dry = cleanupUnusedStickerAssets(true, NOW);
-    expect(dry).toEqual({ deletedFiles: 2, freedBytes: 30, errors: [] });
+    expect(dry).toEqual({ deletedFiles: 1, freedBytes: 15, errors: [] });
     expect(fs.existsSync(stickerAssetPath(idOf(6)))).toBe(true);
     expect(fs.existsSync(stickerPreviewPath(idOf(6)))).toBe(true);
 
     const result = cleanupUnusedStickerAssets(false, NOW);
-    expect(result).toEqual({ deletedFiles: 2, freedBytes: 30, errors: [] });
-    for (const n of [1, 2, 3, 4, 5]) {
+    expect(result).toEqual({ deletedFiles: 1, freedBytes: 15, errors: [] });
+    for (const n of [1, 2, 3, 4, 5, 6]) {
       expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(true);
       expect(fs.existsSync(stickerPreviewPath(idOf(n)))).toBe(true);
     }
-    for (const n of [6, 7]) {
-      expect(fs.existsSync(stickerAssetPath(idOf(n)))).toBe(false);
-      expect(fs.existsSync(stickerPreviewPath(idOf(n)))).toBe(false);
-    }
-    expect(db.select().from(schema.stickerAssets).all().map(row => row.id).sort()).toEqual([1, 2, 3, 4, 5].map(idOf));
+    expect(fs.existsSync(stickerAssetPath(idOf(7)))).toBe(false);
+    expect(fs.existsSync(stickerPreviewPath(idOf(7)))).toBe(false);
+    expect(db.select().from(schema.stickerAssets).all().map(row => row.id).sort()).toEqual([1, 2, 3, 4, 5, 6].map(idOf));
   });
 
   it('leaves assets inside the grace period alone', () => {

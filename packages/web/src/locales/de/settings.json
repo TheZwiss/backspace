@@ -136,6 +136,7 @@
       "appearance": "Darstellung",
       "voice": "Sprache & Video",
       "privacy": "Privatsphäre",
+      "stickers": "Sticker",
       "connections": "Verbindungen",
       "keybinds": "Tastenkürzel",
       "desktop": "Desktop",
@@ -146,6 +147,22 @@
   },
   "appearance": {
     "title": "Darstellung"
+  },
+  "stickers": {
+    "title": "Meine Sticker-Bibliothek",
+    "description": "Private Sticker-Alben, die nur du sehen kannst. Jedes Album enthält bis zu 30 animierte oder statische Sticker.",
+    "packs": "Private Alben",
+    "newPack": "Name des neuen Albums",
+    "createPack": "Album erstellen",
+    "favorites": "Favoriten",
+    "favoritesHint": "Klicke im Chat mit rechts auf einen Sticker, um hier eine lokale Kopie zu speichern.",
+    "noFavorites": "Noch keine favorisierten Sticker.",
+    "share": "Album teilen",
+    "instance": "Diese Instanz",
+    "requestShare": "Freigabe anfordern",
+    "shareRequested": "Freigabeanfrage gesendet.",
+    "cropTitle": "Sticker quadratisch zuschneiden",
+    "itemName": "Sticker-Name"
   },
   "account": {
     "title": "Mein Konto",

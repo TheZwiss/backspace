@@ -175,6 +175,11 @@
   },
   "stickers": {
     "title": "Meine Sticker",
+    "collections": "Sticker-Sammlungen",
+    "favoritesTitle": "Favorisierte Sticker",
+    "favorite": "Sticker favorisieren",
+    "favorited": "Sticker zu Favoriten hinzugefügt",
+    "sharePending": "Ein privates Album möchte in dieser Instanz veröffentlicht werden.",
     "upload": "Bild hochladen",
     "limits": "PNG, JPEG, WebP oder GIF · maximal 5 MB",
     "loading": "Wird geladen…",

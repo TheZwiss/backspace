@@ -14,6 +14,9 @@ vi.mock('../../api/client', async importOriginal => ({
   api: {
     stickers: { list: vi.fn(), remove: vi.fn(), collect: vi.fn(), rename: vi.fn() },
     stickerStore: { myPacks: vi.fn().mockResolvedValue([]), getPack: vi.fn().mockResolvedValue(null) },
+    stickerLibrary: {
+      get: vi.fn().mockResolvedValue({ privatePacks: [], spaces: [], favorites: [] }),
+    },
     instance: { info: vi.fn().mockResolvedValue({}) },
   },
 }));
@@ -33,7 +36,41 @@ beforeEach(() => {
   vi.mocked(api.stickers.remove).mockResolvedValue({ success: true });
   vi.mocked(api.stickers.collect).mockResolvedValue(sticker);
   vi.mocked(api.stickers.rename).mockImplementation(async (id, name) => ({ ...sticker, id, name }));
+  vi.mocked(api.stickerLibrary.get).mockResolvedValue({ privatePacks: [], spaces: [], favorites: [] });
   vi.mocked(uploadSticker).mockResolvedValue(sticker);
+});
+
+describe('server and private sticker collections', () => {
+  it('shows private albums, favorites and every joined server in the left rail', async () => {
+    const onSelect = vi.fn();
+    const second = { ...sticker, id: 'b'.repeat(64), name: 'Private Cat', token: `sticker:https://chat.test/api/stickers/assets/${'b'.repeat(64)}.webp` };
+    const serverSticker = { id: 'server-item', name: 'Server Dog', token: second.token, packId: 'server-pack', versionId: 'v1', assetId: second.id, sortOrder: 0, status: 'active' as const, createdAt: 1 };
+    const privatePack = {
+      id: 'private-pack', name: 'Cat Album', description: null, creatorId: 'alice', creatorName: 'Alice', coverAssetId: second.id, coverUrl: null,
+      originType: 'source' as const, sourceInstance: null, sourcePackId: null, currentVersion: 1, status: 'active' as const, itemCount: 1,
+      createdAt: 1, updatedAt: 1, reviewNotes: null, reviewedBy: null, reviewedAt: null,
+      items: [{ ...serverSticker, id: 'private-item', packId: 'private-pack', name: 'Private Cat' }],
+    };
+    const serverPack = {
+      ...privatePack, id: 'server-pack', name: 'Server Pack', items: [serverSticker], scopeType: 'space' as const, spaceId: 'space-1',
+    };
+    vi.mocked(api.stickerLibrary.get).mockResolvedValue({
+      privatePacks: [privatePack],
+      favorites: [{ ...sticker, id: sticker.id, createdAt: 1 }],
+      spaces: [{ spaceId: 'space-1', name: 'Server One', canCreate: false, canManage: false, pack: serverPack }],
+    });
+
+    render(<StickerPicker onSelect={onSelect} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Favorite stickers' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Happy' }));
+    expect(onSelect).toHaveBeenCalledWith(sticker.token);
+    fireEvent.click(screen.getByRole('button', { name: 'Cat Album' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Private Cat' }));
+    expect(onSelect).toHaveBeenCalledWith(second.token);
+    fireEvent.click(screen.getByRole('button', { name: 'Server One' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Server Dog' }));
+    expect(onSelect).toHaveBeenCalledWith(second.token);
+  });
 });
 
 afterEach(() => vi.unstubAllGlobals());

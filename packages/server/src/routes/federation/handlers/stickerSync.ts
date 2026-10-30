@@ -15,6 +15,7 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
     const packs = db.select().from(schema.stickerPacks)
       .where(and(
         eq(schema.stickerPacks.originType, 'source'),
+        eq(schema.stickerPacks.scopeType, 'instance'),
         eq(schema.stickerPacks.status, 'approved'),
       )).all();
 
@@ -64,6 +65,7 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
       .where(and(
         eq(schema.stickerPacks.id, packId),
         eq(schema.stickerPacks.originType, 'source'),
+        eq(schema.stickerPacks.scopeType, 'instance'),
         eq(schema.stickerPacks.status, 'approved'),
       )).get();
 

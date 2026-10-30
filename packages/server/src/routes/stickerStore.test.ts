@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../db/index.js';
 import { stickerRoutes } from './stickers.js';
 import { stickerStoreRoutes } from './stickerStore.js';
+import { _resetStickerLibraryRateLimit, stickerLibraryRoutes } from './stickerLibrary.js';
 import { registerStickerFederationRoutes } from './federation/handlers/stickerSync.js';
 import { syncRemotePack } from '../utils/stickerSync.js';
 import { getMaxStickerSizeBytes } from '../utils/stickerAssets.js';
@@ -63,6 +64,7 @@ vi.mock('./federation/handlers/s2sAuth.js', () => ({
 }));
 
 beforeEach(async () => {
+  _resetStickerLibraryRateLimit();
   settings.uploadDir = await mkdtemp(path.join(tmpdir(), 'backspace-sticker-store-'));
   settings.maxStickerSize = 5 * 1024 * 1024;
   sqlite = new Database(':memory:');
@@ -84,6 +86,7 @@ beforeEach(async () => {
   app = Fastify();
   await app.register(stickerRoutes);
   await app.register(stickerStoreRoutes);
+  await app.register(stickerLibraryRoutes);
   registerStickerFederationRoutes(app);
 });
 
@@ -496,6 +499,148 @@ describe('Federated Sticker Store', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('manages private albums, favorites and approved instance shares', async () => {
+    const image = await makeTestImage('green');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/private-sticker-packs',
+      headers: { authorization: 'alice' },
+      payload: { name: 'Alice Album' },
+    });
+    expect(created.statusCode).toBe(201);
+    const pack = created.json();
+
+    const added = await app.inject({
+      method: 'POST',
+      url: `/api/sticker-library/packs/${pack.id}/items`,
+      headers: { authorization: 'alice' },
+      payload: {
+        name: 'Cropped',
+        image,
+        crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+      },
+    });
+    expect(added.statusCode).toBe(201);
+
+    const favorite = await app.inject({
+      method: 'POST',
+      url: '/api/sticker-favorites',
+      headers: { authorization: 'bob' },
+      payload: { name: 'Borrowed', image },
+    });
+    expect(favorite.statusCode).toBe(201);
+
+    const bobPack = await app.inject({
+      method: 'POST',
+      url: '/api/private-sticker-packs',
+      headers: { authorization: 'bob' },
+      payload: { name: 'Bob Album' },
+    });
+    const fromFavorite = await app.inject({
+      method: 'POST',
+      url: `/api/private-sticker-packs/${bobPack.json().id}/items/from-favorite`,
+      headers: { authorization: 'bob' },
+      payload: { favoriteId: favorite.json().id, name: 'Copied Favorite' },
+    });
+    expect(fromFavorite.statusCode).toBe(201);
+
+    const share = await app.inject({
+      method: 'POST',
+      url: `/api/private-sticker-packs/${pack.id}/shares`,
+      headers: { authorization: 'alice' },
+      payload: { targetType: 'instance' },
+    });
+    expect(share.statusCode).toBe(201);
+
+    const pending = await app.inject({
+      method: 'GET',
+      url: '/api/sticker-pack-shares?targetType=instance',
+      headers: { authorization: 'admin' },
+    });
+    expect(pending.statusCode).toBe(200);
+    expect(pending.json()[0].pack.name).toBe('Alice Album');
+
+    const decision = await app.inject({
+      method: 'POST',
+      url: `/api/sticker-pack-shares/${share.json().id}/decision`,
+      headers: { authorization: 'admin' },
+      payload: { decision: 'approved' },
+    });
+    expect(decision.statusCode).toBe(200);
+
+    const explored = await app.inject({
+      method: 'GET',
+      url: '/api/sticker-store/packs',
+      headers: { authorization: 'Bearer bob' },
+    });
+    expect(explored.json().map((entry: { id: string }) => entry.id)).toContain(pack.id);
+  });
+
+  it('has one server pack, enforces its permissions and accepts approved album shares', async () => {
+    const now = Date.now();
+    db.insert(schema.schema.spaces).values({
+      id: 'sticker-space',
+      name: 'Sticker Space',
+      ownerId: 'alice',
+      inviteCode: 'stickers',
+      visibility: 'private',
+      createdAt: now,
+    }).run();
+    db.insert(schema.schema.spaceMembers).values([
+      { spaceId: 'sticker-space', userId: 'alice', joinedAt: now },
+      { spaceId: 'sticker-space', userId: 'bob', joinedAt: now },
+    ]).run();
+
+    const serverPack = await app.inject({
+      method: 'POST',
+      url: '/api/spaces/sticker-space/sticker-pack',
+      headers: { authorization: 'alice' },
+    });
+    expect(serverPack.statusCode).toBe(201);
+    const secondCreate = await app.inject({
+      method: 'POST',
+      url: '/api/spaces/sticker-space/sticker-pack',
+      headers: { authorization: 'alice' },
+    });
+    expect(secondCreate.statusCode).toBe(200);
+    expect(secondCreate.json().id).toBe(serverPack.json().id);
+
+    const image = await makeTestImage('purple');
+    const bobPack = await app.inject({
+      method: 'POST',
+      url: '/api/private-sticker-packs',
+      headers: { authorization: 'bob' },
+      payload: { name: 'Shared to server' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: `/api/sticker-library/packs/${bobPack.json().id}/items`,
+      headers: { authorization: 'bob' },
+      payload: { name: 'Share me', image },
+    });
+    const share = await app.inject({
+      method: 'POST',
+      url: `/api/private-sticker-packs/${bobPack.json().id}/shares`,
+      headers: { authorization: 'bob' },
+      payload: { targetType: 'space', targetId: 'sticker-space' },
+    });
+    expect(share.statusCode).toBe(201);
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/api/sticker-pack-shares/${share.json().id}/decision`,
+      headers: { authorization: 'alice' },
+      payload: { decision: 'approved' },
+    });
+    expect(approved.statusCode).toBe(200);
+
+    const explored = await app.inject({
+      method: 'GET',
+      url: '/api/sticker-store/packs?spaceId=sticker-space',
+      headers: { authorization: 'Bearer bob' },
+    });
+    expect(explored.json().map((entry: { id: string }) => entry.id)).toContain(bobPack.json().id);
   });
 });
 

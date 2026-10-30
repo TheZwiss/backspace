@@ -66,8 +66,21 @@ export const MAX_STICKER_PACK_NAME_LENGTH = 100;
 export const MAX_STICKER_PACK_DESC_LENGTH = 500;
 /** Maximum number of stickers per sticker pack. */
 export const MAX_STICKERS_PER_PACK = 100;
+/** Private albums are deliberately smaller than public/instance packs. */
+export const MAX_PRIVATE_STICKERS_PER_PACK = 30;
+/** One server owns one shared pack. */
+export const MAX_SPACE_STICKERS = 50;
+
+/** Normalized square crop: all values are fractions of the source image. */
+export interface StickerCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export type StickerPackOriginType = 'source' | 'replica';
+export type StickerPackScope = 'user' | 'space' | 'instance';
 export type StickerPackStatus =
   | 'draft'
   | 'pending_review'
@@ -89,6 +102,8 @@ export interface StickerPackSummary {
   originType: StickerPackOriginType;
   sourceInstance: string | null;
   sourcePackId: string | null;
+  scopeType?: StickerPackScope;
+  spaceId?: string | null;
   currentVersion: number;
   status: StickerPackStatus;
   itemCount: number;
@@ -117,6 +132,10 @@ export interface StickerPackDetail extends StickerPackSummary {
   reviewedBy: string | null;
   reviewedAt: number | null;
   items: StickerPackItem[];
+  canManage?: boolean;
+  canAdd?: boolean;
+  itemLimit?: number;
+  shares?: StickerPackShare[];
 }
 
 export interface StickerPeerPolicy {
@@ -126,6 +145,29 @@ export interface StickerPeerPolicy {
   autoSync: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface FavoriteSticker {
+  id: string;
+  name: string;
+  token: string;
+  createdAt: number;
+}
+
+export type StickerShareTargetType = 'instance' | 'space';
+export type StickerShareStatus = 'pending' | 'approved' | 'rejected';
+
+export interface StickerPackShare {
+  id: string;
+  packId: string;
+  targetType: StickerShareTargetType;
+  targetId: string | null;
+  requestedBy: string;
+  status: StickerShareStatus;
+  reviewedBy: string | null;
+  reviewNotes: string | null;
+  createdAt: number;
+  reviewedAt: number | null;
 }
 
 /**

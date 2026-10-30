@@ -438,6 +438,8 @@
     "names": {
       "createSoundboard": "Create soundboard sounds",
       "manageSoundboard": "Manage soundboard sounds",
+      "createStickers": "Create server stickers",
+      "manageStickers": "Manage server stickers",
       "useSoundboard": "Use soundboard",
       "useExternalSounds": "Use sounds from other servers",
       "administrator": "Administrator",
@@ -703,6 +705,17 @@
     "suppressRoles": "Suppress role mentions",
     "massHeading": "Group mentions",
     "massNote": "@here reaches the same members as @everyone. Mentions of you by name always notify you."
+  },
+  "stickers": {
+    "title": "Server stickers",
+    "description": "One shared sticker pack for this server, with up to 50 static or animated stickers.",
+    "empty": "This server does not have a sticker pack yet.",
+    "create": "Create server pack",
+    "add": "Add sticker",
+    "pendingShares": "Albums awaiting approval",
+    "sharePending": "Requested a private album share for this server.",
+    "approve": "Approve",
+    "reject": "Reject"
   },
   "profile": {
     "title": "Server profile",

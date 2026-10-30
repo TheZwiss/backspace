@@ -24,6 +24,8 @@ export const PermissionBits = {
   MANAGE_SOUNDBOARD:    1n << 17n,
   USE_SOUNDBOARD:       1n << 27n,
   USE_EXTERNAL_SOUNDS:  1n << 28n,
+  CREATE_STICKERS:      1n << 29n,
+  MANAGE_STICKERS:      1n << 30n,
   CONNECT:              1n << 20n,
   SPEAK:                1n << 21n,
   MUTE_MEMBERS:         1n << 22n,

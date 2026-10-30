@@ -179,6 +179,11 @@
   },
   "stickers": {
     "title": "Minhas figurinhas",
+    "collections": "Coleções de figurinhas",
+    "favoritesTitle": "Figurinhas favoritas",
+    "favorite": "Favoritar figurinha",
+    "favorited": "Figurinha adicionada às favoritas",
+    "sharePending": "Um álbum privado solicitou publicação nesta instância.",
     "upload": "Enviar imagem",
     "limits": "PNG, JPEG, WebP ou GIF · até 5 MB por imagem",
     "loading": "Processando…",

@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import {
   MAX_PERSONAL_STICKERS, MAX_STICKER_NAME_LENGTH, STICKER_ID_PATTERN, STICKER_PREFIX,
-  STICKER_UPLOADS_PER_MINUTE, type PersonalSticker,
+  STICKER_UPLOADS_PER_MINUTE, type PersonalSticker, type StickerCrop,
 } from '@backspace/shared/src/stickers.js';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
@@ -121,7 +121,7 @@ export async function saveStickerAsset(encoded: Buffer): Promise<string> {
  * when it is still larger than an upload may be, so a stored asset is never
  * bigger than the bytes the account sent.
  */
-export async function encodeSticker(bytes: Buffer, maxBytes?: number): Promise<Buffer> {
+export async function encodeSticker(bytes: Buffer, maxBytes?: number, crop?: StickerCrop): Promise<Buffer> {
   const limit = maxBytes ?? getMaxStickerSizeBytes();
   if (!bytes.length || bytes.length > limit) throw new StickerImageError();
   let encoded: Buffer;
@@ -131,7 +131,24 @@ export async function encodeSticker(bytes: Buffer, maxBytes?: number): Promise<B
     if (!metadata.format || !['png', 'jpeg', 'webp', 'gif'].includes(metadata.format)) {
       throw new StickerImageError();
     }
-    encoded = await image.rotate()
+    const frameHeight = metadata.pageHeight ?? metadata.height;
+    let pipeline = image.rotate();
+    if (crop) {
+      const values = [crop.x, crop.y, crop.width, crop.height];
+      if (!metadata.width || !frameHeight || values.some((value) => !Number.isFinite(value) || value < 0 || value > 1)
+        || crop.width <= 0 || crop.height <= 0 || crop.x + crop.width > 1.000001 || crop.y + crop.height > 1.000001) {
+        throw new StickerImageError();
+      }
+      const left = Math.min(metadata.width - 1, Math.round(crop.x * metadata.width));
+      const top = Math.min(frameHeight - 1, Math.round(crop.y * frameHeight));
+      pipeline = pipeline.extract({
+        left,
+        top,
+        width: Math.max(1, Math.min(metadata.width - left, Math.round(crop.width * metadata.width))),
+        height: Math.max(1, Math.min(frameHeight - top, Math.round(crop.height * frameHeight))),
+      });
+    }
+    encoded = await pipeline
       .resize(MAX_STICKER_DIMENSION, MAX_STICKER_DIMENSION, { fit: 'inside', withoutEnlargement: true })
       .webp().toBuffer();
   } catch (error) {

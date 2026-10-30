@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { stickerUrl, stickerPreviewUrl, type StickerPackDetail, type StickerPackSummary } from '@backspace/shared/src/stickers';
+import { stickerUrl, stickerPreviewUrl, type StickerPackDetail, type StickerPackShare, type StickerPackSummary } from '@backspace/shared/src/stickers';
 import { api } from '../../api/client';
 import { describeError } from '../../i18n/errors';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
@@ -13,9 +13,10 @@ import './stickers.css';
 interface StickerStoreModalProps {
   onClose: () => void;
   onPacksChanged?: () => void;
+  spaceId?: string;
 }
 
-export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModalProps) {
+export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerStoreModalProps) {
   const { t } = useTranslation(['chat', 'common']);
   const isSettingsAdmin = useSettingsStore(s => s.isAdmin);
   const isAuthAdmin = useAuthStore(s => !!s.user?.isAdmin);
@@ -26,6 +27,7 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
   const [packs, setPacks] = useState<StickerPackSummary[]>([]);
   const [myPacks, setMyPacks] = useState<StickerPackSummary[]>([]);
   const [reviews, setReviews] = useState<StickerPackSummary[]>([]);
+  const [albumShares, setAlbumShares] = useState<Array<StickerPackShare & { pack: StickerPackDetail | null }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
@@ -46,7 +48,9 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
     setError('');
     setActionSuccess('');
     try {
-      const data = await api.stickerStore.listPacks({ q: query || undefined });
+      const data = await api.stickerStore.listPacks(
+        spaceId ? { q: query || undefined, spaceId } : { q: query || undefined },
+      );
       setPacks(data);
     } catch (err) {
       setError(describeError(err));
@@ -75,8 +79,12 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
     setError('');
     setActionSuccess('');
     try {
-      const data = await api.admin.stickerPacks.listReviews();
+      const [data, shares] = await Promise.all([
+        api.admin.stickerPacks.listReviews(),
+        api.stickerLibrary?.listShares ? api.stickerLibrary.listShares({ targetType: 'instance' }) : Promise.resolve([]),
+      ]);
       setReviews(data);
+      setAlbumShares(shares);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -105,13 +113,13 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
     e.stopPropagation();
     try {
       if (pack.isInstalled) {
-        await api.stickerStore.uninstall(pack.id);
+        await (spaceId ? api.stickerStore.uninstall(pack.id, spaceId) : api.stickerStore.uninstall(pack.id));
         setPacks(prev => prev.map(p => p.id === pack.id ? { ...p, isInstalled: false } : p));
         if (previewPack && previewPack.id === pack.id) {
           setPreviewPack(prev => prev ? { ...prev, isInstalled: false } : null);
         }
       } else {
-        await api.stickerStore.install(pack.id);
+        await (spaceId ? api.stickerStore.install(pack.id, spaceId) : api.stickerStore.install(pack.id));
         setPacks(prev => prev.map(p => p.id === pack.id ? { ...p, isInstalled: true } : p));
         if (previewPack && previewPack.id === pack.id) {
           setPreviewPack(prev => prev ? { ...prev, isInstalled: true } : null);
@@ -125,7 +133,9 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
 
   const handleOpenPreview = async (packId: string) => {
     try {
-      const detail = await api.stickerStore.getPack(packId);
+      const detail = spaceId
+        ? await api.stickerStore.getPack(packId, spaceId)
+        : await api.stickerStore.getPack(packId);
       setPreviewPack(detail);
     } catch (err) {
       setError(describeError(err));
@@ -515,6 +525,50 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
           ) : (
             <div>
               {/* Admin Reviews Tab */}
+              {!loading && albumShares.length > 0 && (
+                <div className="mb-4 space-y-3">
+                  {albumShares.map((share) => (
+                    <div key={share.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-soft bg-surface-base/60 p-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-txt-primary">{share.pack?.name ?? share.packId}</h4>
+                        <p className="text-xs text-txt-tertiary">{t('stickers.sharePending')}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={actionLoading === share.id}
+                          onClick={() => void (async () => {
+                            setActionLoading(share.id);
+                            try {
+                              await api.stickerLibrary.decideShare(share.id, 'rejected');
+                              await fetchReviews();
+                            } catch (err) { setError(describeError(err)); }
+                            finally { setActionLoading(null); }
+                          })()}
+                          className="sticker-secondary-button text-xs"
+                        >
+                          {t('stickers.reject')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionLoading === share.id}
+                          onClick={() => void (async () => {
+                            setActionLoading(share.id);
+                            try {
+                              await api.stickerLibrary.decideShare(share.id, 'approved');
+                              await fetchReviews();
+                            } catch (err) { setError(describeError(err)); }
+                            finally { setActionLoading(null); }
+                          })()}
+                          className="sticker-primary-button text-xs"
+                        >
+                          {t('stickers.approve')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {loading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => (

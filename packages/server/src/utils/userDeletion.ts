@@ -150,6 +150,12 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       tx.delete(schema.dmReactions).where(eq(schema.dmReactions.userId, uid)).run();
     }
     tx.delete(schema.spaceFolders).where(eq(schema.spaceFolders.userId, uid)).run();
+    tx.delete(schema.stickerFavorites).where(eq(schema.stickerFavorites.userId, uid)).run();
+    tx.delete(schema.stickerPackShares).where(eq(schema.stickerPackShares.requestedBy, uid)).run();
+    tx.delete(schema.stickerPacks).where(and(
+      eq(schema.stickerPacks.scopeType, 'user'),
+      eq(schema.stickerPacks.creatorId, uid),
+    )).run();
     // Personal bookmarks: a tombstone keeps the users row, so the cascade never
     // fires. Their rows go here; any files they owned are deleted after commit.
     filesToDelete.push(...purgeUserBookmarks(tx, uid));

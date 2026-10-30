@@ -441,6 +441,8 @@
     "names": {
       "createSoundboard": "Criar efeitos sonoros",
       "manageSoundboard": "Gerenciar efeitos sonoros",
+      "createStickers": "Criar figurinhas do servidor",
+      "manageStickers": "Gerenciar figurinhas do servidor",
       "useSoundboard": "Usar efeitos sonoros",
       "useExternalSounds": "Usar sons de outros servidores",
       "administrator": "Administrador",
@@ -716,6 +718,17 @@
     "suppressRoles": "Suprimir menções a cargos",
     "massHeading": "Menções em grupo",
     "massNote": "@here alcança os mesmos membros que @everyone. Menções diretas a você sempre notificam."
+  },
+  "stickers": {
+    "title": "Figurinhas do servidor",
+    "description": "Um pacote compartilhado para este servidor, com até 50 figurinhas estáticas ou animadas.",
+    "empty": "Este servidor ainda não tem um pacote de figurinhas.",
+    "create": "Criar pacote do servidor",
+    "add": "Adicionar figurinha",
+    "pendingShares": "Álbuns aguardando aprovação",
+    "sharePending": "Solicitou compartilhar um álbum privado com este servidor.",
+    "approve": "Aprovar",
+    "reject": "Rejeitar"
   },
   "profile": {
     "title": "Perfil do servidor",

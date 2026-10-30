@@ -148,6 +148,8 @@ Migration `0031_personal_stickers` adds only these two tables; message and react
 
 The composite primary key (user_id, sticker_id) makes collection idempotent; one user holds at most 200 rows (`MAX_PERSONAL_STICKERS`, checked by the routes). Removing an entry or deleting its user removes only the association. An asset stays while any collection entry, message or reaction on this instance names it; after that, and once past its grace period, the storage cleanup deletes the row and its file (`cleanupUnusedStickerAssets`). Files live under `UPLOAD_DIR/stickers`, outside the attachment phases and the storage stats.
 
+Migration `0038_sticker_library` adds `sticker_packs.scope_type`, `sticker_packs.space_id`, `sticker_favorites`, and `sticker_pack_shares`; `0039_sticker_pack_space_unique` enforces one server-scoped pack per space. Private albums are user-scoped packs limited to 30 items, server packs are space-scoped and limited to 50, and instance packs keep the existing 100-item limit. Favorites reference content-addressed assets and are counted by the sticker janitor. Details: [stickers.md](stickers.md).
+
 ### message_bookmarks and bookmark_attachments
 
 Migration `0034_message_bookmarks` adds only these two tables. Full description: [bookmarks.md](bookmarks.md).

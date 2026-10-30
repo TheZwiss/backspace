@@ -438,6 +438,8 @@
     "names": {
       "createSoundboard": "Soundeffekte erstellen",
       "manageSoundboard": "Soundeffekte verwalten",
+      "createStickers": "Server-Sticker erstellen",
+      "manageStickers": "Server-Sticker verwalten",
       "useSoundboard": "Soundeffekte verwenden",
       "useExternalSounds": "Sounds anderer Server verwenden",
       "administrator": "Administrator",
@@ -703,6 +705,17 @@
     "suppressRoles": "Rollenerwähnungen unterdrücken",
     "massHeading": "Gruppenerwähnungen",
     "massNote": "@here erreicht dieselben Mitglieder wie @everyone. Erwähnungen von dir mit Namen benachrichtigen dich immer."
+  },
+  "stickers": {
+    "title": "Server-Sticker",
+    "description": "Ein gemeinsames Sticker-Paket für diesen Server mit bis zu 50 statischen oder animierten Stickern.",
+    "empty": "Dieser Server hat noch kein Sticker-Paket.",
+    "create": "Server-Paket erstellen",
+    "add": "Sticker hinzufügen",
+    "pendingShares": "Alben zur Freigabe",
+    "sharePending": "Möchte ein privates Album mit diesem Server teilen.",
+    "approve": "Genehmigen",
+    "reject": "Ablehnen"
   },
   "profile": {
     "title": "Serverprofil",

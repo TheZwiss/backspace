@@ -901,6 +901,8 @@ export const stickerPacks = sqliteTable('sticker_packs', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
+  scopeType: text('scope_type', { enum: ['user', 'space', 'instance'] }).notNull().default('instance'),
+  spaceId: text('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
   creatorId: text('creator_id').references(() => users.id, { onDelete: 'set null' }),
   creatorName: text('creator_name'),
   coverAssetId: text('cover_asset_id').references(() => stickerAssets.id, { onDelete: 'set null' }),
@@ -919,6 +921,10 @@ export const stickerPacks = sqliteTable('sticker_packs', {
   statusIdx: index('idx_sticker_packs_status').on(table.status),
   creatorIdx: index('idx_sticker_packs_creator').on(table.creatorId),
   sourceIdx: index('idx_sticker_packs_source').on(table.sourceInstance, table.sourcePackId),
+  scopeIdx: index('idx_sticker_packs_scope').on(table.scopeType, table.spaceId, table.creatorId),
+  spacePackUnique: uniqueIndex('idx_sticker_packs_one_space_pack')
+    .on(table.spaceId)
+    .where(sql`${table.scopeType} = 'space'`),
 }));
 
 export const stickerPackVersions = sqliteTable('sticker_pack_versions', {
@@ -970,6 +976,31 @@ export const stickerPeerPolicies = sqliteTable('sticker_peer_policies', {
   updatedAt: integer('updated_at').notNull(),
 }, (table) => ({
   peerOriginIdx: index('idx_sticker_peer_policies_peer').on(table.peerOrigin),
+}));
+
+export const stickerFavorites = sqliteTable('sticker_favorites', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => stickerAssets.id),
+  name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.assetId] }),
+}));
+
+export const stickerPackShares = sqliteTable('sticker_pack_shares', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  targetType: text('target_type', { enum: ['instance', 'space'] }).notNull(),
+  targetId: text('target_id'),
+  requestedBy: text('requested_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewNotes: text('review_notes'),
+  createdAt: integer('created_at').notNull(),
+  reviewedAt: integer('reviewed_at'),
+}, (table) => ({
+  uniqueTarget: uniqueIndex('idx_sticker_share_target').on(table.packId, table.targetType, table.targetId),
+  targetIdx: index('idx_sticker_share_target_status').on(table.targetType, table.targetId, table.status),
 }));
 
 // Game icon assets: content-addressed WebP the desktop client extracted from

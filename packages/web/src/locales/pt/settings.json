@@ -136,6 +136,7 @@
       "appearance": "Aparência",
       "voice": "Voz e vídeo",
       "privacy": "Privacidade",
+      "stickers": "Figurinhas",
       "connections": "Conexões",
       "keybinds": "Atalhos",
       "desktop": "Desktop",
@@ -146,6 +147,22 @@
   },
   "appearance": {
     "title": "Aparência"
+  },
+  "stickers": {
+    "title": "Minha biblioteca de figurinhas",
+    "description": "Álbuns privados que somente você pode ver. Cada álbum aceita até 30 figurinhas animadas ou estáticas.",
+    "packs": "Álbuns privados",
+    "newPack": "Nome do novo álbum",
+    "createPack": "Criar álbum",
+    "favorites": "Favoritas",
+    "favoritesHint": "Clique com o direito em uma figurinha no chat para salvar uma cópia local aqui.",
+    "noFavorites": "Ainda não há figurinhas favoritas.",
+    "share": "Compartilhar álbum",
+    "instance": "Esta instância",
+    "requestShare": "Solicitar aprovação",
+    "shareRequested": "Solicitação enviada para aprovação.",
+    "cropTitle": "Recortar figurinha em formato quadrado",
+    "itemName": "Nome da figurinha"
   },
   "account": {
     "title": "Minha conta",

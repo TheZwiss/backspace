@@ -36,6 +36,40 @@ async function tryResolveUserId(request: FastifyRequest): Promise<string | null>
   }
 }
 
+function visibleInStore(
+  pack: typeof schema.stickerPacks.$inferSelect,
+  userId: string | null,
+  spaceId: string | null,
+): boolean {
+  if (!['approved', 'active'].includes(pack.status)) return false;
+  if (pack.scopeType === 'instance') return true;
+  if (!userId) return false;
+  const db = getDb();
+  if (pack.scopeType === 'space') {
+    return pack.spaceId === spaceId && !!db.select().from(schema.spaceMembers).where(and(
+      eq(schema.spaceMembers.spaceId, pack.spaceId!),
+      eq(schema.spaceMembers.userId, userId),
+    )).get();
+  }
+  const instanceShare = db.select().from(schema.stickerPackShares).where(and(
+    eq(schema.stickerPackShares.packId, pack.id),
+    eq(schema.stickerPackShares.targetType, 'instance'),
+    eq(schema.stickerPackShares.status, 'approved'),
+  )).get();
+  if (instanceShare) return true;
+  if (!spaceId) return false;
+  const spaceShare = db.select().from(schema.stickerPackShares).where(and(
+    eq(schema.stickerPackShares.packId, pack.id),
+    eq(schema.stickerPackShares.targetType, 'space'),
+    eq(schema.stickerPackShares.targetId, spaceId),
+    eq(schema.stickerPackShares.status, 'approved'),
+  )).get();
+  return !!spaceShare && !!db.select().from(schema.spaceMembers).where(and(
+    eq(schema.spaceMembers.spaceId, spaceId),
+    eq(schema.spaceMembers.userId, userId),
+  )).get();
+}
+
 export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
   await stickerStoreAdminRoutes(app);
 
@@ -44,17 +78,15 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Browse available sticker packs in the store (approved local packs & active federated replicas).
    */
-  app.get<{ Querystring: { q?: string } }>('/api/sticker-store/packs', async (request) => {
+  app.get<{ Querystring: { q?: string; spaceId?: string } }>('/api/sticker-store/packs', async (request) => {
     const db = getDb();
     const userId = await tryResolveUserId(request);
     const search = request.query.q?.trim().toLowerCase();
 
-    const allowedStatuses = ['approved', 'active'];
-    const query = db.select().from(schema.stickerPacks)
-      .where(inArray(schema.stickerPacks.status, allowedStatuses))
-      .orderBy(desc(schema.stickerPacks.updatedAt));
-
-    const rows = query.all();
+    const spaceId = request.query.spaceId?.trim() || null;
+    const rows = db.select().from(schema.stickerPacks)
+      .orderBy(desc(schema.stickerPacks.updatedAt)).all()
+      .filter((pack) => visibleInStore(pack, userId, spaceId));
     const filteredRows = search
       ? rows.filter(r => r.name.toLowerCase().includes(search) || (r.description && r.description.toLowerCase().includes(search)))
       : rows;
@@ -91,6 +123,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
         originType: pack.originType as 'source' | 'replica',
         sourceInstance: pack.sourceInstance,
         sourcePackId: pack.sourcePackId,
+        scopeType: pack.scopeType,
+        spaceId: pack.spaceId,
         currentVersion: pack.currentVersion,
         status: pack.status as StickerPackStatus,
         itemCount: items.length,
@@ -106,7 +140,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Get detail of a sticker pack with all stickers in its current version.
    */
-  app.get<{ Params: { id: string } }>('/api/sticker-store/packs/:id', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { spaceId?: string } }>('/api/sticker-store/packs/:id', async (request, reply) => {
     const db = getDb();
     const userId = await tryResolveUserId(request);
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
@@ -116,7 +150,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Non-approved packs can only be viewed by their creator or an admin
-    if (!['approved', 'active'].includes(pack.status)) {
+    if (!visibleInStore(pack, userId, request.query.spaceId?.trim() || null)) {
       if (!userId) return sendError(reply, 404, 'sticker_pack_not_found');
       const caller = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
       if (pack.creatorId !== userId && caller?.isAdmin !== 1) {
@@ -168,6 +202,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       originType: pack.originType as 'source' | 'replica',
       sourceInstance: pack.sourceInstance,
       sourcePackId: pack.sourcePackId,
+      scopeType: pack.scopeType,
+      spaceId: pack.spaceId,
       currentVersion: pack.currentVersion,
       status: pack.status as StickerPackStatus,
       itemCount: items.length,
@@ -196,13 +232,14 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Install a sticker pack to the current user's picker tabs.
    */
-  app.post<{ Params: { id: string } }>('/api/sticker-store/packs/:id/install', {
+  app.post<{ Params: { id: string }; Querystring: { spaceId?: string } }>('/api/sticker-store/packs/:id/install', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const db = getDb();
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack || !['approved', 'active'].includes(pack.status)) {
+    const userId = await tryResolveUserId(request);
+    if (!pack || !visibleInStore(pack, userId, request.query.spaceId?.trim() || null)) {
       return sendError(reply, 404, 'sticker_pack_not_found');
     }
 
@@ -329,6 +366,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       id: packId,
       name: trimmedName,
       description: request.body.description?.trim() || null,
+      scopeType: 'instance',
+      spaceId: null,
       creatorId: request.userId,
       creatorName: request.username,
       coverAssetId: request.body.coverAssetId || null,
@@ -364,6 +403,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       .where(and(
         eq(schema.stickerPacks.creatorId, request.userId),
         eq(schema.stickerPacks.originType, 'source'),
+        eq(schema.stickerPacks.scopeType, 'instance'),
       ))
       .orderBy(desc(schema.stickerPacks.updatedAt))
       .all();

@@ -1,5 +1,13 @@
 import type { SoundboardPack, SoundboardSound } from '@backspace/shared';
-import type { PersonalSticker, StickerPackSummary, StickerPackDetail, StickerPackItem } from '@backspace/shared/src/stickers';
+import type {
+  FavoriteSticker,
+  PersonalSticker,
+  StickerCrop,
+  StickerPackDetail,
+  StickerPackItem,
+  StickerPackShare,
+  StickerPackSummary,
+} from '@backspace/shared/src/stickers';
 import type { GameIconUpload } from '@backspace/shared/src/gameIcons';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
@@ -483,10 +491,10 @@ export class BackspaceApiClient {
   };
 
   stickerStore: {
-    listPacks: (params?: { q?: string }) => Promise<StickerPackSummary[]>;
-    getPack: (id: string) => Promise<StickerPackDetail>;
-    install: (id: string) => Promise<{ success: boolean }>;
-    uninstall: (id: string) => Promise<{ success: boolean }>;
+    listPacks: (params?: { q?: string; spaceId?: string }) => Promise<StickerPackSummary[]>;
+    getPack: (id: string, spaceId?: string) => Promise<StickerPackDetail>;
+    install: (id: string, spaceId?: string) => Promise<{ success: boolean }>;
+    uninstall: (id: string, spaceId?: string) => Promise<{ success: boolean }>;
     myPacks: () => Promise<StickerPackDetail[]>;
     createPack: (data: { name: string; description?: string; coverAssetId?: string }) => Promise<StickerPackSummary>;
     listCreated: () => Promise<StickerPackSummary[]>;
@@ -497,6 +505,31 @@ export class BackspaceApiClient {
     submitReview: (packId: string) => Promise<{ success: boolean; status: string }>;
     newVersion: (packId: string) => Promise<{ id: string; newVersion: number; versionId: string; status: string }>;
     deletePack: (id: string) => Promise<{ success: boolean }>;
+  };
+  stickerLibrary: {
+    get: () => Promise<{
+      privatePacks: StickerPackDetail[];
+      spaces: Array<{
+        spaceId: string;
+        name: string;
+        icon?: string | null;
+        avatarColor?: string | null;
+        canCreate: boolean;
+        canManage: boolean;
+        pack: StickerPackDetail | null;
+      }>;
+      favorites: FavoriteSticker[];
+    }>;
+    createPrivatePack: (data: { name: string; description?: string }) => Promise<StickerPackDetail>;
+    createSpacePack: (spaceId: string) => Promise<StickerPackDetail>;
+    addItem: (packId: string, data: { name: string; image: string; crop?: StickerCrop }) => Promise<StickerPackItem>;
+    removeItem: (packId: string, itemId: string) => Promise<{ success: boolean }>;
+    favorite: (data: { name: string; image: string; crop?: StickerCrop }) => Promise<FavoriteSticker>;
+    unfavorite: (assetId: string) => Promise<{ success: boolean }>;
+    addFavoriteToPack: (packId: string, data: { favoriteId: string; name?: string }) => Promise<StickerPackItem>;
+    requestShare: (packId: string, data: { targetType: 'instance' | 'space'; targetId?: string }) => Promise<{ id: string; status: string }>;
+    listShares: (params: { targetType: 'instance' | 'space'; targetId?: string }) => Promise<Array<StickerPackShare & { pack: StickerPackDetail | null }>>;
+    decideShare: (id: string, decision: 'approved' | 'rejected', reviewNotes?: string) => Promise<{ success: boolean; status: string }>;
   };
   gameIcons: {
     upload: (data: { image: string }) => Promise<GameIconUpload>;
@@ -604,11 +637,12 @@ export class BackspaceApiClient {
       listPacks: (params) => {
         const qs = new URLSearchParams();
         if (params?.q) qs.set('q', params.q);
+        if (params?.spaceId) qs.set('spaceId', params.spaceId);
         return request<StickerPackSummary[]>('GET', `/sticker-store/packs${qs.toString() ? `?${qs}` : ''}`);
       },
-      getPack: (id) => request<StickerPackDetail>('GET', `/sticker-store/packs/${encodeURIComponent(id)}`),
-      install: (id) => request<{ success: boolean }>('POST', `/sticker-store/packs/${encodeURIComponent(id)}/install`),
-      uninstall: (id) => request<{ success: boolean }>('DELETE', `/sticker-store/packs/${encodeURIComponent(id)}/install`),
+      getPack: (id, spaceId) => request<StickerPackDetail>('GET', `/sticker-store/packs/${encodeURIComponent(id)}${spaceId ? `?spaceId=${encodeURIComponent(spaceId)}` : ''}`),
+      install: (id, spaceId) => request<{ success: boolean }>('POST', `/sticker-store/packs/${encodeURIComponent(id)}/install${spaceId ? `?spaceId=${encodeURIComponent(spaceId)}` : ''}`),
+      uninstall: (id, spaceId) => request<{ success: boolean }>('DELETE', `/sticker-store/packs/${encodeURIComponent(id)}/install${spaceId ? `?spaceId=${encodeURIComponent(spaceId)}` : ''}`),
       myPacks: () => request<StickerPackDetail[]>('GET', '/sticker-store/my-packs'),
       createPack: (data) => request<StickerPackSummary>('POST', '/sticker-packs', data),
       listCreated: () => request<StickerPackSummary[]>('GET', '/sticker-packs/created'),
@@ -619,6 +653,24 @@ export class BackspaceApiClient {
       submitReview: (packId) => request<{ success: boolean; status: string }>('POST', `/sticker-packs/${encodeURIComponent(packId)}/submit`),
       newVersion: (packId) => request<{ id: string; newVersion: number; versionId: string; status: string }>('POST', `/sticker-packs/${encodeURIComponent(packId)}/new-version`),
       deletePack: (id) => request<{ success: boolean }>('DELETE', `/sticker-packs/${encodeURIComponent(id)}`),
+    };
+
+    this.stickerLibrary = {
+      get: () => request('GET', '/sticker-library'),
+      createPrivatePack: (data) => request('POST', '/private-sticker-packs', data),
+      createSpacePack: (spaceId) => request('POST', `/spaces/${encodeURIComponent(spaceId)}/sticker-pack`),
+      addItem: (packId, data) => request('POST', `/sticker-library/packs/${encodeURIComponent(packId)}/items`, data),
+      removeItem: (packId, itemId) => request('DELETE', `/sticker-library/packs/${encodeURIComponent(packId)}/items/${encodeURIComponent(itemId)}`),
+      favorite: (data) => request('POST', '/sticker-favorites', data),
+      unfavorite: (assetId) => request('DELETE', `/sticker-favorites/${encodeURIComponent(assetId)}`),
+      addFavoriteToPack: (packId, data) => request('POST', `/private-sticker-packs/${encodeURIComponent(packId)}/items/from-favorite`, data),
+      requestShare: (packId, data) => request('POST', `/private-sticker-packs/${encodeURIComponent(packId)}/shares`, data),
+      listShares: (params) => {
+        const qs = new URLSearchParams({ targetType: params.targetType });
+        if (params.targetId) qs.set('targetId', params.targetId);
+        return request('GET', `/sticker-pack-shares?${qs}`);
+      },
+      decideShare: (id, decision, reviewNotes) => request('POST', `/sticker-pack-shares/${encodeURIComponent(id)}/decision`, { decision, reviewNotes }),
     };
 
 

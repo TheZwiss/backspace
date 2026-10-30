@@ -45,6 +45,7 @@ export const AccountPanel = lazyPanel(() => import('./settingsPanels/AccountPane
 export const AppearancePanel = lazyPanel(() => import('./settingsPanels/AppearancePanel'), (m) => m.AppearancePanel);
 export const VoicePanel = lazyPanel(() => import('./settingsPanels/VoicePanel'), (m) => m.VoicePanel);
 export const PrivacyPanel = lazyPanel(() => import('./settingsPanels/PrivacyPanel'), (m) => m.PrivacyPanel);
+export const StickerLibraryPanel = lazyPanel(() => import('./settingsPanels/StickerLibraryPanel'), (m) => m.StickerLibraryPanel);
 export const ConnectionsPanel = lazyPanel(() => import('./settingsPanels/ConnectionsPanel'), (m) => m.ConnectionsPanel);
 export const KeybindsPanel = lazyPanel(() => import('./settingsPanels/KeybindsPanel'), (m) => m.KeybindsPanel);
 export const DesktopPanel = lazyPanel(() => import('./settingsPanels/DesktopPanel'), (m) => m.DesktopPanel);
@@ -64,6 +65,7 @@ export const OverviewPanel = lazyPanel(() => import('./spaceSettingsPanels/Overv
 export const MembersPanel = lazyPanel(() => import('./spaceSettingsPanels/MembersPanel'), (m) => m.MembersPanel);
 export const RolesPanel = lazyPanel(() => import('./spaceSettingsPanels/RolesPanel'), (m) => m.RolesPanel);
 export const BansPanel = lazyPanel(() => import('./spaceSettingsPanels/BansPanel'), (m) => m.BansPanel);
+export const StickerPackPanel = lazyPanel(() => import('./spaceSettingsPanels/StickerPackPanel'), (m) => m.StickerPackPanel);
 
 /**
  * Holds the panel's place while its chunk loads. The block has a fixed height

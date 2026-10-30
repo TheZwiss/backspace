@@ -60,6 +60,9 @@ export function getReferencedStickerIds(): Set<string> {
   for (const row of db.select({ id: schema.personalStickers.stickerId }).from(schema.personalStickers).all()) {
     ids.add(row.id);
   }
+  for (const row of db.select({ id: schema.stickerFavorites.assetId }).from(schema.stickerFavorites).all()) {
+    ids.add(row.id);
+  }
   for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems).all()) {
     ids.add(row.id);
   }
