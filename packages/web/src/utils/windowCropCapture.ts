@@ -240,7 +240,9 @@ export async function openWindowCropTrack(
   options: { frameRate: number; destination?: { width: number; height: number }; sourceId: string },
 ): Promise<MediaStreamTrack | null> {
   const api = getElectronAPI();
-  const source = stream.getVideoTracks()[0];
+  const initialSource = stream.getVideoTracks()[0];
+  if (!initialSource) return null;
+  let source: MediaStreamTrack = initialSource;
   if (!api?.getWindowCaptureTarget || !source) return null;
 
   const video = document.createElement('video');
@@ -387,11 +389,79 @@ export async function openWindowCropTrack(
     track.dispatchEvent(new Event('ended'));
   };
 
+  /** Swap the display behind the crop without touching the published canvas track. */
+  const switchSource = async (next: MediaStreamTrack): Promise<boolean> => {
+    const previous = source;
+    video.srcObject = new MediaStream([next]);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timerId = setTimeout(() => reject(new Error('new display produced no frame')), FIRST_FRAME_TIMEOUT_MS);
+        const done = (): void => { clearTimeout(timerId); resolve(); };
+        video.addEventListener('loadeddata', done, { once: true });
+        video.addEventListener('error', () => { clearTimeout(timerId); reject(new Error('new display failed')); }, { once: true });
+        void video.play().catch(() => undefined);
+      });
+    } catch {
+      video.srcObject = new MediaStream([previous]);
+      return false;
+    }
+    source = next;
+    previous.stop();
+    drawnRegion = null;
+    return true;
+  };
+
+  let recapturing = false;
+
+  /**
+   * The window was dragged to another monitor. The display being captured no
+   * longer contains it, so capture the new one and swap it underneath the same
+   * canvas: the published track never changes, viewers see a short reconnecting
+   * card instead of the share ending, and the audio (the window's process tree)
+   * is untouched.
+   */
+  const recapture = async (): Promise<void> => {
+    if (stopped || recapturing) return;
+    recapturing = true;
+    try {
+      drawReconnecting();
+      const next = await api.getWindowCaptureTarget!(options.sourceId);
+      if (stopped) return;
+      if (!next) { endTrack(); return; }
+      if (next.screenSourceId === current.screenSourceId) {
+        current = next;
+        fitCanvas();
+        draw();
+        return;
+      }
+      await api.preselectScreenSource!(next.screenSourceId, false, undefined, options.sourceId);
+      const replacement = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: options.frameRate },
+        audio: false,
+      });
+      const nextSource = replacement.getVideoTracks()[0];
+      if (!nextSource) { endTrack(); return; }
+      const switched = await switchSource(nextSource);
+      if (!switched) {
+        nextSource.stop();
+        endTrack();
+        return;
+      }
+      current = next;
+      fitCanvas();
+      draw();
+    } catch (err) {
+      console.warn('[ScreenShare] Could not move the capture to the new display:', err);
+      if (!stopped) endTrack();
+    } finally {
+      recapturing = false;
+    }
+  };
+
   const applySnapshot = (snapshot: unknown): void => {
     const next = applyWindowGeometry(current, snapshot);
-    // A window that left this display cannot be followed by this capture (the
-    // display was fixed when it started): end the track instead of showing a
-    // rectangle of the wrong monitor.
+    // A window that left this display is recaptured on the new one (recapture);
+    // a window that is gone ends the track.
     if (!next) { endTrack(); return; }
     const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
       || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
@@ -412,6 +482,15 @@ export async function openWindowCropTrack(
     stopGeometry = api.onWindowGeometry((snapshot) => {
       if (stopped) return;
       if (snapshot === null) { endTrack(); return; }
+      const geometry = snapshot as { monitor?: unknown };
+      if (Array.isArray(geometry.monitor) && geometry.monitor.length === 4) {
+        const [x, y, width, height] = geometry.monitor as number[];
+        if (x !== current.monitor.x || y !== current.monitor.y
+          || width !== current.monitor.width || height !== current.monitor.height) {
+          void recapture();
+          return;
+        }
+      }
       applySnapshot(snapshot);
     });
     void api.startWindowGeometry(options.sourceId).catch(() => undefined);
@@ -419,7 +498,8 @@ export async function openWindowCropTrack(
     timer = setInterval(() => {
       void api.getWindowCaptureTarget!(options.sourceId).then((next) => {
         if (stopped) return;
-        if (!next || next.screenSourceId !== current.screenSourceId) { endTrack(); return; }
+        if (!next) { endTrack(); return; }
+        if (next.screenSourceId !== current.screenSourceId) { void recapture(); return; }
         const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
           || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
           || next.minimized !== current.minimized || next.foreground !== current.foreground;
