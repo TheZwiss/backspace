@@ -424,6 +424,47 @@ export async function openWindowCropTrack(
   let recaptureAttempts = 0;
 
   /**
+   * Take the display again without a user gesture.
+   *
+   * `getDisplayMedia` needs transient activation, and a capture that has to be
+   * restarted (window moved to another monitor, a display mode change ended the
+   * old track) has no click behind it. Electron still honours the desktop
+   * constraint form, which needs none; `getDisplayMedia` stays as the fallback
+   * for a build where it does not.
+   */
+  const reopenDisplay = async (screenSourceId: string): Promise<MediaStreamTrack | null> => {
+    try {
+      const legacy = navigator.mediaDevices as unknown as {
+        getUserMedia: (constraints: unknown) => Promise<MediaStream>;
+      };
+      const stream = await legacy.getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: screenSourceId,
+            maxFrameRate: options.frameRate,
+          },
+        },
+      });
+      const track = stream.getVideoTracks()[0] ?? null;
+      if (track) return track;
+    } catch (err) {
+      console.warn('[ScreenShare] Desktop-constraint capture failed, trying getDisplayMedia:', err);
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: options.frameRate },
+        audio: false,
+      });
+      return stream.getVideoTracks()[0] ?? null;
+    } catch (err) {
+      console.warn('[ScreenShare] getDisplayMedia for the new display failed:', err);
+      return null;
+    }
+  };
+
+  /**
    * A capture that cannot be restarted right now (the display is held by an
    * exclusive-fullscreen game, the driver is resetting) is retried, not fatal:
    * the card stays up and the share survives. Only a run of failures ends it.
@@ -457,12 +498,8 @@ export async function openWindowCropTrack(
         return;
       }
       await api.preselectScreenSource!(next.screenSourceId, false, undefined, options.sourceId);
-      const replacement = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: options.frameRate },
-        audio: false,
-      });
-      const nextSource = replacement.getVideoTracks()[0];
-      if (!nextSource) { endTrack(); return; }
+      const nextSource = await reopenDisplay(next.screenSourceId);
+      if (!nextSource) { scheduleRecaptureRetry(); return; }
       const switched = await switchSource(nextSource);
       if (!switched) {
         nextSource.stop();
