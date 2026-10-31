@@ -139,6 +139,12 @@
       "serverError": "Couldn't send (server error)"
     }
   },
+  "inviteFriend": {
+    "title": "Invite {{name}} to a Space",
+    "intro": "Choose one of your Spaces to send an invite.",
+    "noSpaces": "You’re not in any Spaces yet",
+    "contextMenu": "Invite to Space"
+  },
   "join": {
     "title": "Join a Space",
     "discoverIntro": "Discover spaces to join, or browse them all in Explore.",
