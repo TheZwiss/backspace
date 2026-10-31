@@ -176,7 +176,7 @@ interface BackspaceElectronAPI {
   } | null>;
   /** Follow a shared window's rectangle while it is captured (one helper process). */
   startWindowGeometry?: (sourceId: string) => Promise<void>;
-  stopWindowGeometry?: () => Promise<void>;
+  stopWindowGeometry?: (sourceId?: string) => Promise<void>;
   /** A snapshot every 100 ms, or null when the window is gone. */
   onWindowGeometry?: (callback: (geometry: unknown | null) => void) => () => void;
   /**

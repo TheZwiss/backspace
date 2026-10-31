@@ -292,7 +292,7 @@ export async function openWindowCropTrack(
     video.srcObject = null;
     source.stop();
     stopGeometry?.();
-    void api?.stopWindowGeometry?.().catch(() => undefined);
+    void api?.stopWindowGeometry?.(options.sourceId).catch(() => undefined);
     output?.getTracks().forEach((track) => track.stop());
   };
 
@@ -623,8 +623,15 @@ export async function openWindowCropTrack(
   // capture can go quiet while it holds the display. That is not a dead share:
   // show a reconnecting card (audio keeps flowing) and take the normal frame
   // back as soon as one arrives. No dialog, no choice for the user.
+  let recovering = false;
   watchdog = setInterval(() => {
     if (stopped || !live) return;
+    // A quiet watcher is restarted, not waited out: the helper can be stopped
+    // by a superseded capture's teardown, and nothing else would bring it back.
+    if (Date.now() - lastGeometryAt > 2_500 && !recovering) {
+      recovering = true;
+      void recoverGeometry().finally(() => { recovering = false; });
+    }
     // A quiet watcher must not leave the card on screen: redraw the window.
     if (Date.now() - lastGeometryAt > GEOMETRY_STALE_MS) {
       if (reconnecting) reconnecting = false;

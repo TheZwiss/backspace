@@ -647,15 +647,39 @@ const windowsProcessAudio = new WindowsProcessAudio(
  * dragged; this keeps the crop following smoothly at one process.
  */
 let geometryWatcher: ReturnType<typeof spawn> | null = null;
+/**
+ * How many captures hold the watcher. The setup screen can stage a second
+ * capture before the first one is torn down (auto-stage, then the tile the user
+ * clicks), and both hold the same window: the first teardown must not kill the
+ * watcher the second one is already reading.
+ */
+let geometryHolders = 0;
+/** The window the running watcher follows; a stop for another source is ignored. */
+let geometryWatcherSource: string | null = null;
 
-function stopWindowGeometryWatch(): void {
+function stopWindowGeometryWatch(sourceId?: string): void {
+  if (sourceId && geometryWatcherSource && sourceId !== geometryWatcherSource) return;
+  geometryHolders = Math.max(0, geometryHolders - 1);
+  if (geometryHolders > 0) return;
   const child = geometryWatcher;
   geometryWatcher = null;
+  geometryWatcherSource = null;
   child?.kill();
 }
 
 function startWindowGeometryWatch(sourceId: string): void {
-  stopWindowGeometryWatch();
+  if (geometryWatcher && geometryWatcherSource === sourceId) {
+    geometryHolders += 1;
+    return;
+  }
+  if (geometryWatcher) {
+    // A different window is being shared now: replace the watcher.
+    const previous = geometryWatcher;
+    geometryWatcher = null;
+    previous.kill();
+    geometryHolders = 0;
+  }
+  geometryHolders = 1;
   if (process.platform !== 'win32' || !fs.existsSync(windowsAudioExecutable)) return;
   const match = /^window:(\d+):\d+$/.exec(sourceId);
   if (!match) return;
@@ -667,6 +691,7 @@ function startWindowGeometryWatch(sourceId: string): void {
     return;
   }
   geometryWatcher = child;
+  geometryWatcherSource = sourceId;
   let buffered = '';
   child.stdout?.setEncoding('utf8');
   child.stdout?.on('data', (chunk: string) => {
@@ -1051,8 +1076,9 @@ function registerIpcHandlers(): void {
     if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId === 'string') startWindowGeometryWatch(sourceId);
   });
-  ipcMain.handle('stop-window-geometry', (event) => {
-    if (event.sender === mainWindow?.webContents) stopWindowGeometryWatch();
+  ipcMain.handle('stop-window-geometry', (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    stopWindowGeometryWatch(typeof sourceId === 'string' ? sourceId : undefined);
   });
   ipcMain.handle('get-screen-share-picker-mode', (event) => {
     if (event.sender !== mainWindow?.webContents) return 'app';

@@ -123,7 +123,7 @@ contextBridge.exposeInMainWorld('backspace', {
   // A 100 ms stream of the shared window's rectangle (one helper process),
   // so the crop follows a window being dragged without polling from here.
   startWindowGeometry: (sourceId: string) => ipcRenderer.invoke('start-window-geometry', sourceId),
-  stopWindowGeometry: () => ipcRenderer.invoke('stop-window-geometry'),
+  stopWindowGeometry: (sourceId?: string) => ipcRenderer.invoke('stop-window-geometry', sourceId),
   onWindowGeometry: (callback: (geometry: unknown | null) => void) => {
     const snapshot = (_event: Electron.IpcRendererEvent, geometry: unknown): void => callback(geometry);
     const ended = (): void => callback(null);
