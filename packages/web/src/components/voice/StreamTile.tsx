@@ -205,6 +205,35 @@ function handleViewerWatchToggle(sharer: StreamWatchTarget, watching: boolean): 
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
+/**
+ * The poster behind the placeholder. It is replaced every 30 s
+ * (streamPreviews' PREVIEW_INTERVAL), and swapping an <img> src flashes the
+ * tile for a frame on each refresh — very visible while the share shows the
+ * paused card. A background layer that decodes the replacement first keeps the
+ * old image on screen until the new one is ready, so the refresh is invisible.
+ */
+function PreviewBackdrop({ src }: { src: string }) {
+  const [shown, setShown] = useState(src);
+  useEffect(() => {
+    if (src === shown) return;
+    let cancelled = false;
+    const image = new Image();
+    const swap = (): void => { if (!cancelled) setShown(src); };
+    image.onload = swap;
+    image.onerror = swap;
+    image.src = src;
+    if (typeof image.decode === 'function') void image.decode().then(swap).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [src, shown]);
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 bg-cover bg-center"
+      style={{ backgroundImage: `url("${shown}")` }}
+    />
+  );
+}
+
 export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -440,7 +469,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
         />
       ) : (
         <div data-testid="stream-tile-placeholder" className={`relative w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
-          {preview && <><img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-black/65" /></>}
+          {preview && <><PreviewBackdrop src={preview} /><div className="absolute inset-0 bg-black/65" /></>}
           <div className={large ? 'relative flex flex-col items-center gap-3 min-w-0' : 'relative flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
             <div className="relative flex-shrink-0">
               <Avatar src={avatar} name={displayName} size={large ? 80 : 44} userId={avatarUserId} user={user ?? undefined} />
