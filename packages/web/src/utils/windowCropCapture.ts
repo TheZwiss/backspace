@@ -243,6 +243,14 @@ export async function openWindowCropTrack(
   const initialSource = stream.getVideoTracks()[0];
   if (!initialSource) return null;
   let source: MediaStreamTrack = initialSource;
+  // Set once recapture exists. A display capture that Chromium ends (a display
+  // mode change when a game enters or leaves exclusive fullscreen, a driver
+  // reset) is a reason to take it again, not to end the share.
+  let handleSourceEnded = (): void => { /* replaced below */ };
+  const attachSource = (track: MediaStreamTrack): void => {
+    track.addEventListener('ended', () => handleSourceEnded(), { once: true });
+  };
+  attachSource(initialSource);
   if (!api?.getWindowCaptureTarget || !source) return null;
 
   const video = document.createElement('video');
@@ -392,6 +400,7 @@ export async function openWindowCropTrack(
   /** Swap the display behind the crop without touching the published canvas track. */
   const switchSource = async (next: MediaStreamTrack): Promise<boolean> => {
     const previous = source;
+    attachSource(next);
     video.srcObject = new MediaStream([next]);
     try {
       await new Promise<void>((resolve, reject) => {
@@ -412,6 +421,19 @@ export async function openWindowCropTrack(
   };
 
   let recapturing = false;
+  let recaptureAttempts = 0;
+
+  /**
+   * A capture that cannot be restarted right now (the display is held by an
+   * exclusive-fullscreen game, the driver is resetting) is retried, not fatal:
+   * the card stays up and the share survives. Only a run of failures ends it.
+   */
+  const scheduleRecaptureRetry = (): void => {
+    if (stopped) return;
+    recaptureAttempts += 1;
+    if (recaptureAttempts > 5) { endTrack(); return; }
+    setTimeout(() => { if (!stopped) void recapture(true); }, 2_000);
+  };
 
   /**
    * The window was dragged to another monitor. The display being captured no
@@ -420,7 +442,7 @@ export async function openWindowCropTrack(
    * card instead of the share ending, and the audio (the window's process tree)
    * is untouched.
    */
-  const recapture = async (): Promise<void> => {
+  const recapture = async (force = false): Promise<void> => {
     if (stopped || recapturing) return;
     recapturing = true;
     try {
@@ -428,7 +450,7 @@ export async function openWindowCropTrack(
       const next = await api.getWindowCaptureTarget!(options.sourceId);
       if (stopped) return;
       if (!next) { endTrack(); return; }
-      if (next.screenSourceId === current.screenSourceId) {
+      if (!force && next.screenSourceId === current.screenSourceId) {
         current = next;
         fitCanvas();
         draw();
@@ -444,19 +466,21 @@ export async function openWindowCropTrack(
       const switched = await switchSource(nextSource);
       if (!switched) {
         nextSource.stop();
-        endTrack();
+        scheduleRecaptureRetry();
         return;
       }
+      recaptureAttempts = 0;
       current = next;
       fitCanvas();
       draw();
     } catch (err) {
-      console.warn('[ScreenShare] Could not move the capture to the new display:', err);
-      if (!stopped) endTrack();
+      console.warn('[ScreenShare] Could not restart the capture on this display:', err);
+      scheduleRecaptureRetry();
     } finally {
       recapturing = false;
     }
   };
+  handleSourceEnded = () => { void recapture(true); };
 
   const applySnapshot = (snapshot: unknown): void => {
     const next = applyWindowGeometry(current, snapshot);
@@ -487,7 +511,7 @@ export async function openWindowCropTrack(
         const [x, y, width, height] = geometry.monitor as number[];
         if (x !== current.monitor.x || y !== current.monitor.y
           || width !== current.monitor.width || height !== current.monitor.height) {
-          void recapture();
+          void recapture(true);
           return;
         }
       }
@@ -499,7 +523,7 @@ export async function openWindowCropTrack(
       void api.getWindowCaptureTarget!(options.sourceId).then((next) => {
         if (stopped) return;
         if (!next) { endTrack(); return; }
-        if (next.screenSourceId !== current.screenSourceId) { void recapture(); return; }
+        if (next.screenSourceId !== current.screenSourceId) { void recapture(true); return; }
         const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
           || next.crop.width !== current.crop.width || next.crop.height !== current.crop.height
           || next.minimized !== current.minimized || next.foreground !== current.foreground;

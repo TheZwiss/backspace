@@ -177,6 +177,15 @@ runtime so MinGW needs no header), and the renderer draws a "Reconnecting
 capture…" card until a frame arrives again — the share and its audio keep
 running, and recovery is automatic. Nothing is asked of the user.
 
+**Following the window.** When the window is dragged to another monitor, the renderer
+asks for the new target, captures that display and swaps it underneath the same
+canvas track: the publication and its audio never change, and viewers see the
+reconnecting card for about a second. If the display capture that Chromium ends
+(a display-mode change when a game enters or leaves exclusive fullscreen, a
+driver reset) cannot be restarted immediately, it is retried every two seconds
+(up to five times) with the card up, instead of ending the share. Only a closed
+window, or a run of failed restarts, ends the track.
+
 Limits, stated rather than hidden: a window on top of the shared one is inside
 the crop (as it is in Discord's), the crop follows moves and resizes but a
 window dragged to another display ends the track instead of showing the wrong
