@@ -222,6 +222,8 @@ export function setWindowCropResolution(
  * so this is short enough to feel like a reaction to clicking away.
  */
 const GEOMETRY_POLL_MS = 500;
+/** After this long without a snapshot, the last one is not trusted (see draw). */
+const GEOMETRY_STALE_MS = 1_500;
 /** A window that cannot produce a first frame in this time is not worth waiting for. */
 const FIRST_FRAME_TIMEOUT_MS = 5_000;
 
@@ -268,6 +270,8 @@ export async function openWindowCropTrack(
   let drawnRegion: CropRect | null = null;
   let stopGeometry: (() => void) | null = null;
   let lastFrameAt = Date.now();
+  /** When the last geometry snapshot arrived; a stale one must never freeze the share. */
+  let lastGeometryAt = Date.now();
   let reconnecting = false;
   let watchdog: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
@@ -335,7 +339,12 @@ export async function openWindowCropTrack(
   const draw = (): void => {
     if (stopped) return;
     if (canvas.width === 0 || canvas.height === 0) fitCanvas();
-    if (live && !isCaptureActive(current)) { drawPaused(); return; }
+    // Geometry is the only thing that can say "paused". If it went quiet (the
+    // watcher died, the helper was restarted) the last state is not trusted
+    // forever: drawing the window again is better than a card that never lifts
+    // until some unrelated action, which is what a stale unfocused snapshot did.
+    const geometryIsFresh = Date.now() - lastGeometryAt <= GEOMETRY_STALE_MS;
+    if (live && !isCaptureActive(current) && geometryIsFresh) { drawPaused(); return; }
     if (current.minimized) return;
     const frame = { width: video.videoWidth, height: video.videoHeight };
     if (!frame.width || !frame.height) return;
@@ -539,26 +548,50 @@ export async function openWindowCropTrack(
   // rectangle from one long-lived helper process at 10 Hz, which is what lets a
   // dragged window follow smoothly; a build without that stream falls back to
   // asking for one snapshot on a timer.
-  if (api.startWindowGeometry && api.onWindowGeometry) {
-    stopGeometry = api.onWindowGeometry((snapshot) => {
-      if (stopped) return;
-      if (snapshot === null) { endTrack(); return; }
-      const geometry = snapshot as { monitor?: unknown };
-      if (Array.isArray(geometry.monitor) && geometry.monitor.length === 4) {
-        const [x, y, width, height] = geometry.monitor as number[];
-        if (x !== current.monitor.x || y !== current.monitor.y
-          || width !== current.monitor.width || height !== current.monitor.height) {
-          void recapture(true);
-          return;
-        }
+  /**
+   * The watcher died but may have died alone (a helper restart, a transient
+   * spawn failure). Ask for the window once: if it still exists, subscribe
+   * again and keep the share, instead of ending it on a stream hiccup.
+   */
+  const recoverGeometry = async (): Promise<void> => {
+    const next = await api.getWindowCaptureTarget!(options.sourceId).catch(() => null);
+    if (stopped) return;
+    if (!next) { endTrack(); return; }
+    current = next;
+    lastGeometryAt = Date.now();
+    fitCanvas();
+    draw();
+    if (api.startWindowGeometry && api.onWindowGeometry) {
+      stopGeometry?.();
+      stopGeometry = api.onWindowGeometry(handleSnapshot);
+      void api.startWindowGeometry(options.sourceId).catch(() => undefined);
+    }
+  };
+
+  const handleSnapshot = (snapshot: unknown): void => {
+    if (stopped) return;
+    if (snapshot === null) { void recoverGeometry(); return; }
+    lastGeometryAt = Date.now();
+    const geometry = snapshot as { monitor?: unknown };
+    if (Array.isArray(geometry.monitor) && geometry.monitor.length === 4) {
+      const [x, y, width, height] = geometry.monitor as number[];
+      if (x !== current.monitor.x || y !== current.monitor.y
+        || width !== current.monitor.width || height !== current.monitor.height) {
+        void recapture(true);
+        return;
       }
-      applySnapshot(snapshot);
-    });
+    }
+    applySnapshot(snapshot);
+  };
+
+  if (api.startWindowGeometry && api.onWindowGeometry) {
+    stopGeometry = api.onWindowGeometry(handleSnapshot);
     void api.startWindowGeometry(options.sourceId).catch(() => undefined);
   } else {
     timer = setInterval(() => {
       void api.getWindowCaptureTarget!(options.sourceId).then((next) => {
         if (stopped) return;
+        lastGeometryAt = Date.now();
         if (!next) { endTrack(); return; }
         if (next.screenSourceId !== current.screenSourceId) { void recapture(true); return; }
         const moved = next.crop.x !== current.crop.x || next.crop.y !== current.crop.y
@@ -592,6 +625,12 @@ export async function openWindowCropTrack(
   // back as soon as one arrives. No dialog, no choice for the user.
   watchdog = setInterval(() => {
     if (stopped || !live) return;
+    // A quiet watcher must not leave the card on screen: redraw the window.
+    if (Date.now() - lastGeometryAt > GEOMETRY_STALE_MS) {
+      if (reconnecting) reconnecting = false;
+      draw();
+      return;
+    }
     if (!isCaptureActive(current)) return;
     const stalled = isCaptureStalled(current, Date.now() - lastFrameAt);
     if (stalled && !reconnecting) {
