@@ -344,7 +344,13 @@ export async function openWindowCropTrack(
     // forever: drawing the window again is better than a card that never lifts
     // until some unrelated action, which is what a stale unfocused snapshot did.
     const geometryIsFresh = Date.now() - lastGeometryAt <= GEOMETRY_STALE_MS;
-    if (live && !isCaptureActive(current) && geometryIsFresh) { drawPaused(); return; }
+    if (!geometryIsFresh) {
+      // Hold whatever is on screen. Drawing the window here would flash it for
+      // the second or two the watcher is being restarted, which is exactly what
+      // a dead watcher used to look like to viewers.
+      return;
+    }
+    if (live && !isCaptureActive(current)) { drawPaused(); return; }
     if (current.minimized) return;
     const frame = { width: video.videoWidth, height: video.videoHeight };
     if (!frame.width || !frame.height) return;
@@ -632,12 +638,9 @@ export async function openWindowCropTrack(
       recovering = true;
       void recoverGeometry().finally(() => { recovering = false; });
     }
-    // A quiet watcher must not leave the card on screen: redraw the window.
-    if (Date.now() - lastGeometryAt > GEOMETRY_STALE_MS) {
-      if (reconnecting) reconnecting = false;
-      draw();
-      return;
-    }
+    // A quiet watcher holds the last frame (draw does nothing while stale); the
+    // recovery above brings the events back.
+    if (Date.now() - lastGeometryAt > GEOMETRY_STALE_MS) return;
     if (!isCaptureActive(current)) return;
     const stalled = isCaptureStalled(current, Date.now() - lastFrameAt);
     if (stalled && !reconnecting) {
