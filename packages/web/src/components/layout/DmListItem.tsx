@@ -21,6 +21,12 @@ function isMemberAwaitingApproval(homeInstance: string | null | undefined): bool
   return getAwaitingApprovalPeerOrigins().has(normalized);
 }
 
+/** The other party of a 1-on-1 DM, as the DM's instance named them. */
+export interface DmInviteCounterpart {
+  user: User;
+  origin: string;
+}
+
 interface DmListItemProps {
   dm: DmChannel;
   isActive: boolean;
@@ -29,7 +35,7 @@ interface DmListItemProps {
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onLeave: (id: string) => void;
-  onContextMenu?: (e: React.MouseEvent, id: string) => void;
+  onContextMenu?: (e: React.MouseEvent, dm: DmChannel, counterpart: DmInviteCounterpart | null) => void;
 }
 
 export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, onLeave, onContextMenu }: DmListItemProps) {
@@ -70,7 +76,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
     }
   };
   const handleContextMenu = onContextMenu
-    ? (e: React.MouseEvent) => onContextMenu(e, dm.id)
+    ? (e: React.MouseEvent) => onContextMenu(e, dm, isGroup || !firstOther ? null : { user: firstOther, origin: viewer.origin })
     : undefined;
 
   // ── State-driven classes ──────────────────────────────────────────────
@@ -208,8 +214,8 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
     </div>
   );
 
-  // Group DMs get a context menu wrapper
-  if (isGroup && handleContextMenu) {
+  // Right-click: group DMs can be left, 1-on-1s can invite the other person.
+  if (handleContextMenu) {
     return <div onContextMenu={handleContextMenu}>{itemJsx}</div>;
   }
 
