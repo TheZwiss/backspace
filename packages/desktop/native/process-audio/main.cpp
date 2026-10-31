@@ -81,8 +81,20 @@ static void enablePerMonitorDpiAwareness() {
     if (setContext) setContext(reinterpret_cast<DPI_AWARENESS_CONTEXT>(static_cast<INT_PTR>(-4)));
 }
 
-// One JSON line: the window's physical rectangle, its monitor's, and the two
-// flags the share needs. False when the window or its monitor is gone.
+// QUNS_RUNNING_D3D_FULL_SCREEN: a D3D app holds the display outside the
+// compositor. Resolved at runtime because MinGW's shlobj.h predates the API and
+// the export is what matters, not the header.
+static bool d3dAppInExclusiveFullscreen() {
+    using QueryFn = HRESULT (WINAPI*)(int*);
+    static QueryFn query = reinterpret_cast<QueryFn>(
+        GetProcAddress(LoadLibraryW(L"shell32.dll"), "SHQueryUserNotificationState"));
+    if (!query) return false;
+    int state = 1; // QUNS_NOT_PRESENT
+    return SUCCEEDED(query(&state)) && state == 3;
+}
+
+// One JSON line: the window's physical rectangle, its monitor's, and the flags
+// the share needs. False when the window or its monitor is gone.
 static bool printGeometry(HWND hwnd) {
     if (!IsWindow(hwnd)) return false;
     RECT frame{};
@@ -110,15 +122,23 @@ static bool printGeometry(HWND hwnd) {
     // not focused is where the share shows a paused card instead of the pixels
     // on top of it (the capture is of the display, see windowCropCapture.ts).
     const bool foreground = GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
+    // True while a D3D app runs in exclusive fullscreen: that app bypasses the
+    // compositor, and a display capture of its output can stop delivering
+    // frames through no fault of the share. The renderer uses this to explain
+    // the gap instead of showing black, and resumes by itself when frames
+    // return. SHQueryUserNotificationState is the documented signal for exactly
+    // this state.
+    const bool exclusive = d3dAppInExclusiveFullscreen();
     std::fprintf(stdout,
-        "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s}\n",
+        "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s}\n",
         static_cast<long>(frame.left), static_cast<long>(frame.top),
         static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
         static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
         static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
         static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
         minimized ? "true" : "false",
-        foreground ? "true" : "false");
+        foreground ? "true" : "false",
+        exclusive ? "true" : "false");
     std::fflush(stdout);
     return true;
 }

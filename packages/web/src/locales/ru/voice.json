@@ -134,6 +134,7 @@
     "remoteParticipant": "Удалённый"
   },
   "screenPicker": {
+    "captureReconnecting": "Переподключение захвата…",
     "streamPaused": "Трансляция приостановлена",
     "title": "Демонстрация экрана",
     "tabs": {

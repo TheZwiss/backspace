@@ -170,6 +170,13 @@ audio track publishing. The `geometry` line carries `foreground` for this
 while a share is live; before publishing, the crop is shown regardless, because
 the setup screen itself holds focus.
 
+A D3D app in **exclusive fullscreen** bypasses the compositor, so a display capture of
+that output can stop delivering frames. The helper reports `exclusive`
+(`SHQueryUserNotificationState` == `QUNS_RUNNING_D3D_FULL_SCREEN`, resolved at
+runtime so MinGW needs no header), and the renderer draws a "Reconnecting
+capture…" card until a frame arrives again — the share and its audio keep
+running, and recovery is automatic. Nothing is asked of the user.
+
 Limits, stated rather than hidden: a window on top of the shared one is inside
 the crop (as it is in Discord's), the crop follows moves and resizes but a
 window dragged to another display ends the track instead of showing the wrong

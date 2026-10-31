@@ -171,6 +171,8 @@ interface BackspaceElectronAPI {
     minimized: boolean;
     /** False while another window is focused: the share shows a paused card. */
     foreground: boolean;
+    /** A D3D app holds the display in exclusive fullscreen; frames may stall. */
+    exclusive: boolean;
   } | null>;
   /** Follow a shared window's rectangle while it is captured (one helper process). */
   startWindowGeometry?: (sourceId: string) => Promise<void>;

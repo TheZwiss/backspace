@@ -765,6 +765,8 @@ interface WindowGeometry {
   minimized: boolean;
   /** Whether this window is the one the user is working in. */
   foreground: boolean;
+  /** A D3D app holds the display in exclusive fullscreen right now. */
+  exclusive: boolean;
 }
 
 /**
@@ -1039,6 +1041,7 @@ function registerIpcHandlers(): void {
       crop: { x: left - mx, y: top - my, width: right - left, height: bottom - top },
       minimized: geometry.minimized === true,
       foreground: geometry.foreground === true,
+      exclusive: geometry.exclusive === true,
     };
   });
   // One helper process follows the shared window and streams its rectangle

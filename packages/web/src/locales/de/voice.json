@@ -132,6 +132,7 @@
     "remoteParticipant": "Gegenstelle"
   },
   "screenPicker": {
+    "captureReconnecting": "Aufnahme wird neu verbunden…",
     "streamPaused": "Übertragung pausiert",
     "title": "Bildschirm teilen",
     "tabs": {

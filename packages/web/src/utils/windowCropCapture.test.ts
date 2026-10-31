@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyWindowGeometry, computeCropRegion, computeDestinationSize, easeCrop, isCaptureActive, isWindowSourceId } from './windowCropCapture';
+import { applyWindowGeometry, computeCropRegion, computeDestinationSize, easeCrop, isCaptureActive, isCaptureStalled, isWindowSourceId } from './windowCropCapture';
 
 describe('isWindowSourceId', () => {
   it('accepts window ids and rejects screens', () => {
@@ -67,6 +67,7 @@ describe('applyWindowGeometry', () => {
     crop: { x: 100, y: 100, width: 800, height: 600 },
     minimized: false,
     foreground: true,
+    exclusive: false,
   };
   const snapshot = (window, extra = {}) => ({ window, monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, ...extra });
 
@@ -118,6 +119,7 @@ describe('applyWindowGeometry while minimized', () => {
     crop: { x: 100, y: 100, width: 800, height: 600 },
     minimized: false,
     foreground: true,
+    exclusive: false,
   };
 
   it('keeps the share and pauses, even when the monitor is reported differently', () => {
@@ -126,5 +128,12 @@ describe('applyWindowGeometry while minimized', () => {
     expect(next?.minimized).toBe(true);
     expect(next?.foreground).toBe(false);
     expect(next?.crop).toEqual(target.crop);
+  });
+});
+describe('isCaptureStalled', () => {
+  it('is true only while an exclusive-fullscreen D3D app runs and no frame arrived', () => {
+    expect(isCaptureStalled({ exclusive: true }, 5_000)).toBe(true);
+    expect(isCaptureStalled({ exclusive: true }, 500)).toBe(false);
+    expect(isCaptureStalled({ exclusive: false }, 5_000)).toBe(false);
   });
 });

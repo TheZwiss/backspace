@@ -32,6 +32,8 @@ export interface WindowCaptureTarget {
   minimized: boolean;
   /** True while the shared window is the one the user is working in. */
   foreground: boolean;
+  /** A D3D app holds the display in exclusive fullscreen; frames may stall. */
+  exclusive: boolean;
 }
 
 /** One line of `geometry-watch`: physical pixels, the helper's own units. */
@@ -40,6 +42,7 @@ interface WindowGeometrySnapshot {
   monitor: [number, number, number, number];
   minimized: boolean;
   foreground: boolean;
+  exclusive: boolean;
 }
 
 /**
@@ -57,7 +60,7 @@ export function applyWindowGeometry(current: WindowCaptureTarget, snapshot: unkn
   // renderer gets 'ended'). Its monitor can also be reported differently while
   // it has no screen presence, so the last rectangle is kept as it is.
   if (geometry.minimized === true) {
-    return { ...current, minimized: true, foreground: false };
+    return { ...current, minimized: true, foreground: false, exclusive: false };
   }
   const [monitorX, monitorY, monitorWidth, monitorHeight] = geometry.monitor;
   if (monitorX !== current.monitor.x || monitorY !== current.monitor.y
@@ -75,6 +78,7 @@ export function applyWindowGeometry(current: WindowCaptureTarget, snapshot: unkn
     crop: { x: left - monitorX, y: top - monitorY, width: right - left, height: bottom - top },
     minimized: false,
     foreground: geometry.foreground === true,
+    exclusive: geometry.exclusive === true,
   };
 }
 
@@ -106,6 +110,19 @@ export function easeCrop(from: CropRect, to: CropRect, factor = 0.35): CropRect 
  */
 export function isCaptureActive(target: Pick<WindowCaptureTarget, 'foreground' | 'minimized'>): boolean {
   return target.foreground && !target.minimized;
+}
+
+/** Frames that stopped arriving while an exclusive-fullscreen D3D app runs are not a dead share. */
+export const CAPTURE_STALL_MS = 3_000;
+
+/**
+ * Whether the capture has gone quiet because the shared display is held by an
+ * exclusive-fullscreen D3D app. That app bypasses the compositor, so the display
+ * capture can stop delivering frames until it leaves fullscreen; the share keeps
+ * running (and its audio keeps flowing) and recovers by itself.
+ */
+export function isCaptureStalled(target: Pick<WindowCaptureTarget, 'exclusive'>, msSinceFrame: number): boolean {
+  return target.exclusive && msSinceFrame > CAPTURE_STALL_MS;
 }
 
 export interface CropRect {
@@ -240,6 +257,9 @@ export async function openWindowCropTrack(
   /** The rectangle actually drawn, chased towards the target so moves look smooth. */
   let drawnRegion: CropRect | null = null;
   let stopGeometry: (() => void) | null = null;
+  let lastFrameAt = Date.now();
+  let reconnecting = false;
+  let watchdog: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let frameRequest: number | null = null;
@@ -250,6 +270,7 @@ export async function openWindowCropTrack(
     if (stopped) return;
     stopped = true;
     if (timer !== null) clearInterval(timer);
+    if (watchdog !== null) clearInterval(watchdog);
     if (frameRequest !== null) {
       if (useVideoFrameCallback) video.cancelVideoFrameCallback?.(frameRequest);
       else cancelAnimationFrame(frameRequest);
@@ -275,7 +296,7 @@ export async function openWindowCropTrack(
    * with a pause mark and the localized label, drawn on the same canvas so the
    * published track carries it. The audio track is untouched.
    */
-  const drawPaused = (): void => {
+  const drawCard = (message: string, accent: string): void => {
     const width = canvas.width;
     const height = canvas.height;
     if (!width || !height) return;
@@ -287,7 +308,7 @@ export async function openWindowCropTrack(
     const iconWidth = barWidth * 2 + gap;
     const iconX = Math.round((width - iconWidth) / 2);
     const iconY = Math.round(height * 0.42 - icon / 2);
-    context.fillStyle = '#7c6cf6';
+    context.fillStyle = accent;
     context.fillRect(iconX, iconY, barWidth, icon);
     context.fillRect(iconX + barWidth + gap, iconY, barWidth, icon);
     const fontSize = Math.max(12, Math.round(height * 0.05));
@@ -295,8 +316,11 @@ export async function openWindowCropTrack(
     context.font = `600 ${fontSize}px system-ui, -apple-system, "Segoe UI", sans-serif`;
     context.textAlign = 'center';
     context.textBaseline = 'top';
-    context.fillText(i18n.t('voice:screenPicker.streamPaused'), width / 2, iconY + icon + Math.round(fontSize * 0.8));
+    context.fillText(message, width / 2, iconY + icon + Math.round(fontSize * 0.8));
   };
+
+  const drawPaused = (): void => drawCard(i18n.t('voice:screenPicker.streamPaused'), '#7c6cf6');
+  const drawReconnecting = (): void => drawCard(i18n.t('voice:screenPicker.captureReconnecting'), '#f0b74a');
 
   const draw = (): void => {
     if (stopped) return;
@@ -317,9 +341,19 @@ export async function openWindowCropTrack(
   const schedule = (): void => {
     if (stopped) return;
     if (useVideoFrameCallback) {
-      frameRequest = video.requestVideoFrameCallback(() => { draw(); schedule(); });
+      frameRequest = video.requestVideoFrameCallback(() => {
+        lastFrameAt = Date.now();
+        if (reconnecting) reconnecting = false;
+        draw();
+        schedule();
+      });
     } else {
-      frameRequest = requestAnimationFrame(() => { draw(); schedule(); });
+      frameRequest = requestAnimationFrame(() => {
+        lastFrameAt = Date.now();
+        if (reconnecting) reconnecting = false;
+        draw();
+        schedule();
+      });
     }
   };
 
@@ -410,6 +444,23 @@ export async function openWindowCropTrack(
     live = value;
     if (value) draw();
   };
+
+  // An exclusive-fullscreen D3D app bypasses the compositor, so this display
+  // capture can go quiet while it holds the display. That is not a dead share:
+  // show a reconnecting card (audio keeps flowing) and take the normal frame
+  // back as soon as one arrives. No dialog, no choice for the user.
+  watchdog = setInterval(() => {
+    if (stopped || !live) return;
+    if (!isCaptureActive(current)) return;
+    const stalled = isCaptureStalled(current, Date.now() - lastFrameAt);
+    if (stalled && !reconnecting) {
+      reconnecting = true;
+      drawReconnecting();
+    } else if (!stalled && reconnecting) {
+      reconnecting = false;
+      draw();
+    }
+  }, 1_000);
 
   const stopTrack = track.stop.bind(track);
   track.stop = (): void => { stopTrack(); teardown(); };

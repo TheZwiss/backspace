@@ -132,6 +132,7 @@
     "remoteParticipant": "Remote"
   },
   "screenPicker": {
+    "captureReconnecting": "Reconnecting capture…",
     "streamPaused": "Stream paused",
     "title": "Share Your Screen",
     "tabs": {
