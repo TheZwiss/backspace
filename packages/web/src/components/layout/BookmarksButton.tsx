@@ -13,7 +13,7 @@ export function BookmarksButton() {
   const openModal = useUIStore((s) => s.openModal);
   const open = useUIStore((s) => s.activeModal === 'bookmarks');
   return (
-    <Tooltip content={t('title')} position="top"><button
+    <Tooltip content={t('title')} position="top"><button data-icon-motion="pulse"
       type="button"
       onClick={() => openModal('bookmarks')}
       className="w-8 h-8 flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"

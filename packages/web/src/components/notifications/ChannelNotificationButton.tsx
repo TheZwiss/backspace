@@ -25,7 +25,7 @@ export function ChannelNotificationButton({ channelId, channelName }: { channelI
 
   return (
     <>
-      <Tooltip content={muted ? `${t('spaces:main.notificationSettings')} (${t('spaces:notifications.mutedIndicator')})` : t('spaces:main.notificationSettings')} position="top"><button aria-label={muted ? `${t('spaces:main.notificationSettings')} (${t('spaces:notifications.mutedIndicator')})` : t('spaces:main.notificationSettings')}
+      <Tooltip content={muted ? `${t('spaces:main.notificationSettings')} (${t('spaces:notifications.mutedIndicator')})` : t('spaces:main.notificationSettings')} position="top"><button data-icon-motion="bell" aria-label={muted ? `${t('spaces:main.notificationSettings')} (${t('spaces:notifications.mutedIndicator')})` : t('spaces:main.notificationSettings')}
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}

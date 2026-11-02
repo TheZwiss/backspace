@@ -324,7 +324,7 @@ export function InstanceDiscoveryHint({
                 {textOf(row)}
               </p>
               {action !== null && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={action.onClick}
                   // Only the row whose write is in flight: a stacked strip

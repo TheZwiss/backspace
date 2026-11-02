@@ -321,7 +321,7 @@ function MemberRolesBody({
         <h2 className="flex-1 min-w-0 text-lg font-semibold text-txt-primary truncate" title={displayName}>
           {t('spaces:memberRoles.title', { name: displayName })}
         </h2>
-        <button
+        <button data-icon-motion="press"
           onClick={handleViewProfile}
           className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors"
         >
@@ -344,7 +344,7 @@ function MemberRolesBody({
                 const nameId = `${nameIdPrefix}-${role.id}`;
                 const name = roleName(role);
                 return (
-                  <div
+                  <div data-icon-motion="press"
                     key={role.id}
                     onClick={() => setSelectedRoleId(role.id)}
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded cursor-pointer transition-colors ${
@@ -445,7 +445,7 @@ function MemberRolesBody({
                                   <path d={LOCK_ICON} />
                                 </svg>
                               )}
-                              <div
+                              <div data-icon-motion="press"
                                 role="switch"
                                 aria-checked={isOn}
                                 aria-disabled={isLocked}
@@ -497,13 +497,13 @@ function MemberRolesBody({
             <div className="sticky bottom-0 z-10 pointer-events-none">
               <div className="flex justify-center pt-3 pb-1">
                 <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleDiscard}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
                     {t('spaces:settings.discardChanges')}
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleSave}
                     disabled={saving}
                     className="ui-button ui-button-primary transition-colors disabled:opacity-50"

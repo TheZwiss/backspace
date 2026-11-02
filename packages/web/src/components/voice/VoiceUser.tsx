@@ -181,7 +181,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
             )}
           </div>
           {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
-            <button type="button" className="ui-button ui-button-primary transition-colors"
+            <button data-icon-motion="toggle" type="button" className="ui-button ui-button-primary transition-colors"
               onClick={() => { useVoiceStore.getState().rewatchCamera(participant.userId); setCameraSubscription(getActiveRoom(), participant.identity, true); }}>
               {t('voice:participantMenu.watchCamera')}
             </button>

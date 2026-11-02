@@ -570,7 +570,7 @@ export function ScreenShareSetup() {
   return createPortal(
     <div ref={dialogRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
       {/* Card — fixed to the viewport so the layout never jumps with its content */}
       <div
@@ -583,7 +583,7 @@ export function ScreenShareSetup() {
             <h2 className="ui-dialog-title leading-tight">{t('voice:screenPicker.title')}</h2>
             <p className="text-ui-label text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={handleClose}
             disabled={starting}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1 flex-shrink-0"
@@ -675,7 +675,7 @@ export function ScreenShareSetup() {
                               {t('voice:screenPicker.permissionHintMac')}
                             </p>
                           )}
-                          <button
+                          <button data-icon-motion="press"
                             onClick={() => setSourcesNonce((n) => n + 1)}
                             disabled={loadingSources}
                             className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
@@ -744,7 +744,7 @@ export function ScreenShareSetup() {
                           <div className="text-ui-caption text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
                         )}
                       </div>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={stageNow}
                         disabled={staging}
                         className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
@@ -776,7 +776,7 @@ export function ScreenShareSetup() {
                         <div className="text-ui-label text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
                       )}
                     </div>
-                    <button
+                    <button data-icon-motion="press"
                       onClick={stageNow}
                       disabled={staging || !supported || (electron && pickerMode === null)}
                       className="ui-button ui-button-primary transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
@@ -793,7 +793,7 @@ export function ScreenShareSetup() {
           </div>
 
           {/* Drawer scrim — click outside the drawer closes it */}
-          <div
+          <div data-icon-motion="gear"
             className={`absolute inset-0 z-10 bg-black/40 transition-opacity duration-300 ${settingsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setSettingsOpen(false)}
           />
@@ -813,7 +813,7 @@ export function ScreenShareSetup() {
                 <div className="text-ui-message font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
                 <StreamHostSubtitle className="mt-0.5" />
               </div>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => setSettingsOpen(false)}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1"
                 aria-label={t('common:actions.close')}
@@ -834,7 +834,7 @@ export function ScreenShareSetup() {
         {/* Footer */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-6 pt-3 pb-4 border-t border-border-hard">
           <div className="min-w-0 flex flex-col">
-            <Tooltip content={t('voice:streamSettings.title')} position="top"><button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button data-icon-motion="gear"
               onClick={() => setSettingsOpen(true)}
               className="text-left hover:text-txt-secondary transition-colors truncate"
 
@@ -848,7 +848,7 @@ export function ScreenShareSetup() {
             )}
           </div>
           <div className="glass-bubble rounded-full px-2 py-2 flex items-center gap-1 flex-shrink-0">
-            <Tooltip content={t('voice:streamSettings.title')} position="top"><button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button data-icon-motion="gear"
               onClick={() => setSettingsOpen((open) => !open)}
               aria-expanded={settingsOpen}
               aria-controls="stream-settings-drawer-panel"
@@ -866,14 +866,14 @@ export function ScreenShareSetup() {
               <span className="hidden desktop:inline">{t('voice:streamSettings.title')}</span>
             </button></Tooltip>
             <div className="w-px h-5 bg-white/10 mx-1" />
-            <button
+            <button data-icon-motion="press"
               onClick={handleClose}
               disabled={starting}
               className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               {t('common:actions.cancel')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => void handleStart()}
               disabled={!canStart}
               className="ui-button ui-button-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -900,7 +900,7 @@ function TabButton({ active, onClick, label, count }: {
   count: number | null;
 }) {
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={onClick}
       className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
         active
@@ -926,7 +926,7 @@ function SourceCard({ source, selected, onClick, onDoubleClick, disabled }: {
   disabled?: boolean;
 }) {
   return (
-    <button
+    <button data-icon-motion="press"
       disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

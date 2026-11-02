@@ -141,7 +141,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   const previewText = callRunning ? `☎ ${t('voice:callOngoing')}` : preview ?? (isGroup ? `${dm.members.length} Members` : null);
 
   const itemJsx = (
-    <div
+    <div data-icon-motion="press"
       onClick={handleClick}
       className={containerClass}
     >
@@ -213,7 +213,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
       </div>
 
       {/* Close / Leave button */}
-      <Tooltip content={isGroup ? t('list.leaveGroup') : t('list.close')} position="top"><button aria-label={isGroup ? t('list.leaveGroup') : t('list.close')}
+      <Tooltip content={isGroup ? t('list.leaveGroup') : t('list.close')} position="top"><button data-icon-motion="press" aria-label={isGroup ? t('list.leaveGroup') : t('list.close')}
         onClick={handleClose}
         className={closeClass}
 

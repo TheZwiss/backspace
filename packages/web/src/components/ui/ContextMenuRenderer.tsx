@@ -65,7 +65,7 @@ function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
     : disabled ? ITEM_DISABLED_CLASS : ITEM_CLASS;
 
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       className={className}
       style={isMobile ? undefined : ITEM_STYLE}
@@ -221,7 +221,7 @@ function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
           ? ITEM_DANGER_CLASS
           : ITEM_CLASS;
       return (
-        <button
+        <button data-icon-motion="press"
           type="button"
           role="menuitem"
           className={className}
@@ -301,7 +301,7 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
 
   return (
     <>
-      <button
+      <button data-icon-motion="arrow"
         ref={triggerRef}
         type="button"
         role="menuitem"
@@ -476,7 +476,7 @@ function MobileLeafItem({ item, close }: MobileLeafItemProps) {
     case 'action': {
       const colorClass = item.danger ? 'text-txt-danger' : 'text-txt-primary';
       return (
-        <button
+        <button data-icon-motion="press"
           type="button"
           role="menuitem"
           className={`${MOBILE_ITEM_CLASS} ${colorClass} ${item.disabled ? 'opacity-50' : ''}`}
@@ -529,7 +529,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
   return createPortal(
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-menu-backdrop bg-black/50" onClick={close} />
+      <div data-icon-motion="press" className="fixed inset-0 z-menu-backdrop bg-black/50" onClick={close} />
       {/* Bottom sheet */}
       <div
         role="menu"
@@ -541,7 +541,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
         <div aria-hidden="true" className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
         {/* Back button for submenu */}
         {submenuStack && (
-          <button
+          <button data-icon-motion="arrow"
             type="button"
             role="menuitem"
             className={`${MOBILE_ITEM_CLASS} text-txt-secondary`}
@@ -559,7 +559,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
               // Render submenu trigger as a button that switches sheet content
               const colorClass = 'text-txt-primary';
               return (
-                <button
+                <button data-icon-motion="arrow"
                   key={item.key}
                   type="button"
                   role="menuitem"

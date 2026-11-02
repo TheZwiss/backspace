@@ -261,7 +261,7 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
     <li className="glass-pill text-ui-label leading-5 rounded-full pl-2.5 pr-3 py-1 inline-flex items-center gap-2 max-w-full">
       <ChipIdentity label={label} stateWord={stateWord} expired={expired} dimmed={retrying} />
       {expired ? (
-        <button
+        <button data-icon-motion="expand"
           ref={actionRef}
           type="button"
           onClick={() => onExpand(entry.origin)}
@@ -271,7 +271,7 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
           {reconnectWord}
         </button>
       ) : (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => onRetry(entry.origin)}
           disabled={retrying}

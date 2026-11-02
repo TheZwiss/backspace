@@ -160,7 +160,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   };
 
   const cancelButton = (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={handleCancel}
       disabled={loading}
@@ -210,7 +210,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button data-icon-motion="press"
               type="submit"
               disabled={loading || !password}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50"

@@ -30,7 +30,7 @@ export function PayloadPreview({ preview, defaultOpen = false, failed = false }:
 
   return (
     <div>
-      <button
+      <button data-icon-motion="press"
         type="button"
         className="text-xs font-medium text-txt-link hover:underline"
         aria-expanded={open}

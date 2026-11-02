@@ -65,7 +65,7 @@ export function ExploreSpacePreviewCard({
         {/* Action */}
         <div className="flex-shrink-0">
           {isPublic ? (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleJoin}
               disabled={joining}
@@ -76,7 +76,7 @@ export function ExploreSpacePreviewCard({
           ) : isPending ? (
             <span className="px-3 py-1.5 text-xs font-medium text-txt-tertiary">{t('spaces:explore.preview.pending')}</span>
           ) : (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={openRequestForm}
               className="px-3 py-1.5 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs font-medium rounded-full transition-colors"
@@ -98,7 +98,7 @@ export function ExploreSpacePreviewCard({
             className="input-standard w-full resize-none text-sm"
           />
           <div className="flex gap-2">
-            <button
+            <button data-icon-motion="send"
               type="button"
               onClick={sendRequest}
               disabled={joining}
@@ -106,7 +106,7 @@ export function ExploreSpacePreviewCard({
             >
               {joining ? t('spaces:explore.preview.sending') : t('spaces:explore.sendRequest')}
             </button>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={cancelRequestForm}
               className="px-3 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"

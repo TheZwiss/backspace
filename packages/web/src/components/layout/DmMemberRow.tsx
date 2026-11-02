@@ -238,7 +238,7 @@ export function DmMemberRow({
       </div>
 
       {showKebab && (
-        <button
+        <button data-icon-motion="press"
           type="button"
           aria-label={t('dm:memberRow.actions')}
           data-dm-member-kebab

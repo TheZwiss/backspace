@@ -54,7 +54,7 @@ export function TransferIndicator() {
 
   return (
     <div className="relative" ref={ref}>
-      <Tooltip content={t('uploads:transfers.title')} position="top"><button
+      <Tooltip content={t('uploads:transfers.title')} position="top"><button data-icon-motion="attach"
         onClick={() => setOpen((v) => !v)}
         className={`relative w-8 h-8 flex items-center justify-center rounded-[6px] transition-colors ${
           idle
@@ -87,7 +87,7 @@ export function TransferIndicator() {
             <span className="text-txt-secondary">
               {t('uploads:transfers.count', { count: visible.length })}
             </span>
-            <button
+            <button data-icon-motion="press"
               onClick={() =>
                 visible
                   .filter((t) => t.state === 'completed' || t.state === 'aborted')
@@ -171,26 +171,26 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
         </span>
         <span className="flex gap-2 flex-shrink-0">
           {transfer.state === 'active' && (
-            <button onClick={onPause} className="hover:text-txt-primary transition-colors">
+            <button data-icon-motion="toggle" onClick={onPause} className="hover:text-txt-primary transition-colors">
               {t('common:actions.pause')}
             </button>
           )}
           {transfer.state === 'paused' && (
-            <button onClick={onResume} className="hover:text-txt-primary transition-colors">
+            <button data-icon-motion="press" onClick={onResume} className="hover:text-txt-primary transition-colors">
               {t('common:actions.resume')}
             </button>
           )}
           {(transfer.state === 'active' ||
             transfer.state === 'paused' ||
             transfer.state === 'queued') && (
-            <button onClick={onAbort} className="hover:text-accent-rose transition-colors">
+            <button data-icon-motion="press" onClick={onAbort} className="hover:text-accent-rose transition-colors">
               {t('common:actions.abort')}
             </button>
           )}
           {(transfer.state === 'completed' ||
             transfer.state === 'failed' ||
             transfer.state === 'aborted') && (
-            <button onClick={onDismiss} className="hover:text-txt-primary transition-colors">
+            <button data-icon-motion="press" onClick={onDismiss} className="hover:text-txt-primary transition-colors">
               {t('common:actions.dismiss')}
             </button>
           )}

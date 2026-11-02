@@ -93,14 +93,14 @@ export function ToastContainer() {
       style={containerStyle}
     >
       {toasts.map((toast) => (
-        <div
+        <div data-icon-motion="press"
           key={toast.id}
           className={`glass-pill border-l-2 ${borderColors[toast.type]} rounded-[10px] px-4 py-2.5 max-w-[320px] animate-slide-up pointer-events-auto cursor-pointer flex items-center gap-3`}
           onClick={() => removeToast(toast.id)}
         >
           <span className="flex-1 text-sm text-txt-primary leading-snug">{toast.message}</span>
           {toast.action && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={(e) => {
                 e.stopPropagation();

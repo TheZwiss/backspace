@@ -82,7 +82,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
       {/* Stop sharing — only when the host surface has no other stop control */}
       {onStopSharing && (
         <div className="px-3 pb-3 pt-1 shrink-0">
-          <button
+          <button data-icon-motion="press"
             onClick={onStopSharing}
             className="ui-button ui-button-danger w-full flex items-center justify-center gap-2 transition-colors"
           >

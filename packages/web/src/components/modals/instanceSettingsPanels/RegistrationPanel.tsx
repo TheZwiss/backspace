@@ -161,7 +161,7 @@ function FilterDropdown({
 
   return (
     <div className="relative">
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
@@ -175,7 +175,7 @@ function FilterDropdown({
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div data-icon-motion="press" className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
             {view === 'archived' && (
               <>
@@ -183,7 +183,7 @@ function FilterDropdown({
                   {t('admin:invites.filter.status')}
                 </div>
                 {archivedStatusOptions.map((s) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={s}
                     type="button"
                     onClick={() => handleArchivedStatusToggle(s)}
@@ -205,7 +205,7 @@ function FilterDropdown({
             </div>
             {view === 'active'
               ? activeSortOptions.map((opt) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={opt.key}
                     type="button"
                     onClick={() => { onActiveSortChange(opt.key); setOpen(false); }}
@@ -219,7 +219,7 @@ function FilterDropdown({
                   </button>
                 ))
               : archivedSortOptions.map((opt) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={opt.key}
                     type="button"
                     onClick={() => { onArchivedSortChange(opt.key); setOpen(false); }}
@@ -302,7 +302,7 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
     <div>
       <div className="flex items-center gap-2 flex-wrap">
         {showKeep && (
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => onChange('keep', customDateTime)}
             disabled={disabled}
@@ -316,7 +316,7 @@ function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }:
           </button>
         )}
         {EXPIRY_PRESETS.map((p) => (
-          <button
+          <button data-icon-motion="press"
             key={p.id}
             type="button"
             onClick={() => onChange(p.id, customDateTime)}
@@ -563,7 +563,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
         {/* Actions */}
         <div className="flex justify-center pt-2">
           <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={onClose}
               disabled={submitting}
@@ -571,7 +571,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
             >
               {t('common:actions.cancel')}
             </button>
-            <button
+            <button data-icon-motion="press"
               type="submit"
               disabled={submitting}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -783,7 +783,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
         {/* Actions */}
         <div className="flex justify-center pt-2">
           <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={onClose}
               disabled={submitting}
@@ -791,7 +791,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
             >
               {t('common:actions.cancel')}
             </button>
-            <button
+            <button data-icon-motion="press"
               type="submit"
               disabled={submitting}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -999,7 +999,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
         {/* Actions */}
         <div className="flex justify-center pt-2">
           <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={onClose}
               disabled={submitting}
@@ -1007,7 +1007,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
             >
               {t('common:actions.cancel')}
             </button>
-            <button
+            <button data-icon-motion="press"
               type="submit"
               disabled={submitting}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -1272,7 +1272,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         }`}
       >
         {/* Collapsed clickable header */}
-        <div
+        <div data-icon-motion="expand"
           className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
           onClick={onToggleExpand}
         >
@@ -1359,28 +1359,28 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               <div className="flex items-center gap-2 flex-wrap">
                 {isActive ? (
                   <>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleCopy(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
                       {t('admin:invites.row.copyLink')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
                     >
                       {t('common:actions.edit')}
                     </button>
-                    <button
+                    <button data-icon-motion="pulse"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmRevoke(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
                       {t('admin:invites.row.revoke')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
@@ -1390,21 +1390,21 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                   </>
                 ) : (
                   <>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowReinstate(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
                     >
                       {t('admin:invites.row.reinstate')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
                       {t('admin:invites.row.deletePermanently')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
                       className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
@@ -1672,7 +1672,7 @@ export function RegistrationPanel() {
         {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:invites.label')}</div>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setShowCreate(true)}
             className="ui-button ui-button-primary transition-colors"
@@ -1684,7 +1684,7 @@ export function RegistrationPanel() {
         {/* Row 2: tab strip (left) + FilterDropdown (right) */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex bg-white/[0.04] rounded-md p-0.5">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => handleTabSwitch('active')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
@@ -1693,7 +1693,7 @@ export function RegistrationPanel() {
             >
               {t('admin:invites.tabs.active')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{activeCount}</span>
             </button>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => handleTabSwitch('archived')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
@@ -1750,13 +1750,13 @@ export function RegistrationPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

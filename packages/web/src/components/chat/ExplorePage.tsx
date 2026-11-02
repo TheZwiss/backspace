@@ -252,7 +252,7 @@ export function ExplorePage() {
             className="input-search w-full"
           />
           {searchQuery && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleSearchChange('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary"
               aria-label={t('common:actions.clear')}
@@ -350,7 +350,7 @@ export function ExplorePage() {
                 {/* Joined spaces section */}
                 {hasJoined && (
                   <div>
-                    <button
+                    <button data-icon-motion="arrow"
                       onClick={() => setJoinedCollapsed(!joinedCollapsed)}
                       className="flex items-center gap-2 mb-3 group"
                     >

@@ -411,7 +411,7 @@ export function GeneralPanel() {
               {!instanceSettings.federatedRegistrationOpen && !noDirectoryEndpoint && (
                 <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber space-y-2">
                   <p>{t('admin:general.directory.registrationClosed')}</p>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleOpenFederatedRegistration}
                     disabled={openingRegistration}
@@ -499,7 +499,7 @@ export function GeneralPanel() {
               {instanceSettings.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
             </span>
             {instanceSettings.gifEnabled && !gifKeyDirty && (
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { setGifKeyDraft(''); setGifKeyDirty(true); }}
                 className="text-ui-caption text-txt-tertiary hover:text-txt-danger transition-colors"
               >
@@ -540,13 +540,13 @@ export function GeneralPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

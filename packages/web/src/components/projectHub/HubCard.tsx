@@ -47,7 +47,7 @@ export const HUB_ACTION = {
  */
 export function HubLinkAction(props: { href: string; children: ReactNode }): JSX.Element {
   return (
-    <a href={props.href} target="_blank" rel="noopener noreferrer" className={HUB_ACTION.quiet}>
+    <a data-icon-motion="press" href={props.href} target="_blank" rel="noopener noreferrer" className={HUB_ACTION.quiet}>
       {props.children}
       <svg
         width="14"

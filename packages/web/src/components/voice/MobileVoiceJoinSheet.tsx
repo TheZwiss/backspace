@@ -396,7 +396,7 @@ export function MobileVoiceJoinSheet({
   return createPortal(
     <>
       {/* Backdrop */}
-      <div
+      <div data-icon-motion="arrow"
         className="fixed inset-0 bg-black/50 z-50"
         onClick={handleBackdropClick}
       />
@@ -460,7 +460,7 @@ export function MobileVoiceJoinSheet({
 
             {/* Dormant / prompt state — tap to enable */}
             {!previewActive && !previewError && permState !== 'denied' && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
                 className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-white/[0.03] transition-colors"
@@ -479,7 +479,7 @@ export function MobileVoiceJoinSheet({
             {!previewActive && !previewError && permState === 'denied' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary px-6 text-center gap-2">
                 <span className="text-xs">{t('voice:joinSheet.cameraDenied')}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={startPreviewFromUser}
                   className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
@@ -493,7 +493,7 @@ export function MobileVoiceJoinSheet({
             {previewError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary px-6 text-center gap-2 bg-surface-base/90">
                 <span className="text-xs">{previewError}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={startPreviewFromUser}
                   className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
@@ -505,7 +505,7 @@ export function MobileVoiceJoinSheet({
 
             {/* Stop preview pill — visible while running */}
             {previewActive && !previewError && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={stopPreviewFromUser}
                 className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5"
@@ -520,7 +520,7 @@ export function MobileVoiceJoinSheet({
                 tile when the device list is long. */}
             {showCameraPicker && (
               <div ref={pickerAnchorRef} className="absolute bottom-2 left-2">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => setPickerOpen((v) => !v)}
                   className="rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
@@ -588,9 +588,9 @@ export function MobileVoiceJoinSheet({
         {/* Bottom action bar */}
         <div className="flex items-center justify-between px-6 py-4">
           {/* Mic toggle */}
-          <button
+          <button data-icon-motion="toggle"
             onClick={() => setPreMuted(!preMuted)}
-            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
+            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary"
             aria-label={preMuted ? t('voice:joinSheet.unmuteMicrophone') : t('voice:joinSheet.muteMicrophone')}
           >
             {preMuted ? (
@@ -610,7 +610,7 @@ export function MobileVoiceJoinSheet({
           </button>
 
           {/* Join Voice button */}
-          <button
+          <button data-icon-motion="press"
             onClick={handleJoin}
             className="bg-accent-mint text-black font-semibold rounded-full px-8 py-3 active:scale-95 transition-transform"
           >
@@ -618,9 +618,9 @@ export function MobileVoiceJoinSheet({
           </button>
 
           {/* Close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
-            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
+            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary"
             aria-label={t('common:actions.close')}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -653,7 +653,7 @@ export function MobileVoiceJoinSheet({
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <button
+          <button data-icon-motion="toggle"
             type="button"
             onClick={() => {
               setCameraDeviceId(null);
@@ -666,7 +666,7 @@ export function MobileVoiceJoinSheet({
             {t('voice:camera.autoSystemDefault')}
           </button>
           {cameraDevices.map((d, i) => (
-            <button
+            <button data-icon-motion="toggle"
               key={d.deviceId}
               type="button"
               onClick={() => {

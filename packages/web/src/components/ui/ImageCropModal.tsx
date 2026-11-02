@@ -91,12 +91,12 @@ export function ImageCropModal({
 
   return createPortal(
     <div ref={dialogRef} className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
       <div className="relative max-w-md w-full mx-4 bg-surface-elevated rounded-lg shadow-xl animate-slide-up">
         {/* Title bar */}
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-xl font-bold text-txt-primary">{heading}</h2>
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
             aria-label={t('common:actions.close')}
@@ -149,14 +149,14 @@ export function ImageCropModal({
 
         {/* Actions */}
         <div className="flex gap-3 p-4">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={onClose}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors"
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleApply}
             disabled={isProcessing || !croppedAreaPixels || applyDisabled}

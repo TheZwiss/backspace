@@ -97,7 +97,7 @@ function PasswordForm({
         </div>
       </div>
       {extraFields}
-      <button type="submit" disabled={isLoading || !password} className={submitClass}>
+      <button data-icon-motion="press" type="submit" disabled={isLoading || !password} className={submitClass}>
         {isLoading ? connectingLabel : connectLabel}
       </button>
     </form>
@@ -218,7 +218,7 @@ export function FallbackForm({
       </div>
       {extraFields}
       <div className="flex items-center gap-2">
-        <button
+        <button data-icon-motion="press"
           type="submit"
           disabled={isLoading || !username || !remotePassword}
           className={secondaryAction ? submitBase : submitClass}

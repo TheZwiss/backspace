@@ -1,5 +1,4 @@
 import { Tooltip } from '../ui/Tooltip';
-import { ControlIcon } from '../ui/ControlIcon';
 import { useTranslation } from 'react-i18next';
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -62,13 +61,17 @@ export function NudgeButton({ channelId }: { channelId: string }) {
   }, [open]);
   const close = () => { setOpen(false); button.current?.focus(); };
   return <>
-    <Tooltip content={cooling ? t('chat:nudge.cooldown') : t('chat:nudge.title')} position="top"><button ref={button} type="button"
+    <Tooltip content={cooling ? t('chat:nudge.cooldown') : t('chat:nudge.title')} position="top"><button data-icon-motion="bell" ref={button} type="button"
       aria-label={t('chat:nudge.title')} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       disabled={cooling} onClick={() => {
         const rect = button.current!.getBoundingClientRect();
         setPosition({ left: Math.max(8, Math.min(rect.left, innerWidth - 280)), bottom: Math.max(8, innerHeight - rect.top + 8) });
         setOpen(value => !value);
-      }} className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] rounded-[6px] text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] disabled:opacity-40"><ControlIcon name="bell" /></button></Tooltip>
+      }} className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 disabled:opacity-40 ${open ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'}`}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2Zm6-6V9a6 6 0 0 0-5-5.92V2h-2v1.08A6 6 0 0 0 6 9v7l-2 2v1h16v-1l-2-2Z" />
+        </svg>
+      </button></Tooltip>
     {open && createPortal(<div ref={menu} id={id} role="menu" aria-label={t('chat:nudge.choose')}
       style={{ position: 'fixed', ...position, zIndex: 'var(--layer-menu)', width: 264, maxHeight: 'min(420px, calc(75 * var(--app-vh)))', overflowY: 'auto' }}
       className="rounded-[10px] border border-border-soft bg-surface-elevated p-1.5 shadow-xl"
@@ -84,7 +87,7 @@ export function NudgeButton({ channelId }: { channelId: string }) {
       <p className="px-2 py-1.5 text-xs font-semibold text-txt-secondary">{t('chat:nudge.title')}</p>
       {[...effects, ...msnEffects].map((effect, index) => <Fragment key={effect.value}>
         {index === effects.length && <p className="border-t border-border-soft mt-1 px-2 pt-3 pb-1 text-xs font-semibold text-txt-secondary">{t('chat:nudge.originals')}</p>}
-        <button role="menuitem" type="button"
+        <button data-icon-motion="press" role="menuitem" type="button"
         className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-white/[0.06] focus:bg-white/[0.06] focus:outline-none"
         onClick={() => {
           if (Date.now() >= until.current && wsSend({ type: 'dm_nudge', dmChannelId: channelId, effect: effect.value }, getChannelOrigin(channelId))) {

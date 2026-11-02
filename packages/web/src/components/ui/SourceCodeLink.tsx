@@ -28,7 +28,7 @@ export function SourceCodeLink({ sourceCodeUrl, version, commit, className }: So
   const label = build ? t('sourceCode.labelWithBuild', { build }) : t('sourceCode.label');
 
   return (
-    <a
+    <a data-icon-motion="press"
       href={sourceCodeUrl}
       target="_blank"
       rel="noreferrer noopener"

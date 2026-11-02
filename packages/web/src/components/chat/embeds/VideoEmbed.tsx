@@ -45,7 +45,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
             allowFullScreen
           />
         ) : (
-          <button
+          <button data-icon-motion="toggle"
             type="button"
             data-embed-thumbnail
             onClick={() => setIsPlaying(true)}
@@ -85,7 +85,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
             </div>
           )}
           {embed.title && (
-            <a
+            <a data-icon-motion="press"
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"

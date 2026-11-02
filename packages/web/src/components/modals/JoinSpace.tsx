@@ -272,7 +272,7 @@ export function JoinSpaceModal() {
                 </div>
               )}
 
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleBrowseExplore}
                 className="mt-3 w-full py-2 flex items-center justify-center gap-1.5 text-sm font-medium text-accent-primary hover:bg-accent-primary/10 rounded-lg transition-colors"
@@ -312,14 +312,14 @@ export function JoinSpaceModal() {
             <div className="sticky bottom-0 z-10 pointer-events-none">
               <div className="flex justify-center pt-3 pb-1">
                 <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={closeModal}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
                     {t('common:actions.cancel')}
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     type="submit"
                     disabled={isLoading || !inviteCode.trim()}
                     className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -368,7 +368,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setPhase('input'); setPassword(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -379,14 +379,14 @@ export function JoinSpaceModal() {
                   {t('common:actions.back')}
                 </button>
                 <div className="w-px h-5 bg-white/10" />
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading || !password}
                   className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -417,7 +417,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setPhase('input'); setRequestTarget(null); setRequestMessage(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -428,14 +428,14 @@ export function JoinSpaceModal() {
                   {t('common:actions.back')}
                 </button>
                 <div className="w-px h-5 bg-white/10" />
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading}
                   className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -455,7 +455,7 @@ export function JoinSpaceModal() {
             {requestOutcome === 'sent' ? t('spaces:join.request.sent') : t('spaces:join.request.pending')}
           </p>
           <div className="flex justify-end">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={closeModal}
               className="ui-button ui-button-primary transition-colors"
@@ -500,7 +500,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="arrow"
                   type="button"
                   onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -511,14 +511,14 @@ export function JoinSpaceModal() {
                   {t('common:actions.back')}
                 </button>
                 <div className="w-px h-5 bg-white/10" />
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading || !fallbackUsername || !fallbackPassword}
                   className="ui-button ui-button-primary transition-colors disabled:opacity-50"

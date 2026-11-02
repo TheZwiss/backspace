@@ -92,7 +92,7 @@ export function UpdateToast() {
             <p className="text-xs text-txt-secondary mt-1 leading-relaxed">{body}</p>
           </div>
 
-          <button
+          <button data-icon-motion="press"
             onClick={handleLater}
             className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06] transition-colors"
             aria-label={t('desktop:update.dismiss')}
@@ -105,21 +105,21 @@ export function UpdateToast() {
 
         <div className="flex items-center gap-2 mt-3.5 pl-11">
           {canRestart ? (
-            <button
+            <button data-icon-motion="press"
               onClick={install}
               className="ui-button ui-button-primary transition-colors"
             >
               {t('desktop:update.restartNow')}
             </button>
           ) : (
-            <button
+            <button data-icon-motion="download"
               onClick={openDownloadPage}
               className="ui-button ui-button-primary transition-colors"
             >
               {t('desktop:update.download')}
             </button>
           )}
-          <button
+          <button data-icon-motion="press"
             onClick={handleLater}
             className="px-3 py-1.5 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
           >

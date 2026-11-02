@@ -200,14 +200,14 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
       className="fixed inset-0 z-[520] flex items-center justify-center animate-fade-in"
       onMouseDown={e => e.stopPropagation()}
     >
-      <div className="absolute inset-0 bg-black/50" onClick={() => { if (!submitting) onClose(); }} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={() => { if (!submitting) onClose(); }} />
       <div className="relative w-full max-w-lg mx-4 ui-dialog-surface shadow-2xl flex flex-col max-h-[calc(90*var(--app-vh))] overflow-hidden animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-soft">
           <h3 className="text-base font-semibold text-txt-primary">
             {packId ? t('stickers.editPack') : t('stickers.createPack')}
           </h3>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"
@@ -264,7 +264,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
                 {t('stickers.packs')} ({items.length}/{MAX_STICKERS_PER_PACK})
               </label>
               {items.length > 0 && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingItem || items.length >= MAX_STICKERS_PER_PACK}
@@ -287,7 +287,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
                       alt={item.name}
                       className="max-h-full max-w-full object-contain pointer-events-none"
                     />
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={() => handleRemoveItem(item.id)}
                       className="sticker-remove-button opacity-0 group-hover:opacity-100 transition-opacity"
@@ -304,7 +304,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
                 ))}
               </div>
             ) : (
-              <div
+              <div data-icon-motion="press"
                 onClick={() => fileInputRef.current?.click()}
                 className="sticker-dropzone cursor-pointer"
                 onDragOver={(e) => e.preventDefault()}
@@ -339,7 +339,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-border-soft bg-surface-base/40">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={onClose}
             disabled={loading || submitting || uploadingItem}
@@ -347,7 +347,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="send"
             type="button"
             onClick={handleSubmitForReview}
             disabled={loading || submitting || uploadingItem || items.length === 0}

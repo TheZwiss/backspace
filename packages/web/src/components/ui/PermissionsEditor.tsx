@@ -429,13 +429,13 @@ export function PermissionsEditor({
 
   const savePill = (
     <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
-      <button
+      <button data-icon-motion="press"
         onClick={handleDiscard}
         className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
       >
         {t('spaces:settings.discardChanges')}
       </button>
-      <button
+      <button data-icon-motion="press"
         onClick={handleSave}
         disabled={saving}
         className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -486,7 +486,7 @@ export function PermissionsEditor({
         {/* Add Role */}
         <div className="mt-2 relative">
           {!showAddRole ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setShowAddRole(true)}
               className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
@@ -502,7 +502,7 @@ export function PermissionsEditor({
                   <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('spaces:permissions.noMoreRoles')}</div>
                 ) : (
                   availableRoles.map(role => (
-                    <button
+                    <button data-icon-motion="press"
                       key={role.id}
                       onClick={() => handleAddRole(role.id)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover rounded transition-colors"
@@ -517,7 +517,7 @@ export function PermissionsEditor({
                 )}
               </div>
               <div className="border-t border-white/[0.04] p-1.5">
-                <button
+                <button data-icon-motion="press"
                   onClick={() => setShowAddRole(false)}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >
@@ -560,7 +560,7 @@ export function PermissionsEditor({
         {/* Add Member */}
         <div className="mt-2 relative">
           {!showAddMember ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setShowAddMember(true)}
               className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
@@ -586,7 +586,7 @@ export function PermissionsEditor({
                   <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('common:labels.noMembersFound')}</div>
                 ) : (
                   availableMembers.map(member => (
-                    <button
+                    <button data-icon-motion="press"
                       key={member.userId}
                       onClick={() => handleAddMember(member.userId)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover rounded transition-colors"
@@ -600,7 +600,7 @@ export function PermissionsEditor({
                 )}
               </div>
               <div className="border-t border-white/[0.04] p-1.5">
-                <button
+                <button data-icon-motion="press"
                   onClick={() => { setShowAddMember(false); setMemberSearch(''); }}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >

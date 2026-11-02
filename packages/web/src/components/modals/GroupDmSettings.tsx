@@ -361,7 +361,7 @@ export function GroupDmSettings() {
       {/* Hero icon */}
       <div className="flex flex-col items-center gap-3">
         <div className="relative">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleHeroClick}
             disabled={!isOwner}
@@ -395,7 +395,7 @@ export function GroupDmSettings() {
 
           {/* Clear (X) button — owner-only, only when we have a non-empty icon to clear */}
           {isOwner && previewIconUrl && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleClearIcon}
               data-group-dm-icon-clear
@@ -452,7 +452,7 @@ export function GroupDmSettings() {
       {/* Save / Cancel — owner only, only when dirty */}
       {isOwner && (
         <div className="flex items-center justify-end gap-2 pt-2">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleCancel}
             className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -460,7 +460,7 @@ export function GroupDmSettings() {
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleSave}
             disabled={!isDirty || saving}
@@ -475,7 +475,7 @@ export function GroupDmSettings() {
       {/* For non-owners: a single Close button (no Save). */}
       {!isOwner && (
         <div className="flex items-center justify-end gap-2 pt-2">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={closeModal}
             className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-txt-primary text-sm font-medium rounded-full transition-colors"
@@ -494,7 +494,7 @@ export function GroupDmSettings() {
         <p className="text-xs text-txt-tertiary mb-3">
           {t('dm:leave.explanation')}
         </p>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={handleLeaveClick}
           disabled={leaving}
@@ -527,7 +527,7 @@ export function GroupDmSettings() {
         </span>
       </div>
 
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => useUIStore.getState().openModal('addDmMember', { dmChannelId })}
         disabled={!canAddMembers}
@@ -597,10 +597,10 @@ export function GroupDmSettings() {
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
               {t('dm:groupSettings.general')}
             </div>
-            <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
+            <button data-icon-motion="press" type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
               {t('dm:groupSettings.overview')}
             </button>
-            <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
+            <button data-icon-motion="press" type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
               {t('common:labels.members')}
             </button>
           </div>
@@ -626,10 +626,10 @@ export function GroupDmSettings() {
               <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
                 {t('dm:groupSettings.general')}
               </div>
-              <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
+              <button data-icon-motion="press" type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
                 {t('dm:groupSettings.overview')}
               </button>
-              <button type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
+              <button data-icon-motion="press" type="button" onClick={() => handleTabClick('members')} className={tabBtnClass('members')}>
                 {t('common:labels.members')}
               </button>
             </div>
@@ -641,7 +641,7 @@ export function GroupDmSettings() {
           <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
             <div className="px-6 max-w-[640px] mx-auto">
               {isMobile && (
-                <button
+                <button data-icon-motion="arrow"
                   type="button"
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"

@@ -39,7 +39,7 @@ export function ConfirmDialog({
 
   return ReactDOM.createPortal(
     <div ref={dialogRef} className="fixed inset-0 z-confirm flex items-center justify-center animate-fade-in">
-      <div
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={() => { if (!loading) onClose(); }}
       />
@@ -48,7 +48,7 @@ export function ConfirmDialog({
           <h3 className="ui-dialog-title mb-2">{title}</h3>
           <div className="text-sm text-txt-secondary mb-5 leading-relaxed">{description}</div>
           <div className="flex gap-3">
-            <Button
+            <Button data-icon-motion="press"
               variant="secondary"
               onClick={onClose}
               disabled={loading}
@@ -56,7 +56,7 @@ export function ConfirmDialog({
             >
               {cancelLabel ?? t('common:actions.cancel')}
             </Button>
-            <Button
+            <Button data-icon-motion="pulse"
               variant={variant}
               onClick={onConfirm}
               disabled={loading}

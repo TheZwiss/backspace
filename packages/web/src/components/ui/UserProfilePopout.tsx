@@ -259,7 +259,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
         {/* Actions. Nobody sends themselves a message. */}
         {!isYou && (
-          <button
+          <button data-icon-motion="send"
             onClick={handleSendMessage}
             className="w-full mt-3 py-2 rounded-lg text-ui-label font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
           >
@@ -267,14 +267,14 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
           </button>
         )}
         {canEditRoles && (
-          <button
+          <button data-icon-motion="press"
             onClick={handleEditRoles}
             className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-secondary hover:text-txt-primary bg-transparent hover:bg-white/[0.04] transition-colors"
           >
             {t('social:profile.editRoles')}
           </button>
         )}
-        <button
+        <button data-icon-motion="press"
           onClick={handleViewFullProfile}
           className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
         >

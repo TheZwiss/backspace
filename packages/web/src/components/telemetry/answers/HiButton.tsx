@@ -218,7 +218,7 @@ export function HiButton({ children, disabled = false, onClick }: HiButtonProps)
   // React's ids carry colons, which are not safe inside url(#…) references.
   const uid = useId().replace(/:/g, '');
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className="hi-button">
+    <button data-icon-motion="press" type="button" disabled={disabled} onClick={onClick} className="hi-button">
       <span className="hi-button__aura" aria-hidden="true" />
       <span className="hi-button__pane" aria-hidden="true">
         <span className="hi-button__void" />

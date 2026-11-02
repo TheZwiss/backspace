@@ -161,7 +161,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           {RESOLUTIONS.map((r) => (
-            <button
+            <button data-icon-motion="press"
               key={String(r.value)}
               onClick={() => setConfig({ height: r.value })}
               aria-pressed={effective.height === r.value}
@@ -180,7 +180,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           {FRAME_RATES.map((f) => (
-            <button
+            <button data-icon-motion="press"
               key={f.value}
               onClick={() => setConfig({ fps: f.value })}
               aria-pressed={effective.fps === f.value}
@@ -199,7 +199,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
         </div>
         <div className="flex gap-1.5">
           {MODES.map((m) => (
-            <button
+            <button data-icon-motion="press"
               key={m.value}
               onClick={() => setConfig({ mode: m.value })}
               aria-pressed={config.mode === m.value}
@@ -220,7 +220,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
           {CODEC_OPTIONS.map((c) => {
             const isSelected = config.codec === c.value;
             return (
-              <button
+              <button data-icon-motion="press"
                 key={c.value}
                 onClick={() => setConfig({ codec: c.value })}
                 aria-pressed={isSelected}
@@ -241,14 +241,14 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
         {hostLimits.allowCustomBitrate ? (
           <>
             <div className="flex gap-1.5">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => setConfig({ customBitrateKbps: null })}
                 aria-pressed={effective.customBitrateKbps == null}
                 className={`${pillBase} ${effective.customBitrateKbps == null ? pillSelected : pillUnselected}`}
               >
                 {t('voice:streamSettings.auto')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => {
                   // Start the slider where Auto currently sits so switching changes nothing yet
                   if (effective.customBitrateKbps == null) setConfig({ customBitrateKbps: autoKbps });

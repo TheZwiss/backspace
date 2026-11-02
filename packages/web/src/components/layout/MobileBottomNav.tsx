@@ -102,7 +102,7 @@ export function MobileBottomNav() {
       }}
     >
       {tabs.map((tab) => (
-        <button
+        <button data-icon-motion="press"
           key={tab.id}
           onClick={() => handleTab(tab.id)}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 relative transition-colors ${

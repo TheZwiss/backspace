@@ -94,7 +94,7 @@ export function MemberNicknameDialog({ target, nickname, accountName, self, onCl
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
               {nickname !== null && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => void save(null)}
                   disabled={saving}
@@ -103,7 +103,7 @@ export function MemberNicknameDialog({ target, nickname, accountName, self, onCl
                   {t('spaces:members.nickname.reset')}
                 </button>
               )}
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={close}
                 disabled={saving}
@@ -111,7 +111,7 @@ export function MemberNicknameDialog({ target, nickname, accountName, self, onCl
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

@@ -36,7 +36,7 @@ export function TriStateToggle({
   };
 
   const button = (v: TriState, glyph: string, next: TriState) => (
-    <Tooltip content={names[v]} position="top"><button
+    <Tooltip content={names[v]} position="top"><button data-icon-motion="arrow"
       type="button"
       className={btnClass(v, value === v)}
       onClick={() => !disabled && onChange(next)}

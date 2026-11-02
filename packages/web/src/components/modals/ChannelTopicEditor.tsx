@@ -138,7 +138,7 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
       )}
       {isDirty && (
         <div className="mt-2 flex justify-end gap-2">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={discard}
             disabled={isSaving}
@@ -146,7 +146,7 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
           >
             {t('spaces:channel.settings.topic.reset')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={isSaving || tooLong}
             className="ui-button ui-button-primary transition-colors disabled:opacity-50"

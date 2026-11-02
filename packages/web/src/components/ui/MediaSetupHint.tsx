@@ -79,7 +79,7 @@ export function MediaSetupHint() {
               {t('mediaSetup.neteaseSmtc.body')}
             </p>
           </div>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={dismiss}
             className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06] transition-colors"
@@ -92,7 +92,7 @@ export function MediaSetupHint() {
         </div>
 
         <div className="flex items-center gap-3 mt-3.5 pl-11">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={dismiss}
             className="ui-button ui-button-primary transition-colors"

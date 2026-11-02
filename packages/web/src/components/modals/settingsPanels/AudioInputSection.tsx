@@ -107,7 +107,7 @@ export function AudioInputSection() {
           <div className="text-xs text-txt-tertiary">
             {t('voice.input.accessDenied.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => { requestPermission().catch(() => {}); }}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
@@ -125,7 +125,7 @@ export function AudioInputSection() {
           <div className="text-xs text-txt-tertiary">
             {t('voice.input.permissionPrompt.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => { requestPermission().catch(() => {}); }}
             className="ui-button ui-button-primary transition-colors"
           >
@@ -158,7 +158,7 @@ export function AudioInputSection() {
     <SectionShell title={t('voice.input.title')}>
       <div className="space-y-3">
         <div ref={dropdownRef}>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setListOpen((v) => !v)}
             className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"

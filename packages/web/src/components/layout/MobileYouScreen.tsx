@@ -93,7 +93,7 @@ export function MobileYouScreen() {
     <div className="flex flex-col h-full bg-surface-base overflow-y-auto">
       {/* Header with settings gear */}
       <header className="h-12 flex items-center justify-end px-3 shrink-0">
-        <button
+        <button data-icon-motion="gear"
           onClick={() => pushMobileScreen('settings')}
           className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary relative"
           aria-label={updateBadge ? t('admin:updates.badge.settingsAriaLabel') : t('common:labels.settings')}
@@ -155,7 +155,7 @@ export function MobileYouScreen() {
       {/* Action rows */}
       <div className="mt-4 mx-4 rounded-xl bg-surface-channel overflow-hidden">
         {actionRows.map((row, i) => (
-          <button
+          <button data-icon-motion="press"
             key={row.label}
             onClick={row.action}
             className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors ${
@@ -174,7 +174,7 @@ export function MobileYouScreen() {
 
       {/* Log out */}
       <div className="mt-4 mx-4 mb-8 rounded-xl bg-surface-channel overflow-hidden">
-        <button
+        <button data-icon-motion="pulse"
           onClick={() => setShowLogoutConfirm(true)}
           className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors"
         >

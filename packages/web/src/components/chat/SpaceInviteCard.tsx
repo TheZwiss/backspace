@@ -177,7 +177,7 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
             {requestOutcome === 'sent' ? t('chat:invite.requestSent') : t('chat:invite.requestPending')}
           </span>
         ) : (
-          <button
+          <button data-icon-motion="press"
             onClick={onJoin}
             disabled={joining}
             className="px-4 py-1.5 rounded-md text-ui-label font-medium bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 flex-shrink-0"

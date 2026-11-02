@@ -63,7 +63,7 @@ function StreamQualityItem() {
         {t('voice:stream.quality')}
       </div>
       <div className="relative">
-        <button
+        <button data-icon-motion="press"
           ref={btnRef}
           onClick={() => {
             const n = !open;
@@ -136,7 +136,7 @@ function StreamAttenuationItem() {
   return (
     <div>
       <div className="py-1.5">
-        <button
+        <button data-icon-motion="press"
           onClick={() => setAttenuationEnabled(!streamAttenuationEnabled)}
           className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
           style={{ width: 'calc(100% - 12px)' }}
@@ -615,7 +615,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
                 {t('voice:stream.isStreaming', { name: displayName })}
               </p>
               {!isLocal && (
-                <button
+                <button data-icon-motion="press"
                   onClick={handleWatch}
                   aria-label={t('voice:stream.watch')}
                   className={`${large ? 'mt-2 px-4 py-1.5' : 'mt-2 w-full min-h-7 px-3 py-1 text-ui-caption'} whitespace-nowrap bg-accent-primary hover:bg-accent-primary-hover rounded text-white font-semibold transition-colors`}
@@ -653,7 +653,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
         </div>
       )}
 
-      {hasVideo && isWatching && <button
+      {hasVideo && isWatching && <button data-icon-motion="expand"
         type="button"
         aria-label={t(streamFullscreen.active ? 'voice:controls.exitFullscreen' : 'voice:controls.fullscreen')}
         onClick={(event) => { event.stopPropagation(); streamFullscreen.toggle(); }}

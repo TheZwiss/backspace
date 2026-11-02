@@ -23,7 +23,7 @@ function TransferMemberRow({
   const canonical = useCanonicalUserView(member.user, origin);
   const displayName = canonical.displayName || canonical.username;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onSelect(member.userId)}
       className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
     >
@@ -171,14 +171,14 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               <p className="text-xs text-txt-tertiary mt-1.5">{t('spaces:ownership.regularMember')}</p>
             </div>
             <div className="flex gap-3">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => setSelectedUserId(null)}
                 className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
                 disabled={transferring}
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleTransfer}
                 disabled={transferring}
                 className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"

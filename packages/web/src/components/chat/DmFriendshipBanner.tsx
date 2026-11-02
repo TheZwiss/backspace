@@ -50,11 +50,11 @@ export function DmFriendshipBanner({ user, origin }: { user: User; origin: strin
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2 desktop:pl-3">
-        <Button variant={outgoing ? 'secondary' : 'primary'} disabled={busy} onClick={() => void run()} className="min-h-11 flex-1 desktop:flex-none whitespace-nowrap">
+        <Button data-icon-motion="press" variant={outgoing ? 'secondary' : 'primary'} disabled={busy} onClick={() => void run()} className="min-h-11 flex-1 desktop:flex-none whitespace-nowrap">
           {busy ? <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.25" /><path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg> : !outgoing && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={status.state === 'inbound_pending' ? 'm5 12 4 4L19 6' : 'M12 5v14M5 12h14'} /></svg>}
           {t(status.state === 'inbound_pending' ? 'common:actions.accept' : outgoing ? 'social:request.cancel' : 'social:profile.addFriend')}
         </Button>
-        {status.state === 'inbound_pending' && <Button variant="secondary" disabled={busy} onClick={() => void run(false)} className="min-h-11">{t('common:actions.decline')}</Button>}
+        {status.state === 'inbound_pending' && <Button data-icon-motion="press" variant="secondary" disabled={busy} onClick={() => void run(false)} className="min-h-11">{t('common:actions.decline')}</Button>}
       </div>
     </div>
   </div>;

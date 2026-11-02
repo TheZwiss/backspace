@@ -52,7 +52,7 @@ function DmSearchUserRow({ user, isSelected, selectedRef, onClick }: {
   const canonical = useCanonicalUserView(user, '');
   const displayName = canonical.displayName ?? canonical.username;
   return (
-    <div
+    <div data-icon-motion="press"
       ref={isSelected ? selectedRef : undefined}
       onClick={onClick}
       className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
@@ -101,7 +101,7 @@ function DmSearchDmRow({ item, isSelected, selectedRef, onClick }: {
   const partner = rawPartner ? canonicalPartner : null;
 
   return (
-    <div
+    <div data-icon-motion="press"
       ref={isSelected ? selectedRef : undefined}
       onClick={onClick}
       className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
@@ -438,7 +438,7 @@ export function DmSearchBar() {
           />
         </div>
       ) : (
-        <button
+        <button data-icon-motion="press"
           onClick={open}
           title={t('dm:search.trigger')}
           className="w-full h-8 bg-surface-input text-txt-tertiary text-ui-label font-medium px-2 rounded-[4px] text-left border border-white/[0.06] shadow-input hover:border-white/[0.1] transition-colors truncate"

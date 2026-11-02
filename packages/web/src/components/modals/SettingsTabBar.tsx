@@ -20,7 +20,7 @@ export function SettingsTabBar() {
             <HiButton onClick={() => ctx.scrollToSection(s.id)}>{s.label}</HiButton>
           </div>
         ) : (
-        <button
+        <button data-icon-motion="press"
           key={s.id}
           onClick={() => ctx.scrollToSection(s.id)}
           className={`pb-2.5 text-sm transition-colors relative ${

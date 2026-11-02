@@ -28,15 +28,15 @@ function SpaceProfileContent({ space }: { space: TaggedSpace }) {
   const gradient = getSpaceGradient(space.id, space.name, space.avatarColor).gradient;
   return <Modal isOpen onClose={() => preview ? setPreview(null) : close()} title={preview?.label ?? t('spaces:profile.title')} maxWidth="max-w-xl">
     {preview ? <div className="space-y-3">
-      <button className="text-sm text-accent-mint hover:underline" onClick={() => setPreview(null)}>← {t('common:actions.back')}</button>
+      <button data-icon-motion="press" className="text-sm text-accent-mint hover:underline" onClick={() => setPreview(null)}>← {t('common:actions.back')}</button>
       <img src={preview.src} alt={preview.label} className="mx-auto max-h-[calc(65*var(--app-vh))] max-w-full object-contain rounded-xl" />
     </div> : <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-      {banner ? <button type="button" className="block aspect-[9/4] w-full overflow-hidden bg-black/20" title={t('spaces:profile.viewBanner')} onClick={() => setPreview({ src: banner, label: t('spaces:profile.viewBanner') })}>
+      {banner ? <button data-icon-motion="press" type="button" className="block aspect-[9/4] w-full overflow-hidden bg-black/20" title={t('spaces:profile.viewBanner')} onClick={() => setPreview({ src: banner, label: t('spaces:profile.viewBanner') })}>
         <img src={banner} alt={t('spaces:profile.bannerAlt', { name: space.name })} className="h-full w-full object-cover transition-transform duration-300 hover:scale-105" />
       </button> : <div className="h-28" style={{ background: gradient }} />}
       <div className="px-5 pb-5">
         <div className="relative -mt-10 mb-3 flex items-end justify-between gap-3">
-          {icon ? <Tooltip content={t('spaces:profile.viewIcon')} position="top"><button aria-label={t('spaces:profile.viewIcon')} type="button" className="h-20 w-20 shrink-0 rounded-2xl overflow-hidden border-4 border-surface-base bg-surface-base"  onClick={() => setPreview({ src: icon, label: t('spaces:profile.viewIcon') })}>
+          {icon ? <Tooltip content={t('spaces:profile.viewIcon')} position="top"><button data-icon-motion="press" aria-label={t('spaces:profile.viewIcon')} type="button" className="h-20 w-20 shrink-0 rounded-2xl overflow-hidden border-4 border-surface-base bg-surface-base"  onClick={() => setPreview({ src: icon, label: t('spaces:profile.viewIcon') })}>
             <img src={icon} alt={space.name} className="h-full w-full object-cover" />
           </button></Tooltip> : <div className="h-20 w-20 shrink-0 rounded-2xl border-4 border-surface-base flex items-center justify-center text-3xl font-bold text-white" style={{ background: gradient }}>{space.name.charAt(0).toUpperCase()}</div>}
           <span className="mb-1 rounded-full bg-white/5 px-2.5 py-1 text-ui-micro uppercase tracking-wider text-txt-tertiary">{t('spaces:profile.server')}</span>

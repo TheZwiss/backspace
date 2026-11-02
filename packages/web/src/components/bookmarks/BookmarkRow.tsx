@@ -41,7 +41,7 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
 
   return (
     <div className="group/bookmark relative flex items-start gap-3 px-3 py-3 hover:bg-interactive-hover transition-colors">
-      <button
+      <button data-icon-motion="pulse"
         type="button"
         onClick={() => onOpen(bookmark)}
         className="flex-1 min-w-0 flex items-start gap-3 text-left"
@@ -92,7 +92,7 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
           )}
         </div>
       </button>
-      <Tooltip content={t('list.remove')} position="top"><button
+      <Tooltip content={t('list.remove')} position="top"><button data-icon-motion="press"
         type="button"
         onClick={() => onRemove(bookmark)}
         disabled={removing}

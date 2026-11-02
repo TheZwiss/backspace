@@ -42,7 +42,7 @@ function MobileMemberRow({
     : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] border-l-2 border-transparent cursor-pointer transition-all duration-200 ease-out active:bg-interactive-hover';
 
   return (
-    <div
+    <div data-icon-motion="press"
       onClick={() => onClickMember(member)}
       className={rowClass}
     >

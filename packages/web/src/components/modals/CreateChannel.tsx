@@ -162,14 +162,14 @@ export function CreateChannelModal() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={closeModal}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={isLoading}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

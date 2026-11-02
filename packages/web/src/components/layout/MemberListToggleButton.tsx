@@ -9,7 +9,7 @@ export function MemberListToggleButton() {
   const memberListOpen = useUIStore((s) => s.memberListOpen);
 
   return (
-    <Tooltip content={t('chrome.toggleMemberList')} position="top"><button
+    <Tooltip content={t('chrome.toggleMemberList')} position="top"><button data-icon-motion="press"
       onClick={toggleMemberList}
       className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-interactive-hover ${
         memberListOpen ? 'text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'

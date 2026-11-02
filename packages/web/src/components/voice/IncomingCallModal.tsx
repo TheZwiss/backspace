@@ -122,7 +122,7 @@ export function IncomingCallModal() {
           {/* Action buttons */}
           <div className="flex items-center gap-6 mt-2">
             {/* Decline */}
-            <Tooltip content={t('common:actions.decline')} position="top"><button aria-label={t('common:actions.decline')}
+            <Tooltip content={t('common:actions.decline')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.decline')}
               onClick={handleDecline}
               className="w-14 h-14 rounded-full bg-accent-rose/20 border border-accent-rose/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200 hover:bg-accent-rose/35 group"
 
@@ -133,7 +133,7 @@ export function IncomingCallModal() {
             </button></Tooltip>
 
             {/* Accept */}
-            <Tooltip content={t('common:actions.accept')} position="top"><button aria-label={t('common:actions.accept')}
+            <Tooltip content={t('common:actions.accept')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.accept')}
               onClick={handleAccept}
               className="w-14 h-14 rounded-full bg-status-online/20 border border-status-online/30 backdrop-blur-sm flex items-center justify-center transition-all duration-200 hover:bg-status-online/35 animate-call-button-glow group"
 

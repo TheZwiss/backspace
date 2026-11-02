@@ -180,7 +180,7 @@ function UpdateSettings() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {action && (
-            <button
+            <button data-icon-motion="press"
               onClick={action.onClick}
               className="ui-button ui-button-primary transition-colors"
             >
@@ -188,7 +188,7 @@ function UpdateSettings() {
             </button>
           )}
           {capability !== 'external' && (
-            <button
+            <button data-icon-motion="press"
               onClick={checkNow}
               disabled={busy}
               className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
@@ -254,7 +254,7 @@ export function DesktopPanel() {
             <div className="text-sm text-txt-primary font-medium">{window.location.origin}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{t('desktop.instance.current')}</div>
           </div>
-          <button
+          <button data-icon-motion="arrow"
             onClick={() => window.backspace?.clearInstanceUrl()}
             className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
           >

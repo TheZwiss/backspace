@@ -188,7 +188,7 @@ export function ProjectHubPage(props: { links?: ProjectLinks; showTopBar?: boole
 
             {showDesktop && (
               <HubCard accent="rose" icon={<DesktopIcon />} title={t('desktop.title')} body={t('desktop.body')}>
-                <button
+                <button data-icon-motion="gear"
                   type="button"
                   onClick={() => openModal('userSettings', { tab: 'desktop' })}
                   className={HUB_ACTION.quiet}
@@ -202,16 +202,16 @@ export function ProjectHubPage(props: { links?: ProjectLinks; showTopBar?: boole
           <InstanceSection info={info} />
 
           <footer className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-            <a href={links.license} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
+            <a data-icon-motion="press" href={links.license} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
               {t('footer.license')}
             </a>
-            <a href={links.security} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
+            <a data-icon-motion="press" href={links.security} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
               {t('footer.security')}
             </a>
-            <a href={links.contributors} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
+            <a data-icon-motion="press" href={links.contributors} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
               {t('footer.contributors')}
             </a>
-            <a href={links.repository} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
+            <a data-icon-motion="press" href={links.repository} target="_blank" rel="noopener noreferrer" className="text-txt-tertiary hover:text-txt-secondary transition-colors">
               {t('footer.source')}
             </a>
           </footer>

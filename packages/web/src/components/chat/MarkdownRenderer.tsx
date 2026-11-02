@@ -159,7 +159,7 @@ function buildComponents(): Components {
         return <ChannelMentionBadge userId={mentionMatch[1]!} />;
       }
       return (
-        <a
+        <a data-icon-motion="press"
           href={href}
           target="_blank"
           rel="noopener noreferrer"

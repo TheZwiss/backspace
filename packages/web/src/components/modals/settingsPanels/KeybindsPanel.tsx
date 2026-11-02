@@ -95,14 +95,14 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
       <div className="flex items-center gap-1.5 ml-3">
         {!isRecording && (
           <>
-            <button
+            <button data-icon-motion="press"
               onClick={onStartRecording}
               className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
             >
               {keybind ? t('common:actions.edit') : t('keybinds.row.record')}
             </button>
             {keybind && (
-              <button
+              <button data-icon-motion="press"
                 onClick={onDelete}
                 className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-rose-400 hover:bg-rose-400/10 transition-colors"
               >
@@ -326,7 +326,7 @@ export function KeybindsPanel() {
           <p className="mt-2">{t(`keybinds.portal.${portal.state}`)}</p>
           {portal.reason === 'missingDesktopEntry' && <p className="mt-2 text-amber-200">{t('keybinds.portal.missingDesktopEntry')}</p>}
           {portal.reason === 'missingDesktopEntry' && portal.canIntegrateAppImage && window.backspace?.integrateKeybindAppImage && (
-            <button type="button" onClick={() => {
+            <button data-icon-motion="arrow" type="button" onClick={() => {
               setIntegrationError(false);
               void window.backspace?.integrateKeybindAppImage?.().then((ok) => setIntegrationError(!ok)).catch(() => setIntegrationError(true));
             }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
@@ -335,7 +335,7 @@ export function KeybindsPanel() {
           )}
           {integrationError && <p className="mt-2 text-amber-200">{t('keybinds.portal.integrationError')}</p>}
           {portal.state === 'ready' && window.backspace?.configureKeybindPortal && (
-            <button type="button" onClick={() => {
+            <button data-icon-motion="gear" type="button" onClick={() => {
               setPortalConfigureError(false);
               void window.backspace?.configureKeybindPortal?.().then((opened) => setPortalConfigureError(!opened)).catch(() => setPortalConfigureError(true));
             }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
@@ -344,7 +344,7 @@ export function KeybindsPanel() {
           )}
           {portalConfigureError && <p className="mt-2 text-amber-200">{t('keybinds.portal.configureError')}</p>}
           {portal.state === 'unavailable' && (
-            <button type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
+            <button data-icon-motion="arrow" type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
               className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
               {t('keybinds.portal.retry')}
             </button>
@@ -376,7 +376,7 @@ export function KeybindsPanel() {
           <div className="text-xs text-amber-200/70 mt-1">
             {t('keybinds.accessibility.description')}
           </div>
-          <button
+          <button data-icon-motion="arrow"
             onClick={() => {
               window.backspace?.checkAccessibility().then(setAccessibilityTrusted);
             }}
@@ -448,13 +448,13 @@ export function KeybindsPanel() {
             />
           </div>
           <div className="flex gap-2 mt-2.5">
-            <button
+            <button data-icon-motion="pulse"
               onClick={confirmConflict}
               className="text-xs px-3 py-1.5 rounded bg-accent-mint/20 text-accent-mint hover:bg-accent-mint/30 transition-colors"
             >
               {t('keybinds.conflict.overwrite')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={cancelConflict}
               className="text-xs px-3 py-1.5 rounded bg-white/[0.06] text-txt-secondary hover:bg-white/[0.1] transition-colors"
             >

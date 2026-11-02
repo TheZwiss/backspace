@@ -98,7 +98,7 @@ export function SidebarSubLinks() {
             <HiButton onClick={() => ctx.scrollToSection(section.id)}>{section.label}</HiButton>
           </div>
         ) : (
-        <button
+        <button data-icon-motion="press"
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
           className={`w-full flex items-center gap-1.5 text-left pl-6 pr-2 py-1 text-xs rounded-md transition-colors ${
@@ -196,7 +196,7 @@ export function UserSettingsModal() {
         {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
           entry.id === 'instance' && layout === 'desktop' ? (
             <Fragment key={entry.id}>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleTabClick(entry.id)}
                 className={tabClass(entry.id)}
                 aria-current={tab === entry.id ? 'page' : undefined}
@@ -208,7 +208,7 @@ export function UserSettingsModal() {
               {tab === 'instance' && <SidebarSubLinks />}
             </Fragment>
           ) : (
-            <button
+            <button data-icon-motion="press"
               key={entry.id}
               onClick={() => handleTabClick(entry.id)}
               className={tabClass(entry.id)}
@@ -265,7 +265,7 @@ export function UserSettingsModal() {
             <div className="flex-1" />
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <button
+            <button data-icon-motion="press"
               onClick={handleLogout}
               className="group w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
             >
@@ -303,7 +303,7 @@ export function UserSettingsModal() {
               {renderNav('mobile')}
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <button
+              <button data-icon-motion="press"
                 onClick={handleLogout}
                 className="group w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
               >
@@ -326,7 +326,7 @@ export function UserSettingsModal() {
             <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
-                <button
+                <button data-icon-motion="arrow"
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
                   aria-label={t('settings:nav.backToMenu')}

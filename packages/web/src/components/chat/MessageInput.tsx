@@ -788,7 +788,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
               {chatReplyTo.user.displayName ?? chatReplyTo.user.username}
             </span>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => chatSetReplyTo(channelId, null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={t('chat:composer.cancelReply')}
@@ -821,7 +821,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
           {/* File attach button */}
           {canAttachFiles && (
-            <Tooltip content={t('chat:composer.attachFile')} position="top"><button
+            <Tooltip content={t('chat:composer.attachFile')} position="top"><button data-icon-motion="attach"
               onClick={() => fileInputRef.current?.click()}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
 
@@ -896,7 +896,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
           {/* GIF button */}
           {gifEnabled && (
-            <Tooltip content={t('chat:composer.gif')} position="top"><button
+            <Tooltip content={t('chat:composer.gif')} position="top"><button data-icon-motion="press"
               onClick={() => togglePopover('gif')}
               className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
                 activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
@@ -912,7 +912,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
           {isDm && <NudgeButton channelId={channelId} />}
           {/* Emoji button */}
-          <Tooltip content={t('chat:composer.emoji')} position="top"><button
+          <Tooltip content={t('chat:composer.emoji')} position="top"><button data-icon-motion="press"
             onClick={() => togglePopover('emoji')}
             className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
@@ -926,7 +926,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           </button></Tooltip>
 
           {/* Sticker button */}
-          <Tooltip content={t('chat:stickers.title')} position="top"><button
+          <Tooltip content={t('chat:stickers.title')} position="top"><button data-icon-motion="press"
             onClick={() => togglePopover('sticker')}
             className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'sticker' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
@@ -941,7 +941,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
           {/* Send button — appears when there's content/attachments to send */}
           {canSend && (
-            <Tooltip content={t('chat:composer.send')} position="top"><button
+            <Tooltip content={t('chat:composer.send')} position="top"><button data-icon-motion="send"
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"

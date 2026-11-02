@@ -130,7 +130,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         {/* Mute */}
         <Tooltip content={(isSpaceMuted || isSpaceDeafened)
             ? (isMuted ? t('voice:controls.spaceMutedSelfMuted') : t('voice:badges.spaceMuted'))
-            : isMuted ? t('voice:controls.unmuteShortcut') : t('voice:controls.muteShortcut')} position="top"><button aria-label={(isSpaceMuted || isSpaceDeafened)
+            : isMuted ? t('voice:controls.unmuteShortcut') : t('voice:controls.muteShortcut')} position="top"><button data-icon-motion="toggle" aria-label={(isSpaceMuted || isSpaceDeafened)
             ? (isMuted ? t('voice:controls.spaceMutedSelfMuted') : t('voice:badges.spaceMuted'))
             : isMuted ? t('voice:controls.unmuteShortcut') : t('voice:controls.muteShortcut')}
           onClick={handleMute}
@@ -150,7 +150,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         </button></Tooltip>
 
         {/* Deafen */}
-        <Tooltip content={isSpaceDeafened ? t('voice:badges.spaceDeafened') : isDeafened ? t('voice:controls.undeafenShortcut') : t('voice:controls.deafenShortcut')} position="top"><button aria-label={isSpaceDeafened ? t('voice:badges.spaceDeafened') : isDeafened ? t('voice:controls.undeafenShortcut') : t('voice:controls.deafenShortcut')}
+        <Tooltip content={isSpaceDeafened ? t('voice:badges.spaceDeafened') : isDeafened ? t('voice:controls.undeafenShortcut') : t('voice:controls.deafenShortcut')} position="top"><button data-icon-motion="toggle" aria-label={isSpaceDeafened ? t('voice:badges.spaceDeafened') : isDeafened ? t('voice:controls.undeafenShortcut') : t('voice:controls.deafenShortcut')}
           onClick={handleDeafen}
           className={isSpaceDeafened
             ? `${btnBase} bg-accent-amber/20 text-accent-amber cursor-not-allowed`
@@ -168,7 +168,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
 
         {/* Camera */}
         {canSpeak && (
-          <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
+          <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button data-icon-motion="toggle" aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
             onClick={handleCamera}
             className={isCameraOn ? btnGreen : btnDefault}
 
@@ -189,7 +189,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         {/* Screen Share — picker when idle, settings + stop menu when live */}
         {canStream && (
           <>
-            <Tooltip content={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')} position="top"><button aria-label={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
+            <Tooltip content={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')} position="top"><button data-icon-motion="expand" aria-label={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
               ref={shareBtnRef}
               onClick={handleScreenShare}
               // Idle the button starts a share; live it toggles a menu, so it
@@ -218,7 +218,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
 
         {!detached && <>
         {/* Chat Toggle */}
-        <Tooltip content={t('voice:controls.toggleChat')} position="top"><button aria-label={t('voice:controls.toggleChat')}
+        <Tooltip content={t('voice:controls.toggleChat')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.toggleChat')}
           onClick={toggleVoiceChat}
           className={voiceChatOpen
             ? `${btnBase} bg-surface-channel text-txt-primary`
@@ -232,7 +232,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         </button></Tooltip>
 
         {/* Chat focus */}
-        <Tooltip content={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')} position="top"><button aria-label={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')}
+        <Tooltip content={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')} position="top"><button data-icon-motion="press" aria-label={voiceChatFocus ? t('voice:controls.unfocusChat') : t('voice:controls.focusChat')}
           onClick={toggleVoiceChatFocus}
           aria-pressed={voiceChatFocus}
           className={voiceChatFocus
@@ -255,7 +255,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         </>}
 
         {/* Fullscreen Toggle */}
-        <Tooltip content={voiceFullscreen ? t('voice:controls.exitFullscreen') : t('voice:controls.fullscreen')} position="top"><button aria-label={voiceFullscreen ? t('voice:controls.exitFullscreen') : t('voice:controls.fullscreen')}
+        <Tooltip content={voiceFullscreen ? t('voice:controls.exitFullscreen') : t('voice:controls.fullscreen')} position="top"><button data-icon-motion="expand" aria-label={voiceFullscreen ? t('voice:controls.exitFullscreen') : t('voice:controls.fullscreen')}
           onClick={handleFullscreen}
           className={voiceFullscreen
             ? `${btnBase} bg-surface-channel text-txt-primary`
@@ -275,7 +275,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         </button></Tooltip>
 
         {!detached && isElectron() && (
-          <Tooltip content={t('voice:controls.openCallWindow')} position="top"><button aria-label={t('voice:controls.openCallWindow')} onClick={() => {
+          <Tooltip content={t('voice:controls.openCallWindow')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.openCallWindow')} onClick={() => {
             if (!openDetachedCallWindow()) useUIStore.getState().addToast(t('voice:controls.callWindowFailed'), 'warning');
           }} className={btnDefault} >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -288,7 +288,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
 
         {/* Disconnect */}
-        <Tooltip content={t('voice:controls.disconnect')} position="top"><button aria-label={t('voice:controls.disconnect')}
+        <Tooltip content={t('voice:controls.disconnect')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.disconnect')}
           onClick={handleDisconnect}
           className={`${btnBase} bg-accent-rose hover:bg-accent-rose/80 text-white`}
 

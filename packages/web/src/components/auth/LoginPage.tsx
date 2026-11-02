@@ -126,7 +126,7 @@ export function LoginPage() {
             />
           </div>
 
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={isDisabled}
             className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -143,7 +143,7 @@ export function LoginPage() {
               t={t}
               i18nKey="auth:login.registerPrompt"
               components={{
-                actionLink: <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+                actionLink: <Link data-icon-motion="press" to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
               }}
             />
           </p>

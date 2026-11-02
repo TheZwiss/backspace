@@ -1226,7 +1226,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       )}
 
       {(!isNearBottom || isDetached) && messages.length > 0 && (
-        <button
+        <button data-icon-motion="press"
           onClick={() => { void jumpToPresent(); }}
           className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-all animate-fade-in cursor-pointer"
         >
@@ -1257,7 +1257,7 @@ function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
       <div role="alert" className="flex max-w-sm flex-col items-center gap-1 text-center">
         <p className="text-ui-message font-semibold text-txt-primary">{title}</p>
         <p className="text-ui-label text-txt-tertiary break-words">{detail}</p>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={onRetry}
           className="ui-button ui-button-primary mt-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
@@ -1353,7 +1353,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
               values={{ name: ownerName }}
               components={{
                 owner: ownerMember ? (
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleOwnerClick}
                     className="font-bold text-txt-secondary hover:text-txt-primary hover:underline transition-colors"
@@ -1370,13 +1370,13 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
             </p>
           )}
           <div className="mt-4 flex items-center gap-2">
-            <button
+            <button data-icon-motion="gear"
               onClick={handleOpenSettings}
               className="ui-button ui-button-primary transition-colors"
             >
               {t('chat:list.welcome.group.openSettings')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={handleLeaveGroup}
               className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
             >
@@ -1420,7 +1420,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         )}
         {isFriend && otherUser && (
           <div className="mt-4">
-            <button
+            <button data-icon-motion="press"
               onClick={() => friend && removeFriend(friend, friend._instanceOrigin)}
               className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
             >

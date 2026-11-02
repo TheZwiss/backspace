@@ -24,11 +24,11 @@ export function FriendsVoiceCard({ group, children }: { group: VoiceGroup; child
     joinVoiceChannel(group.channelId, useVoiceStore.getState().connectFn ?? undefined);
   };
   return <div className="rounded-[10px] bg-white/[0.03] border border-border-soft p-2 mb-2">
-    <button type="button" onClick={() => openSpace()} className="flex w-full items-center gap-2 rounded-lg p-1 text-left hover:bg-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" title={t('activity.openSpace')}>
+    <button data-icon-motion="press" type="button" onClick={() => openSpace()} className="flex w-full items-center gap-2 rounded-lg p-1 text-left hover:bg-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" title={t('activity.openSpace')}>
       <Avatar src={resolveAssetUrl(group.space.icon, group.space._instanceOrigin)} name={group.space.name} size={28} palette="space" userId={group.space.id} avatarColor={group.space.avatarColor} />
       <span className="text-xs font-semibold text-txt-primary truncate">{group.space.name}</span>
     </button>
-    <button type="button" aria-haspopup="menu" aria-label={t('activity.channelOptions', { channel: group.channelName })} className="block w-full rounded-lg px-1.5 py-2 mt-1 text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" onClick={event => {
+    <button data-icon-motion="press" type="button" aria-haspopup="menu" aria-label={t('activity.channelOptions', { channel: group.channelName })} className="block w-full rounded-lg px-1.5 py-2 mt-1 text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" onClick={event => {
       const rect = event.currentTarget.getBoundingClientRect();
       useContextMenuStore.getState().open({ x: rect.left, y: rect.bottom }, [
         { type: 'action', key: 'open-space', label: t('activity.openSpace'), onClick: () => openSpace() },

@@ -39,7 +39,7 @@ function CommandBlock({ command }: { command: string }) {
       <code className="flex-1 min-w-0 rounded-lg bg-surface-input px-3 py-2 font-mono text-xs text-txt-primary overflow-x-auto whitespace-pre select-all">
         {command}
       </code>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={copy}
         className="shrink-0 px-3 py-2 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
@@ -114,7 +114,7 @@ export function UpdatesPanel() {
         <div className="rounded-lg bg-accent-rose/10 border border-accent-rose/20 p-3.5 text-sm text-txt-secondary">
           {loadError || t('admin:updates.loadFailed')}
         </div>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => void load(false)}
           className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
@@ -188,7 +188,7 @@ export function UpdatesPanel() {
               </div>
               <div className="text-xs text-txt-tertiary mt-0.5">
                 {status.latest.publishedAt && t('admin:updates.available.released', { date: formatReleaseDate(status.latest.publishedAt, f) })}
-                <a
+                <a data-icon-motion="press"
                   href={status.latest.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -208,7 +208,7 @@ export function UpdatesPanel() {
             </div>
 
             <div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setShowManual((v) => !v)}
                 aria-expanded={showManual}
@@ -298,7 +298,7 @@ export function UpdatesPanel() {
         <div className="text-xs text-txt-tertiary">
           {lastCheckedLine()}
         </div>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => void load(true)}
           disabled={checking || !status.checkEnabled}

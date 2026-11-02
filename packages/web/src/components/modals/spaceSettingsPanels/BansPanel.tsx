@@ -104,7 +104,7 @@ export function BansPanel({ spaceId }: BansPanelProps) {
                         </div>
                       </div>
                     </div>
-                    <button
+                    <button data-icon-motion="press"
                       onClick={() => handleUnban(ban.userId)}
                       className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-surface-base rounded transition-colors flex-shrink-0"
                     >

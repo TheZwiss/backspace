@@ -190,13 +190,13 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
 
   return (
     <div ref={dialogRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-surface-overlay" onClick={step !== 'complete' ? onClose : undefined} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-surface-overlay" onClick={step !== 'complete' ? onClose : undefined} />
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 flex-shrink-0">
           <h2 className="text-lg font-bold text-txt-primary">{t('settings:account.deletion.title')}</h2>
           {step !== 'complete' && (
-            <button onClick={onClose} className="text-txt-tertiary hover:text-txt-primary transition-colors p-1" aria-label={t('common:actions.close')}>
+            <button data-icon-motion="press" onClick={onClose} className="text-txt-tertiary hover:text-txt-primary transition-colors p-1" aria-label={t('common:actions.close')}>
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -228,7 +228,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                       <div key={space.id} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3">
                         <div className="text-sm font-medium text-txt-primary mb-2">{space.name}</div>
                         <div className="flex gap-2 mb-2">
-                          <button
+                          <button data-icon-motion="press"
                             onClick={() => handleSpaceAction(space.id, 'transfer')}
                             className={`px-2.5 py-1 text-xs rounded transition-colors ${
                               space.action === 'transfer'
@@ -238,7 +238,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                           >
                             {t('settings:account.deletion.ownedSpaces.transfer')}
                           </button>
-                          <button
+                          <button data-icon-motion="press"
                             onClick={() => handleSpaceAction(space.id, 'delete')}
                             className={`px-2.5 py-1 text-xs rounded transition-colors ${
                               space.action === 'delete'
@@ -273,7 +273,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                 <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{error}</div>
               )}
 
-              <button
+              <button data-icon-motion="pulse"
                 onClick={ownedSpaces.length > 0 ? handleContinueFromWarning : () => setStep('confirm')}
                 disabled={
                   isLoading ||
@@ -328,13 +328,13 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               )}
 
               <div className="flex gap-3">
-                <button
+                <button data-icon-motion="press"
                   onClick={() => { setStep('warning'); setError(''); }}
                   className="flex-1 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors"
                 >
                   {t('common:actions.back')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading || confirmUsername !== user.username || !confirmPassword}
                   className="ui-button ui-button-danger flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -382,7 +382,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               )}
 
               {federationResults.length > 0 && !deletionComplete && (
-                <button
+                <button data-icon-motion="press"
                   onClick={handleDeleteAnyway}
                   disabled={isLoading}
                   className="ui-button ui-button-danger w-full transition-colors disabled:opacity-50"
