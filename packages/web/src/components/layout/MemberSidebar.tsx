@@ -61,7 +61,7 @@ function MemberSidebarRow({
   };
 
   return (
-    <div
+    <div data-icon-motion="press"
       key={member.userId}
       onClick={(e) => onClickMember(e, member, canonical)}
       onContextMenu={(e) => onContextMenuMember(e, member, canonical)}

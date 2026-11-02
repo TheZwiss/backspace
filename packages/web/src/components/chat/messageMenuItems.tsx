@@ -131,7 +131,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
       render: (close) => (
         <div className="flex items-center gap-1 px-2 py-1.5">
           {QUICK_EMOJIS.map(emoji => (
-            <button
+            <button data-icon-motion="press"
               key={emoji}
               onClick={(e) => {
                 e.stopPropagation();
@@ -145,7 +145,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
               {emoji}
             </button>
           ))}
-          <Tooltip content={i18n.t('common:actions.addReaction')} position="top"><button aria-label={i18n.t('common:actions.addReaction')}
+          <Tooltip content={i18n.t('common:actions.addReaction')} position="top"><button data-icon-motion="pulse" aria-label={i18n.t('common:actions.addReaction')}
             onClick={(e) => {
               e.stopPropagation();
               onOpenEmojiPicker();

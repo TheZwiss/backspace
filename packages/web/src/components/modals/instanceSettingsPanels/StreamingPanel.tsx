@@ -93,7 +93,7 @@ export function StreamingPanel() {
       return (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
           <span>{t('common:states.loadSettingsFailed')}</span>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => { void loadLimits(); }}
             disabled={loading}
@@ -358,7 +358,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex flex-wrap gap-1">
               {[100, 250, 500, 1000, 2500, 5000].map((step) => (
-                <button
+                <button data-icon-motion="press"
                   key={step}
                   onClick={() => setDraft({ ...draft, bitrateStepKbps: step })}
                   className={`px-2 py-0.5 rounded text-ui-caption font-medium transition-colors cursor-pointer select-none ${
@@ -387,7 +387,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {ALL_RESOLUTIONS.map((res) => (
-                <button
+                <button data-icon-motion="press"
                   key={String(res)}
                   onClick={() => toggleResolution(res)}
                   className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
@@ -405,7 +405,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {STANDARD_FRAMERATES.map((fps) => (
-                <button
+                <button data-icon-motion="press"
                   key={fps}
                   onClick={() => toggleFramerate(fps)}
                   className={`${pillBase} ${draft.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
@@ -507,7 +507,7 @@ export function StreamingPanel() {
                               }}
                             />
                           ) : (
-                            <button
+                            <button data-icon-motion="press"
                               onClick={() => setEditingCell(key)}
                               className={`w-full px-1.5 py-0.5 rounded text-center transition-colors
                                 ${exceedsCap ? 'bg-accent-amber/10 text-accent-amber' : ''}
@@ -518,7 +518,7 @@ export function StreamingPanel() {
                             >
                               {(val / 1000).toFixed(1)}
                               {overridden && (
-                                <span
+                                <span data-icon-motion="press"
                                   className="ml-1 text-ui-micro text-txt-tertiary hover:text-txt-danger cursor-pointer"
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -541,7 +541,7 @@ export function StreamingPanel() {
 
           {/* Reset all button */}
           {Object.entries(matrixDraft).some(([key, val]) => val !== getDefaultKbps(key)) && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => {
                 const reset: Record<string, number> = {};
                 for (const [key] of Object.entries(matrixDraft)) {
@@ -565,13 +565,13 @@ export function StreamingPanel() {
           <div>
             <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.mode.label')}</div>
             <div className="flex flex-wrap gap-1.5">
-              <button
+              <button data-icon-motion="toggle"
                 onClick={() => setCamera({ mode: 'fixed' })}
                 className={`${pillBase} ${camera.mode === 'fixed' ? pillOn : pillOff}`}
               >
                 {t('admin:streaming.camera.mode.fixed')}
               </button>
-              <button
+              <button data-icon-motion="toggle"
                 onClick={() => setCamera({ mode: 'user-choice' })}
                 className={`${pillBase} ${camera.mode === 'user-choice' ? pillOn : pillOff}`}
               >
@@ -635,7 +635,7 @@ export function StreamingPanel() {
                 <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.quality.resolutions')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {STANDARD_RESOLUTIONS.map((height) => (
-                    <button
+                    <button data-icon-motion="toggle"
                       key={height}
                       onClick={() => toggleCameraResolution(height)}
                       className={`${pillBase} ${camera.allowedResolutions.includes(height) ? pillOn : pillOff}`}
@@ -649,7 +649,7 @@ export function StreamingPanel() {
                 <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.quality.framerates')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {STANDARD_FRAMERATES.map((fps) => (
-                    <button
+                    <button data-icon-motion="toggle"
                       key={fps}
                       onClick={() => toggleCameraFramerate(fps)}
                       className={`${pillBase} ${camera.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
@@ -745,13 +745,13 @@ export function StreamingPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

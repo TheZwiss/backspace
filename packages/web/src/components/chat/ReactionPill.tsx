@@ -121,7 +121,7 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
 
   return (
     <>
-      <button
+      <button data-icon-motion="press"
         ref={anchorRef}
         type="button"
         onClick={onToggle}

@@ -195,7 +195,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
     const draggable = movable && !isMobile && index !== null;
 
     return (
-      <div
+      <div data-icon-motion="press"
         key={role.id}
         data-role-row=""
         draggable={draggable || undefined}
@@ -221,7 +221,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
         {reorderable && !isMobile && (
           <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
             {movable && index !== null && (
-              <Tooltip content={t('roles.reorder.handleHint')} position="top"><button
+              <Tooltip content={t('roles.reorder.handleHint')} position="top"><button data-icon-motion="press"
                 ref={registerControl(role.id, 'handle')}
                 type="button"
                 // Chrome starts no drag of the row from inside a button, so
@@ -248,7 +248,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
           </div>
         )}
 
-        <button
+        <button data-icon-motion="press"
           type="button"
           draggable={draggable || undefined}
           className={`flex-1 min-w-0 flex items-center gap-2.5 py-2 rounded text-left ${FOCUS_RING}`}
@@ -268,7 +268,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
           >
             {movable && index !== null ? (
               <>
-                <button
+                <button data-icon-motion="press"
                   ref={registerControl(role.id, 'up')}
                   type="button"
                   aria-label={t('roles.reorder.up', { name: role.name })}
@@ -280,7 +280,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                   </svg>
                 </button>
-                <button
+                <button data-icon-motion="press"
                   ref={registerControl(role.id, 'down')}
                   type="button"
                   aria-label={t('roles.reorder.down', { name: role.name })}

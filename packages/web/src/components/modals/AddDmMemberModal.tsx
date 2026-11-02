@@ -61,7 +61,7 @@ function AddDmFriendRow({
   const { baseName } = parseFederatedUsername(canonical.username);
   const friendDisplayName = canonical.displayName ?? baseName;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onToggle(friendKey(friend))}
       disabled={isInDm || isAdding || atCapacity}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
@@ -274,7 +274,7 @@ export function AddDmMemberModal() {
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-ui-caption bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => removeFriend(friendKey(f))}
                   className="opacity-60 hover:opacity-100 transition-opacity text-ui-body leading-none"
                 >
@@ -332,7 +332,7 @@ export function AddDmMemberModal() {
         </div>
 
         {/* Submit button */}
-        <button
+        <button data-icon-motion="send"
           onClick={handleSubmit}
           disabled={selectedFriends.length === 0 || isAdding}
           className="w-full py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"

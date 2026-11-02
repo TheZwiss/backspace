@@ -44,7 +44,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
           loading="lazy"
         />
       ) : (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setIsLoaded(true)}
           className="w-full text-left focus:outline-none group"

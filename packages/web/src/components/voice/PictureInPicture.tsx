@@ -462,7 +462,7 @@ export function PictureInPicture() {
       )}
 
       {/* Close button */}
-      <button
+      <button data-icon-motion="press"
         data-pip-action="close"
         onClick={handleClose}
         className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white/80 hover:text-white transition-colors"

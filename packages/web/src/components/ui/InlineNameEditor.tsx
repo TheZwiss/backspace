@@ -146,14 +146,14 @@ export function InlineNameEditor({
             maxLength={maxLength}
             className="input-standard min-w-0 flex-1 py-1.5 px-2 text-sm"
           />
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={isSaving}
             className="ui-button ui-button-primary flex-shrink-0 transition-colors disabled:opacity-50"
           >
             {isSaving ? t('states.saving') : t('actions.save')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={cancelEditing}
             disabled={isSaving}
@@ -163,7 +163,7 @@ export function InlineNameEditor({
           </button>
         </form>
       ) : (
-        <Tooltip content={editLabel} position="top"><button aria-label={editLabel}
+        <Tooltip content={editLabel} position="top"><button data-icon-motion="press" aria-label={editLabel}
           ref={editButtonRef}
           type="button"
           onClick={startEditing}

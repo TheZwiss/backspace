@@ -144,7 +144,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
           {choices.map((choice, index) => {
             const checked = choice === selected;
             return (
-              <button
+              <button data-icon-motion="press"
                 key={choice}
                 type="button"
                 role="radio"
@@ -178,7 +178,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
                 ? t('spaces:notifications.mutedIndefinitely')
                 : t('spaces:notifications.mutedUntil', { time: formatMuteEnd(own.mutedUntil) })}
             </span>
-            <button
+            <button data-icon-motion="toggle"
               type="button"
               disabled={saving}
               onClick={() => void save({ mute: null })}
@@ -190,7 +190,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
         ) : (
           <div className="grid grid-cols-2 gap-1">
             {MUTE_DURATIONS.map((duration) => (
-              <button
+              <button data-icon-motion="toggle"
                 key={duration}
                 type="button"
                 disabled={saving}

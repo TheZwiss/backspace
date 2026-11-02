@@ -43,7 +43,7 @@ function PackStickerGrid({ pack, query, onSelect }: { pack: StickerPackDetail; q
     <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3">
       <div className="grid grid-cols-4 gap-1.5">
         {items.map(item => (
-          <button
+          <button data-icon-motion="press"
             key={item.id}
             type="button"
             onClick={() => onSelect(item.token)}
@@ -76,7 +76,7 @@ function TokenStickerGrid({ items, query, onSelect }: {
     <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 pb-3">
       <div className="grid grid-cols-4 gap-1.5">
         {visible.map((item) => (
-          <button
+          <button data-icon-motion="press"
             key={item.token}
             type="button"
             onClick={() => onSelect(item.token)}
@@ -137,7 +137,7 @@ function StickerSearchInput({ value, onChange, className = 'mx-4 mb-3' }: {
         className="input-search w-full pl-8 pr-8 text-xs"
       />
       {value && (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => onChange('')}
           aria-label={t('common:actions.clear')}
@@ -331,7 +331,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   selected ? 'h-7 opacity-100' : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-70'
                 }`}
               />
-              <Tooltip content={space.name} position="top"><button
+              <Tooltip content={space.name} position="top"><button data-icon-motion="press"
                 type="button"
                 onClick={() => setActiveTab(`space:${space.spaceId}`)}
                 aria-label={space.name}
@@ -392,7 +392,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 {manageable && (
                   <div className="flex items-center gap-1">
                     {items.length > 0 && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         disabled={!!removing}
                         aria-pressed={managing}
@@ -402,7 +402,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                         {t(managing ? 'stickers.done' : 'stickers.manage')}
                       </button>
                     )}
-                    <button
+                    <button data-icon-motion="attach"
                       type="button"
                       data-sticker-upload
                       disabled={loading || !!removing || full}
@@ -446,7 +446,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                       <p className="text-sm font-medium">{t('stickers.empty')}</p>
                       <p className="text-xs leading-5 text-txt-tertiary">{t('stickers.emptyHint')}</p>
                       {manageable && (
-                        <button type="button" onClick={startUpload} className="sticker-secondary-button">
+                        <button data-icon-motion="attach" type="button" onClick={startUpload} className="sticker-secondary-button">
                           {t('stickers.chooseImage')}
                         </button>
                       )}
@@ -542,7 +542,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 px-1"
             >
               {/* Personal Stickers tab */}
-              <Tooltip content={t('stickers.title')} position="top"><button
+              <Tooltip content={t('stickers.title')} position="top"><button data-icon-motion="press"
                 type="button"
                 onClick={() => setActiveTab('personal')}
 
@@ -559,7 +559,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               </button></Tooltip>
 
               {library && library.favorites.length > 0 && (
-                <Tooltip content={t('stickers.favoritesTitle')} position="top"><button aria-label={t('stickers.favoritesTitle')}
+                <Tooltip content={t('stickers.favoritesTitle')} position="top"><button data-icon-motion="pulse" aria-label={t('stickers.favoritesTitle')}
                   type="button"
                   onClick={() => setActiveTab('favorites')}
 
@@ -575,7 +575,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               )}
 
               {library?.privatePacks.map(pack => (
-                <Tooltip content={pack.name} position="top"><button
+                <Tooltip content={pack.name} position="top"><button data-icon-motion="press"
                   key={pack.id}
                   type="button"
                   onClick={() => setActiveTab(`user:${pack.id}`)}
@@ -594,7 +594,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               ))}
 
               {library?.spaces.map(space => space.pack && (
-                <Tooltip content={space.pack.name} position="top"><button
+                <Tooltip content={space.pack.name} position="top"><button data-icon-motion="press"
                   key={`pack:${space.spaceId}`}
                   type="button"
                   onClick={() => setActiveTab(`space:${space.spaceId}`)}
@@ -622,7 +622,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 const tabId = `store:${pack.id}`;
                 const isActive = activeTab === tabId;
                 return (
-                  <Tooltip content={pack.name} position="top"><button
+                  <Tooltip content={pack.name} position="top"><button data-icon-motion="press"
                     key={pack.id}
                     type="button"
                     onClick={() => setActiveTab(tabId)}
@@ -646,7 +646,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
 
             {/* Sticker Store modal button */}
             {manageable && (
-              <Tooltip content={t('stickers.store')} position="top"><button
+              <Tooltip content={t('stickers.store')} position="top"><button data-icon-motion="press"
                 type="button"
                 onClick={() => setShowStore(true)}
 

@@ -179,7 +179,7 @@ function MusicCard({ activity }: { activity: Activity }) {
       )}
 
       {activity.url && (
-        <a
+        <a data-icon-motion="press"
           href={activity.url}
           target="_blank"
           rel="noopener noreferrer"
@@ -289,7 +289,7 @@ function ProcessCard({
       )}
 
       {activity.url && (
-        <a
+        <a data-icon-motion="press"
           href={activity.url}
           target="_blank"
           rel="noopener noreferrer"

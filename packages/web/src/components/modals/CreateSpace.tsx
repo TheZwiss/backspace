@@ -133,7 +133,7 @@ export function CreateSpaceModal() {
 
         {/* Icon Picker */}
         <div className="flex justify-center mb-4">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingIcon}
@@ -174,7 +174,7 @@ export function CreateSpaceModal() {
             className="hidden"
           />
           {iconPreview && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleRemoveIcon}
               className="ml-2 self-start mt-1 text-txt-tertiary hover:text-txt-danger text-xs transition-colors"
@@ -193,7 +193,7 @@ export function CreateSpaceModal() {
             {AVATAR_COLORS.map((key) => {
               const entry = SPACE_GRADIENT_MAP[key];
               return (
-                <button
+                <button data-icon-motion="press"
                   key={key}
                   type="button"
                   onClick={() => setAvatarColor(key)}
@@ -278,14 +278,14 @@ export function CreateSpaceModal() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleClose}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={isLoading || uploadingIcon}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

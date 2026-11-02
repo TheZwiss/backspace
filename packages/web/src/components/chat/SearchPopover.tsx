@@ -56,7 +56,7 @@ function SearchResultRow({
   const displayName = canonical.displayName ?? canonical.username ?? '?';
   const avatar = msg.user ? canonical.avatar : undefined;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onJumpToMessage(msg.id)}
       className="w-full px-3 py-2.5 hover:bg-interactive-hover transition-colors text-left flex items-start gap-2.5 group/result"
     >
@@ -229,7 +229,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
             className="input-embedded flex-1 text-ui-body"
           />
           {query && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setQuery('')}
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
             >
@@ -241,7 +241,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
         </div>
 
         {/* Filter toggle */}
-        <button
+        <button data-icon-motion="press"
           onClick={() => setShowFilters(!showFilters)}
           className="mt-2 text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
         >
@@ -341,7 +341,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
             ))}
             {results.length < totalCount && (
               <div className="px-3 py-2 border-t border-white/[0.07]">
-                <button
+                <button data-icon-motion="press"
                   onClick={handleLoadMore}
                   disabled={isSearching}
                   className="w-full py-1.5 text-ui-label text-accent-primary hover:text-accent-primary-hover transition-colors font-medium disabled:opacity-50"

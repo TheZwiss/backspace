@@ -95,7 +95,7 @@ function SettingsPanelLoadFailed() {
   return (
     <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
       <span>{t('states.loadSettingsFailed')}</span>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => window.location.reload()}
         className="font-medium underline underline-offset-2 hover:no-underline transition-all"

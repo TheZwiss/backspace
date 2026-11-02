@@ -107,7 +107,7 @@ export function BookmarkList({ onOpened }: BookmarkListProps) {
         />
       ))}
       {hasMore && (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={showMore}
           disabled={loadingMore}

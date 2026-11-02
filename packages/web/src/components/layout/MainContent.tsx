@@ -309,7 +309,7 @@ export function MainContent() {
           <div className="flex-1 flex overflow-hidden min-h-0">
             {!voiceChatFocus && (
               <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-                {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
+                {callWindowOpen ? <button data-icon-motion="press" className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
                 <VoiceControlBar revealed={chromeRevealed} />
               </div>
             )}
@@ -336,7 +336,7 @@ export function MainContent() {
               </svg>
               <span className="text-status-online text-sm font-medium">{t('spaces:main.dm.calling', { name: dmName })}</span>
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={handleCancelCall}
               className="ui-button ui-button-danger transition-colors"
             >
@@ -347,7 +347,7 @@ export function MainContent() {
         <div className="h-12 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
           <div className="flex items-center gap-[10px] min-w-0">
             {isGroupDm ? (
-              <div
+              <div data-icon-motion="press"
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'overview' })}
                 className="flex-shrink-0 cursor-pointer"
                 aria-label={t('spaces:main.dm.openGroupSettings')}
@@ -360,7 +360,7 @@ export function MainContent() {
               </svg>
             )}
             {isGroupDm ? (
-              <span
+              <span data-icon-motion="press"
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'overview' })}
                 className="font-bold text-ui-message tracking-[-0.02em] text-txt-primary truncate cursor-pointer"
               >
@@ -388,7 +388,7 @@ export function MainContent() {
               );
             })()}
             {isGroupDm && (
-              <span
+              <span data-icon-motion="press"
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'members' })}
                 className="text-xs text-txt-tertiary flex-shrink-0 cursor-pointer"
               >
@@ -396,7 +396,7 @@ export function MainContent() {
               </span>
             )}
             {isGroupDm && (
-              <Tooltip content={t('spaces:main.dm.groupSettings')} position="top"><button aria-label={t('spaces:main.dm.groupSettings')}
+              <Tooltip content={t('spaces:main.dm.groupSettings')} position="top"><button data-icon-motion="gear" aria-label={t('spaces:main.dm.groupSettings')}
                 onClick={() => openModal('groupDmSettings', { dmChannelId: currentChannelId, initialTab: 'overview' })}
                 className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover flex-shrink-0"
 
@@ -411,7 +411,7 @@ export function MainContent() {
             {/* A 1-on-1 whose partner was deleted has nobody to ring, as on mobile. */}
             {!dmPartnerDeleted && (
               <>
-                <Tooltip content={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')} position="top"><button aria-label={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')}
+                <Tooltip content={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')} position="top"><button data-icon-motion="press" aria-label={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVoiceCall')}
                   onClick={() => handleStartCall(false)}
                   disabled={!canStartCall}
                   className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed ${dmCallRunning ? 'text-accent-mint hover:text-accent-mint/80' : 'text-txt-tertiary hover:text-txt-primary'}`}
@@ -421,7 +421,7 @@ export function MainContent() {
                     <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
                   </svg>
                 </button></Tooltip>
-                <Tooltip content={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')} position="top"><button aria-label={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')}
+                <Tooltip content={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')} position="top"><button data-icon-motion="press" aria-label={dmCallRunning ? t('spaces:main.dm.joinCall') : t('spaces:main.dm.startVideoCall')}
                   onClick={() => handleStartCall(true)}
                   disabled={!canStartCall}
                   className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed ${dmCallRunning ? 'text-accent-mint hover:text-accent-mint/80' : 'text-txt-tertiary hover:text-txt-primary'}`}
@@ -433,7 +433,7 @@ export function MainContent() {
                 </button></Tooltip>
               </>
             )}
-            <Tooltip content={t('spaces:main.dm.addFriends')} position="top"><button aria-label={t('spaces:main.dm.addFriends')}
+            <Tooltip content={t('spaces:main.dm.addFriends')} position="top"><button data-icon-motion="pulse" aria-label={t('spaces:main.dm.addFriends')}
               onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
 
@@ -442,7 +442,7 @@ export function MainContent() {
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>
             </button></Tooltip>
-            <Tooltip content={t('common:actions.search')} position="top"><button aria-label={t('common:actions.search')}
+            <Tooltip content={t('common:actions.search')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.search')}
               ref={searchButtonRef}
               onClick={() => setSearchOpen(!searchOpen)}
               className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}
@@ -519,7 +519,7 @@ export function MainContent() {
               <h2 className="text-[28px] font-bold text-white mb-3">{channel.name}</h2>
               <p className="text-txt-tertiary text-ui-message">{t('spaces:main.voice.empty')}</p>
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={() => joinVoiceChannel(currentChannelId, useVoiceStore.getState().connectFn ?? undefined)}
               className="ui-button ui-button-primary relative z-10 transition-all shadow-[0_4px_20px_rgb(var(--accent-primary)/0.3)]"
             >
@@ -566,7 +566,7 @@ export function MainContent() {
         <div className="flex-1 flex overflow-hidden min-h-0">
           {!voiceChatFocus && (
             <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-              {callWindowOpen ? <button className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
+              {callWindowOpen ? <button data-icon-motion="press" className="flex-1 text-txt-secondary" onClick={openDetachedCallWindow}>{t('voice:controls.callInWindow')}</button> : <VoiceGrid participants={participants} fullscreen={voiceFullscreen} chromeRevealed={chromeRevealed} />}
               <VoiceControlBar revealed={chromeRevealed} />
             </div>
           )}
@@ -595,7 +595,7 @@ export function MainContent() {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ChannelNotificationButton channelId={currentChannelId} channelName={channel.name} />
-          <Tooltip content={t('common:actions.search')} position="top"><button aria-label={t('common:actions.search')}
+          <Tooltip content={t('common:actions.search')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.search')}
             ref={searchButtonRef}
             onClick={() => setSearchOpen(!searchOpen)}
             className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}

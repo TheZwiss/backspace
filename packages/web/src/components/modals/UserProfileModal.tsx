@@ -247,7 +247,7 @@ export function UserProfileModal() {
 
   return (
     <div ref={overlayRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={closeModal} />
       <div onContextMenu={event => { if (user) openUserFriendshipMenu(event, user, userOrigin); }} className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col ui-dialog-surface animate-slide-up overflow-hidden">
         {/* Banner */}
         <div
@@ -258,7 +258,7 @@ export function UserProfileModal() {
           }
         >
           {/* Close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={closeModal}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-colors"
           >
@@ -300,7 +300,7 @@ export function UserProfileModal() {
         <div className="px-5 flex-shrink-0 border-b border-white/[0.06]">
           <div className="flex gap-1">
             {tabs.map((tab) => (
-              <button
+              <button data-icon-motion="press"
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-3 py-2 text-ui-label font-medium rounded-t-lg transition-colors relative ${
@@ -370,7 +370,7 @@ export function UserProfileModal() {
                   {mutualFriends.map((friend) => {
                     const fname = friend.displayName ?? parseFederatedUsername(friend.username).baseName;
                     return (
-                      <button
+                      <button data-icon-motion="press"
                         key={friend.id}
                         onClick={() => handleViewFriend(friend)}
                         className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-colors text-left"
@@ -425,7 +425,7 @@ export function UserProfileModal() {
                   {mutualSpaces.map((space) => {
                     const spaceApi = getApiForOrigin(space._instanceOrigin);
                     return (
-                    <button
+                    <button data-icon-motion="press"
                       key={`${space.id}:${space._instanceOrigin}`}
                       onClick={() => handleGoToSpace(space.id)}
                       className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-white/[0.06] transition-colors text-left"
@@ -479,7 +479,7 @@ export function UserProfileModal() {
             befriends themselves. */}
         {friendship.state !== 'self' && (
           <div className="flex-shrink-0 px-5 py-3 border-t border-white/[0.06] flex gap-2">
-            <button
+            <button data-icon-motion="send"
               onClick={handleSendMessage}
               className="ui-button ui-button-primary flex-1 transition-colors"
             >
@@ -487,14 +487,14 @@ export function UserProfileModal() {
             </button>
 
             {friendship.state === 'none' && (
-              <button onClick={handleAddFriend} disabled={friendActionLoading}
+              <button data-icon-motion="pulse" onClick={handleAddFriend} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:profile.addFriend')}
               </button>
             )}
 
             {friendship.state === 'outbound_pending' && (
-              <button onClick={handleCancelRequest} disabled={friendActionLoading}
+              <button data-icon-motion="press" onClick={handleCancelRequest} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-ui-label font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:request.cancel')}
               </button>
@@ -502,11 +502,11 @@ export function UserProfileModal() {
 
             {friendship.state === 'inbound_pending' && (
               <>
-                <button onClick={handleAcceptRequest} disabled={friendActionLoading}
+                <button data-icon-motion="pulse" onClick={handleAcceptRequest} disabled={friendActionLoading}
                   className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50">
                   {friendActionLoading ? '...' : t('common:actions.accept')}
                 </button>
-                <button onClick={handleDeclineRequest} disabled={friendActionLoading}
+                <button data-icon-motion="press" onClick={handleDeclineRequest} disabled={friendActionLoading}
                   className="py-2 px-3 rounded-lg text-ui-label font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
                   {friendActionLoading ? '...' : t('social:request.ignore')}
                 </button>
@@ -514,7 +514,7 @@ export function UserProfileModal() {
             )}
 
             {friendship.state === 'friends' && (
-              <button onClick={handleRemoveFriend} disabled={friendActionLoading}
+              <button data-icon-motion="press" onClick={handleRemoveFriend} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:friend.remove')}
               </button>

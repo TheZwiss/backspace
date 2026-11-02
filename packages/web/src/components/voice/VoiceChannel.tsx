@@ -162,7 +162,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
       onDrop={dropZone?.onDrop}
       className={dropZone?.isDragOver && dropZone?.isValidTarget ? 'rounded-[8px] ring-1 ring-accent-mint/40' : ''}
     >
-      <button
+      <button data-icon-motion="press"
         onClick={onClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
           locked
@@ -257,7 +257,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const isBeingDragged = userDrag?.isBeingDragged ?? false;
 
             return (
-              <div
+              <div data-icon-motion="press"
                 key={userId}
                 className={`px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors ${
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''

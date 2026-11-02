@@ -480,7 +480,7 @@ export function VideoSection() {
               ? t(`voice.video.blocked.${getHardBlockedPlatform()}`)
               : t('voice.video.accessDenied.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
@@ -507,7 +507,7 @@ export function VideoSection() {
               {t('voice.video.permissionPrompt.description')}
             </div>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
             className="ui-button ui-button-primary w-full transition-colors"
           >
@@ -553,7 +553,7 @@ export function VideoSection() {
             style={{ transform: 'scaleX(-1)' }}
           />
           {isDormant && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={startPreviewFromUser}
               aria-label={t('voice.video.preview.testAria')}
@@ -566,7 +566,7 @@ export function VideoSection() {
             </button>
           )}
           {previewActive && !previewError && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={stopPreviewFromUser}
               // Mobile: always visible (no hover state) and 44 px tap target
@@ -581,7 +581,7 @@ export function VideoSection() {
           {previewError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-base/90 text-xs text-txt-tertiary text-center px-4 gap-2">
               <div>{t(`voice.video.previewError.${previewError}`)}</div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
                 className="text-ui-caption px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
@@ -593,7 +593,7 @@ export function VideoSection() {
         </div>
         <div className="text-ui-label font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
         <div ref={dropdownRef}>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setListOpen((v) => !v)}
             className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
@@ -674,7 +674,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cameraLimits.allowedResolutions.map((height) => (
-                <button
+                <button data-icon-motion="toggle"
                   key={height}
                   type="button"
                   onClick={() => setCameraConfig({ height })}
@@ -695,7 +695,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cameraLimits.allowedFramerates.map((fps) => (
-                <button
+                <button data-icon-motion="toggle"
                   key={fps}
                   type="button"
                   onClick={() => setCameraConfig({ fps })}
@@ -732,7 +732,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
                 className="ui-range"
               />
               {effectiveCamera.customBitrateKbps != null && (
-                <button
+                <button data-icon-motion="toggle"
                   type="button"
                   onClick={() => setCameraConfig({ customBitrateKbps: null })}
                   className="mt-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -760,7 +760,7 @@ interface DropdownItemProps {
 
 function DropdownItem({ label, active, onClick }: DropdownItemProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={onClick}
       className={`w-full px-3 py-2 text-left text-ui-label hover:bg-interactive-hover transition-colors flex items-center gap-2 ${

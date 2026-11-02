@@ -117,7 +117,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
     <div className="flex flex-col h-full bg-surface-chat">
       {/* Header */}
       <header className="h-12 flex items-center gap-2 px-3 border-b border-border-soft bg-surface-base shrink-0">
-        <button
+        <button data-icon-motion="arrow"
           type="button"
           onClick={popMobileScreen}
           className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
@@ -140,7 +140,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
             and in-call get the round tinted chip the voice mini bar uses for
             its call controls. */}
         {dm && !dmPartnerDeleted && (
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleCall}
             disabled={callState === 'busy'}
@@ -160,7 +160,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
             group-DM button pushes the new `group-dm-info` screen so the user
             lands on the full info + management surface. */}
         {(!isDm || isGroup) && (
-          <button
+          <button data-icon-motion="press"
             onClick={() => {
               if (isDm && isGroup && channelId) {
                 pushMobileScreen('group-dm-info', { channelId });

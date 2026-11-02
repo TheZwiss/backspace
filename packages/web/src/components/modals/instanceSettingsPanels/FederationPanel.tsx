@@ -140,10 +140,10 @@ function FederationGlobalSettings() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button onClick={handleReset} className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors">
+              <button data-icon-motion="press" onClick={handleReset} className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors">
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -312,7 +312,7 @@ function FilterDropdown({
 
   return (
     <div className="relative">
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
@@ -326,13 +326,13 @@ function FilterDropdown({
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div data-icon-motion="press" className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
             {view === 'active' && (
               <>
                 <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:admin.filter.statusHeading')}</div>
                 {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention'] as StatusFilter[]).map((s) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={s}
                     type="button"
                     onClick={() => toggleStatus(s)}
@@ -349,7 +349,7 @@ function FilterDropdown({
             )}
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
             {sortOptions.map((opt) => (
-              <button
+              <button data-icon-motion="press"
                 key={opt.key}
                 type="button"
                 onClick={() => { setSortBy(opt.key); setOpen(false); }}
@@ -392,7 +392,7 @@ function PeerListControls({
   return (
     <div className="flex items-center justify-between mb-3">
       <div className="flex bg-white/[0.04] rounded-md p-0.5">
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setView('active')}
           className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
@@ -401,7 +401,7 @@ function PeerListControls({
         >
           {t('federation:admin.views.active')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{activeCount}</span>
         </button>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setView('revoked')}
           className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
@@ -517,7 +517,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
   return (
     <div className={`bg-white/[0.02] rounded-md transition-colors ${isGone ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
       {/* Compact row */}
-      <div
+      <div data-icon-motion="expand"
         className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
         onClick={onToggleExpand}
       >
@@ -558,14 +558,14 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
             {isRevoked ? (
               /* Revoked peer actions */
               <div className="flex gap-2">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onAction('reinitiate'); }}
                   className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
                 >
                   {t('federation:admin.peer.reinitiate')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onAction('delete'); }}
                   className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -609,7 +609,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                   <div>
                     <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.autoRotate')}</div>
                     {editingInterval ? (
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div data-icon-motion="press" className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="number"
                           min={1}
@@ -620,7 +620,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                           disabled={intervalSaving}
                           autoFocus
                         />
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={handleSaveInterval}
                           disabled={intervalSaving}
@@ -628,7 +628,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                         >
                           {intervalSaving ? '…' : t('common:actions.save')}
                         </button>
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={() => { setEditingInterval(false); setIntervalDraft(peer.autoRotateIntervalDays); setIntervalError(''); }}
                           className="text-ui-micro text-txt-tertiary hover:text-txt-secondary"
@@ -655,7 +655,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                 {/* Actions */}
                 <div className="flex items-center gap-2">
                   {peer.status === 'unreachable' && (
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onRecheck(); }}
                       disabled={recheckLoading}
@@ -665,7 +665,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                     </button>
                   )}
                   {peer.status === 'needs_attention' ? (
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onAction('reset'); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -674,7 +674,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                     </button>
                   ) : (
                     <>
-                      <Tooltip content={peer.rotationInProgress ? t('federation:admin.peer.rotationInProgress') : undefined} position="top"><button
+                      <Tooltip content={peer.rotationInProgress ? t('federation:admin.peer.rotationInProgress') : undefined} position="top"><button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
                         disabled={peer.rotationInProgress}
@@ -683,7 +683,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                       >
                         {t('federation:admin.peer.rotateSecret')}
                       </button></Tooltip>
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -691,7 +691,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                         {t('federation:admin.peer.revoke')}
                       </button>
                       {!editingInterval && (
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
                           className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
@@ -830,7 +830,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <button
+                  <button data-icon-motion="pulse"
                     type="button"
                     onClick={() => setConfirmAction({ type: 'approve', request: req })}
                     disabled={actionLoading === req.id}
@@ -838,7 +838,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                   >
                     {t('federation:admin.approvals.approve')}
                   </button>
-                  <button
+                  <button data-icon-motion="pulse"
                     type="button"
                     onClick={() => setConfirmAction({ type: 'deny', request: req })}
                     disabled={actionLoading === req.id}
@@ -851,7 +851,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
               {errors[req.id] && (
                 <div className="mt-2 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-ui-caption">
                   {errors[req.id]}
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={() => setErrors((prev) => { const next = { ...prev }; delete next[req.id]; return next; })}
                     className="ml-2 underline"
@@ -1084,7 +1084,7 @@ function ResetCleanup() {
                     {t('federation:admin.resetCleanup.peerResetDescription')}
                   </p>
                 </div>
-                <button
+                <button data-icon-motion="pulse"
                   type="button"
                   onClick={() => setConfirmAction({ kind: 'repeer', peer })}
                   disabled={actionLoading}
@@ -1136,7 +1136,7 @@ function ResetCleanup() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={() =>
                             setConfirmAction({ kind: 'remove', account, origin: event.origin })
@@ -1151,7 +1151,7 @@ function ResetCleanup() {
                   </div>
                 ))}
               </div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => handleDismiss(event.origin)}
                 disabled={actionLoading}
@@ -1398,7 +1398,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.peers.title')}</div>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={fetchPeers}
             disabled={peersLoading}
@@ -1425,7 +1425,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           {peersError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs mb-2">
               {peersError}
-              <button type="button" onClick={fetchPeers} className="ml-2 underline">{t('common:actions.retry')}</button>
+              <button data-icon-motion="press" type="button" onClick={fetchPeers} className="ml-2 underline">{t('common:actions.retry')}</button>
             </div>
           )}
 

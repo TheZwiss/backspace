@@ -124,7 +124,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   };
 
   const buttonContent = (
-    <Tooltip content={tooltipText ? undefined : name} position="top"><button aria-label={name} onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle}  aria-current={active ? 'page' : undefined}>
+    <Tooltip content={tooltipText ? undefined : name} position="top"><button data-icon-motion="press" aria-label={name} onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle}  aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
         <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
@@ -446,7 +446,7 @@ function FolderFlyout({
               <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
             )}
 
-            <button
+            <button data-icon-motion="press"
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
                 isDimmed ? 'opacity-40 saturate-50' : ''
               } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
@@ -550,7 +550,7 @@ function FolderSlot({
   };
 
   const iconContent = (
-    <button onClick={onToggleFlyout}>
+    <button data-icon-motion="press" onClick={onToggleFlyout}>
       <FolderIcon spaces={folderSpaces} color={folder.color} isActive={isActive || isFlyoutOpen} isHovered={isHovered} />
     </button>
   );
@@ -1171,13 +1171,13 @@ export function SpaceSidebar() {
                     <div className="px-3 py-1.5">
                       <p className="text-ui-caption text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
                       <div className="flex gap-1.5">
-                        <button
+                        <button data-icon-motion="press"
                           className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
                           onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
                           title={t('common:states.default')}
                         />
                         {FOLDER_COLORS.map((c) => (
-                          <button
+                          <button data-icon-motion="press"
                             key={c.name}
                             className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-white/40' : 'border-transparent'}`}
                             style={{ background: c.value }}

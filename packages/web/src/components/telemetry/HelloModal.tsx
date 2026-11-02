@@ -93,7 +93,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
               <p>{t('yes.body')}</p>
-              <button type="button" className={CLOSE_BUTTON} onClick={close}>
+              <button data-icon-motion="press" type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('yes.close')}
               </button>
             </>
@@ -102,7 +102,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('no.title')}</h2>
               <p>{t('no.body')}</p>
-              <button type="button" className={CLOSE_BUTTON} onClick={close}>
+              <button data-icon-motion="press" type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('no.close')}
               </button>
             </>
@@ -126,7 +126,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
               </div>
               <div className="flex items-center justify-between gap-3 text-xs text-txt-tertiary">
                 <span aria-live="polite">{stage === 'saving' ? t('ask.saving') : ''}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={stage === 'saving'}
                   className="underline hover:text-txt-secondary transition-colors disabled:opacity-50"

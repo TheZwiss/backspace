@@ -47,7 +47,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
       <div className="grid grid-cols-4 gap-1.5">
         {items.map(item => (
           <div key={item.id} className="group relative min-w-0 rounded-xl hover:bg-interactive-hover transition-colors">
-            <button
+            <button data-icon-motion="press"
               type="button"
               data-sticker-id={item.id}
               disabled={managing || !!removing}
@@ -66,7 +66,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
             </button>
             {managing && (
               <>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   data-sticker-rename={item.id}
                   disabled={!!removing}
@@ -76,7 +76,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
                 >
                   <PencilIcon />
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={!!removing}
                   aria-label={t('stickers.removeNamed', { name: item.name })}

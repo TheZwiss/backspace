@@ -126,7 +126,7 @@ function OverviewTab({
       {canManageChannels && (
         <div className="pt-4 border-t border-border-soft">
           <label className="block text-xs font-bold text-accent-rose uppercase mb-2">{t('common:labels.dangerZone')}</label>
-          <button
+          <button data-icon-motion="press"
             onClick={onDeleteChannel}
             className="w-full px-3 py-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-accent-rose text-sm font-medium hover:bg-accent-rose/20 transition-colors"
           >
@@ -249,10 +249,10 @@ export function ChannelSettingsModal() {
             {/* Tabs */}
             <div className="w-32 flex-shrink-0 self-start z-10">
               <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
-                <button onClick={() => setTab('overview')} className={tabClass('overview')}>
+                <button data-icon-motion="press" onClick={() => setTab('overview')} className={tabClass('overview')}>
                   {t('spaces:settings.nav.tabs.overview')}
                 </button>
-                <button onClick={() => setTab('permissions')} className={tabClass('permissions')}>
+                <button data-icon-motion="press" onClick={() => setTab('permissions')} className={tabClass('permissions')}>
                   {t('spaces:permissions.title')}
                 </button>
               </div>

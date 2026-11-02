@@ -169,7 +169,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               className="input-standard flex-1"
               disabled={isLoading}
             />
-            <button
+            <button data-icon-motion="press"
               onClick={handleProbe}
               disabled={isLoading || !url.trim()}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -177,7 +177,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               {isLoading ? t('federation:connections.add.probing') : t('federation:connections.add.connect')}
             </button>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={onDone}
             className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
           >
@@ -201,7 +201,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             onLogin={handleFallbackLogin}
           />
           <div className="flex gap-2">
-            <button
+            <button data-icon-motion="arrow"
               onClick={() => {
                 if (authPhase === 'fallback') {
                   setAuthPhase('password');
@@ -215,7 +215,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             >
               {t('common:actions.back')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
@@ -275,7 +275,7 @@ function RegistryFilterBar({
     <div className="flex items-center justify-between mb-3">
       <div className="flex bg-white/[0.04] rounded-md p-0.5">
         {tabs.map((tab) => (
-          <button
+          <button data-icon-motion="press"
             key={tab.key}
             type="button"
             onClick={() => setFilter(tab.key)}
@@ -289,7 +289,7 @@ function RegistryFilterBar({
       </div>
 
       <div className="relative">
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
           className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
@@ -303,11 +303,11 @@ function RegistryFilterBar({
 
         {sortOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+            <div data-icon-motion="press" className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
               <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
               {sortOptions.map((opt) => (
-                <button
+                <button data-icon-motion="press"
                   key={opt.key}
                   type="button"
                   onClick={() => { setSortBy(opt.key); setSortOpen(false); }}
@@ -420,7 +420,7 @@ function DeleteIdentityDialog({
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-confirm flex items-center justify-center animate-fade-in">
-      <div
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={loading ? undefined : onClose}
       />
@@ -438,7 +438,7 @@ function DeleteIdentityDialog({
         {/* Deletion mode selection */}
         <div className="space-y-2 mb-4">
           {/* Leave quietly */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('leave')}
             disabled={loading}
@@ -455,7 +455,7 @@ function DeleteIdentityDialog({
           </button>
 
           {/* Delete User (soft) */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('soft')}
             disabled={loading}
@@ -472,7 +472,7 @@ function DeleteIdentityDialog({
           </button>
 
           {/* Nuke everything (full) */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('full')}
             disabled={loading}
@@ -496,7 +496,7 @@ function DeleteIdentityDialog({
           <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
           <div className="flex gap-1.5">
             {scopeOptions.map((opt) => (
-              <button
+              <button data-icon-motion="press"
                 key={opt.key}
                 type="button"
                 onClick={() => setScope(opt.key)}
@@ -546,14 +546,14 @@ function DeleteIdentityDialog({
 
         {/* Actions */}
         <div className="flex gap-3">
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             disabled={loading}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="pulse"
             onClick={handleConfirm}
             disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
             className="ui-button ui-button-danger flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -637,7 +637,7 @@ function RegistryRow({
     <>
       <div className={`bg-white/[0.02] rounded-md transition-colors ${isDisconnected ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
         {/* Compact row */}
-        <div
+        <div data-icon-motion="expand"
           className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
           onClick={onToggleExpand}
         >
@@ -717,14 +717,14 @@ function RegistryRow({
               <div className="flex items-center gap-2 flex-wrap">
                 {isConnected && (
                   <>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.disconnect')}
                     </button>
-                    <Tooltip content={t('federation:connections.row.deleteIdentityDisabled')} position="top"><button
+                    <Tooltip content={t('federation:connections.row.deleteIdentityDisabled')} position="top"><button data-icon-motion="press"
                       type="button"
                       disabled
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger rounded opacity-50 cursor-not-allowed"
@@ -738,7 +738,7 @@ function RegistryRow({
                 {isDisconnected && (
                   <>
                     {liveInstance && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
@@ -746,14 +746,14 @@ function RegistryRow({
                         {t('federation:connections.row.reconnect')}
                       </button>
                     )}
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                     >
                       {t('federation:connections.row.reauthenticate')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -766,7 +766,7 @@ function RegistryRow({
                 {hasIssue && (
                   <>
                     {entry.status === 'unreachable' && liveInstance && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
@@ -775,7 +775,7 @@ function RegistryRow({
                       </button>
                     )}
                     {entry.status === 'auth_expired' && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
@@ -783,14 +783,14 @@ function RegistryRow({
                         {t('federation:connections.row.reauthenticate')}
                       </button>
                     )}
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowForceRemoveConfirm(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.forceRemove')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -913,7 +913,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
           )}
         </div>
       </div>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={handleCancel}
         disabled={busy}
@@ -1060,7 +1060,7 @@ function PeeringNotificationCard({
           <div className="text-ui-caption text-txt-tertiary mt-0.5">{contextText}</div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {showRetry && (
-              <button
+              <button data-icon-motion="bell"
                 type="button"
                 onClick={() => onRetry(notification)}
                 className="px-3 py-1.5 text-xs font-medium bg-status-online/15 text-status-online hover:bg-status-online/25 rounded transition-colors"
@@ -1068,7 +1068,7 @@ function PeeringNotificationCard({
                 {t('federation:connections.outcomes.retry', { action: actionLabel(t, notification.triggerReason) })}
               </button>
             )}
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleDismiss}
               disabled={busy}
@@ -1145,7 +1145,7 @@ function RecentPeeringOutcomesSection() {
           {t('federation:connections.outcomes.title')}
         </div>
         {notifications.length > 1 && (
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleDismissAll}
             disabled={bulkBusy}
@@ -1268,7 +1268,7 @@ export function ConnectedInstances() {
           <div className="flex items-center gap-2 shrink-0 ml-2">
             <span className="text-xs text-txt-tertiary">{t('federation:connections.home.local')}</span>
             {isElectron() && (
-              <button
+              <button data-icon-motion="arrow"
                 onClick={() => window.backspace?.clearInstanceUrl()}
                 className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
               >
@@ -1318,7 +1318,7 @@ export function ConnectedInstances() {
         {showAddForm ? (
           <AddInstanceFlow onDone={() => setShowAddForm(false)} />
         ) : (
-          <button
+          <button data-icon-motion="press"
             onClick={() => setShowAddForm(true)}
             className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] transition-colors"
           >

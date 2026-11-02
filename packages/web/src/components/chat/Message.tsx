@@ -572,7 +572,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             return <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 min-w-0">{preview}</div>;
           }
           return (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => jumpToMessage(replyTo.id)}
               className="group/reply flex items-center gap-1 max-w-full min-w-0 mb-1 ml-[-8px] pl-1 pr-1.5 rounded-md text-left opacity-80 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent-primary/60 transition-opacity cursor-pointer"
@@ -585,7 +585,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
         {(isFirstInGroup || message.replyTo) && (
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span
+            <span data-icon-motion="press"
               role="button"
               tabIndex={0}
               onClick={handleUsernameClick}
@@ -622,9 +622,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 t={t}
                 i18nKey="chat:message.edit.hint"
                 components={{ // i18n-check: allow-literal (the next line is an object key after a JSX element, not text)
-                  cancel: <button onClick={stopEditing} className="text-txt-link hover:underline" />,
+                  cancel: <button data-icon-motion="press" onClick={stopEditing} className="text-txt-link hover:underline" />,
                   save: (
-                    <button
+                    <button data-icon-motion="press"
                       onClick={() => {
                         if (editContent.trim()) {
                           editMessage(message.id, editContent.trim(), channelKey);
@@ -711,7 +711,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 </span>
                 <span className="w-px h-3.5 bg-accent-rose/25" aria-hidden="true" />
                 {canRetry && (
-                  <button
+                  <button data-icon-motion="press"
                     onClick={async () => {
                       const transfers = useTransferStore.getState().transfers;
                       const retryIds = pending.transferIds.filter((tid) => {
@@ -730,7 +730,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     {t('common:actions.retry')}
                   </button>
                 )}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => {
                     const transfers = useTransferStore.getState().transfers;
                     for (const tid of pending.transferIds) {
@@ -795,7 +795,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
               {['👍', '❤️', '😂', '😮'].map(emoji => (
-                <button
+                <button data-icon-motion="pulse"
                   key={emoji}
                   onClick={() => toggleReaction(emoji)}
                   className="p-1 hover:bg-interactive-hover rounded transition-colors text-ui-lead leading-none"
@@ -803,7 +803,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                   {emoji}
                 </button>
               ))}
-              <Tooltip content={t('common:actions.addReaction')} position="top"><button aria-label={t('common:actions.addReaction')}
+              <Tooltip content={t('common:actions.addReaction')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.addReaction')}
                 ref={reactionPickerBtnRef}
                 onClick={() => setReactionPicker((v) => (v ? null : 'button'))}
                 className={`p-1 hover:bg-interactive-hover rounded transition-colors text-ui-body leading-none ${
@@ -817,7 +817,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               </button></Tooltip>
             </div>
           )}
-          <Tooltip content={t('common:actions.reply')} position="top"><button aria-label={t('common:actions.reply')}
+          <Tooltip content={t('common:actions.reply')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.reply')}
             onClick={startReply}
             className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
 
@@ -827,7 +827,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             </svg>
           </button></Tooltip>
           {canBookmark && (
-            <Tooltip content={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')} position="top"><button aria-label={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')}
+            <Tooltip content={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')} position="top"><button data-icon-motion="press" aria-label={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')}
               onClick={() => { void bookmark.toggle(); }}
               disabled={bookmark.busy}
               className={`px-2 h-full transition-all flex items-center justify-center hover:bg-interactive-hover ${
@@ -840,7 +840,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             </button></Tooltip>
           )}
           {canEdit && (
-            <Tooltip content={t('common:actions.edit')} position="top"><button aria-label={t('common:actions.edit')}
+            <Tooltip content={t('common:actions.edit')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.edit')}
               onClick={startEditing}
               className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
 
@@ -851,7 +851,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             </button></Tooltip>
           )}
           {canDelete && (
-            <Tooltip content={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')} position="top"><button aria-label={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')}
+            <Tooltip content={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')} position="top"><button data-icon-motion="press" aria-label={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')}
               onClick={() => {
                 if (confirmingDelete) {
                   cancelDeleteConfirm();

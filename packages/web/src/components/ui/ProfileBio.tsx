@@ -14,7 +14,7 @@ const ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'del', 'a', 'br'];
 const REMARK_PLUGINS = [remarkGfm, remarkEmojiShortcodes];
 const COMPONENTS: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+    <a data-icon-motion="press" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
   ),
 };
 

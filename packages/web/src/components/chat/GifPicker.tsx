@@ -130,7 +130,7 @@ export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
         ) : (
           <div className="columns-2 gap-1.5 p-1">
             {results.map((gif) => (
-              <button
+              <button data-icon-motion="press"
                 key={gif.id}
                 onClick={() => onGifSelect(gif.url)}
                 className="w-full mb-1.5 rounded-lg overflow-hidden hover:ring-2 hover:ring-accent-primary transition-all break-inside-avoid"

@@ -40,7 +40,7 @@ export function NotificationsPanel() {
       <p className="text-xs text-txt-secondary">{t('settings:notifications.messagesDescription')}</p>
       {isElectron() ? <p className="text-xs text-txt-tertiary">{t('settings:notifications.systemDescription')}</p>
         : <div className="flex flex-wrap items-center gap-3 pt-1"><span className="text-xs text-txt-secondary">{permission === 'granted' ? t('settings:notifications.permissionGranted') : permission === 'denied' ? t('settings:notifications.permissionDenied') : permission === 'unavailable' ? t('settings:notifications.permissionUnavailable') : t('settings:notifications.permissionDefault')}</span>
-          {permission === 'default' && <button type="button" className="ui-button ui-button-primary" onClick={async () => { await requestNotificationPermission(); setPermission(Notification.permission); }}>{t('settings:notifications.enable')}</button>}</div>}
+          {permission === 'default' && <button data-icon-motion="bell" type="button" className="ui-button ui-button-primary" onClick={async () => { await requestNotificationPermission(); setPermission(Notification.permission); }}>{t('settings:notifications.enable')}</button>}</div>}
     </section>
     <FriendNotificationSettingsSection />
     <NudgePreferencesSection />

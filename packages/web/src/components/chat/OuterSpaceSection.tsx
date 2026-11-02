@@ -146,7 +146,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
 
           {status === 'ok' && hasMore && (
             <div className="flex justify-center">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { void loadMore(); }}
                 className="px-4 py-2 bg-interactive-muted hover:bg-interactive-hover text-txt-secondary text-sm font-medium rounded transition-colors"
               >

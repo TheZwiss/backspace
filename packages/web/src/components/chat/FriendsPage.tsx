@@ -57,7 +57,7 @@ function ActivityFriendItem({
     : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] border-l-2 border-transparent hover:bg-interactive-hover cursor-pointer transition-all duration-200 ease-out active:bg-interactive-hover';
 
   return (
-    <div
+    <div data-icon-motion="press"
       onClick={() => {
         if (mobile) {
           onMobileClick(friend);
@@ -337,7 +337,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       {/* Header */}
       {mobile ? (
         <div className="h-12 px-3 flex items-center gap-2 border-b border-border-soft flex-shrink-0 z-10 bg-surface-base">
-          <button onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
+          <button data-icon-motion="press" onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
@@ -364,7 +364,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 </span>
               )}
             </TabButton>
-            <button
+            <button data-icon-motion="press"
               onClick={() => setActiveTab('add')}
               className={`px-2 py-0.5 rounded text-ui-body font-medium transition-all ${
                 activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
@@ -383,7 +383,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       {mobile && (
         <div className="flex border-b border-border-soft">
           {(['online', 'all', 'pending', 'add', 'activity'] as Tab[]).map((tab) => (
-            <button
+            <button data-icon-motion="press"
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
@@ -584,7 +584,7 @@ function AddFriendTab({
             className="input-search w-full px-4 py-3 rounded-lg"
           />
           {query && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary"
             >
@@ -609,7 +609,7 @@ function AddFriendTab({
                 components={{ handle: <span className="font-semibold text-txt-primary" /> }}
               />
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={handleDirectAdd}
               disabled={directAddLoading}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50 flex-shrink-0"
@@ -793,7 +793,7 @@ function UserDiscoverCard({
 
       {/* Overlapping avatar */}
       <div className="relative px-4 -mt-7 z-10">
-        <button onContextMenu={event => openUserFriendshipMenu(event, user, user._instanceOrigin)} onClick={handleOpenProfile} className="block">
+        <button data-icon-motion="press" onContextMenu={event => openUserFriendshipMenu(event, user, user._instanceOrigin)} onClick={handleOpenProfile} className="block">
           {avatarUrl ? (
             <img
               src={avatarUrl}
@@ -813,7 +813,7 @@ function UserDiscoverCard({
 
       {/* Content */}
       <div className="px-4 pt-1.5 pb-3.5 flex flex-col flex-1">
-        <button onContextMenu={event => openUserFriendshipMenu(event, user, user._instanceOrigin)} onClick={handleOpenProfile} className="text-left group">
+        <button data-icon-motion="press" onContextMenu={event => openUserFriendshipMenu(event, user, user._instanceOrigin)} onClick={handleOpenProfile} className="text-left group">
           <h3 className="text-ui-body font-bold text-txt-primary truncate group-hover:underline">{displayName}</h3>
           <p className="text-ui-caption text-txt-tertiary truncate">@{user.username}</p>
         </button>
@@ -846,7 +846,7 @@ function UserDiscoverCard({
 
         {/* Action button */}
         {user.relationship === 'none' && (
-          <button
+          <button data-icon-motion="send"
             onClick={handleSendRequest}
             disabled={actionLoading}
             className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50"
@@ -855,7 +855,7 @@ function UserDiscoverCard({
           </button>
         )}
         {user.relationship === 'outbound_pending' && (
-          <button
+          <button data-icon-motion="press"
             onClick={handleCancelRequest}
             disabled={actionLoading || !user.requestId}
             className="w-full py-1.5 bg-accent-amber/15 hover:bg-accent-amber/25 text-accent-amber text-ui-label font-medium rounded transition-colors disabled:opacity-50"
@@ -865,14 +865,14 @@ function UserDiscoverCard({
         )}
         {user.relationship === 'inbound_pending' && (
           <div className="flex gap-2">
-            <button
+            <button data-icon-motion="pulse"
               onClick={handleAccept}
               disabled={actionLoading}
               className="flex-1 py-1.5 bg-status-online/20 hover:bg-status-online/30 text-status-online text-ui-label font-medium rounded transition-colors disabled:opacity-50"
             >
               {t('common:actions.accept')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={handleDecline}
               disabled={actionLoading}
               className="flex-1 py-1.5 bg-accent-rose/15 hover:bg-accent-rose/25 text-accent-rose text-ui-label font-medium rounded transition-colors disabled:opacity-50"
@@ -882,7 +882,7 @@ function UserDiscoverCard({
           </div>
         )}
         {user.relationship === 'friends' && (
-          <button
+          <button data-icon-motion="press"
             onClick={handleMessage}
             className="w-full py-1.5 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-ui-label font-medium rounded transition-colors"
           >
@@ -898,7 +898,7 @@ function UserDiscoverCard({
 
 function TabButton({ children, active, onClick }: { children: React.ReactNode, active: boolean, onClick: () => void }) {
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={onClick}
       className={`px-2 py-0.5 rounded-[4px] text-ui-lead font-medium transition-colors ${
         active ? 'bg-interactive-selected text-white' : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
@@ -932,7 +932,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
         </div>
       </div>
       <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity pr-2">
-        <Tooltip content={t('social:friend.message')} position="top"><button aria-label={t('social:friend.message')}
+        <Tooltip content={t('social:friend.message')} position="top"><button data-icon-motion="press" aria-label={t('social:friend.message')}
           onClick={(e) => { e.stopPropagation(); onDm(); }}
           className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-primary transition-colors"
 
@@ -941,7 +941,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z" />
           </svg>
         </button></Tooltip>
-        <Tooltip content={t('social:friend.remove')} position="top"><button aria-label={t('social:friend.remove')}
+        <Tooltip content={t('social:friend.remove')} position="top"><button data-icon-motion="press" aria-label={t('social:friend.remove')}
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-colors"
 
@@ -991,7 +991,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
       <div className="flex items-center gap-2">
         {type === 'incoming' ? (
           <>
-            <Tooltip content={t('common:actions.accept')} position="top"><button aria-label={t('common:actions.accept')}
+            <Tooltip content={t('common:actions.accept')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.accept')}
               onClick={() => onAccept?.()}
               className="p-2 bg-surface-base rounded-full text-status-online hover:bg-status-online hover:text-white transition-all"
 
@@ -1000,7 +1000,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
               </svg>
             </button></Tooltip>
-            <Tooltip content={t('common:actions.decline')} position="top"><button aria-label={t('common:actions.decline')}
+            <Tooltip content={t('common:actions.decline')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.decline')}
               onClick={() => onDecline?.()}
               className="p-2 bg-surface-base rounded-full text-txt-danger hover:bg-accent-rose hover:text-white transition-all"
 
@@ -1011,7 +1011,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
             </button></Tooltip>
           </>
         ) : (
-          <Tooltip content={t('social:request.cancel')} position="top"><button aria-label={t('social:request.cancel')}
+          <Tooltip content={t('social:request.cancel')} position="top"><button data-icon-motion="press" aria-label={t('social:request.cancel')}
             onClick={() => onCancel?.()}
             className="p-2 bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-all"
 

@@ -58,7 +58,7 @@ export function MobileVoiceMiniBar() {
   return (
     <div className="glass-bubble mx-2 mb-1 rounded-2xl flex items-center gap-2 px-3 py-2 shrink-0">
       {/* Tap to expand */}
-      <button
+      <button data-icon-motion="press"
         onClick={() => pushMobileScreen('voice-full')}
         className="flex-1 flex items-center gap-2 min-w-0"
       >
@@ -82,7 +82,7 @@ export function MobileVoiceMiniBar() {
       </button>
 
       {isDropped && (
-        <button
+        <button data-icon-motion="press"
           onClick={(e) => { e.stopPropagation(); reconnectVoice(); }}
           className="px-2 h-8 rounded-full text-ui-caption font-medium text-accent-primary hover:bg-interactive-hover transition-colors shrink-0"
         >
@@ -92,7 +92,7 @@ export function MobileVoiceMiniBar() {
 
       {/* Quick controls */}
       <div className="flex items-center gap-1 shrink-0">
-        <button
+        <button data-icon-motion="toggle"
           onClick={(e) => { e.stopPropagation(); toggleMuteFromControl(); }}
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isMuted ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
@@ -111,7 +111,7 @@ export function MobileVoiceMiniBar() {
           )}
         </button>
 
-        <button
+        <button data-icon-motion="toggle"
           onClick={(e) => { e.stopPropagation(); toggleDeafenFromControl(); }}
           className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
             isDeafened ? 'bg-accent-rose/20 text-accent-rose' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
@@ -124,7 +124,7 @@ export function MobileVoiceMiniBar() {
           </svg>
         </button>
 
-        <button
+        <button data-icon-motion="press"
           onClick={(e) => {
             e.stopPropagation();
             handleDisconnectAction();

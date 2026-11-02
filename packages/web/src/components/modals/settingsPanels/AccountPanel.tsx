@@ -363,7 +363,7 @@ export function AccountPanel() {
           {homeConnection && (
             <>
               {' '}{t('settings:account.detached.reattachHint', { username: homeConnection.username, homeInstance: formerHome })}
-              <button
+              <button data-icon-motion="attach"
                 type="button"
                 onClick={handleReattach}
                 disabled={reattaching}
@@ -427,7 +427,7 @@ export function AccountPanel() {
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.avatar.label')}</label>
             <div className="flex items-center gap-3">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={uploadingAvatar}
@@ -462,7 +462,7 @@ export function AccountPanel() {
                 )}
               </button>
               <div className="flex flex-col gap-1">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={uploadingAvatar}
@@ -471,7 +471,7 @@ export function AccountPanel() {
                   {t('settings:account.profile.avatar.change')}
                 </button>
                 {(displayAvatarSrc || user.avatar) && avatarFilename !== '' && (
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleRemoveAvatar}
                     className="text-xs text-txt-danger hover:underline text-left"
@@ -493,7 +493,7 @@ export function AccountPanel() {
           {/* Banner upload */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.banner.label')}</label>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => bannerInputRef.current?.click()}
               disabled={uploadingBanner}
@@ -526,7 +526,7 @@ export function AccountPanel() {
               )}
             </button>
             <div className="flex gap-2 mt-1">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
                 disabled={uploadingBanner}
@@ -535,7 +535,7 @@ export function AccountPanel() {
                 {t('settings:account.profile.banner.change')}
               </button>
               {(displayBannerSrc || user.banner) && bannerFilename !== '' && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={handleRemoveBanner}
                   className="text-xs text-txt-danger hover:underline"
@@ -560,7 +560,7 @@ export function AccountPanel() {
               {AVATAR_COLORS.map((key) => {
                 const entry = AVATAR_GRADIENT_MAP[key];
                 return (
-                  <button
+                  <button data-icon-motion="press"
                     key={key}
                     type="button"
                     onClick={() => setAvatarColorState(key)}
@@ -586,7 +586,7 @@ export function AccountPanel() {
                 BANNER_COLOR_PRESETS.map((family) => {
                   const color = family[row]!;
                   return (
-                    <button
+                    <button data-icon-motion="press"
                       key={color}
                       type="button"
                       onClick={() => { setAccentColor(color); setCustomHex(color); }}
@@ -624,7 +624,7 @@ export function AccountPanel() {
                 />
               )}
               {accentColor && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setAccentColor(null); setCustomHex(''); }}
                   className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -664,7 +664,7 @@ export function AccountPanel() {
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.status.label')}</label>
             <div className="relative">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={statusOpen}
@@ -682,7 +682,7 @@ export function AccountPanel() {
               {statusOpen && (
                 <MotionMenu role="listbox" aria-label={t('settings:account.details.status.label')} className="motion-menu-enter absolute z-20 mt-1 w-full rounded-md border border-border-hard bg-surface-channel p-1 shadow-lg">
                   {CHOSEN_STATUS_OPTIONS.map((option) => (
-                    <button
+                    <button data-icon-motion="press"
                       key={option.value}
                       type="button"
                       role="option"
@@ -738,7 +738,7 @@ export function AccountPanel() {
                 placeholder={t('settings:account.password.current.placeholder')}
                 autoComplete="current-password"
               />
-              <button
+              <button data-icon-motion="toggle"
                 type="button"
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                 aria-label={showCurrentPassword ? t('settings:account.password.hide') : t('settings:account.password.show')}
@@ -768,7 +768,7 @@ export function AccountPanel() {
                 placeholder={t('settings:account.password.new.placeholder', { min: PASSWORD_MIN_LENGTH })}
                 autoComplete="new-password"
               />
-              <button
+              <button data-icon-motion="toggle"
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
                 aria-label={showNewPassword ? t('settings:account.password.hide') : t('settings:account.password.show')}
@@ -802,7 +802,7 @@ export function AccountPanel() {
           {passwordError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
           )}
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
             className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -819,7 +819,7 @@ export function AccountPanel() {
           <p className="text-sm text-txt-secondary mb-3">
             {t('settings:account.danger.description')}
           </p>
-          <button
+          <button data-icon-motion="press"
             onClick={() => setShowDeleteModal(true)}
             className="ui-button ui-button-danger transition-colors"
           >
@@ -836,13 +836,13 @@ export function AccountPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={isLoading || uploadingAvatar || uploadingBanner}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"

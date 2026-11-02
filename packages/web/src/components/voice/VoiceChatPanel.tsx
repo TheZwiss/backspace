@@ -29,7 +29,7 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
       <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0">
         <span className="font-bold text-txt-primary text-ui-lead">{t('voice:chatPanel.title')}</span>
         <div className="flex items-center gap-1">
-          <Tooltip content={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')} position="top"><button aria-label={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')}
+          <Tooltip content={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')} position="top"><button data-icon-motion="expand" aria-label={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')}
             onClick={toggleVoiceChatFocus}
             aria-pressed={voiceChatFocus}
             className={`w-7 h-7 flex items-center justify-center transition-colors rounded ${
@@ -49,7 +49,7 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
               </svg>
             )}
           </button></Tooltip>
-          <Tooltip content={t('voice:chatPanel.close')} position="top"><button aria-label={t('voice:chatPanel.close')}
+          <Tooltip content={t('voice:chatPanel.close')} position="top"><button data-icon-motion="press" aria-label={t('voice:chatPanel.close')}
             onClick={toggleVoiceChat}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
 

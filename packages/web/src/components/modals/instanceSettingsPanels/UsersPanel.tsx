@@ -235,7 +235,7 @@ export function UsersPanel() {
         </label>
 
         {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== 'newest' || showDeleted || query) && (
-          <button
+          <button data-icon-motion="press"
             onClick={() => {
               setQuery(''); setInstanceFilter(''); setRoleFilter('');
               setJoinedAfter(''); setJoinedBefore('');
@@ -321,7 +321,7 @@ export function UsersPanel() {
                   {!isDeleted && (
                     <div className="flex items-center gap-1 shrink-0">
                       {/* Toggle admin */}
-                      <Tooltip content={adminButtonTitle(user, isFederated)} position="top"><button aria-label={adminButtonTitle(user, isFederated)}
+                      <Tooltip content={adminButtonTitle(user, isFederated)} position="top"><button data-icon-motion="press" aria-label={adminButtonTitle(user, isFederated)}
                         onClick={() => handleToggleAdmin(user)}
                         disabled={isFederated && !user.isAdmin}
 
@@ -339,7 +339,7 @@ export function UsersPanel() {
                       </button></Tooltip>
 
                       {/* Reset password */}
-                      <Tooltip content={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')} position="top"><button aria-label={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')}
+                      <Tooltip content={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')} position="top"><button data-icon-motion="press" aria-label={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')}
                         onClick={() => handleResetPassword(user)}
                         disabled={isFederated}
 
@@ -355,7 +355,7 @@ export function UsersPanel() {
                       </button></Tooltip>
 
                       {/* Delete user */}
-                      <Tooltip content={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')} position="top"><button aria-label={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')}
+                      <Tooltip content={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')} position="top"><button data-icon-motion="press" aria-label={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')}
                         onClick={() => handleDeleteUser(user)}
                         disabled={isSelf}
 
@@ -378,7 +378,7 @@ export function UsersPanel() {
                   <div className="p-3 bg-status-online/10 border border-status-online/30 border-t-0 rounded-b-lg">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-txt-secondary">{t('admin:users.tempPassword.label')}</div>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={() => setTempPassword(null)}
                         className="text-txt-tertiary hover:text-txt-secondary text-xs"
                       >
@@ -389,7 +389,7 @@ export function UsersPanel() {
                       <code className="px-2 py-1 bg-black/30 rounded text-sm font-mono text-status-online select-all">
                         {tempPassword.password}
                       </code>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={() => navigator.clipboard.writeText(tempPassword.password)}
                         className="px-2 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-xs rounded transition-colors"
                       >
@@ -410,7 +410,7 @@ export function UsersPanel() {
       {/* Pagination */}
       {data && totalPages > 1 && (
         <div className="flex items-center justify-between pt-2">
-          <button
+          <button data-icon-motion="press"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
@@ -420,7 +420,7 @@ export function UsersPanel() {
           <span className="text-xs text-txt-tertiary">
             {t('admin:users.pagination', { page, total: totalPages, users: userCountLabel })}
           </span>
-          <button
+          <button data-icon-motion="press"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
             className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"

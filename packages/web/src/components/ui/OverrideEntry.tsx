@@ -115,7 +115,7 @@ export function OverrideEntry({
       {/* The expand toggle and the remove action are siblings: a button inside
           a button is invalid HTML and reads as one control. */}
       <div className="flex items-center hover:bg-interactive-hover transition-colors">
-        <button
+        <button data-icon-motion="expand"
           type="button"
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
@@ -146,7 +146,7 @@ export function OverrideEntry({
               : removeLocked ? 'spaces:permissions.removeUnheldShort' : 'spaces:permissions.removeOverride')}
             position="top"
           >
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={removeDisabled ? undefined : onRemove}
               disabled={removeDisabled}
@@ -214,7 +214,7 @@ export function OverrideEntry({
               <span className="text-ui-caption leading-snug text-txt-tertiary">
                 {t(removeLocked ? 'spaces:permissions.removeUnheld' : 'spaces:permissions.removeOverrideHint')}
               </span>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={removeLocked ? undefined : onRemove}
                 disabled={removeLocked}

@@ -97,7 +97,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
       .join(' · ');
     return (
       <div className="mt-1 max-w-[400px]">
-        <button
+        <button data-icon-motion="download"
           type="button"
           onClick={() => {
             void startDownload(attUrl, { filename: originalName, size, mimetype, tray: true });
@@ -307,7 +307,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   // shrink (flex children's min-content size defaults to their intrinsic
   // content) and would push the entire chip past the parent's right edge.
   return (
-    <button
+    <button data-icon-motion="download"
       type="button"
       onClick={() => {
         void startDownload(attUrl, {

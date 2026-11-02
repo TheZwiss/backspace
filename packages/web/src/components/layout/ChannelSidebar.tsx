@@ -466,7 +466,7 @@ export function ChannelSidebar() {
           <DmSearchBar />
         </div>
         <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }}>
-          <div
+          <div data-icon-motion="press"
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'friends'
@@ -482,7 +482,7 @@ export function ChannelSidebar() {
             <span className="font-medium text-ui-lead">{t('common:labels.friends')}</span>
           </div>
 
-          <div
+          <div data-icon-motion="press"
             onClick={() => navigate('/explore')}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'explore'
@@ -496,7 +496,7 @@ export function ChannelSidebar() {
             <span className="font-medium text-ui-lead">{t('spaces:sidebar.dmList.explore')}</span>
           </div>
 
-          <div
+          <div data-icon-motion="arrow"
             onClick={() => navigate('/backspace')}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'backspace'
@@ -511,7 +511,7 @@ export function ChannelSidebar() {
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">
             <span className="text-ui-caption font-bold text-txt-tertiary tracking-wider">{t('spaces:sidebar.directMessages')}</span>
-            <Tooltip content={t('spaces:sidebar.dmList.newDm')} position="top"><button aria-label={t('spaces:sidebar.dmList.newDm')}
+            <Tooltip content={t('spaces:sidebar.dmList.newDm')} position="top"><button data-icon-motion="press" aria-label={t('spaces:sidebar.dmList.newDm')}
               onClick={() => openModal('newDm')}
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
 
@@ -587,7 +587,7 @@ export function ChannelSidebar() {
     <div className="w-60 desktop:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none desktop:pl-[72px] border-r border-border-hard">
       {/* Space header */}
       <div className="h-12 flex items-stretch border-b border-border-hard z-10 group/header">
-        <button
+        <button data-icon-motion="gear"
           onClick={() => openModal('spaceSettings')}
           className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
         >
@@ -604,7 +604,7 @@ export function ChannelSidebar() {
           </svg>
         </button>
         {canCreateInvite && (
-          <Tooltip content={t('common:actions.invitePeople')} position="top"><button aria-label={t('common:actions.invitePeople')}
+          <Tooltip content={t('common:actions.invitePeople')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.invitePeople')}
             onClick={() => openModal('invite')}
             className="w-10 h-full flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex-shrink-0"
 
@@ -643,7 +643,7 @@ export function ChannelSidebar() {
           <div className="mb-[19px]">
             {canManageChannels && sortedCategories.length === 0 && (
               <div className="flex items-center justify-end px-1 mb-1">
-                <Tooltip content={t('spaces:channels.create')} position="top"><button aria-label={t('spaces:channels.create')}
+                <Tooltip content={t('spaces:channels.create')} position="top"><button data-icon-motion="press" aria-label={t('spaces:channels.create')}
                   onClick={() => openModal('createChannel')}
                   className="text-txt-tertiary hover:text-txt-primary transition-colors"
 
@@ -691,7 +691,7 @@ export function ChannelSidebar() {
           const hasUnread = isCollapsed && categoryHasUnread(category.id);
 
           const categoryHeader = (
-                <div
+                <div data-icon-motion="arrow"
                   className={`flex items-center justify-between px-1 mb-1 group cursor-pointer ${
                     activeDrag?.type === 'category' && activeDrag.dragId === category.id ? 'opacity-50' : ''
                   } ${dropTarget?.targetId === category.id && dropTarget.targetType === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
@@ -713,7 +713,7 @@ export function ChannelSidebar() {
                     )}
                   </div>
                   {canManageChannels && (
-                    <Tooltip content={t('spaces:channels.create')} position="top"><button aria-label={t('spaces:channels.create')}
+                    <Tooltip content={t('spaces:channels.create')} position="top"><button data-icon-motion="press" aria-label={t('spaces:channels.create')}
                       onClick={(e) => {
                         e.stopPropagation();
                         openModal('createChannel', { categoryId: category.id });
@@ -803,7 +803,7 @@ export function ChannelSidebar() {
         {canManageChannels && (
           <div className="px-1 mt-4 pt-3 border-t border-white/[0.06]">
             {sortedCategories.length > 0 && (
-              <button
+              <button data-icon-motion="press"
                 onClick={() => openModal('createChannel')}
                 className="w-full flex items-center gap-1.5 px-[10px] py-1 rounded-[6px] text-txt-tertiary/60 hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
               >
@@ -813,7 +813,7 @@ export function ChannelSidebar() {
                 <span className="text-ui-caption">{t('spaces:channels.create')}</span>
               </button>
             )}
-            <button
+            <button data-icon-motion="press"
               onClick={() => openModal('createCategory')}
               className="w-full flex items-center gap-1.5 px-[10px] py-1 rounded-[6px] text-txt-tertiary/60 hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
             >
@@ -991,7 +991,7 @@ function UserAreaPanel({
         <div className="absolute bottom-full left-0 right-0 mb-0 bg-surface-channel rounded-t-lg shadow-lg z-[150] border-t border-x border-border-hard">
           {/* Input Device */}
           <div className="relative">
-            <button
+            <button data-icon-motion="press"
               onClick={() => setShowInputDeviceList(!showInputDeviceList)}
               className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
             >
@@ -1008,7 +1008,7 @@ function UserAreaPanel({
                 {permState !== 'granted' && (
                   <div className="px-3 py-2 text-ui-caption text-txt-tertiary">
                     {t('spaces:sidebar.userArea.microphonePermission')}{' '}
-                    <button
+                    <button data-icon-motion="press"
                       onClick={() => { requestPermission().catch(() => {}); }}
                       className="underline text-accent-primary"
                     >
@@ -1072,7 +1072,7 @@ function UserAreaPanel({
                       <div className="mx-4 border-t border-border-soft" />
 
                       {/* Voice Settings link */}
-                      <button
+                      <button data-icon-motion="gear"
                         onClick={() => onSettingsClick('voice')}
                         className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                       >
@@ -1089,7 +1089,7 @@ function UserAreaPanel({
                     <div className="absolute bottom-full left-0 right-0 mb-0 bg-surface-channel rounded-t-lg shadow-lg z-[150] border-t border-x border-border-hard">
                       {/* Output Device */}
                       <div className="relative">
-                        <button
+                        <button data-icon-motion="press"
                           onClick={() => setShowOutputDeviceList(!showOutputDeviceList)}
                           className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                         >
@@ -1106,7 +1106,7 @@ function UserAreaPanel({
                             {permState !== 'granted' && (
                               <div className="px-3 py-2 text-ui-caption text-txt-tertiary">
                                 {t('spaces:sidebar.userArea.audioPermission')}{' '}
-                                <button
+                                <button data-icon-motion="press"
                                   onClick={() => { requestPermission().catch(() => {}); }}
                                   className="underline text-accent-primary"
                                 >
@@ -1158,7 +1158,7 @@ function UserAreaPanel({
           <div className="mx-4 border-t border-border-soft" />
 
           {/* Voice Settings link */}
-          <button
+          <button data-icon-motion="gear"
             onClick={() => onSettingsClick('voice')}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
           >
@@ -1173,7 +1173,7 @@ function UserAreaPanel({
       {/* User area bar */}
       <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
-        <div
+        <div data-icon-motion="press"
           role="button"
           tabIndex={0}
           aria-haspopup="menu"
@@ -1204,7 +1204,7 @@ function UserAreaPanel({
         {/* Controls */}
         <div className="flex items-center">
           {/* Mic */}
-          <Tooltip content={(isPermissionMuted) ? t('spaces:sidebar.userArea.permissionMuted') : (isSpaceMuted || isSpaceDeafened) ? t('spaces:sidebar.userArea.spaceMuted') : isMuted ? t('spaces:sidebar.userArea.unmute') : t('spaces:sidebar.userArea.mute')} position="top"><button aria-label={(isPermissionMuted) ? t('spaces:sidebar.userArea.permissionMuted') : (isSpaceMuted || isSpaceDeafened) ? t('spaces:sidebar.userArea.spaceMuted') : isMuted ? t('spaces:sidebar.userArea.unmute') : t('spaces:sidebar.userArea.mute')}
+          <Tooltip content={(isPermissionMuted) ? t('spaces:sidebar.userArea.permissionMuted') : (isSpaceMuted || isSpaceDeafened) ? t('spaces:sidebar.userArea.spaceMuted') : isMuted ? t('spaces:sidebar.userArea.unmute') : t('spaces:sidebar.userArea.mute')} position="top"><button data-icon-motion="toggle" aria-label={(isPermissionMuted) ? t('spaces:sidebar.userArea.permissionMuted') : (isSpaceMuted || isSpaceDeafened) ? t('spaces:sidebar.userArea.spaceMuted') : isMuted ? t('spaces:sidebar.userArea.unmute') : t('spaces:sidebar.userArea.mute')}
             onClick={onMicToggle}
             className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
               (isSpaceMuted || isSpaceDeafened || isPermissionMuted) ? 'text-accent-amber cursor-not-allowed'
@@ -1219,7 +1219,7 @@ function UserAreaPanel({
             </svg>
           </button></Tooltip>
           {/* Input chevron */}
-          <Tooltip content={t('spaces:sidebar.userArea.inputDevices')} position="top"><button aria-label={t('spaces:sidebar.userArea.inputDevices')}
+          <Tooltip content={t('spaces:sidebar.userArea.inputDevices')} position="top"><button data-icon-motion="press" aria-label={t('spaces:sidebar.userArea.inputDevices')}
             onClick={() => togglePanel('input')}
             className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
               openPanel === 'input' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
@@ -1232,7 +1232,7 @@ function UserAreaPanel({
           </button></Tooltip>
 
           {/* Headphones */}
-          <Tooltip content={isSpaceDeafened ? t('spaces:sidebar.userArea.spaceDeafened') : isDeafened ? t('spaces:sidebar.userArea.undeafen') : t('spaces:sidebar.userArea.deafen')} position="top"><button aria-label={isSpaceDeafened ? t('spaces:sidebar.userArea.spaceDeafened') : isDeafened ? t('spaces:sidebar.userArea.undeafen') : t('spaces:sidebar.userArea.deafen')}
+          <Tooltip content={isSpaceDeafened ? t('spaces:sidebar.userArea.spaceDeafened') : isDeafened ? t('spaces:sidebar.userArea.undeafen') : t('spaces:sidebar.userArea.deafen')} position="top"><button data-icon-motion="toggle" aria-label={isSpaceDeafened ? t('spaces:sidebar.userArea.spaceDeafened') : isDeafened ? t('spaces:sidebar.userArea.undeafen') : t('spaces:sidebar.userArea.deafen')}
             onClick={onDeafenToggle}
             className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
               isSpaceDeafened ? 'text-accent-amber cursor-not-allowed'
@@ -1246,7 +1246,7 @@ function UserAreaPanel({
             </svg>
           </button></Tooltip>
           {/* Output chevron */}
-          <Tooltip content={t('spaces:sidebar.userArea.outputDevices')} position="top"><button aria-label={t('spaces:sidebar.userArea.outputDevices')}
+          <Tooltip content={t('spaces:sidebar.userArea.outputDevices')} position="top"><button data-icon-motion="press" aria-label={t('spaces:sidebar.userArea.outputDevices')}
             onClick={() => togglePanel('output')}
             className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
               openPanel === 'output' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
@@ -1259,7 +1259,7 @@ function UserAreaPanel({
           </button></Tooltip>
 
           {/* Settings */}
-          <Tooltip content={t('common:labels.settings')} position="top"><button
+          <Tooltip content={t('common:labels.settings')} position="top"><button data-icon-motion="gear"
             onClick={() => onSettingsClick()}
             className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover rounded-[4px] transition-colors relative"
 
@@ -1357,7 +1357,7 @@ function ChannelItem({
       {...channelDragHandlers}
     >
       {dropIndicator === 'before' && <div className="absolute -top-[1px] left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
-      <button
+      <button data-icon-motion="press"
         onClick={onChannelClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
           isActive

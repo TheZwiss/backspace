@@ -142,7 +142,7 @@ function InviteSelectFriendRow({
   const { baseName } = parseFederatedUsername(canonical.username);
   const dn = canonical.displayName ?? baseName;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onToggle(friendKey(friend), friend)}
       disabled={alreadyMember || sending}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
@@ -405,7 +405,7 @@ export function InviteModal() {
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-ui-caption bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => removeFriend(friendKey(f))}
                   className="opacity-60 hover:opacity-100 transition-opacity text-ui-body leading-none"
                   aria-label={t('spaces:invite.removeSelected', { name: f.displayName ?? f.username })}
@@ -466,7 +466,7 @@ export function InviteModal() {
         {inResultsView ? (
           <div className="flex gap-2">
             {hasFailures && (
-              <button
+              <button data-icon-motion="press"
                 onClick={onRetryFailed}
                 disabled={sending}
                 className="flex-1 py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -474,7 +474,7 @@ export function InviteModal() {
                 {t('spaces:invite.retryFailed')}
               </button>
             )}
-            <button
+            <button data-icon-motion="press"
               onClick={closeModal}
               className="flex-1 py-2 rounded-md text-ui-label font-semibold glass-pill text-txt-primary"
             >
@@ -482,7 +482,7 @@ export function InviteModal() {
             </button>
           </div>
         ) : (
-          <button
+          <button data-icon-motion="send"
             onClick={onSubmit}
             disabled={selectedFriends.length === 0 || sending || codeLoading}
             className="w-full py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -506,7 +506,7 @@ export function InviteModal() {
               readOnly
               className="input-embedded flex-1 font-mono text-xs px-2 py-1.5"
             />
-            <button
+            <button data-icon-motion="press"
               onClick={handleCopy}
               disabled={codeLoading || !inviteUrl}
               className={`glass-pill px-3 py-1.5 text-ui-caption font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${

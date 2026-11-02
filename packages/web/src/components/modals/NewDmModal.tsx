@@ -22,7 +22,7 @@ function NewDmUserRow({
   const { baseName } = parseFederatedUsername(canonical.username);
   const displayName = canonical.displayName ?? baseName;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onSelect(user)}
       className="w-full flex items-center gap-3 px-3 py-2 rounded-[4px] hover:bg-interactive-hover transition-colors text-left"
     >

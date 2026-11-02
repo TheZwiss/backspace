@@ -60,7 +60,7 @@ export const MentionBadge = React.memo(function MentionBadge({ userId, channelId
   // A real button, so it is in the tab order and Enter and Space open the
   // profile, like the click does.
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={handleClick}
       className={`${baseClass} cursor-pointer transition-colors hover:brightness-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60`}

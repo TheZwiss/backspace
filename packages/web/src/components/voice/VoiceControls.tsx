@@ -114,7 +114,7 @@ export function VoiceControls() {
     <>
       {/* Row 1: Signal icon + status text + disconnect */}
       <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
-        <Tooltip content={t('voice:controls.connectionInfo')} position="top"><button aria-label={t('voice:controls.connectionInfo')}
+        <Tooltip content={t('voice:controls.connectionInfo')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.connectionInfo')}
           ref={connectionBtnRef}
           onClick={() => {
             setShowConnectionInfo(!showConnectionInfo);
@@ -139,14 +139,14 @@ export function VoiceControls() {
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {voiceConnectionStatus === 'disconnected' && connectionError && (
-            <button
+            <button data-icon-motion="press"
               onClick={handleRetry}
               className="px-2 h-7 text-ui-caption text-accent-primary hover:bg-interactive-hover rounded"
             >
               {t('voice:status.retry')}
             </button>
           )}
-          <Tooltip content={t('voice:controls.disconnect')} position="top"><button aria-label={t('voice:controls.disconnect')}
+          <Tooltip content={t('voice:controls.disconnect')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.disconnect')}
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
 
@@ -168,7 +168,7 @@ export function VoiceControls() {
       {/* Row 2: Camera, Screen Share, Noise Suppression, Text Voice, Soundboard */}
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         {canSpeak && (
-          <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
+          <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button data-icon-motion="toggle" aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
             onClick={handleCameraAction}
             className={`${btnBase} ${
               isCameraOn
@@ -191,7 +191,7 @@ export function VoiceControls() {
         )}
 
         {canStream && (
-          <Tooltip content={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')} position="top"><button aria-label={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
+          <Tooltip content={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')} position="top"><button data-icon-motion="expand" aria-label={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
             ref={shareBtnRef}
             onClick={handleScreenShare}
             // Idle the button starts a share; live it toggles a menu, so it
@@ -213,7 +213,7 @@ export function VoiceControls() {
         )}
 
         {/* AI Noise Suppression (RNNoise) */}
-        <Tooltip content={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')} position="top"><button aria-label={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')}
+        <Tooltip content={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')} position="top"><button data-icon-motion="toggle" aria-label={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')}
           onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
           className={`${btnBase} ${
             rnnoiseEnabled

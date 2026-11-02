@@ -61,13 +61,13 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
       {!isFinal && (
         <div className="absolute top-1 right-1 flex gap-1">
           {state === 'paused' && onResume && (
-            <button onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.resume')}><ControlIcon name="play" width="12" height="12" /></button>
+            <button data-icon-motion="press" onClick={onResume} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.resume')}><ControlIcon name="play" width="12" height="12" /></button>
           )}
           {state === 'active' && onPause && (
-            <button onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.pause')}><ControlIcon name="pause" width="12" height="12" /></button>
+            <button data-icon-motion="toggle" onClick={onPause} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.pause')}><ControlIcon name="pause" width="12" height="12" /></button>
           )}
           {onAbort && (
-            <button onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.abort')}><ControlIcon name="close" width="12" height="12" /></button>
+            <button data-icon-motion="press" onClick={onAbort} className="bg-black/60 hover:bg-black/80 text-white w-5 h-5 rounded text-[9px]" aria-label={t('common:actions.abort')}><ControlIcon name="close" width="12" height="12" /></button>
           )}
         </div>
       )}

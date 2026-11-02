@@ -28,7 +28,7 @@ export interface DropdownItemProps {
  */
 export function DropdownItem({ label, active, onClick }: DropdownItemProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={onClick}
       className={`w-full px-3 py-2 text-left text-ui-label hover:bg-interactive-hover transition-colors flex items-center gap-2 ${

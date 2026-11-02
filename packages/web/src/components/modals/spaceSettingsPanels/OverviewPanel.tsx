@@ -337,7 +337,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             {t('spaces:settings.overview.iconLabel')}
           </label>
           <div className="flex items-center gap-3">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => canManageSpace && fileInputRef.current?.click()}
               disabled={!canManageSpace || uploadingIcon}
@@ -382,7 +382,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               className="hidden"
             />
             {canManageSpace && (displayIconSrc || space.icon) && iconFilename !== '' && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleRemoveIcon}
                 className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors"
@@ -402,7 +402,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             {AVATAR_COLORS.map((key) => {
               const entry = SPACE_GRADIENT_MAP[key];
               return (
-                <button
+                <button data-icon-motion="press"
                   key={key}
                   type="button"
                   onClick={() => canManageSpace && setAvatarColorState(key)}
@@ -426,7 +426,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             {t('spaces:settings.overview.bannerLabel')}
           </label>
           <div className="flex flex-col gap-2">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => canManageSpace && bannerFileInputRef.current?.click()}
               disabled={!canManageSpace || uploadingBanner}
@@ -473,7 +473,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               className="hidden"
             />
             {canManageSpace && (displayBannerSrc || space.banner) && bannerFilename !== '' && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleRemoveBanner}
                 className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors self-start"
@@ -527,14 +527,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        <button
+                        <button data-icon-motion="press"
                           onClick={() => setTransferTargetId(null)}
                           className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
                           disabled={transferring}
                         >
                           {t('common:actions.back')}
                         </button>
-                        <button
+                        <button data-icon-motion="press"
                           onClick={handleTransfer}
                           disabled={transferring}
                           className="ui-button ui-button-warning transition-colors disabled:opacity-50"
@@ -563,7 +563,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                               ? (member.user.avatar.startsWith('http') || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
                               : null;
                             return (
-                              <button
+                              <button data-icon-motion="press"
                                 key={member.userId}
                                 onClick={() => setTransferTargetId(member.userId)}
                                 className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
@@ -592,7 +592,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                           })
                         )}
                       </div>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={() => { setShowTransfer(false); setTransferSearch(''); }}
                         className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
                       >
@@ -601,7 +601,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                     </div>
                   )
                 ) : (
-                  <button
+                  <button data-icon-motion="press"
                     onClick={() => setShowTransfer(true)}
                     className="ui-button ui-button-warning transition-colors"
                   >
@@ -616,7 +616,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               {/* Delete Space */}
               <div>
                 <p className="text-xs text-txt-tertiary mb-3">{t('spaces:settings.overview.delete.description')}</p>
-                <button
+                <button data-icon-motion="press"
                   onClick={handleDelete}
                   className="ui-button ui-button-danger transition-colors"
                 >
@@ -631,13 +631,13 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-                <button
+                <button data-icon-motion="press"
                   onClick={handleDiscard}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('spaces:settings.discardChanges')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   onClick={handleSave}
                   disabled={saving || uploadingIcon || uploadingBanner || !spaceName.trim()}
                   className="ui-button ui-button-primary transition-colors disabled:opacity-50"

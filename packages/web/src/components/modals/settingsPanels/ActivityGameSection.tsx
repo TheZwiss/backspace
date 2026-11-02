@@ -216,7 +216,7 @@ export function ActivityGameSection() {
                   <span className={`flex-1 min-w-0 truncate text-sm ${isHidden ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`} title={name}>
                     {name}
                   </span>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     className={ICON_BUTTON}
                     disabled={index === 0}
@@ -225,7 +225,7 @@ export function ActivityGameSection() {
                   >
                     ↑
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     className={ICON_BUTTON}
                     disabled={index === rows.keys.length - 1}
@@ -234,7 +234,7 @@ export function ActivityGameSection() {
                   >
                     ↓
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     className={`${LINK_BUTTON} w-16 text-right`}
                     aria-label={t(isHidden ? 'privacy.activity.game.showGame' : 'privacy.activity.game.hideGame', { name })}
@@ -289,7 +289,7 @@ export function ActivityGameSection() {
             aria-label={t('privacy.activity.game.label')}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button type="submit" className={PRIMARY_BUTTON} disabled={!canAdd}>
+          <button data-icon-motion="press" type="submit" className={PRIMARY_BUTTON} disabled={!canAdd}>
             {t('privacy.activity.game.add')}
           </button>
         </form>
@@ -327,10 +327,10 @@ export function ActivityGameSection() {
                       aria-label={t('privacy.activity.game.manualNameLabel', { name: game.name })}
                       onChange={(event) => setManualDrafts((drafts) => ({ ...drafts, [key]: event.target.value }))}
                     />
-                    <button type="submit" className={PRIMARY_BUTTON} disabled={!changed}>
+                    <button data-icon-motion="press" type="submit" className={PRIMARY_BUTTON} disabled={!changed}>
                       {t('privacy.activity.game.save')}
                     </button>
-                    <button type="button" className={LINK_BUTTON} onClick={() => removeManualGame(game.name)}>
+                    <button data-icon-motion="press" type="button" className={LINK_BUTTON} onClick={() => removeManualGame(game.name)}>
                       {t('privacy.activity.game.remove')}
                     </button>
                   </form>
@@ -356,7 +356,7 @@ export function ActivityGameSection() {
             {unknownFresh.map((p) => (
               <li key={p.process} className="flex items-center justify-between gap-3">
                 <span className="text-xs text-txt-secondary truncate" title={p.process}>{p.label}</span>
-                <button type="button" className={PRIMARY_BUTTON} onClick={() => addManualGame(p.label, p.process)}>
+                <button data-icon-motion="press" type="button" className={PRIMARY_BUTTON} onClick={() => addManualGame(p.label, p.process)}>
                   {t('privacy.activity.game.unknownUse')}
                 </button>
               </li>
@@ -392,11 +392,11 @@ export function ActivityGameSection() {
                     aria-label={t('privacy.activity.game.renameLabel', { name: game.name })}
                     onChange={(event) => setRenameDrafts((drafts) => ({ ...drafts, [key]: event.target.value }))}
                   />
-                  <button type="submit" className={PRIMARY_BUTTON} disabled={value.trim() === '' || value.trim() === shownAs}>
+                  <button data-icon-motion="press" type="submit" className={PRIMARY_BUTTON} disabled={value.trim() === '' || value.trim() === shownAs}>
                     {t('privacy.activity.game.set')}
                   </button>
                   {(shownAs !== undefined || value !== '') && (
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       className={LINK_BUTTON}
                       onClick={() => {
@@ -425,7 +425,7 @@ export function ActivityGameSection() {
             {renamedEntries.map(([key, chosen]) => (
               <li key={key} className="flex items-center justify-between gap-3 text-xs text-txt-secondary">
                 <span className="truncate">{t('privacy.activity.game.renamedItem', { detected: key, chosen })}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   className={LINK_BUTTON}
                   onClick={() => {

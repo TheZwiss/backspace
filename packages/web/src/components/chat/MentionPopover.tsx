@@ -32,7 +32,7 @@ function MentionMemberRow({
     ? 'gap-3 px-3 py-2.5 min-h-[44px]'
     : 'gap-2.5 px-2 py-1.5';
   return (
-    <div
+    <div data-icon-motion="press"
       ref={isSelected ? selectedRef : undefined}
       onClick={() => onSelect(candidate)}
       className={`flex items-center mx-1 rounded cursor-pointer transition-colors ${rowSizing} ${

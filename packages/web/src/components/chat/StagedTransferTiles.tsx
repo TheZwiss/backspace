@@ -75,7 +75,7 @@ export function StagedTransferTiles({ stagedTransfers, previewUrls, onRemove }: 
 
             {/* Remove chip, shown once the upload has completed. */}
             {isFinal && (
-              <button
+              <button data-icon-motion="press"
                 onClick={() => onRemove(transfer.id)}
                 className="absolute -top-2 -right-2 w-7 h-7 bg-accent-rose hover:bg-accent-rose/80 shadow-elevation-high rounded-lg flex items-center justify-center text-white transition-colors z-10"
                 aria-label={t('composer.removeAttachment')}

@@ -65,7 +65,7 @@ export function EmojiPicker({
     <div ref={containerRef} className={wrapperClass}>
       {stickers && (
         <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-1">
-          <button
+          <button data-icon-motion="press"
             type="button"
             aria-pressed={!showStickers}
             onClick={() => setShowStickers(false)}
@@ -77,7 +77,7 @@ export function EmojiPicker({
           >
             {t('composer.emoji')}
           </button>
-          <Tooltip content={t('stickers.title')} position="top"><button
+          <Tooltip content={t('stickers.title')} position="top"><button data-icon-motion="press"
             type="button"
             aria-pressed={showStickers}
             aria-label={t('stickers.title')}

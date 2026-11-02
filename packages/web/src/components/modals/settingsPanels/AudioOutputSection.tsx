@@ -130,7 +130,7 @@ function AudioOutputSectionInner() {
       <div className="space-y-3">
         {showPicker ? (
           <div ref={dropdownRef}>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => setListOpen((v) => !v)}
               className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
@@ -164,7 +164,7 @@ function AudioOutputSectionInner() {
             <div className="text-xs text-txt-tertiary">
               {t('voice.output.permissionPrompt.description')}
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={() => { requestPermission().catch(() => {}); }}
               className="ui-button ui-button-primary transition-colors"
             >
@@ -191,7 +191,7 @@ function AudioOutputSectionInner() {
           />
         </div>
 
-        <button
+        <button data-icon-motion="press"
           onClick={handleTestTone}
           className="w-full text-ui-label px-3 py-2 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-primary transition-colors flex items-center justify-center gap-2"
         >

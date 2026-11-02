@@ -99,7 +99,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
         {CHOSEN_STATUS_OPTIONS.map((option) => {
           const active = option.value === savedStatus;
           return (
-            <button
+            <button data-icon-motion="press"
               key={option.value}
               role="menuitemradio"
               aria-checked={active}
@@ -138,7 +138,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
           className="input-standard w-full text-ui-label"
         />
         <div className="flex items-center justify-end gap-2 mt-2">
-          <button
+          <button data-icon-motion="press"
             onClick={() => {
               setCustomStatus('');
               void saveCustomStatus('');
@@ -148,7 +148,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
           >
             {t('common:actions.clear')}
           </button>
-          <button
+          <button data-icon-motion="press"
             onClick={() => void saveCustomStatus(customStatus)}
             disabled={pending}
             className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -159,7 +159,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
         {error && <div className="mt-1.5 text-xs text-accent-rose">{error}</div>}
       </div>
 
-      <button
+      <button data-icon-motion="gear"
         onClick={openProfileSettings}
         className="w-full px-3 py-2 border-t border-border-soft flex items-center justify-between text-left text-ui-label text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors rounded-b-none"
       >

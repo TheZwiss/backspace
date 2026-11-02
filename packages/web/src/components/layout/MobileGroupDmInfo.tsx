@@ -397,7 +397,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   // (intentional duplication so a tap-target is always reachable above the
   // keyboard).
   const headerRight = editing ? (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={handleCancel}
       className="px-2 py-1 text-sm text-txt-tertiary hover:text-txt-secondary"
@@ -422,7 +422,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         {/* HERO ────────────────────────────────────────────────────────── */}
         <div className="flex flex-col items-center gap-3 px-4 pt-8 pb-6 border-b border-border-soft">
           <div className="relative">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleHeroClick}
               disabled={!editing || !isOwner}
@@ -444,7 +444,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
             {/* Clear (X) — owner-only, edit mode only, only when there's an icon to clear. */}
             {editing && isOwner && previewIconUrl && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleClearIcon}
                 data-mobile-group-icon-clear
@@ -504,7 +504,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {/* Edit toggle — owner-only, hidden during edit (Cancel header action takes its place). */}
           {isOwner && !editing && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => setEditing(true)}
               data-mobile-group-edit
@@ -523,7 +523,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
         {/* ACTIONS ROW ──────────────────────────────────────────────────── */}
         <div className="px-4 py-3 border-b border-border-soft">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => channelId && openModal('addDmMember', { dmChannelId: channelId })}
             disabled={!canAddMembers}
@@ -572,7 +572,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
         {/* DESTRUCTIVE FOOTER ────────────────────────────────────────────── */}
         <div className="px-4 py-4 border-t border-border-soft">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setConfirmLeave(true)}
             disabled={leaving}
@@ -592,7 +592,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           className="fixed left-0 right-0 z-30 bg-surface-base border-t border-border-hard px-4 py-3 flex items-center justify-end gap-2"
           style={{ bottom: bottomInset }}
         >
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleCancel}
             disabled={saving}
@@ -601,7 +601,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleSave}
             disabled={!isDirty || saving || !isOwner}

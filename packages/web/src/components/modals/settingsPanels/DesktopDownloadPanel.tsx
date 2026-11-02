@@ -169,7 +169,7 @@ function SegmentedPicker<T extends string>({
       {segments.map((segment) => {
         const checked = segment.value === value;
         return (
-          <button
+          <button data-icon-motion="press"
             key={segment.value}
             type="button"
             role="radio"
@@ -265,7 +265,7 @@ function HeroTile({
       {pickers && <div className="mt-4 flex flex-wrap gap-2">{pickers}</div>}
 
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <a
+        <a data-icon-motion="press"
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -306,7 +306,7 @@ function QuietTile({
       <PlatformName platform={platform} id={nameId} hero={false} />
       <p className="mt-2 text-xs text-txt-tertiary">{t(COVERS_KEYS[platform])}</p>
       {pickers && <div className="mt-3 flex flex-wrap gap-2">{pickers}</div>}
-      <a
+      <a data-icon-motion="press"
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -464,7 +464,7 @@ export function DesktopDownloadPanel({ version }: { version: string | null }) {
 
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <p className="text-xs text-txt-tertiary">{t('desktopDownload.intro')}</p>
-        <a
+        <a data-icon-motion="press"
           href={links?.allReleasesUrl ?? RELEASES_URL}
           target="_blank"
           rel="noopener noreferrer"

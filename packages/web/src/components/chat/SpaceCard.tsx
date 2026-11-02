@@ -203,14 +203,14 @@ export function SpaceCard({
 
         {outer ? (
           isPublic ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => outer.onConnect(outer.entry)}
               className="ui-button ui-button-primary w-full transition-colors"
             >
               {t('spaces:explore.outer.connectAndJoin')}
             </button>
           ) : (
-            <button
+            <button data-icon-motion="press"
               onClick={() => outer.onConnect(outer.entry)}
               className="w-full py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-sm font-medium rounded transition-colors"
             >
@@ -218,14 +218,14 @@ export function SpaceCard({
             </button>
           )
         ) : isJoined ? (
-          <button
+          <button data-icon-motion="press"
             onClick={handleViewSpace}
             className="w-full py-2 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-sm font-medium rounded transition-colors"
           >
             {t('spaces:explore.viewSpace')}
           </button>
         ) : isPublic ? (
-          <button
+          <button data-icon-motion="press"
             onClick={handlePublicJoin}
             disabled={joining}
             className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50"
@@ -240,7 +240,7 @@ export function SpaceCard({
             )}
           </button>
         ) : isPending ? (
-          <button
+          <button data-icon-motion="press"
             disabled
             className="w-full py-2 bg-interactive-muted text-txt-tertiary text-sm font-medium rounded cursor-default"
           >
@@ -256,14 +256,14 @@ export function SpaceCard({
               className="input-standard w-full resize-none"
             />
             <div className="flex gap-2">
-              <button
+              <button data-icon-motion="send"
                 onClick={sendRequest}
                 disabled={joining}
                 className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
               >
                 {joining ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={cancelRequestForm}
                 className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
@@ -272,7 +272,7 @@ export function SpaceCard({
             </div>
           </div>
         ) : (
-          <button
+          <button data-icon-motion="press"
             onClick={openRequestForm}
             className="w-full py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-sm font-medium rounded transition-colors"
           >

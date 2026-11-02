@@ -400,7 +400,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <p className="text-xs text-txt-secondary">{directoryReason}</p>
               {rungActionOffered && (
-                <button
+                <button data-icon-motion="pulse"
                   type="button"
                   onClick={() => setConfirmingRung(true)}
                   disabled={rungPending}
@@ -428,7 +428,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             // scale of a reason under a switch.
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs flex flex-wrap items-center gap-2.5">
               <span>{t('common:states.loadSettingsFailed')}</span>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={retryFlags}
                 disabled={flagsLoading}
@@ -471,13 +471,13 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
                 className="ui-button ui-button-primary transition-colors disabled:opacity-50"
@@ -570,7 +570,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <Tooltip content={t('common:actions.accept')} position="top"><button aria-label={t('common:actions.accept')}
+                  <Tooltip content={t('common:actions.accept')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.accept')}
                     onClick={() => handleDecide(req.id, 'accept')}
                     className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
 
@@ -579,7 +579,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                     </svg>
                   </button></Tooltip>
-                  <Tooltip content={t('common:actions.decline')} position="top"><button aria-label={t('common:actions.decline')}
+                  <Tooltip content={t('common:actions.decline')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.decline')}
                     onClick={() => handleDecide(req.id, 'decline')}
                     className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
 
@@ -687,23 +687,23 @@ export function SpaceSettingsModal() {
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
-            <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
-            <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+            <button data-icon-motion="press" onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+            <button data-icon-motion="press" onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
             {canManageStickers && (
-              <button onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
             )}
             {canManageSpace && (
-              <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
+            <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
             {canManageRoles && (
-              <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
             )}
             {canBanMembers && (
-              <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
             )}
           </div>
         </div>
@@ -728,23 +728,23 @@ export function SpaceSettingsModal() {
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
-              <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
-              <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
               {canManageStickers && (
-                <button onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
               )}
               {canManageSpace && (
-                <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
               <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
               {canManageRoles && (
-                <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
               )}
               {canBanMembers && (
-                <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
               )}
             </div>
           </div>
@@ -756,7 +756,7 @@ export function SpaceSettingsModal() {
             <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
-                <button
+                <button data-icon-motion="arrow"
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
                   aria-label={t('spaces:settings.backAria')}

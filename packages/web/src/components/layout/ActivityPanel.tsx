@@ -41,7 +41,7 @@ function ActivityFriendRow({
     : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] border-l-2 border-transparent hover:bg-interactive-hover cursor-pointer group transition-all duration-200 ease-out';
 
   return (
-    <div
+    <div data-icon-motion="press"
       onClick={(e) => onClickFriend(e, friend)}
       className={rowClass}
     >

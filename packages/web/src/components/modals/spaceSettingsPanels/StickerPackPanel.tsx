@@ -184,7 +184,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
         <div className="rounded-xl border border-border-soft bg-surface-elevated/50 p-5 text-center">
           <p className="text-sm text-txt-secondary">{t('spaces:stickers.empty')}</p>
           {(canCreate || canManage) && (
-            <button type="button" disabled={busy} onClick={() => void createPack()} className="ui-button ui-button-primary mt-3 disabled:opacity-40">
+            <button data-icon-motion="press" type="button" disabled={busy} onClick={() => void createPack()} className="ui-button ui-button-primary mt-3 disabled:opacity-40">
               {t('spaces:stickers.create')}
             </button>
           )}
@@ -197,7 +197,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
               <p className="text-xs text-txt-tertiary">{pack.itemCount}/{MAX_SPACE_STICKERS}</p>
             </div>
             {(pack.canAdd || pack.canManage) && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 disabled={busy || pack.itemCount >= MAX_SPACE_STICKERS}
                 onClick={() => inputRef.current?.click()}
@@ -233,10 +233,10 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                 aria-label={t('settings:stickers.itemName')}
                 className="input-standard min-w-48 flex-1"
               />
-              <button type="submit" disabled={busy || !normalizeStickerName(renamingItem.name)} className="sticker-primary-button">
+              <button data-icon-motion="press" type="submit" disabled={busy || !normalizeStickerName(renamingItem.name)} className="sticker-primary-button">
                 {t('chat:stickers.save')}
               </button>
-              <button type="button" disabled={busy} onClick={() => setRenamingItem(null)} className="sticker-secondary-button">
+              <button data-icon-motion="press" type="button" disabled={busy} onClick={() => setRenamingItem(null)} className="sticker-secondary-button">
                 {t('chat:stickers.cancel')}
               </button>
             </form>
@@ -247,7 +247,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                 <img src={stickerImage(item.token)} alt={item.name} className="h-full w-full object-contain" />
                 {pack.canManage && (
                   <>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={() => setRenamingItem({ id: item.id, name: item.name })}
                       className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100"
@@ -255,7 +255,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                     >
                       ✎
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={() => void (async () => {
                         await api.stickerLibrary.removeItem(pack.id, item.id);
@@ -285,10 +285,10 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                   <p className="text-xs text-txt-tertiary">{t('spaces:stickers.sharePending')}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" disabled={busy} onClick={() => void decide(share.id, 'rejected')} className="rounded-lg bg-accent-rose/10 px-3 py-1.5 text-xs text-accent-rose">
+                  <button data-icon-motion="press" type="button" disabled={busy} onClick={() => void decide(share.id, 'rejected')} className="rounded-lg bg-accent-rose/10 px-3 py-1.5 text-xs text-accent-rose">
                     {t('spaces:stickers.reject')}
                   </button>
-                  <button type="button" disabled={busy} onClick={() => void decide(share.id, 'approved')} className="rounded-lg bg-accent-mint/10 px-3 py-1.5 text-xs text-accent-mint">
+                  <button data-icon-motion="pulse" type="button" disabled={busy} onClick={() => void decide(share.id, 'approved')} className="rounded-lg bg-accent-mint/10 px-3 py-1.5 text-xs text-accent-mint">
                     {t('spaces:stickers.approve')}
                   </button>
                 </div>

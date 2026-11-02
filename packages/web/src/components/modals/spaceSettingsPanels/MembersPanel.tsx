@@ -91,7 +91,7 @@ function MembersPanelRow({
 
   return (
     <div>
-      <div
+      <div data-icon-motion="expand"
         className={`flex items-center justify-between p-2 rounded transition-colors ${
           expandable ? 'cursor-pointer hover:bg-interactive-hover' : ''
         } ${isExpanded ? 'bg-interactive-hover' : ''}`}
@@ -138,7 +138,7 @@ function MembersPanelRow({
 
         <div className="flex items-center gap-1 flex-shrink-0">
           {canBan && !isSelf && !isOwner && (
-            <button
+            <button data-icon-motion="toggle"
               onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
@@ -146,7 +146,7 @@ function MembersPanelRow({
             </button>
           )}
           {canKick && !isSelf && !isOwner && (
-            <button
+            <button data-icon-motion="toggle"
               onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
               className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             >
@@ -207,13 +207,13 @@ function MembersPanelRow({
           )}
           {hasPendingChanges && (
             <div className="flex items-center gap-2 mt-1.5">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => onSaveRoles(member.userId)}
                 className="ui-button ui-button-primary transition-colors"
               >
                 {t('common:actions.save')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => onCancelRoleChange(member.userId)}
                 className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
               >

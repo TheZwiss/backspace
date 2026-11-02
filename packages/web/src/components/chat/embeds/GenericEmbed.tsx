@@ -26,7 +26,7 @@ export function GenericEmbed({ embed }: GenericEmbedProps) {
             {providerName}
           </div>
         )}
-        <a
+        <a data-icon-motion="press"
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"

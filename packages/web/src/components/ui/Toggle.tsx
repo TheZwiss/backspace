@@ -11,7 +11,7 @@ interface ToggleProps {
 
 export function Toggle({ enabled, onChange, disabled, ariaLabel }: ToggleProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       role="switch"
       aria-checked={enabled}

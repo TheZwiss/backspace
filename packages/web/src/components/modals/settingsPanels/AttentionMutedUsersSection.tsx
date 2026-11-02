@@ -68,7 +68,7 @@ export function AttentionMutedUsersSection() {
         {candidates.map(({ user, origin }) => <div key={userKey(user, origin)} className="flex items-center gap-2 rounded-lg p-2 hover:bg-interactive-hover">
           <Avatar src={user.avatar} name={user.displayName || user.username} userId={user.id} size={28} />
           <span className="min-w-0 flex-1 truncate text-ui-label text-txt-primary">{user.displayName || user.username}</span>
-          <Button variant="secondary" onClick={() => mute(owner, user, origin, duration === 'forever' ? null : Number(duration))}>{t('settings:attentionMutes.muteShort')}</Button>
+          <Button data-icon-motion="toggle" variant="secondary" onClick={() => mute(owner, user, origin, duration === 'forever' ? null : Number(duration))}>{t('settings:attentionMutes.muteShort')}</Button>
         </div>)}
         {candidates.length === 0 && <p className="py-2 text-xs text-txt-secondary">{t('settings:attentionMutes.noResults')}</p>}
       </div>
@@ -78,7 +78,7 @@ export function AttentionMutedUsersSection() {
       {active.map(entry => <div key={entry.key} className="flex items-center gap-2 rounded-lg bg-surface-input/50 p-2">
         <Avatar src={entry.avatar} name={entry.name} size={28} />
         <div className="min-w-0 flex-1"><p className="truncate text-ui-label text-txt-primary">{entry.name}</p><p className="text-xs text-txt-secondary">{entry.until === null ? t('settings:attentionMutes.forever') : t('settings:attentionMutes.until', { time: f.formatDateTime(entry.until) })}</p></div>
-        <Button variant="secondary" onClick={() => unmute(owner, entry.key)}>{t('settings:attentionMutes.unmuteShort')}</Button>
+        <Button data-icon-motion="toggle" variant="secondary" onClick={() => unmute(owner, entry.key)}>{t('settings:attentionMutes.unmuteShort')}</Button>
       </div>)}
     </div>
   </section>;

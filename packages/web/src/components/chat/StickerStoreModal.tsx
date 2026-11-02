@@ -236,7 +236,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
       className="fixed inset-0 z-[500] flex items-center justify-center animate-fade-in"
       onMouseDown={e => e.stopPropagation()}
     >
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-3xl h-[620px] max-h-[calc(calc(100*var(--app-vh))-2rem)] mx-4 ui-dialog-surface shadow-2xl flex flex-col overflow-hidden animate-slide-up">
         {/* Modal Top Bar */}
         <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-border-soft">
@@ -253,14 +253,14 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
 
             {/* Navigation Tabs */}
             <div className="flex rounded-lg bg-surface-base/80 p-0.5 border border-border-soft">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setActiveTab('explore')}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${activeTab === 'explore' ? 'bg-surface-elevated text-txt-primary shadow-sm' : 'text-txt-tertiary hover:text-txt-primary'}`}
               >
                 {t('stickers.explore')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setActiveTab('myPacks')}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${activeTab === 'myPacks' ? 'bg-surface-elevated text-txt-primary shadow-sm' : 'text-txt-tertiary hover:text-txt-primary'}`}
@@ -268,7 +268,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                 {t('stickers.myPacks')}
               </button>
               {isAdmin && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => setActiveTab('reviews')}
                   className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-colors ${activeTab === 'reviews' ? 'bg-surface-elevated text-txt-primary shadow-sm' : 'text-txt-tertiary hover:text-txt-primary'}`}
@@ -284,7 +284,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
             </div>
           </div>
 
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"
@@ -306,7 +306,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
           {actionSuccess && (
             <div role="status" className="mb-4 p-3 rounded-xl bg-accent-mint/10 border border-accent-mint/20 text-xs text-accent-mint flex items-center justify-between">
               <span>{actionSuccess}</span>
-              <button type="button" onClick={() => setActionSuccess('')} className="text-accent-mint/70 hover:text-accent-mint font-bold">✕</button>
+              <button data-icon-motion="press" type="button" onClick={() => setActionSuccess('')} className="text-accent-mint/70 hover:text-accent-mint font-bold">✕</button>
             </div>
           )}
 
@@ -350,7 +350,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   {packs.map(pack => (
-                    <div
+                    <div data-icon-motion="press"
                       key={pack.id}
                       onClick={() => handleOpenPreview(pack.id)}
                       className="group cursor-pointer rounded-2xl border border-border-soft bg-surface-base/60 hover:bg-surface-base/90 p-3.5 transition-all flex flex-col justify-between hover:shadow-lg hover:border-border-hard"
@@ -384,7 +384,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                           {t('stickers.stickersCount', { count: pack.itemCount })}
                         </span>
 
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={e => handleToggleInstall(e, pack)}
                           className={pack.isInstalled ? 'sticker-secondary-button text-xs py-1 px-2.5' : 'sticker-primary-button text-xs py-1 px-2.5'}
@@ -402,7 +402,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
               {/* Creator Packs Tab */}
               <div className="flex items-center justify-between mb-5">
                 <p className="text-xs text-txt-tertiary">{t('stickers.collectionHint')}</p>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => setEditingPackId(null)}
                   className="sticker-primary-button text-xs"
@@ -420,7 +420,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
               ) : myPacks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center text-txt-tertiary">
                   <p className="text-sm">{t('stickers.noPacks')}</p>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={() => setEditingPackId(null)}
                     className="sticker-secondary-button mt-3 text-xs"
@@ -467,7 +467,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
+                          <button data-icon-motion="press"
                             type="button"
                             onClick={() => handleOpenPreview(pack.id)}
                             className="sticker-secondary-button text-xs"
@@ -475,7 +475,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                             {t('stickers.viewStickers')}
                           </button>
                           {pack.status === 'approved' ? (
-                            <button
+                            <button data-icon-motion="press"
                               type="button"
                               onClick={() => handleNewVersion(pack.id)}
                               className="sticker-secondary-button text-xs"
@@ -483,7 +483,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                               {t('stickers.newVersion')}
                             </button>
                           ) : (
-                            <button
+                            <button data-icon-motion="press"
                               type="button"
                               onClick={() => setEditingPackId(pack.id)}
                               className="sticker-secondary-button text-xs"
@@ -491,7 +491,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                               {t('stickers.editPack')}
                             </button>
                           )}
-                          <button
+                          <button data-icon-motion="press"
                             type="button"
                             onClick={() => handleDeletePack(pack.id)}
                             className="sticker-icon-button text-txt-danger hover:bg-accent-rose/10"
@@ -534,7 +534,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         <p className="text-xs text-txt-tertiary">{t('stickers.sharePending')}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           disabled={actionLoading === share.id}
                           onClick={() => void (async () => {
@@ -549,7 +549,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         >
                           {t('stickers.reject')}
                         </button>
-                        <button
+                        <button data-icon-motion="pulse"
                           type="button"
                           disabled={actionLoading === share.id}
                           onClick={() => void (async () => {
@@ -616,14 +616,14 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 self-end">
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           onClick={() => handleOpenPreview(pack.id)}
                           className="sticker-secondary-button text-xs"
                         >
                           {t('stickers.viewStickers')}
                         </button>
-                        <button
+                        <button data-icon-motion="press"
                           type="button"
                           disabled={actionLoading === pack.id}
                           onClick={() => handleStartReject(pack)}
@@ -631,7 +631,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         >
                           {t('stickers.reject')}
                         </button>
-                        <button
+                        <button data-icon-motion="pulse"
                           type="button"
                           disabled={actionLoading === pack.id}
                           onClick={() => handleApprove(pack.id)}
@@ -657,7 +657,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
           className="fixed inset-0 z-[510] flex items-center justify-center animate-fade-in"
           onMouseDown={e => e.stopPropagation()}
         >
-          <div className="absolute inset-0 bg-black/60" onClick={() => setPreviewPack(null)} />
+          <div data-icon-motion="press" className="absolute inset-0 bg-black/60" onClick={() => setPreviewPack(null)} />
           <div className="relative w-full max-w-md mx-4 ui-dialog-surface shadow-2xl p-6 flex flex-col max-h-[calc(80*var(--app-vh))] animate-slide-up">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
@@ -671,7 +671,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                   <p className="text-xs text-txt-secondary mt-1.5">{previewPack.description}</p>
                 )}
               </div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setPreviewPack(null)}
                 className="p-1.5 rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"
@@ -698,7 +698,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
               </span>
               {isAdmin && (previewPack.status === 'pending_review' || reviews.some(r => r.id === previewPack.id)) ? (
                 <div className="flex items-center gap-2">
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     disabled={actionLoading === previewPack.id}
                     onClick={() => handleStartReject(previewPack)}
@@ -706,7 +706,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                   >
                     {t('stickers.reject')}
                   </button>
-                  <button
+                  <button data-icon-motion="pulse"
                     type="button"
                     disabled={actionLoading === previewPack.id}
                     onClick={() => handleApprove(previewPack.id)}
@@ -716,7 +716,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                   </button>
                 </div>
               ) : (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={e => handleToggleInstall(e, previewPack)}
                   className={previewPack.isInstalled ? 'sticker-secondary-button' : 'sticker-primary-button'}
@@ -738,14 +738,14 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
           className="fixed inset-0 z-[520] flex items-center justify-center animate-fade-in"
           onMouseDown={e => e.stopPropagation()}
         >
-          <div className="absolute inset-0 bg-black/60" onClick={() => setRejectingPack(null)} />
+          <div data-icon-motion="press" className="absolute inset-0 bg-black/60" onClick={() => setRejectingPack(null)} />
           <div className="relative w-full max-w-md mx-4 ui-dialog-surface shadow-2xl p-6 flex flex-col animate-slide-up">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-base font-bold text-txt-primary flex items-center gap-2">
                 <span className="text-accent-rose">⚠️</span>
                 {t('stickers.rejectTitle')}
               </h4>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setRejectingPack(null)}
                 className="p-1 rounded-lg text-txt-tertiary hover:text-txt-primary transition-colors"
@@ -774,14 +774,14 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
             />
 
             <div className="flex justify-end gap-2">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setRejectingPack(null)}
                 className="sticker-secondary-button text-xs"
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 disabled={actionLoading === rejectingPack.id}
                 onClick={handleConfirmReject}

@@ -23,7 +23,7 @@ export function ChannelHeaderTopic({ channelName, topic }: ChannelHeaderTopicPro
   return (
     <>
       <div className="w-[1px] h-5 bg-border-soft mx-2 flex-shrink-0" aria-hidden="true" />
-      <Tooltip content={topic} position="top"><button
+      <Tooltip content={topic} position="top"><button data-icon-motion="press"
         type="button"
         onClick={() => setIsOpen(true)}
 

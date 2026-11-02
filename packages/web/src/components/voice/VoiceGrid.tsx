@@ -100,14 +100,14 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
-        <div
+        <div data-icon-motion="press"
           className={`flex-1 min-h-0 cursor-pointer relative ${immersive ? '' : 'p-2'}`}
           onClick={() => setFocusedParticipant(null)}
           title={t('voice:grid.returnToGridHint')}
         >
           {renderTile(focusedTile, true)}
           {/* Grid button — top-right */}
-          <Tooltip content={t('voice:grid.backToGrid')} position="top"><button
+          <Tooltip content={t('voice:grid.backToGrid')} position="top"><button data-icon-motion="press"
             onClick={(e) => {
               e.stopPropagation();
               setFocusedParticipant(null);
@@ -130,7 +130,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
         {/* Centered Hide/Show Members button — divider between focused tile and strip */}
         {otherTiles.length > 0 && (
           <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={immersive ? `absolute inset-x-0 bottom-24 z-10 flex justify-center transition-opacity ${chromeRevealed ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : 'flex justify-center flex-shrink-0 py-1'}>
-            <Tooltip content={stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')} position="top"><button
+            <Tooltip content={stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')} position="top"><button data-icon-motion="press"
               onClick={(e) => {
                 e.stopPropagation();
                 setStripHidden(!stripHidden);
@@ -156,7 +156,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
         {!stripHidden && otherTiles.length > 0 && (!immersive || chromeRevealed) && (
           <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={`${immersive ? 'absolute inset-x-0 bottom-32 z-10' : 'flex-shrink-0'} h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar`}>
             {otherTiles.map((t) => (
-              <div
+              <div data-icon-motion="press"
                 key={t.key}
                 onClick={() => setFocusedParticipant(t.key)}
                 className="h-full aspect-video flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -184,7 +184,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
         }}
       >
         {tiles.map((t) => (
-          <div
+          <div data-icon-motion="press"
             key={t.key}
             onClick={() => setFocusedParticipant(t.key)}
             className="cursor-pointer hover:opacity-90 transition-opacity"

@@ -50,7 +50,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
             {title ? <h2 className="ui-dialog-title">{title}</h2> : <div />}
-            <button
+            <button data-icon-motion="press"
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
               aria-label={closeLabel}
@@ -72,7 +72,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   if (isMobile && mobileStyle === 'sheet') {
     return (
       <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-end justify-center animate-fade-in">
-        <div
+        <div data-icon-motion="press"
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
@@ -80,7 +80,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
           {title && (
             <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
               <h2 className="ui-dialog-title">{title}</h2>
-              <button
+              <button data-icon-motion="press"
                 onClick={onClose}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
                 aria-label={closeLabel}
@@ -103,13 +103,13 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   if (size === 'settings') {
     return (
       <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
-        <div
+        <div data-icon-motion="press"
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
         <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col ui-dialog-surface animate-slide-up overflow-hidden">
           {/* Floating close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             className="absolute top-4 right-4 z-10 p-1.5 rounded-full bg-surface-elevated/50 backdrop-blur-sm text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={closeLabel}
@@ -127,7 +127,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Default centered dialog (desktop and mobile default)
   return (
     <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
-      <div
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
@@ -135,7 +135,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
         {title && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
             <h2 className="ui-dialog-title">{title}</h2>
-            <button
+            <button data-icon-motion="press"
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
               aria-label={closeLabel}

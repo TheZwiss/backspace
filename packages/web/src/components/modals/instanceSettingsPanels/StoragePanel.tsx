@@ -211,7 +211,7 @@ export function StoragePanel() {
     return (
       <div className="space-y-3">
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{loadError}</div>
-        <button onClick={fetchStats} className="text-sm text-accent-primary hover:underline">{t('common:actions.retry')}</button>
+        <button data-icon-motion="press" onClick={fetchStats} className="text-sm text-accent-primary hover:underline">{t('common:actions.retry')}</button>
       </div>
     );
   }
@@ -308,7 +308,7 @@ export function StoragePanel() {
               />
               <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
                 {(['MB', 'GB'] as const).map((u) => (
-                  <button
+                  <button data-icon-motion="attach"
                     key={u}
                     type="button"
                     onClick={() => handleUploadUnitChange(u)}
@@ -323,7 +323,7 @@ export function StoragePanel() {
                 ))}
               </div>
             </div>
-            <button
+            <button data-icon-motion="attach"
               onClick={handleUploadLimitSave}
               disabled={!uploadLimitDirty || uploadLimitSaving || parsedUploadMb === null}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50 ml-auto"
@@ -345,7 +345,7 @@ export function StoragePanel() {
               />
               <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
                 {(['MB', 'GB'] as const).map((u) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={u}
                     type="button"
                     onClick={() => handleStickerUnitChange(u)}
@@ -360,7 +360,7 @@ export function StoragePanel() {
                 ))}
               </div>
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={handleStickerLimitSave}
               disabled={!stickerLimitDirty || stickerLimitSaving || parsedStickerMb === null}
               className="ui-button ui-button-primary transition-colors disabled:opacity-50 ml-auto"
@@ -381,14 +381,14 @@ export function StoragePanel() {
 
           {hasOrphans && (
             <div className="flex flex-wrap gap-2">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleCleanup(true)}
                 disabled={cleaning}
                 className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 {cleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleCleanup(false)}
                 disabled={cleaning || !previewDone}
                 className="ui-button ui-button-danger transition-colors disabled:opacity-50"
@@ -452,14 +452,14 @@ export function StoragePanel() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleTusCleanup(true)}
               disabled={tusCleaning || tusMaxAgeHours <= 0}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {tusCleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleTusCleanup(false)}
               disabled={tusCleaning || !tusPreviewDone}
               className="ui-button ui-button-danger transition-colors disabled:opacity-50"
@@ -509,14 +509,14 @@ export function StoragePanel() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleMediaCleanup(true)}
               disabled={mediaCleaning || mediaAgeDays < 1}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {mediaCleaning ? t('common:states.scanning') : t('common:actions.preview')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleMediaCleanup(false)}
               disabled={mediaCleaning || !mediaPreviewDone}
               className="ui-button ui-button-danger transition-colors disabled:opacity-50"
@@ -547,7 +547,7 @@ export function StoragePanel() {
         </div>
       </div>
 
-      <button
+      <button data-icon-motion="press"
         onClick={() => { setCleanupResult(null); setPreviewDone(false); fetchStats(); }}
         className="text-sm text-accent-primary hover:underline"
       >

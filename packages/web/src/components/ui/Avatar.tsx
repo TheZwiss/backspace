@@ -77,7 +77,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   const { dot: dotDiameter, inset: dotInset } = getDotMetrics(size, ringWidth);
 
   return (
-    <div
+    <div data-icon-motion-target="" data-icon-motion={onClick ? 'press' : undefined}
       data-avatar
       className={`relative inline-flex flex-shrink-0 ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: outerSize, height: outerSize }}

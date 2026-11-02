@@ -23,7 +23,7 @@ export function EmbedRenderer({ embed }: EmbedRendererProps) {
       return (
         <div className="mt-2 max-w-[400px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard p-3">
           {embed.title && (
-            <a
+            <a data-icon-motion="press"
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"

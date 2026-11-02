@@ -44,7 +44,7 @@ function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
       {availableTabs.map((t) => {
         const isSticker = t.key === 'sticker';
         return (
-          <Tooltip content={t.label} position="top"><button
+          <Tooltip content={t.label} position="top"><button data-icon-motion="press"
             key={t.key}
             type="button"
             onClick={() => onTabChange(t.key)}

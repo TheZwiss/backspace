@@ -32,7 +32,7 @@ export function InterfaceScaleSection() {
             onChange={event => changeScale(Number(event.target.value))} className="ui-select flex-1 min-w-0">
             {INTERFACE_SCALES.map(value => <option key={value} value={value}>{value}%</option>)}
           </select>
-          <button type="button" onClick={() => changeScale(100)} disabled={scale === 100}
+          <button data-icon-motion="press" type="button" onClick={() => changeScale(100)} disabled={scale === 100}
             className="px-3 py-2 rounded-md bg-white/5 hover:bg-white/10 text-sm text-txt-primary disabled:opacity-50">{t('interfaceScale.reset')}</button>
         </div>
       </div>

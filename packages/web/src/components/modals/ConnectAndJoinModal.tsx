@@ -241,7 +241,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
             {probe.message}
           </div>
           <div className="flex justify-end">
-            <button type="button" onClick={closeModal} className={textButtonClass}>
+            <button data-icon-motion="press" type="button" onClick={closeModal} className={textButtonClass}>
               {t('common:actions.close')}
             </button>
           </div>
@@ -273,7 +273,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
                   className="space-y-2"
                 >
                   {messageField}
-                  <button
+                  <button data-icon-motion="press"
                     type="submit"
                     disabled={isLoading}
                     className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50"
@@ -312,7 +312,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
 
           <div className="flex justify-end gap-4">
             {phase === 'fallback' && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => { setPhase('password'); setError(''); }}
                 disabled={isLoading}
@@ -321,7 +321,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
                 {t('common:actions.back')}
               </button>
             )}
-            <button type="button" onClick={closeModal} disabled={isLoading} className={textButtonClass}>
+            <button data-icon-motion="press" type="button" onClick={closeModal} disabled={isLoading} className={textButtonClass}>
               {t('common:actions.cancel')}
             </button>
           </div>
