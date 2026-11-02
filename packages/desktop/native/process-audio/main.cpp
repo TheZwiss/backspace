@@ -23,6 +23,7 @@ static_assert(sizeof(AUDIOCLIENT_ACTIVATION_PARAMS) == 12, "Windows SDK activati
 #include <cstdlib>
 #include <vector>
 #include <cstdint>
+#include <string>
 using Microsoft::WRL::ComPtr;
 class Activation final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
     std::atomic<ULONG> references{1};
@@ -93,9 +94,78 @@ static bool d3dAppInExclusiveFullscreen() {
     return SUCCEEDED(query(&state)) && state == 3;
 }
 
+static std::string wideToUtf8(const wchar_t* value, int length) {
+    if (!value || length <= 0) return {};
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, value, length, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) return {};
+    std::string result(static_cast<size_t>(bytes), '\0');
+    if (WideCharToMultiByte(CP_UTF8, 0, value, length, result.data(), bytes, nullptr, nullptr) != bytes) return {};
+    return result;
+}
+
+// Resolve the owning executable only for the one-shot geometry request. The
+// 100 ms geometry watcher reports rectangles repeatedly and should not reopen
+// a process handle on every tick.
+static std::string windowProcessName(HWND hwnd) {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hwnd, &pid) || pid == 0) return {};
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return {};
+    wchar_t path[32768]{};
+    DWORD size = static_cast<DWORD>(sizeof(path) / sizeof(path[0]));
+    std::string result;
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        const wchar_t* base = path;
+        for (DWORD i = 0; i < size; ++i) {
+            if (path[i] == L'\\' || path[i] == L'/') base = path + i + 1;
+        }
+        const int baseLength = static_cast<int>(path + size - base);
+        result = wideToUtf8(base, baseLength);
+    }
+    CloseHandle(process);
+    return result;
+}
+
+static std::string jsonEscape(const std::string& value) {
+    static const char hex[] = "0123456789abcdef";
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (unsigned char ch : value) {
+        switch (ch) {
+        case '"': escaped += "\\\""; break;
+        case '\\': escaped += "\\\\"; break;
+        case '\b': escaped += "\\b"; break;
+        case '\f': escaped += "\\f"; break;
+        case '\n': escaped += "\\n"; break;
+        case '\r': escaped += "\\r"; break;
+        case '\t': escaped += "\\t"; break;
+        default:
+            if (ch < 0x20) {
+                escaped += "\\u00";
+                escaped += hex[(ch >> 4) & 0x0f];
+                escaped += hex[ch & 0x0f];
+            } else {
+                escaped += static_cast<char>(ch);
+            }
+        }
+    }
+    return escaped;
+}
+
+static HWND createProcessNameSelfTestWindow() {
+    static const wchar_t className[] = L"BackspaceProcessAudioSelfTestWindow";
+    WNDCLASSW windowClass{};
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = className;
+    if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return nullptr;
+    return CreateWindowExW(0, className, L"", WS_OVERLAPPED, 0, 0, 100, 100,
+        nullptr, nullptr, windowClass.hInstance, nullptr);
+}
+
 // One JSON line: the window's physical rectangle, its monitor's, and the flags
 // the share needs. False when the window or its monitor is gone.
-static bool printGeometry(HWND hwnd) {
+static bool printGeometry(HWND hwnd, bool includeProcess = false) {
     if (!IsWindow(hwnd)) return false;
     RECT frame{};
     // The extended frame bounds are the visible window without the invisible
@@ -129,8 +199,11 @@ static bool printGeometry(HWND hwnd) {
     // return. SHQueryUserNotificationState is the documented signal for exactly
     // this state.
     const bool exclusive = d3dAppInExclusiveFullscreen();
+    const std::string processName = includeProcess ? jsonEscape(windowProcessName(hwnd)) : std::string{};
     std::fprintf(stdout,
-        "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s}\n",
+        includeProcess
+            ? "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s,\"process\":\"%s\"}\n"
+            : "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s}\n",
         static_cast<long>(frame.left), static_cast<long>(frame.top),
         static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
         static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
@@ -138,7 +211,8 @@ static bool printGeometry(HWND hwnd) {
         static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
         minimized ? "true" : "false",
         foreground ? "true" : "false",
-        exclusive ? "true" : "false");
+        exclusive ? "true" : "false",
+        processName.c_str());
     std::fflush(stdout);
     return true;
 }
@@ -146,6 +220,37 @@ static bool printGeometry(HWND hwnd) {
 int wmain(int argc, wchar_t** argv) {
     enablePerMonitorDpiAwareness();
     if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) {
+        const std::wstring unicodeName = L"Jogo-\x6f22\x5b57.exe";
+        const std::string expectedUnicodeName = std::string("Jogo-") + "\xE6\xBC\xA2\xE5\xAD\x97" + ".exe";
+        if (wideToUtf8(unicodeName.data(), static_cast<int>(unicodeName.size())) != expectedUnicodeName) {
+            std::fprintf(stderr, "SELF_TEST_FAIL UTF-8 process name\n");
+            return 10;
+        }
+        if (jsonEscape("\"\\") != "\\\"\\\\") {
+            std::fprintf(stderr, "SELF_TEST_FAIL JSON escaping\n");
+            return 9;
+        }
+        HWND selfTestWindow = createProcessNameSelfTestWindow();
+        if (!selfTestWindow) {
+            std::fprintf(stderr, "SELF_TEST_FAIL process-name window\n");
+            return 11;
+        }
+        wchar_t executablePath[32768]{};
+        const DWORD executableLength = GetModuleFileNameW(nullptr, executablePath,
+            static_cast<DWORD>(sizeof(executablePath) / sizeof(executablePath[0])));
+        const wchar_t* executableBase = executablePath;
+        for (DWORD i = 0; i < executableLength; ++i) {
+            if (executablePath[i] == L'\\' || executablePath[i] == L'/') executableBase = executablePath + i + 1;
+        }
+        const std::string expectedProcessName = executableLength
+            ? wideToUtf8(executableBase, static_cast<int>(executablePath + executableLength - executableBase))
+            : std::string{};
+        const std::string actualProcessName = windowProcessName(selfTestWindow);
+        DestroyWindow(selfTestWindow);
+        if (expectedProcessName.empty() || actualProcessName != expectedProcessName) {
+            std::fprintf(stderr, "SELF_TEST_FAIL process-name lookup\n");
+            return 12;
+        }
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (FAILED(hr)) return fail("self-test.CoInitializeEx", hr, 4);
         ComPtr<Activation> completion;
@@ -156,7 +261,7 @@ int wmain(int argc, wchar_t** argv) {
         if (FAILED(hr)) return fail("self-test.IAgileObject", hr, 8);
         hr = completion.As(&marshaler);
         if (FAILED(hr)) return fail("self-test.IMarshal", hr, 8);
-        std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal\n");
+        std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal JSON_ESCAPE UTF8_PROCESS_NAME WINDOW_PROCESS_LOOKUP\n");
         return 0;
     }
     // Window geometry for the borderless window-capture path: the renderer
@@ -166,7 +271,7 @@ int wmain(int argc, wchar_t** argv) {
     // not). Physical pixels, JSON on stdout, one line.
     if (argc == 3 && (wcscmp(argv[1], L"geometry") == 0 || wcscmp(argv[1], L"geometry-watch") == 0)) {
         auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
-        if (!printGeometry(hwnd)) {
+        if (!printGeometry(hwnd, wcscmp(argv[1], L"geometry") == 0)) {
             std::fprintf(stderr, "ERROR stage=geometry reason=invalid-window\n");
             return 3;
         }

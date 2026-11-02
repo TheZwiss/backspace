@@ -8,6 +8,7 @@ vi.mock('../../audio/AudioManager', () => ({
     getInstance: () => ({
       clearInputDenial: vi.fn(),
       resumeContext: vi.fn(() => Promise.resolve()),
+      setTextInputOnly: vi.fn(),
       setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),
   },
@@ -39,6 +40,18 @@ beforeEach(async () => {
 });
 
 describe('IncomingCallModal decline', () => {
+  it('does not accept or decline the ring on Escape', () => {
+    const connectFn = vi.fn();
+    useVoiceStore.setState({ connectFn });
+    render(<IncomingCallModal />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(useVoiceStore.getState().incomingCall).toEqual(RING);
+    expect(connectFn).not.toHaveBeenCalled();
+    expect(wsSend).not.toHaveBeenCalled();
+  });
+
   it('declines through the ring\'s origin with the ring\'s ids', () => {
     render(<IncomingCallModal />);
 

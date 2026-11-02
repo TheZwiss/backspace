@@ -1,5 +1,6 @@
 import { getElectronAPI } from '../platform/platform';
 import i18n from '../i18n';
+import { FrameCadence } from './frameCadence';
 
 /**
  * Borderless window sharing on Windows.
@@ -34,6 +35,8 @@ export interface WindowCaptureTarget {
   foreground: boolean;
   /** A D3D app holds the display in exclusive fullscreen; frames may stall. */
   exclusive: boolean;
+  /** The owning executable matches a known or manually bound game. */
+  isGame?: boolean;
 }
 
 /** One line of `geometry-watch`: physical pixels, the helper's own units. */
@@ -194,7 +197,32 @@ export function computeDestinationSize(
 /** A cropped-window track, which carries its own resize hook. */
 export interface WindowCropTrack extends MediaStreamTrack {
   setDestination?: (size: { width: number; height: number } | undefined) => void;
+  setFrameRate?: (rate: number) => void;
+  setCursorMode?: (mode: 'auto' | 'show' | 'hide') => void;
   setLive?: (live: boolean) => void;
+}
+
+export interface OpenWindowCropTrackOptions {
+  frameRate: number;
+  destination?: { width: number; height: number };
+  sourceId: string;
+  cursorMode?: 'auto' | 'show' | 'hide';
+  /**
+   * Reopen the display source after a display change or ended capture. The
+   * caller can use the desktop capture API with `chromeMediaSourceNoCursor`
+   * when supported. Returning null is a failed attempt; this path deliberately
+   * does not fall through to Chromium's cursor-bearing capture APIs.
+   */
+  reopenDisplay?: (screenSourceId: string, cursorMode: 'auto' | 'show' | 'hide') => Promise<MediaStreamTrack | null | undefined>;
+}
+
+export function classifyCustomDisplayReopen(
+  track: MediaStreamTrack | null | undefined,
+  cursorFreeRequired: boolean,
+): 'source' | 'fallback' | 'failed' {
+  if (track) return 'source';
+  if (track === null || cursorFreeRequired) return 'failed';
+  return 'fallback';
 }
 
 /** Tell a cropped-window track that its share is published, if it is one. */
@@ -213,6 +241,20 @@ export function setWindowCropResolution(
   const crop = track as WindowCropTrack;
   if (typeof crop.setDestination !== 'function') return false;
   crop.setDestination(size);
+  return true;
+}
+
+export function setWindowCropFrameRate(track: MediaStreamTrack, rate: number): boolean {
+  const crop = track as WindowCropTrack;
+  if (!crop.setFrameRate) return false;
+  crop.setFrameRate(rate);
+  return true;
+}
+
+export function setWindowCropCursorMode(track: MediaStreamTrack, mode: 'auto' | 'show' | 'hide'): boolean {
+  const crop = track as WindowCropTrack;
+  if (!crop.setCursorMode) return false;
+  crop.setCursorMode(mode);
   return true;
 }
 
@@ -239,7 +281,7 @@ const FIRST_FRAME_TIMEOUT_MS = 5_000;
 export async function openWindowCropTrack(
   stream: MediaStream,
   target: WindowCaptureTarget,
-  options: { frameRate: number; destination?: { width: number; height: number }; sourceId: string },
+  options: OpenWindowCropTrackOptions,
 ): Promise<MediaStreamTrack | null> {
   const api = getElectronAPI();
   const initialSource = stream.getVideoTracks()[0];
@@ -264,7 +306,12 @@ export async function openWindowCropTrack(
   if (!context) { source.stop(); return null; }
 
   let current = target;
+  let desiredCursorMode = options.cursorMode ?? 'auto';
+  const shouldHideCursor = (mode = desiredCursorMode): boolean =>
+    mode === 'hide' || (mode === 'auto' && current.isGame === true);
   let destination = options.destination;
+  const cadence = new FrameCadence(options.frameRate);
+  let requestCanvasFrame = (): void => {};
   let live = false;
   /** The rectangle actually drawn, chased towards the target so moves look smooth. */
   let drawnRegion: CropRect | null = null;
@@ -331,13 +378,15 @@ export async function openWindowCropTrack(
     context.textAlign = 'center';
     context.textBaseline = 'top';
     context.fillText(message, width / 2, iconY + icon + Math.round(fontSize * 0.8));
+    requestCanvasFrame();
   };
 
   const drawPaused = (): void => drawCard(i18n.t('voice:screenPicker.streamPaused'), '#7c6cf6');
   const drawReconnecting = (): void => drawCard(i18n.t('voice:screenPicker.captureReconnecting'), '#f0b74a');
 
-  const draw = (): void => {
+  const draw = (force = false): void => {
     if (stopped) return;
+    if (!force && !cadence.shouldDraw(performance.now())) return;
     if (canvas.width === 0 || canvas.height === 0) fitCanvas();
     // Geometry is the only thing that can say "paused". If it went quiet (the
     // watcher died, the helper was restarted) the last state is not trusted
@@ -361,6 +410,7 @@ export async function openWindowCropTrack(
     const width = Math.max(2, Math.round(drawnRegion.width));
     const height = Math.max(2, Math.round(drawnRegion.height));
     context.drawImage(video, x, y, width, height, 0, 0, canvas.width, canvas.height);
+    requestCanvasFrame();
   };
 
   const schedule = (): void => {
@@ -402,9 +452,15 @@ export async function openWindowCropTrack(
   }
 
   fitCanvas();
-  output = canvas.captureStream(options.frameRate);
+  output = canvas.captureStream(0);
+  // Explicit frame requests let a quality change alter cadence on the same track.
+  if (typeof (output.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined)?.requestFrame !== 'function') {
+    output.getTracks().forEach(track => track.stop());
+    output = canvas.captureStream();
+  }
   const track = output.getVideoTracks()[0];
   if (!track) { teardown(); return null; }
+  requestCanvasFrame = () => (track as CanvasCaptureMediaStreamTrack).requestFrame?.();
 
   const endTrack = (): void => {
     track.stop();
@@ -437,6 +493,40 @@ export async function openWindowCropTrack(
 
   let recapturing = false;
   let recaptureAttempts = 0;
+  let cursorModeGeneration = 0;
+
+  const synchronizeCursorSource = async (): Promise<void> => {
+    while (!stopped) {
+      const generation = cursorModeGeneration;
+      const mode = desiredCursorMode;
+      const effectiveMode = shouldHideCursor(mode) ? 'hide' : 'show';
+      const currentNativeSource = source as MediaStreamTrack & { setCursorMode?: (value: 'auto' | 'show' | 'hide') => void };
+      if (currentNativeSource.setCursorMode) {
+        currentNativeSource.setCursorMode(effectiveMode);
+        return;
+      }
+      if (!shouldHideCursor(mode)) return;
+
+      const nextSource = await reopenDisplay(current.screenSourceId, mode);
+      if (generation !== cursorModeGeneration) {
+        nextSource?.stop();
+        continue;
+      }
+      if (!nextSource) {
+        console.warn('[WindowCapture] Cursor-free source unavailable for the selected cursor mode.');
+        endTrack();
+        return;
+      }
+      if (!await switchSource(nextSource)) {
+        nextSource.stop();
+        endTrack();
+        return;
+      }
+      const replacement = source as MediaStreamTrack & { setCursorMode?: (value: 'auto' | 'show' | 'hide') => void };
+      replacement.setCursorMode?.(shouldHideCursor(desiredCursorMode) ? 'hide' : 'show');
+      if (generation === cursorModeGeneration) return;
+    }
+  };
 
   /**
    * Take the display again without a user gesture.
@@ -447,7 +537,22 @@ export async function openWindowCropTrack(
    * constraint form, which needs none; `getDisplayMedia` stays as the fallback
    * for a build where it does not.
    */
-  const reopenDisplay = async (screenSourceId: string): Promise<MediaStreamTrack | null> => {
+  const reopenDisplay = async (
+    screenSourceId: string,
+    mode = desiredCursorMode,
+  ): Promise<MediaStreamTrack | null> => {
+    if (options.reopenDisplay) {
+      try {
+        const custom = await options.reopenDisplay(screenSourceId, mode);
+        const result = classifyCustomDisplayReopen(custom, shouldHideCursor(mode));
+        if (result === 'source') return custom!;
+        if (result === 'failed') return null;
+      } catch (err) {
+        console.warn('[ScreenShare] Custom display recapture failed:', err);
+        if (shouldHideCursor(mode)) return null;
+      }
+    }
+    if (shouldHideCursor(mode)) return null;
     try {
       const legacy = navigator.mediaDevices as unknown as {
         getUserMedia: (constraints: unknown) => Promise<MediaStream>;
@@ -458,7 +563,7 @@ export async function openWindowCropTrack(
           mandatory: {
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: screenSourceId,
-            maxFrameRate: options.frameRate,
+            maxFrameRate: cadence.rate,
           },
         },
       });
@@ -469,7 +574,7 @@ export async function openWindowCropTrack(
     }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: options.frameRate },
+        video: { frameRate: cadence.rate },
         audio: false,
       });
       return stream.getVideoTracks()[0] ?? null;
@@ -510,6 +615,7 @@ export async function openWindowCropTrack(
         current = next;
         fitCanvas();
         draw();
+        await synchronizeCursorSource();
         return;
       }
       await api.preselectScreenSource!(next.screenSourceId, false, undefined, options.sourceId);
@@ -525,6 +631,7 @@ export async function openWindowCropTrack(
       current = next;
       fitCanvas();
       draw();
+      await synchronizeCursorSource();
     } catch (err) {
       console.warn('[ScreenShare] Could not restart the capture on this display:', err);
       scheduleRecaptureRetry();
@@ -619,10 +726,49 @@ export async function openWindowCropTrack(
     destination = size;
     fitCanvas();
   };
+  let configuredSource = source;
+  let configuredRate = cadence.rate;
+  let configuringRate = false;
+  const configureSourceRate = async (): Promise<void> => {
+    if (configuringRate) return;
+    configuringRate = true;
+    try {
+      while (!stopped && (configuredSource !== source || configuredRate !== cadence.rate)) {
+        const currentSource = source;
+        const rate = cadence.rate;
+        const nativeSource = currentSource as MediaStreamTrack & { setFrameRate?: (frameRate: number) => void };
+        if (nativeSource.setFrameRate) nativeSource.setFrameRate(rate);
+        else {
+          try { await currentSource.applyConstraints({ frameRate: { ideal: rate, max: rate } }); }
+          catch (error) { console.warn('[WindowCapture] Could not update source cadence:', error); }
+        }
+        configuredSource = currentSource;
+        configuredRate = rate;
+      }
+    } finally { configuringRate = false; }
+  };
+  (track as WindowCropTrack).setFrameRate = (rate) => {
+    cadence.setRate(rate);
+    void configureSourceRate();
+  };
+  (track as WindowCropTrack).setCursorMode = (mode) => {
+    desiredCursorMode = mode;
+    cursorModeGeneration += 1;
+    const nativeSource = source as MediaStreamTrack & { setCursorMode?: (value: 'auto' | 'show' | 'hide') => void };
+    if (nativeSource.setCursorMode) {
+      nativeSource.setCursorMode(shouldHideCursor(mode) ? 'hide' : 'show');
+      return;
+    }
+    if (!shouldHideCursor(mode) || recapturing || stopped) return;
+    recapturing = true;
+    void synchronizeCursorSource().catch((error) => {
+      console.warn('[WindowCapture] Could not enable cursor-free source:', error);
+    }).finally(() => { recapturing = false; });
+  };
   // Published: from here on a window that loses focus shows the paused card.
   (track as WindowCropTrack).setLive = (value) => {
     live = value;
-    if (value) draw();
+    if (value) draw(true);
   };
 
   // An exclusive-fullscreen D3D app bypasses the compositor, so this display

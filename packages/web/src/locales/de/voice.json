@@ -181,6 +181,11 @@
     "hostLimits": "Vorgaben von {{host}}",
     "resolution": "Auflösung",
     "frameRate": "Framerate",
+    "cursorMode": "Mauszeiger",
+    "cursorAuto": "Automatisch",
+    "cursorShow": "Anzeigen",
+    "cursorHide": "Ausblenden",
+    "cursorHideUnavailable": "Diese Aufnahmequelle kann den Windows-Cursor nicht ausblenden. Starte eine unterstützte DXGI-Aufnahme, um diese Einstellung anzuwenden.",
     "contentMode": "Inhaltsmodus",
     "mode": {
       "gaming": "Gaming",
@@ -237,6 +242,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "Das Netzwerk des Streamers ist instabil",
+    "publisherBandwidth": "Die verfügbare Bandbreite begrenzt die Streamqualität",
     "publisherCpu": "Der Computer des Streamers kann das Video nicht schnell genug codieren",
     "viewerNetwork": "Deine Verbindung ist instabil",
     "reconnecting": "Verbindung verloren — Verbindung wird wiederhergestellt…",

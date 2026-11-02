@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { applyWindowGeometry, computeCropRegion, computeDestinationSize, easeCrop, isCaptureActive, isCaptureStalled, isWindowSourceId } from './windowCropCapture';
+import { applyWindowGeometry, classifyCustomDisplayReopen, computeCropRegion, computeDestinationSize, easeCrop, isCaptureActive, isCaptureStalled, isWindowSourceId } from './windowCropCapture';
+
+describe('custom display recapture fallback', () => {
+  it('uses Chromium recapture when the callback returns undefined for a normal cursor mode', () => {
+    expect(classifyCustomDisplayReopen(undefined, false)).toBe('fallback');
+  });
+
+  it('fails safely when cursor-free recapture returns null or undefined', () => {
+    expect(classifyCustomDisplayReopen(null, true)).toBe('failed');
+    expect(classifyCustomDisplayReopen(undefined, true)).toBe('failed');
+  });
+
+  it('uses a returned native track regardless of cursor-free requirement', () => {
+    const track = {} as MediaStreamTrack;
+    expect(classifyCustomDisplayReopen(track, true)).toBe('source');
+  });
+});
 
 describe('isWindowSourceId', () => {
   it('accepts window ids and rejects screens', () => {

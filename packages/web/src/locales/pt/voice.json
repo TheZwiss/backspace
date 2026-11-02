@@ -182,6 +182,11 @@
     "hostLimits": "Limites definidos por {{host}}",
     "resolution": "Resolução",
     "frameRate": "Taxa de quadros",
+    "cursorMode": "Cursor do mouse",
+    "cursorAuto": "Automático",
+    "cursorShow": "Mostrar",
+    "cursorHide": "Ocultar",
+    "cursorHideUnavailable": "Esta fonte de captura não consegue ocultar o cursor do Windows. Inicie uma captura DXGI compatível para aplicar esta opção.",
     "contentMode": "Modo de conteúdo",
     "mode": {
       "gaming": "Jogos",
@@ -238,6 +243,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "A rede de quem transmite está instável",
+    "publisherBandwidth": "A banda disponível está limitando a qualidade da transmissão",
     "publisherCpu": "O computador de quem transmite não consegue codificar o vídeo rápido o suficiente",
     "viewerNetwork": "Sua conexão está instável",
     "reconnecting": "Conexão perdida — reconectando…",

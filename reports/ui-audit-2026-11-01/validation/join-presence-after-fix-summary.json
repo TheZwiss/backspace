@@ -1,0 +1,68 @@
+[
+  {
+    "joiner": "bob",
+    "round": 0,
+    "websocketMs": 154,
+    "participantMs": 163,
+    "domMs": 166,
+    "twoRafMs": 181,
+    "sdkMs": 2422,
+    "rowCount": 1,
+    "tileCount": 1
+  },
+  {
+    "joiner": "bob",
+    "round": 1,
+    "websocketMs": 234,
+    "participantMs": 242,
+    "domMs": 246,
+    "twoRafMs": 259,
+    "sdkMs": 2907,
+    "rowCount": 1,
+    "tileCount": 1
+  },
+  {
+    "joiner": "bob",
+    "round": 2,
+    "websocketMs": 204,
+    "participantMs": 213,
+    "domMs": 217,
+    "twoRafMs": 233,
+    "sdkMs": 3002,
+    "rowCount": 1,
+    "tileCount": 1
+  },
+  {
+    "joiner": "alice",
+    "round": 0,
+    "websocketMs": 223,
+    "participantMs": 93,
+    "domMs": 97,
+    "twoRafMs": 99,
+    "sdkMs": 92,
+    "rowCount": 1,
+    "tileCount": 1
+  },
+  {
+    "joiner": "alice",
+    "round": 1,
+    "websocketMs": 118,
+    "participantMs": 129,
+    "domMs": 133,
+    "twoRafMs": 148,
+    "sdkMs": 2920,
+    "rowCount": 1,
+    "tileCount": 1
+  },
+  {
+    "joiner": "alice",
+    "round": 2,
+    "websocketMs": 172,
+    "participantMs": 179,
+    "domMs": 182,
+    "twoRafMs": 198,
+    "sdkMs": 2582,
+    "rowCount": 1,
+    "tileCount": 1
+  }
+]

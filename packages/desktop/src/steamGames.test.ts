@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -149,6 +149,8 @@ describe('parseAppManifest', () => {
 // ─── getSteamRoots ──────────────────────────────────────────────────────────
 
 describe('getSteamRoots', () => {
+  beforeEach(() => resetSteamIndexCache());
+
   it('knows the default Steam roots on Windows and macOS', () => {
     expect(candidateSteamRoots('/home/u', 'darwin')).toEqual([
       path.join('/home/u', 'Library', 'Application Support', 'Steam'),
@@ -178,6 +180,20 @@ describe('getSteamRoots', () => {
 
   it('returns an empty list when Steam is not installed', () => {
     expect(getSteamRoots(fs.mkdtempSync(path.join(os.tmpdir(), 'steam-none-')))).toEqual([]);
+  });
+
+  it('reuses discovered roots for repeated polls', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-roots-cache-'));
+    fs.mkdirSync(path.join(home, '.local', 'share', 'Steam'), { recursive: true });
+    const realpath = vi.spyOn(fs, 'realpathSync');
+    try {
+      const first = getSteamRoots(home);
+      const callsAfterFirstLookup = realpath.mock.calls.length;
+      expect(getSteamRoots(home)).toEqual(first);
+      expect(realpath).toHaveBeenCalledTimes(callsAfterFirstLookup);
+    } finally {
+      realpath.mockRestore();
+    }
   });
 });
 
@@ -259,6 +275,25 @@ describe('findSteamGameForProcess', () => {
 
   it('matches games in a secondary library on another disk', () => {
     expect(findSteamGameForProcess('/mnt/games/Steam Library/steamapps/common/dota 2 beta/game/bin/linuxsteamrt64/dota2', games)?.appId).toBe(570);
+  });
+
+  it('resolves the executable once when checking several realpath-only matches', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'steam-match-realpath-'));
+    const installDir = path.join(root, 'Actual Game');
+    const exe = path.join(installDir, 'game.exe');
+    fs.mkdirSync(installDir, { recursive: true });
+    fs.writeFileSync(exe, '');
+    const games = [
+      { appId: 1, name: 'Other', installDir: path.join(root, 'Other') },
+      { appId: 2, name: 'Actual Game', installDir },
+    ];
+    const realpath = vi.spyOn(fs, 'realpathSync');
+    try {
+      expect(findSteamGameForProcess(exe, games)?.appId).toBe(2);
+      expect(realpath.mock.calls.filter(([candidate]) => candidate === exe)).toHaveLength(1);
+    } finally {
+      realpath.mockRestore();
+    }
   });
 
   it('rejects exe paths outside every install directory', () => {

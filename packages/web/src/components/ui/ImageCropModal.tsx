@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
-import React, { useState, useCallback, useEffect, type ReactNode } from 'react';
+import React, { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -45,6 +46,8 @@ export function ImageCropModal({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(dialogRef, { open: isOpen, onClose, dismissible: !isProcessing, label: heading });
 
   const handleCropComplete = useCallback((percentage: Area, croppedPixels: Area) => {
     setCroppedArea(percentage);
@@ -84,19 +87,10 @@ export function ImageCropModal({
     }
   }, [isOpen, imageSrc]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
       <div className="relative max-w-md w-full mx-4 bg-surface-elevated rounded-lg shadow-xl animate-slide-up">
         {/* Title bar */}

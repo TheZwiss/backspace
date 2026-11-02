@@ -120,6 +120,10 @@ contextBridge.exposeInMainWorld('backspace', {
   // Where a window is: the renderer captures that display and crops to it, so
   // the share has no Windows Graphics Capture border (windowCropCapture.ts).
   getWindowCaptureTarget: (sourceId: string) => ipcRenderer.invoke('get-window-capture-target', sourceId),
+  // Optional DXGI Desktop Duplication capture for display sources. Window IDs
+  // may return null and should continue through the existing Chromium path.
+  startNativeScreenCapture: (options: unknown) => ipcRenderer.invoke('start-native-screen-capture', options),
+  stopNativeScreenCapture: (id: string) => ipcRenderer.invoke('stop-native-screen-capture', id),
   // A 100 ms stream of the shared window's rectangle (one helper process),
   // so the crop follows a window being dragged without polling from here.
   startWindowGeometry: (sourceId: string) => ipcRenderer.invoke('start-window-geometry', sourceId),

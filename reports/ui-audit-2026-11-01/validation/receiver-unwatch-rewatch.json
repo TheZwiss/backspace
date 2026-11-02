@@ -1,0 +1,239 @@
+{
+  "rounds": [
+    {
+      "i": 0,
+      "offVideos": 0,
+      "on": {
+        "time": 60021.10000000149,
+        "route": "/channels/375400147737526272/375400147737526276",
+        "voice": "connected",
+        "sharing": false,
+        "config": {
+          "previewMode": "normal",
+          "height": 720,
+          "fps": 60,
+          "mode": "gaming",
+          "customBitrateKbps": null,
+          "shareAudio": false,
+          "codec": "vp9"
+        },
+        "participants": [
+          {
+            "userId": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "local": true,
+            "sharing": false,
+            "republishing": false
+          },
+          {
+            "userId": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "local": false,
+            "sharing": true,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "republishing": false
+          }
+        ],
+        "videos": [
+          {
+            "time": 51.644,
+            "frames": 4,
+            "paused": false,
+            "width": 1098,
+            "height": 720,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "ready": 4
+          }
+        ],
+        "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:30\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n2P 50FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n15 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n15 min decorridos"
+      },
+      "elapsedMs": 373
+    },
+    {
+      "i": 1,
+      "offVideos": 0,
+      "on": {
+        "time": 60472,
+        "route": "/channels/375400147737526272/375400147737526276",
+        "voice": "connected",
+        "sharing": false,
+        "config": {
+          "previewMode": "normal",
+          "height": 720,
+          "fps": 60,
+          "mode": "gaming",
+          "customBitrateKbps": null,
+          "shareAudio": false,
+          "codec": "vp9"
+        },
+        "participants": [
+          {
+            "userId": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "local": true,
+            "sharing": false,
+            "republishing": false
+          },
+          {
+            "userId": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "local": false,
+            "sharing": true,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "republishing": false
+          }
+        ],
+        "videos": [
+          {
+            "time": 0,
+            "frames": 0,
+            "paused": false,
+            "width": 0,
+            "height": 0,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "ready": 0
+          }
+        ],
+        "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:30\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 29FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n15 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n15 min decorridos"
+      },
+      "elapsedMs": 374
+    },
+    {
+      "i": 2,
+      "offVideos": 0,
+      "on": {
+        "time": 60923.89999999851,
+        "route": "/channels/375400147737526272/375400147737526276",
+        "voice": "connected",
+        "sharing": false,
+        "config": {
+          "previewMode": "normal",
+          "height": 720,
+          "fps": 60,
+          "mode": "gaming",
+          "customBitrateKbps": null,
+          "shareAudio": false,
+          "codec": "vp9"
+        },
+        "participants": [
+          {
+            "userId": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "local": true,
+            "sharing": false,
+            "republishing": false
+          },
+          {
+            "userId": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "local": false,
+            "sharing": true,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "republishing": false
+          }
+        ],
+        "videos": [
+          {
+            "time": 52.541,
+            "frames": 4,
+            "paused": false,
+            "width": 1098,
+            "height": 720,
+            "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+            "ready": 4
+          }
+        ],
+        "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:31\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 29FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n15 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n15 min decorridos"
+      },
+      "elapsedMs": 374
+    }
+  ],
+  "first": {
+    "time": 62134.29999999702,
+    "route": "/channels/375400147737526272/375400147737526276",
+    "voice": "connected",
+    "sharing": false,
+    "config": {
+      "previewMode": "normal",
+      "height": 720,
+      "fps": 60,
+      "mode": "gaming",
+      "customBitrateKbps": null,
+      "shareAudio": false,
+      "codec": "vp9"
+    },
+    "participants": [
+      {
+        "userId": "375397997229785088",
+        "identity": "375397997229785088:test_bob",
+        "local": true,
+        "sharing": false,
+        "republishing": false
+      },
+      {
+        "userId": "375397996164431872",
+        "identity": "375397996164431872:test_alice",
+        "local": false,
+        "sharing": true,
+        "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+        "republishing": false
+      }
+    ],
+    "videos": [
+      {
+        "time": 53.761,
+        "frames": 75,
+        "paused": false,
+        "width": 1098,
+        "height": 720,
+        "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+        "ready": 4
+      }
+    ],
+    "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:32\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 29FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n15 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n15 min decorridos"
+  },
+  "second": {
+    "time": 63648.89999999851,
+    "route": "/channels/375400147737526272/375400147737526276",
+    "voice": "connected",
+    "sharing": false,
+    "config": {
+      "previewMode": "normal",
+      "height": 720,
+      "fps": 60,
+      "mode": "gaming",
+      "customBitrateKbps": null,
+      "shareAudio": false,
+      "codec": "vp9"
+    },
+    "participants": [
+      {
+        "userId": "375397997229785088",
+        "identity": "375397997229785088:test_bob",
+        "local": true,
+        "sharing": false,
+        "republishing": false
+      },
+      {
+        "userId": "375397996164431872",
+        "identity": "375397996164431872:test_alice",
+        "local": false,
+        "sharing": true,
+        "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+        "republishing": false
+      }
+    ],
+    "videos": [
+      {
+        "time": 55.266,
+        "frames": 162,
+        "paused": false,
+        "width": 1098,
+        "height": 720,
+        "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+        "ready": 4
+      }
+    ],
+    "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:33\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 29FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n15 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n15 min decorridos"
+  }
+}

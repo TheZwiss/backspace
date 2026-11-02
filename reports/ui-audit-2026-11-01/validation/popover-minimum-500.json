@@ -1,0 +1,34 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 500
+  },
+  "panel": {
+    "top": 8,
+    "bottom": 459,
+    "left": 8,
+    "right": 268,
+    "hit": true
+  },
+  "stop": {
+    "top": 410.5,
+    "bottom": 446,
+    "left": 21,
+    "right": 255,
+    "hit": true
+  },
+  "scroll": {
+    "client": 319,
+    "total": 487,
+    "top": 168
+  },
+  "switches": [
+    {
+      "top": 329.5,
+      "bottom": 353.5,
+      "left": 207,
+      "right": 251,
+      "hit": true
+    }
+  ]
+}

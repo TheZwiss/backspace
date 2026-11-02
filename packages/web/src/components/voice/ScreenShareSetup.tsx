@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { getElectronAPI, isElectron, isElectronMac } from '../../platform/platform';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useScreenShareSetupStore } from '../../stores/screenShareSetupStore';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
+import { CaptureQueue } from '../../utils/captureQueue';
+import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { broadcastVoiceStatus } from '../../utils/voice';
@@ -12,6 +15,7 @@ import {
   applyStagedCaptureConfig,
   stopStagedCapture,
   publishScreenShare,
+  replaceScreenShare,
   isScreenCaptureSupported,
   isCaptureCancellation,
   canAddScreenShareAudioLater,
@@ -85,7 +89,16 @@ export function ScreenShareSetup() {
   const close = useScreenShareSetupStore((s) => s.close);
   const targetDocument = useScreenShareSetupStore((s) => s.targetDocument) ?? document;
   const portalContainer = usePortalContainer(targetDocument);
-  const config = useVoiceStore((s) => s.screenShareConfig);
+  const savedConfig = useVoiceStore((s) => s.screenShareConfig);
+  const replacing = useScreenShareSetupStore((s) => s.mode === 'replace');
+  const openingId = useScreenShareSetupStore((s) => s.openingId);
+  const [draft, setDraft] = useState<{ openingId: number; config: ScreenShareConfig } | null>(null);
+  const config = replacing && draft?.openingId === openingId ? draft.config : savedConfig;
+  const configRef = useRef(config);
+  configRef.current = config;
+  const changeDraft = useCallback((changes: Partial<ScreenShareConfig>) => {
+    setDraft(previous => ({ openingId, config: { ...(previous?.openingId === openingId ? previous.config : useVoiceStore.getState().screenShareConfig), ...changes } }));
+  }, [openingId]);
   const lastSourceId = useVoiceStore((s) => s.lastScreenShareSourceId);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
 
@@ -127,6 +140,12 @@ export function ScreenShareSetup() {
   const stagedRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const stagingRef = useRef(false);
+  const startingRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const stagedSourceIdRef = useRef<string | null>(null);
+  const captureQueue = useRef(new CaptureQueue());
 
   // Older-desktop prompted flow bookkeeping. The ref is the source of truth for
   // synchronous decisions inside callbacks; the state mirror is what render reads.
@@ -169,9 +188,13 @@ export function ScreenShareSetup() {
   }, []);
 
   const replaceStaged = useCallback((next: MediaStream | null) => {
-    if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
+    const previous = stagedRef.current;
     stagedRef.current = next;
+    if (!next) stagedSourceIdRef.current = null;
     setStaged(next);
+    // Publish the new ref before stopping the previous track. Its `ended`
+    // event can fire synchronously and must not clear the newly staged source.
+    if (previous && previous !== next) stopStagedCapture(previous);
   }, []);
 
   /**
@@ -180,14 +203,21 @@ export function ScreenShareSetup() {
    * (the "Choose screen" button) takes a fresh one.
    */
   const stage = useCallback(async (claimed?: number, sourceId?: string | null) => {
+    if (startingRef.current) return;
     const generation = claimed ?? ++stageGenerationRef.current;
     setError(null);
     setStaging(true);
-    const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
+    stagingRef.current = true;
+    const captureConfig = configRef.current;
+    const shareAudioAtStage = captureConfig.shareAudio;
     // System picker: no tile carries the audio preference, so send it ahead of the request
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
-      const stream = await stageScreenCapture(sourceId, audioTargetId);
+      const capture = () => stageScreenCapture(sourceId, audioTargetId, captureConfig);
+      const stream = api && pickerMode === 'app'
+        ? await captureQueue.current.run(() => generation === stageGenerationRef.current, capture, stopStagedCapture)
+        : await capture();
+      if (!stream) return;
       if (generation !== stageGenerationRef.current) {
         // Superseded while the picker was open: never adopt it, and never
         // leave the OS capturing for a stream nothing will publish.
@@ -195,6 +225,7 @@ export function ScreenShareSetup() {
         return;
       }
       replaceStaged(stream);
+      stagedSourceIdRef.current = sourceId ?? selectedIdRef.current;
       // What the capture actually carries, not what was asked for: a share whose
       // system audio could not be captured is staged silent (with a warning),
       // and the ready bar must not claim otherwise.
@@ -202,7 +233,7 @@ export function ScreenShareSetup() {
     } catch (err) {
       if (generation !== stageGenerationRef.current) return;
       replaceStaged(null);
-      setSelectedId(null);
+      selectedIdRef.current = null; setSelectedId(null);
       setError(errorKey(err));
     } finally {
       // Only the newest attempt owns these flags; an older one finishing later
@@ -210,18 +241,20 @@ export function ScreenShareSetup() {
       if (generation === stageGenerationRef.current) {
         markPromptInFlight(false);
         setStaging(false);
+        stagingRef.current = false;
       }
     }
-  }, [api, audioTargetId, replaceStaged, markPromptInFlight]);
+  }, [api, audioTargetId, replaceStaged, markPromptInFlight, pickerMode]);
 
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
   const stageSource = useCallback(async (sourceId: string) => {
-    if (!api) return;
-    const shareAudio = useVoiceStore.getState().screenShareConfig.shareAudio;
+    if (!api || startingRef.current) return;
+    const shareAudio = configRef.current.shareAudio;
     if (promptInFlightRef.current) {
       // Only the first click answers the request; see promptAnsweredRef.
       if (promptAnsweredRef.current) return;
       promptAnsweredRef.current = true;
+      selectedIdRef.current = sourceId;
       setSelectedId(sourceId);
       // The in-flight stage() call owns the current generation and is waiting
       // on the very capture this click answers, so it must keep it. Taking a
@@ -232,6 +265,7 @@ export function ScreenShareSetup() {
       api.selectScreenSource(sourceId, shareAudio);
       return;
     }
+    selectedIdRef.current = sourceId;
     setSelectedId(sourceId);
     const generation = ++stageGenerationRef.current;
     if (!api.preselectScreenSource) {
@@ -284,6 +318,7 @@ export function ScreenShareSetup() {
       try {
         const list = await api!.getScreenSources!({ thumbnails: withThumbnails });
         if (cancelled) return;
+        if (withThumbnails && list.length > 0 && list.every(source => !source.thumbnailDataUrl)) nextWantsThumbnails = true;
         setSources((previous) => {
           const merged = mergeScreenSources(previous, list);
           return sameScreenSources(previous, merged) ? previous : merged;
@@ -328,7 +363,7 @@ export function ScreenShareSetup() {
       const pendingId = pendingPromptIdRef.current;
       if (pendingId) {
         pendingPromptIdRef.current = null;
-        api.selectScreenSource(pendingId, useVoiceStore.getState().screenShareConfig.shareAudio);
+        api.selectScreenSource(pendingId, configRef.current.shareAudio);
         return;
       }
       markPromptInFlight(true);
@@ -344,7 +379,7 @@ export function ScreenShareSetup() {
     if (api?.platform === 'linux' && systemPicker) void api.setSystemAudioTarget?.('');
     setActiveTab('screens');
     setSearch('');
-    setSelectedId(null);
+    selectedIdRef.current = null; setSelectedId(null);
     setError(null);
     setStarting(false);
     setSettingsOpen(false);
@@ -357,9 +392,10 @@ export function ScreenShareSetup() {
     replaceStaged(null);
     setStagedShareAudio(useVoiceStore.getState().screenShareConfig.shareAudio);
     setStaging(false);
+    stagingRef.current = false;
     markPromptInFlight(false);
     pendingPromptIdRef.current = null;
-  }, [isOpen, replaceStaged, markPromptInFlight, api, systemPicker]);
+  }, [isOpen, openingId, replaceStaged, markPromptInFlight, api, systemPicker]);
 
   // Stage the remembered source (or a lone screen) so the common case needs a
   // single click on Start
@@ -387,7 +423,13 @@ export function ScreenShareSetup() {
   useEffect(() => {
     const track = staged?.getVideoTracks()[0];
     if (!track) return;
-    const onEnded = () => { replaceStaged(null); setSelectedId(null); };
+    const onEnded = () => {
+      // A replaced capture may end after the next one is already staged.
+      if (stagedRef.current?.getVideoTracks()[0] !== track) return;
+      replaceStaged(null);
+      selectedIdRef.current = null;
+      setSelectedId(null);
+    };
     track.addEventListener('ended', onEnded);
     return () => track.removeEventListener('ended', onEnded);
   }, [staged, replaceStaged]);
@@ -395,8 +437,8 @@ export function ScreenShareSetup() {
   // Quality changes reach the staged track immediately (local only, no renegotiation)
   useEffect(() => {
     if (!staged) return;
-    void applyStagedCaptureConfig(staged);
-  }, [staged, config.height, config.fps, config.mode]);
+    void applyStagedCaptureConfig(staged, config);
+  }, [staged, config]);
 
   // The closed drawer is off-canvas but still in the DOM, so its buttons,
   // sliders and toggle would stay in the tab order: tabbing through the setup
@@ -415,10 +457,12 @@ export function ScreenShareSetup() {
   }, [settingsOpen, isOpen]);
 
   const handleClose = useCallback(() => {
+    if (startingRef.current) return;
     // Abandon any capture still being picked. Without this the promise resolves
     // onto a closed screen and the OS keeps capturing forever.
     stageGenerationRef.current++;
     setStaging(false);
+    stagingRef.current = false;
     if (promptInFlightRef.current && api) {
       api.selectScreenSource(null);
     }
@@ -430,8 +474,11 @@ export function ScreenShareSetup() {
 
   // Already live (started elsewhere while open): the setup no longer applies
   useEffect(() => {
-    if (isOpen && isScreenSharing && !starting) handleClose();
-  }, [isOpen, isScreenSharing, starting, handleClose]);
+    if (isOpen && (replacing ? !isScreenSharing : isScreenSharing) && !starting) handleClose();
+  }, [isOpen, isScreenSharing, starting, replacing, handleClose]);
+
+  useDialogLayer(dialogRef, { open: isOpen, document: targetDocument, label: t('voice:screenPicker.title'), dismissible: !starting,
+    onClose: () => { if (settingsOpen) setSettingsOpen(false); else handleClose(); } });
 
   // Escape closes the drawer first, then the screen; also release the capture on unmount
   useEffect(() => {
@@ -447,17 +494,25 @@ export function ScreenShareSetup() {
   useEffect(() => () => stopStagedCapture(stagedRef.current), []);
 
   const handleStart = useCallback(async () => {
+    if (startingRef.current || stagingRef.current || stagedSourceIdRef.current !== selectedIdRef.current) return;
     const stream = stagedRef.current;
     const room = getActiveRoom();
     if (!stream || !room) { setError('startFailed'); return; }
     setStarting(true);
+    startingRef.current = true;
     setError(null);
-    const ok = await publishScreenShare(room, stream, { sourceId: selectedId, pickerMode });
+    let ok = false;
+    try {
+      ok = replacing
+        ? await replaceScreenShare(room, stream, { sourceId: selectedIdRef.current, pickerMode, config: configRef.current })
+        : await publishScreenShare(room, stream, { sourceId: selectedIdRef.current, pickerMode });
+    } catch (error) { console.error('[ScreenShareSetup] Could not commit capture:', error); stopStagedCapture(stream); }
+    finally { startingRef.current = false; }
     if (!ok) {
       // publishScreenShare stopped the tracks on failure
       stagedRef.current = null;
       setStaged(null);
-      setSelectedId(null);
+      selectedIdRef.current = null; setSelectedId(null);
       setStarting(false);
       setError('startFailed');
       return;
@@ -467,13 +522,13 @@ export function ScreenShareSetup() {
     // backed out of should not be the thing that comes up next time. Only a
     // tile we enumerated has an id worth keeping — a browser or portal capture
     // has none, and stores null so a stale one cannot outlive it.
-    useVoiceStore.getState().setLastScreenShareSourceId(selectedId);
+    useVoiceStore.getState().setLastScreenShareSourceId(selectedIdRef.current);
     // Ownership moved to LiveKit: do not stop the tracks on close
     stagedRef.current = null;
     setStaged(null);
     setStarting(false);
     close();
-  }, [close, selectedId, pickerMode]);
+  }, [close, pickerMode, replacing]);
 
   const screens = useMemo(() => sources.filter((s) => s.isScreen), [sources]);
   const windows = useMemo(() => {
@@ -500,7 +555,7 @@ export function ScreenShareSetup() {
       ? t('voice:screenPicker.chooseHintSystem')
       : null;
   const stageNow = () => void stage();
-  const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
+  const stagedSource = sources.find((s) => s.id === stagedSourceIdRef.current) ?? null;
   // Only a source we picked ourselves has a name and a kind we can trust.
   const stagedName = stagedSource?.name ?? null;
   // Derived from our own enumeration, never from the track: displaySurface
@@ -512,7 +567,7 @@ export function ScreenShareSetup() {
     : t('voice:screenPicker.stageReady');
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
@@ -529,6 +584,7 @@ export function ScreenShareSetup() {
           </div>
           <button
             onClick={handleClose}
+            disabled={starting}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1 flex-shrink-0"
             aria-label={t('common:actions.close')}
           >
@@ -545,7 +601,7 @@ export function ScreenShareSetup() {
               setAudioTargetId(event.target.value);
               if (systemPicker) void api.setSystemAudioTarget?.(event.target.value);
               replaceStaged(null);
-              setSelectedId(null);
+              selectedIdRef.current = null; setSelectedId(null);
               stageGenerationRef.current++;
             }}>
               <option value="">{t('voice:screenPicker.chooseAudioApplication')}</option>
@@ -635,6 +691,7 @@ export function ScreenShareSetup() {
                           key={source.id}
                           source={source}
                           selected={selectedId === source.id}
+                          disabled={starting}
                           onClick={() => void stageSource(source.id)}
                           onDoubleClick={() => { if (stagedRef.current && selectedId === source.id) void handleStart(); }}
                         />
@@ -766,7 +823,9 @@ export function ScreenShareSetup() {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-4">
-              <StreamQualityControls />
+              <fieldset disabled={starting} className="min-w-0 border-0 p-0">
+                <StreamQualityControls config={replacing ? config : undefined} onChange={replacing ? changeDraft : undefined} />
+              </fieldset>
             </div>
           </div>
         </div>
@@ -779,7 +838,7 @@ export function ScreenShareSetup() {
               className="text-left hover:text-txt-secondary transition-colors truncate"
               title={t('voice:streamSettings.title')}
             >
-              <StreamSummary />
+              <StreamSummary config={config} />
             </button>
             {error && (
               <span className="text-[12px] text-txt-danger truncate" role="alert">
@@ -808,6 +867,7 @@ export function ScreenShareSetup() {
             <div className="w-px h-5 bg-white/10 mx-1" />
             <button
               onClick={handleClose}
+              disabled={starting}
               className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               {t('common:actions.cancel')}
@@ -857,14 +917,16 @@ function TabButton({ active, onClick, label, count }: {
   );
 }
 
-function SourceCard({ source, selected, onClick, onDoubleClick }: {
+function SourceCard({ source, selected, onClick, onDoubleClick, disabled }: {
   source: ElectronScreenSource;
   selected: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
+      disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={`group flex flex-col rounded-lg overflow-hidden transition-all text-left ring-2 ${

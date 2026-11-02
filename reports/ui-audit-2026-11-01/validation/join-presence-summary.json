@@ -1,0 +1,62 @@
+[
+  {
+    "joiner": "bob",
+    "round": 0,
+    "websocketMs": 221,
+    "livekitMs": 88,
+    "domMs": 94,
+    "presentationTwoRafMs": 99,
+    "stateToDomMs": 5,
+    "longTasks": 0
+  },
+  {
+    "joiner": "bob",
+    "round": 1,
+    "websocketMs": 166,
+    "livekitMs": 2961,
+    "domMs": 2964,
+    "presentationTwoRafMs": 2966,
+    "stateToDomMs": 3,
+    "longTasks": 0
+  },
+  {
+    "joiner": "bob",
+    "round": 2,
+    "websocketMs": 176,
+    "livekitMs": 791,
+    "domMs": 796,
+    "presentationTwoRafMs": 800,
+    "stateToDomMs": 5,
+    "longTasks": 0
+  },
+  {
+    "joiner": "alice",
+    "round": 0,
+    "websocketMs": 161,
+    "livekitMs": 90,
+    "domMs": 96,
+    "presentationTwoRafMs": 99,
+    "stateToDomMs": 6,
+    "longTasks": 0
+  },
+  {
+    "joiner": "alice",
+    "round": 1,
+    "websocketMs": 167,
+    "livekitMs": 2980,
+    "domMs": 2983,
+    "presentationTwoRafMs": 2988,
+    "stateToDomMs": 3,
+    "longTasks": 0
+  },
+  {
+    "joiner": "alice",
+    "round": 2,
+    "websocketMs": 170,
+    "livekitMs": 2889,
+    "domMs": 2892,
+    "presentationTwoRafMs": 2899,
+    "stateToDomMs": 3,
+    "longTasks": 0
+  }
+]

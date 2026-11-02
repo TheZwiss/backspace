@@ -8,6 +8,7 @@ import { acceptIncomingDmCall } from '../../utils/voiceActions';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
 import type { User } from '@backspace/shared';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 
 /**
  * Decline the call ringing in: the decline goes where the ring came from,
@@ -25,6 +26,13 @@ export function IncomingCallModal() {
   const { t } = useTranslation(['voice', 'common']);
   const incomingCall = useVoiceStore((s) => s.incomingCall);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(overlayRef, {
+    open: !!incomingCall,
+    onClose: () => {},
+    dismissible: false,
+    label: incomingCall?.callerName ?? t('voice:incomingCall.status'),
+  });
 
   // Auto-dismiss after 30 seconds
   useEffect(() => {
@@ -71,7 +79,7 @@ export function IncomingCallModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div ref={overlayRef} className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" />
 

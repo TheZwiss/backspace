@@ -116,6 +116,14 @@ function sharerIsListedAsSharing(identity = SHARER): boolean {
   return useVoiceStore.getState().participants.find((p) => p.identity === identity)?.isScreenSharing ?? false;
 }
 
+function sharerIsRepublishing(identity = SHARER): boolean {
+  return useVoiceStore.getState().participants.find((p) => p.identity === identity)?.isScreenShareRepublishing ?? false;
+}
+
+function sharerRepublishRevision(identity = SHARER): number {
+  return useVoiceStore.getState().participants.find((p) => p.identity === identity)?.isScreenShareRepublishRevision ?? 0;
+}
+
 /** Every value `isScreenSharing` took for the sharer across store updates. */
 function recordSharingFlag(identity = SHARER): boolean[] {
   const seen: boolean[] = [];
@@ -246,6 +254,25 @@ describe('a viewer watching a share that is republished', () => {
 
     expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(false);
   });
+
+  it('clears an expired announcement flag without ending the still-published share', async () => {
+    const room = await connectedRoom();
+    const sharer = makeSharer(room);
+    publish(room, sharer, 'TR_1');
+    useVoiceStore.getState().watchStream('bob');
+    vi.useFakeTimers();
+
+    announceRepublish(room, sharer);
+    const revision = sharerRepublishRevision();
+    expect(revision).toBeGreaterThan(0);
+    expect(sharerIsRepublishing()).toBe(true);
+    act(() => { vi.advanceTimersByTime(STREAM_REPUBLISH_WINDOW_MS); });
+
+    expect(sharerIsRepublishing()).toBe(false);
+    expect(sharerRepublishRevision()).toBe(0);
+    expect(sharerIsListedAsSharing()).toBe(true);
+    expect(useVoiceStore.getState().watchingStreams.has('bob')).toBe(true);
+  });
 });
 
 describe('a second republish announced before the first one\'s new track arrives', () => {
@@ -260,8 +287,11 @@ describe('a second republish announced before the first one\'s new track arrives
     const seen = recordSharingFlag();
 
     announceRepublish(room, sharer);
+    const firstRevision = sharerRepublishRevision();
     unpublish(room, sharer, first);
     announceRepublish(room, sharer);
+    const secondRevision = sharerRepublishRevision();
+    expect(secondRevision).toBeGreaterThan(firstRevision);
     const second = publish(room, sharer, 'TR_2');
 
     expect(second.setSubscribed).toHaveBeenCalledWith(true);
@@ -498,9 +528,11 @@ describe('the sharer\'s own side across a republish', () => {
   }
 
   function videoCapture(withAudio = false): MediaStream {
+    const setCursorMode = vi.fn();
     const track = {
       kind: 'video', id: 'capture', readyState: 'live', contentHint: '',
       stop: vi.fn(), getSettings: () => ({}), applyConstraints: vi.fn(async () => {}),
+      setCursorMode,
     } as unknown as MediaStreamTrack;
     const audio = { kind: 'audio', id: 'loopback', readyState: 'live', stop: vi.fn() } as unknown as MediaStreamTrack;
     return new MediaStream(withAudio ? [track, audio] : [track]);

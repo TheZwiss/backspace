@@ -1,0 +1,94 @@
+{
+  "height": 500,
+  "panelHeight": 451,
+  "buttons": [
+    {
+      "text": "540p",
+      "top": -80.5,
+      "bottom": -49,
+      "hit": false
+    },
+    {
+      "text": "720p",
+      "top": -80.5,
+      "bottom": -49,
+      "hit": false
+    },
+    {
+      "text": "1080p",
+      "top": -80.5,
+      "bottom": -49,
+      "hit": false
+    },
+    {
+      "text": "30",
+      "top": -14.5,
+      "bottom": 17,
+      "hit": false
+    },
+    {
+      "text": "45",
+      "top": -14.5,
+      "bottom": 17,
+      "hit": false
+    },
+    {
+      "text": "60",
+      "top": -14.5,
+      "bottom": 17,
+      "hit": false
+    },
+    {
+      "text": "Jogos",
+      "top": 51.5,
+      "bottom": 83,
+      "hit": true
+    },
+    {
+      "text": "Texto",
+      "top": 51.5,
+      "bottom": 83,
+      "hit": true
+    },
+    {
+      "text": "VP9",
+      "top": 117.5,
+      "bottom": 149,
+      "hit": true
+    },
+    {
+      "text": "H264",
+      "top": 117.5,
+      "bottom": 149,
+      "hit": true
+    },
+    {
+      "text": "Automática",
+      "top": 183.5,
+      "bottom": 215,
+      "hit": true
+    },
+    {
+      "text": "Personalizada",
+      "top": 183.5,
+      "bottom": 215,
+      "hit": true
+    },
+    {
+      "text": "",
+      "top": 335.5,
+      "bottom": 359.5,
+      "hit": true
+    },
+    {
+      "text": "Parar de compartilhar",
+      "top": 410.5,
+      "bottom": 446,
+      "hit": true
+    }
+  ],
+  "scroll": {
+    "client": 325,
+    "total": 487
+  }
+}

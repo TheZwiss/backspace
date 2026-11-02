@@ -173,7 +173,26 @@ interface BackspaceElectronAPI {
     foreground: boolean;
     /** A D3D app holds the display in exclusive fullscreen; frames may stall. */
     exclusive: boolean;
+    /** Executable basename owning the window, when the helper can read it. */
+    processName?: string | null;
+    /** Whether the owning executable matches a known or manually bound game. */
+    isGame?: boolean;
   } | null>;
+  /** Optional Windows DXGI display capture; returns null when unavailable or for window sources. */
+  startNativeScreenCapture?: (options: {
+    sourceId: string;
+    displaySourceId?: string;
+    frameRate: number;
+    width?: number;
+    height?: number;
+    bitrateKbps?: number;
+    cursorMode?: 'auto' | 'show' | 'hide';
+    encodingDevice?: 'gpu' | 'cpu';
+    crop?: { x: number; y: number; width: number; height: number };
+  }) => Promise<{ id: string; url: string } | null>;
+  stopNativeScreenCapture?: (id: string) => Promise<void>;
+  holdScreenCaptureActivity?: () => Promise<void>;
+  releaseScreenCaptureActivity?: () => Promise<void>;
   /** Follow a shared window's rectangle while it is captured (one helper process). */
   startWindowGeometry?: (sourceId: string) => Promise<void>;
   stopWindowGeometry?: (sourceId?: string) => Promise<void>;

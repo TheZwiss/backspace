@@ -1,0 +1,144 @@
+{
+  "before": [
+    {
+      "leaver": "bob",
+      "round": 0,
+      "voiceStoreMs": 1,
+      "participantMs": 238,
+      "domMs": 247,
+      "twoRafMs": 250,
+      "sdkMs": 238,
+      "settled": null
+    },
+    {
+      "leaver": "bob",
+      "round": 1,
+      "voiceStoreMs": 1,
+      "participantMs": 2323,
+      "domMs": 2332,
+      "twoRafMs": 2334,
+      "sdkMs": 2323,
+      "settled": null
+    },
+    {
+      "leaver": "bob",
+      "round": 2,
+      "voiceStoreMs": 0,
+      "participantMs": 2356,
+      "domMs": 2366,
+      "twoRafMs": 2368,
+      "sdkMs": 2356,
+      "settled": null
+    },
+    {
+      "leaver": "alice",
+      "round": 0,
+      "voiceStoreMs": 1,
+      "participantMs": 1569,
+      "domMs": 1576,
+      "twoRafMs": 1578,
+      "sdkMs": 1569,
+      "settled": null
+    },
+    {
+      "leaver": "alice",
+      "round": 1,
+      "voiceStoreMs": 1,
+      "participantMs": 2354,
+      "domMs": 2363,
+      "twoRafMs": 2365,
+      "sdkMs": 2354,
+      "settled": null
+    },
+    {
+      "leaver": "alice",
+      "round": 2,
+      "voiceStoreMs": 1,
+      "participantMs": 2534,
+      "domMs": 2542,
+      "twoRafMs": 2547,
+      "sdkMs": 2534,
+      "settled": null
+    }
+  ],
+  "after": [
+    {
+      "leaver": "bob",
+      "round": 0,
+      "voiceStoreMs": 1,
+      "participantMs": 9,
+      "domMs": 12,
+      "twoRafMs": 16,
+      "sdkMs": 2012,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    },
+    {
+      "leaver": "bob",
+      "round": 1,
+      "voiceStoreMs": 1,
+      "participantMs": 8,
+      "domMs": 10,
+      "twoRafMs": 15,
+      "sdkMs": 474,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    },
+    {
+      "leaver": "bob",
+      "round": 2,
+      "voiceStoreMs": 2,
+      "participantMs": 9,
+      "domMs": 11,
+      "twoRafMs": 16,
+      "sdkMs": 2395,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    },
+    {
+      "leaver": "alice",
+      "round": 0,
+      "voiceStoreMs": 1,
+      "participantMs": 12,
+      "domMs": 14,
+      "twoRafMs": 17,
+      "sdkMs": 1091,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    },
+    {
+      "leaver": "alice",
+      "round": 1,
+      "voiceStoreMs": 1,
+      "participantMs": 10,
+      "domMs": 13,
+      "twoRafMs": 15,
+      "sdkMs": 2351,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    },
+    {
+      "leaver": "alice",
+      "round": 2,
+      "voiceStoreMs": 1,
+      "participantMs": 12,
+      "domMs": 15,
+      "twoRafMs": 19,
+      "sdkMs": 2346,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      }
+    }
+  ]
+}

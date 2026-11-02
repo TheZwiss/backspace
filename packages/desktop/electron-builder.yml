@@ -66,6 +66,10 @@ win:
       to: process-audio/${arch}/
       filter:
         - "*.exe"
+    - from: native/dxgi-output-probe/bin/${arch}/
+      to: dxgi-output-probe/${arch}/
+      filter:
+        - "*.exe"
   icon: ./build/icon.ico
   target:
     - nsis
