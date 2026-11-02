@@ -704,7 +704,12 @@ export interface DmCallUndeliverableFailure {
 }
 
 // Client → Server Events
+export const MSN_WINK_EFFECTS = ['msn_bouncy_ball', 'msn_bow', 'msn_dancing_pig', 'msn_eyeball', 'msn_frog', 'msn_guitar_smash', 'msn_heart', 'msn_kiss', 'msn_lipstick_girl', 'msn_love_letter', 'msn_notes', 'msn_silly_face', 'msn_stars', 'msn_water_balloon', 'msn_fart_guy'] as const;
+export type MsnWinkEffect = typeof MSN_WINK_EFFECTS[number];
+export type NudgeEffect = 'shake' | 'wave' | 'jelly' | 'knock' | 'confetti' | 'pulse' | MsnWinkEffect;
+
 export type ClientEvent =
+  | { type: 'dm_nudge'; dmChannelId: string; effect?: NudgeEffect }
   | { type: 'auth'; token: string; client?: ClientKind }
   | { type: 'message_create'; channelId: string; content: string; replyToId?: string }
   | { type: 'message_edit'; messageId: string; content: string }
@@ -748,6 +753,7 @@ export interface PresenceIdentity {
 
 // Server → Client Events
 export type ServerEvent =
+  | { type: 'dm_nudge'; dmChannelId: string; userId: string; username: string; avatar?: string | null; displayName?: string | null; effect?: NudgeEffect }
   | { type: 'channel_poke'; message: MessageWithUser }
   | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; supportsPoke?: boolean; unreadCounts?: Record<string, number>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; userActivityIdentities?: Record<string, PresenceIdentity>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'channel_unread_count'; counts: Record<string, number> }
@@ -1148,7 +1154,10 @@ export interface GifResult {
 
 // ─── Instance Settings Types ────────────────────────────────────────────────
 
+export type PeopleDiscoveryMode = 'search' | 'shared-spaces' | 'all';
+
 export interface InstanceAdminSettings {
+  peopleDiscoveryMode?: PeopleDiscoveryMode;
   instanceName: string;
   registrationOpen: boolean;
   federatedRegistrationOpen: boolean;

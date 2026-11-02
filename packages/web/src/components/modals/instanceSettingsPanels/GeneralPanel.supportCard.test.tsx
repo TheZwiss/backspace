@@ -101,6 +101,16 @@ describe('GeneralPanel Support card switch', () => {
     expect(within(group).queryByRole('switch', { name: SUPPORT })).not.toBeInTheDocument();
   });
 
+  it('defaults people discovery to direct search and saves the selected visibility', async () => {
+    const update = seed({ supportCardEnabled: true });
+    renderPanel();
+    const select = screen.getByRole('combobox', { name: 'People discovery' });
+    expect(select).toHaveValue('search');
+    await userEvent.selectOptions(select, 'shared-spaces');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ peopleDiscoveryMode: 'shared-spaces' }));
+  });
+
   it('reflects the loaded value', () => {
     seed({ supportCardEnabled: true });
     const { unmount } = renderPanel();
@@ -152,6 +162,7 @@ describe('GeneralPanel Support card switch', () => {
     await userEvent.click(supportSwitch());
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(update).toHaveBeenCalledWith({
+      peopleDiscoveryMode: 'search',
       instanceName: 'Workbench',
       discoveryEnabled: true,
       directoryEnabled: false,

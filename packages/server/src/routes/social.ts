@@ -941,6 +941,14 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       )!);
     }
 
+    if (!q) {
+      const settings = db.select({ mode: schema.instanceSettings.peopleDiscoveryMode }).from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+      if (!settings || settings.mode === 'search') return reply.code(200).send({ users: [], total: 0 });
+      if (settings.mode !== 'all') {
+        conditions.push(sql`EXISTS (SELECT 1 FROM ${schema.spaceMembers} candidate JOIN ${schema.spaceMembers} viewer ON candidate.space_id = viewer.space_id WHERE candidate.user_id = ${schema.users.id} AND viewer.user_id = ${myId})`);
+      }
+    }
+
     // Get total count
     const countResult = db.select({ count: sql<number>`count(*)` })
       .from(schema.users)

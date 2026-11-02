@@ -88,6 +88,9 @@ interface LocalTextVoiceStatus {
 }
 
 interface BackspaceElectronAPI {
+  getNudgeContext?: (detectGames?: boolean) => Promise<import('../utils/nudgePolicy').NudgeContext | null>;
+  getNudgeMedia?: (effect: string) => Promise<{ video: string; durationMs: number } | null>;
+  playNudge?: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: import('@backspace/shared').NudgeEffect; mode?: 'full' | 'reduced' | 'notification'; displayIds?: number[]; sound?: boolean; volume?: number }) => void;
   getTextVoiceStatus?: () => Promise<LocalTextVoiceStatus>;
   prepareTextVoice?: (device: 'auto' | 'cpu' | 'gpu') => Promise<LocalTextVoiceStatus>;
   synthesizeTextVoice?: (text: string, voice: string, speed: number) => Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }>;

@@ -2,6 +2,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('backspace', {
+  getNudgeContext: (detectGames = true) => ipcRenderer.invoke('nudge-context', detectGames),
+  getNudgeMedia: (effect: string) => ipcRenderer.invoke('nudge-media', effect),
+  playNudge: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: string; mode?: string; displayIds?: number[]; sound?: boolean; volume?: number }) => ipcRenderer.send('play-nudge', sender, avatar, channelId, options),
   getTextVoiceStatus: () => ipcRenderer.invoke('local-text-voice-status'),
   prepareTextVoice: (device: 'auto' | 'cpu' | 'gpu') => ipcRenderer.invoke('local-text-voice-prepare', device),
   synthesizeTextVoice: (text: string, voice: string, speed: number) => ipcRenderer.invoke('local-text-voice-speech', { text, voice, speed }),

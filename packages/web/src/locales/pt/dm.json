@@ -1,4 +1,10 @@
 {
+  "friendship": {
+    "title": "Amizade",
+    "none": "Vocês ainda não são amigos.",
+    "incoming": "Esta pessoa enviou uma solicitação de amizade. Deseja aceitar?",
+    "outgoing": "Solicitação de amizade enviada. Aguardando resposta."
+  },
   "names": {
     "group": "Grupo",
     "directMessage": "Mensagem direta",
@@ -17,6 +23,7 @@
     "withSender": "{{name}}: {{text}}"
   },
   "system": {
+    "nudge": "{{actor}} chamou a atenção com {{effect}}",
     "spaceInviteNamed": "📨 Enviou convite para {{spaceName}}",
     "memberAdded": "{{actor}} adicionou {{target}}",
     "memberAddedToGroup": "{{actor}} adicionou {{target}} ao grupo",

@@ -1,4 +1,10 @@
 {
+  "friendship": {
+    "title": "Дружба",
+    "none": "Вы пока не друзья.",
+    "incoming": "Этот пользователь отправил вам запрос в друзья. Принять?",
+    "outgoing": "Запрос в друзья отправлен. Ожидание ответа."
+  },
   "names": {
     "group": "Группа",
     "directMessage": "Личные сообщения",
@@ -18,6 +24,7 @@
     "withSender": "{{name}}: {{text}}"
   },
   "system": {
+    "nudge": "{{actor}} привлёк внимание с помощью {{effect}}",
     "spaceInviteNamed": "📨 Приглашение в {{spaceName}}",
     "memberAdded": "{{actor}} добавляет в группу: {{target}}",
     "memberAddedToGroup": "{{actor}} добавляет в группу: {{target}}",

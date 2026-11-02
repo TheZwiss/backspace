@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import {
   AccountPanel,
   AppearancePanel,
+  NotificationsPanel,
   VoicePanel,
   ConnectionsPanel,
   PrivacyPanel,
@@ -26,6 +27,7 @@ interface MobileSettingsScreenProps {
 type PanelTitleKey =
   | 'settings:nav.tabs.account'
   | 'settings:nav.tabs.appearance'
+  | 'settings:nav.tabs.notifications'
   | 'settings:nav.tabs.voice'
   | 'settings:nav.tabs.privacy'
   | 'settings:nav.tabs.connections'
@@ -46,6 +48,7 @@ const panelConfig: Record<
 > = {
   account: { titleKey: 'settings:nav.tabs.account', body: () => <AccountPanel /> },
   appearance: { titleKey: 'settings:nav.tabs.appearance', body: () => <AppearancePanel /> },
+  notifications: { titleKey: 'settings:nav.tabs.notifications', body: () => <NotificationsPanel /> },
   voice: { titleKey: 'settings:nav.tabs.voice', body: () => <VoicePanel /> },
   privacy: { titleKey: 'settings:nav.tabs.privacy', body: () => <PrivacyPanel /> },
   connections: { titleKey: 'settings:nav.tabs.connections', body: () => <ConnectionsPanel /> },
@@ -58,6 +61,7 @@ const panelConfig: Record<
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
+  notifications: <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>,
   account: (
     <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -148,6 +152,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   const sections = [
     { id: 'account', label: t('settings:nav.tabs.account') },
     { id: 'appearance', label: t('settings:nav.tabs.appearance') },
+    { id: 'notifications', label: t('settings:nav.tabs.notifications') },
     { id: 'voice', label: t('settings:nav.tabs.voice') },
     { id: 'privacy', label: t('settings:nav.tabs.privacy') },
     { id: 'connections', label: t('settings:nav.tabs.connections') },

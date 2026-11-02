@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "People discovery",
+      "description": "Choose who appears before a search. Direct search and adding people from a space remain available.",
+      "search": "Direct search only (default)",
+      "shared": "People from shared spaces",
+      "all": "Everyone on this instance"
+    },
     "title": "General",
     "description": "Configure your Backspace instance. These settings affect all users.",
     "instanceName": {

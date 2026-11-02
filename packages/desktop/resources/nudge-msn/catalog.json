@@ -1,0 +1,137 @@
+{
+  "msn_bouncy_ball": {
+    "file": "bouncy_ball.webm",
+    "durationMs": 7250,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 87,
+    "fps": 12.0
+  },
+  "msn_bow": {
+    "file": "bow.webm",
+    "durationMs": 11333,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 136,
+    "fps": 12.0
+  },
+  "msn_dancing_pig": {
+    "file": "dancing_pig.webm",
+    "durationMs": 11250,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 135,
+    "fps": 12.0
+  },
+  "msn_eyeball": {
+    "file": "eyeball.webm",
+    "durationMs": 5667,
+    "width": 550,
+    "height": 450,
+    "hasAudio": true,
+    "frames": 119,
+    "fps": 21.0
+  },
+  "msn_frog": {
+    "file": "frog.webm",
+    "durationMs": 9750,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 117,
+    "fps": 12.0
+  },
+  "msn_guitar_smash": {
+    "file": "guitar_smash.webm",
+    "durationMs": 6750,
+    "width": 150,
+    "height": 126,
+    "hasAudio": true,
+    "frames": 81,
+    "fps": 12.0
+  },
+  "msn_heart": {
+    "file": "heart.webm",
+    "durationMs": 6188,
+    "width": 126,
+    "height": 118,
+    "hasAudio": true,
+    "frames": 99,
+    "fps": 16.0
+  },
+  "msn_kiss": {
+    "file": "kiss.webm",
+    "durationMs": 6750,
+    "width": 160,
+    "height": 120,
+    "hasAudio": true,
+    "frames": 81,
+    "fps": 12.0
+  },
+  "msn_lipstick_girl": {
+    "file": "lipstick_girl.webm",
+    "durationMs": 9167,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 110,
+    "fps": 12.0
+  },
+  "msn_love_letter": {
+    "file": "love_letter.webm",
+    "durationMs": 8000,
+    "width": 190,
+    "height": 400,
+    "hasAudio": true,
+    "frames": 200,
+    "fps": 25.0
+  },
+  "msn_notes": {
+    "file": "notes.webm",
+    "durationMs": 8667,
+    "width": 400,
+    "height": 350,
+    "hasAudio": true,
+    "frames": 208,
+    "fps": 24.0
+  },
+  "msn_silly_face": {
+    "file": "silly_face.webm",
+    "durationMs": 7722,
+    "width": 226,
+    "height": 400,
+    "hasAudio": true,
+    "frames": 139,
+    "fps": 18.0
+  },
+  "msn_stars": {
+    "file": "stars.webm",
+    "durationMs": 6500,
+    "width": 450,
+    "height": 426,
+    "hasAudio": true,
+    "frames": 78,
+    "fps": 12.0
+  },
+  "msn_water_balloon": {
+    "file": "water_balloon.webm",
+    "durationMs": 7667,
+    "width": 640,
+    "height": 480,
+    "hasAudio": true,
+    "frames": 92,
+    "fps": 12.0
+  },
+  "msn_fart_guy": {
+    "file": "fart_guy.webm",
+    "durationMs": 8688,
+    "width": 336,
+    "height": 320,
+    "hasAudio": true,
+    "frames": 139,
+    "fps": 16.0
+  }
+}

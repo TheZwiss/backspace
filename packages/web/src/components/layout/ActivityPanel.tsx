@@ -1,3 +1,7 @@
+import { FriendsVoiceCard } from './FriendsVoiceCard';
+import { friendshipMenuItems, runMemberAction, sendMemberMessage } from './memberMenu/memberSocialActions';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { useNavigate } from 'react-router-dom';
 import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
@@ -9,6 +13,9 @@ import type { Activity, User } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { useVoiceStore } from '../../stores/voiceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { groupFriendsInVoice } from '../../utils/friendsInVoice';
 
 function ActivityFriendRow({
   friend,
@@ -64,12 +71,17 @@ function ActivityFriendRow({
 }
 
 export function ActivityPanel() {
-  const { t } = useTranslation(['social', 'common']);
+  const navigate = useNavigate();
+  const { t } = useTranslation(['social', 'common', 'spaces']);
   const friends = useSocialStore((s) => s.friends);
   const loadFriends = useSocialStore((s) => s.loadFriends);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
+  const voiceUsers = useVoiceStore((s) => s.voiceUsers);
+  const channelIndex = useSpaceStore((s) => s.spaceChannelIndex);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const voiceGroups = useMemo(() => groupFriendsInVoice(friends, voiceUsers, channelIndex, spaces), [friends, voiceUsers, channelIndex, spaces]);
 
   useEffect(() => {
     loadFriends();
@@ -148,6 +160,24 @@ export function ActivityPanel() {
     <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
+        {voiceGroups.length > 0 && <section className="mb-4" aria-label={t('social:activity.friendsInVoice')}>
+          <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-2">{t('social:activity.friendsInVoice')}</h3>
+          {voiceGroups.map(group => <FriendsVoiceCard key={group.channelId} group={group}>
+              {group.friends.slice(0, 5).map(friend => <span key={friend.id} title={friend.displayName ?? friend.username} aria-label={friend.displayName ?? friend.username} onContextMenu={e => {
+                e.preventDefault(); e.stopPropagation();
+                const anchor = e.currentTarget.getBoundingClientRect();
+                const user = { ...friend, isAdmin: false, replicatedInstances: [] };
+                useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, [
+                  { type: 'action', key: 'profile', label: t('spaces:members.menu.profile'), onClick: () => openUserProfile(user, friend._instanceOrigin, anchor, 'left') },
+                  { type: 'action', key: 'message', label: t('social:profile.sendMessage'), onClick: () => { void runMemberAction(() => sendMemberMessage(user, friend._instanceOrigin, navigate)); } },
+                  ...friendshipMenuItems(user, friend._instanceOrigin),
+                ]);
+              }} className="shrink-0 rounded-full hover:opacity-80">
+                <Avatar src={friend.avatar} name={friend.displayName ?? friend.username} size={28} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
+              </span>)}
+              {group.friends.length > 5 && <span className="shrink-0 text-[10px] font-semibold text-txt-tertiary" title={t('social:activity.moreFriends', { n: group.friends.length - 5 })} aria-label={t('social:activity.moreFriends', { n: group.friends.length - 5 })}>+{group.friends.length - 5}</span>}
+          </FriendsVoiceCard>)}
+        </section>}
 
         {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
           <div className="text-center py-8">

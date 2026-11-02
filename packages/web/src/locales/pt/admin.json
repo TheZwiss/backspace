@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "Descoberta de pessoas",
+      "description": "Escolha quem aparece antes de uma busca. A busca direta e a opção de adicionar pelos servidores continuam disponíveis.",
+      "search": "Somente busca direta (padrão)",
+      "shared": "Pessoas dos servidores em comum",
+      "all": "Todas as pessoas da instância"
+    },
     "title": "Geral",
     "description": "Configure sua instância do Backspace. Estas configurações afetam todos os usuários.",
     "instanceName": {

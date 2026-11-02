@@ -1,4 +1,8 @@
 import { WindowsProcessAudio } from './windowsProcessAudio';
+import { playNudge } from './nudge';
+import { getMsnWinkAsset, isMsnWinkEffect } from './msnWinkCatalog';
+import { getMsnKnockVideo } from './msnKnockAsset';
+import { detectNudgeGames, hasNudgeGameActivity } from './nudgeGameContext';
 import { LocalTextVoice, type TextVoiceDevice } from './textVoice';
 import {
   app,
@@ -917,6 +921,39 @@ function registerIpcHandlers(): void {
     return localTextVoice.speech(data);
   });
   ipcMain.handle('local-text-voice-release', (event) => { if (event.sender === mainWindow?.webContents) localTextVoice.release(); });
+  ipcMain.handle('nudge-context', async (event, detectGames: unknown) => {
+    if (event.sender !== mainWindow?.webContents || !mainWindow) return null;
+    const primary = screen.getPrimaryDisplay().id;
+    const appBounds = mainWindow.getBounds();
+    const games = detectGames === true ? await detectNudgeGames({ query: queryWindowGeometry,
+      isGame: isGameProcess, knownGameRunning: hasNudgeGameActivity(getAllCurrentActivities()), physicalBounds: displayPhysicalBounds })
+      : { gameRunning: false, foregroundGame: false, gameDisplayIds: [], gameDetectionUncertain: false };
+    return { ...games, focused: mainWindow?.isFocused() ?? false, minimized: mainWindow?.isMinimized() ?? true,
+      displays: screen.getAllDisplays().map(d => ({ id: d.id, label: d.label || `Monitor ${d.id}`, primary: d.id === primary,
+        app: appBounds.x < d.bounds.x + d.bounds.width && appBounds.x + appBounds.width > d.bounds.x
+          && appBounds.y < d.bounds.y + d.bounds.height && appBounds.y + appBounds.height > d.bounds.y })) };
+  });
+  ipcMain.handle('nudge-media', (event, effect: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return null;
+    if (effect === 'knock') return { video: getMsnKnockVideo(), durationMs: 2417 };
+    if (isMsnWinkEffect(effect)) return getMsnWinkAsset(effect);
+    return null;
+  });
+  ipcMain.on('play-nudge', (event, sender: unknown, avatar: unknown, channelId: unknown, options?: { effect?: unknown; mode?: unknown; displayIds?: unknown; sound?: unknown; volume?: unknown }) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    const openConversation = () => {
+      if (!mainWindow || mainWindow.isDestroyed() || typeof channelId !== 'string' || !/^\d{1,20}$/.test(channelId)) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('open-internal-route', `/channels/@me/${channelId}`);
+    };
+    const effect = typeof options?.effect === 'string' && (['shake', 'wave', 'jelly', 'knock', 'confetti', 'pulse'].includes(options.effect) || isMsnWinkEffect(options.effect)) ? options.effect as import('./nudgeEffects').NudgeEffect : 'shake';
+    const mode = typeof options?.mode === 'string' && ['full', 'reduced', 'notification'].includes(options.mode) ? options.mode : 'full';
+    const displayIds = Array.isArray(options?.displayIds) ? options.displayIds.filter((id): id is number => typeof id === 'number' && Number.isFinite(id)).slice(0, 32) : undefined;
+    void playNudge(typeof sender === 'string' ? sender : undefined, typeof avatar === 'string' ? avatar : undefined, openConversation, effect, mode,
+      { displayIds, sound: options?.sound !== false, volume: typeof options?.volume === 'number' && Number.isFinite(options.volume) ? Math.max(0, Math.min(1, options.volume)) : .6 }).catch(error => console.warn('[Nudge]', error));
+  });
   ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const sender = event.sender;

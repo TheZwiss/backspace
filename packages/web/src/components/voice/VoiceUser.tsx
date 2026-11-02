@@ -1,3 +1,4 @@
+import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
 import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -79,7 +80,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       // Build moderation items
       const modItems = channelId ? buildVoiceModMenuItems(targetUserId, channelId) : [];
 
-      const items: ContextMenuItem[] = [...modItems];
+      const items: ContextMenuItem[] = [...modItems, ...(user ? friendshipMenuItems(user, userOrigin) : [])];
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -140,7 +141,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
+    [user, userOrigin, isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
   );
 
   return (
@@ -161,7 +162,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full ${large ? 'object-contain bg-black' : 'object-cover'}`}
+          className="w-full h-full object-contain bg-black"
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">

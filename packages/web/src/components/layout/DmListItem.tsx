@@ -1,3 +1,4 @@
+import { friendshipMenuItems } from './memberMenu/memberSocialActions';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -84,6 +85,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
     const rect = event.currentTarget.getBoundingClientRect();
     useContextMenuStore.getState().open({ x: event.clientX, y: event.clientY }, [
       { key: 'profile', type: 'action', label: t('dm:memberRow.viewProfile'), onClick: () => useUIStore.getState().openUserProfile(firstOther, viewer.origin, rect, 'right') },
+      ...friendshipMenuItems(firstOther, viewer.origin),
       { key: 'close-dm', type: 'action', label: t('dm:list.close'), onClick: () => onClose(dm.id) },
     ]);
   };

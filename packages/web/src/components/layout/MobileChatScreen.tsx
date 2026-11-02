@@ -1,3 +1,4 @@
+import { DmFriendshipBanner } from '../chat/DmFriendshipBanner';
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -178,6 +179,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
         )}
       </header>
 
+      {isDm && !isGroup && rawMainOther && <DmFriendshipBanner key={rawMainOther.id} user={canonicalMainOther} origin={viewer.origin} />}
       {/* Messages + floating composer.
           Mirrors the desktop pattern in `MainContent.tsx`: a single relative
           flex-1 region holds both `<MessageList>` (filling the area) and

@@ -19,6 +19,7 @@ import { applyIncomingDmMessage, applyIncomingDmChannel } from '../utils/dmMessa
 import { ownStatusReport, statusToAssertOnRemote } from '../utils/selfStatus';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
+import { notifyNudge } from '../utils/nudgeNotification';
 import { describeErrorCode } from '../i18n/errors';
 import { useActivityStore } from '../stores/activityStore';
 import { presenceSubjectOf, readyActivityEntries, readyRowIndex } from '../utils/presenceSubject';
@@ -1039,6 +1040,11 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       break;
     }
 
+    case 'dm_nudge': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
+      void notifyNudge(event.displayName || event.username, event.avatar, origin, event.dmChannelId, event.effect);
+      break;
+    }
     case 'dm_typing': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
       let dmTypingUsername = event.username as string;

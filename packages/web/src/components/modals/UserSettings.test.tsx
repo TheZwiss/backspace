@@ -103,6 +103,7 @@ vi.mock('../../api/client', () => ({
 // whichever of the two Desktop panels the wiring picks.
 vi.mock('./settingsPanels/AccountPanel', () => ({ AccountPanel: () => <p>AccountPanel stub</p> }));
 vi.mock('./settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => <p>AppearancePanel stub</p> }));
+vi.mock('./settingsPanels/NotificationsPanel', () => ({ NotificationsPanel: () => <p>NotificationsPanel stub</p> }));
 vi.mock('./settingsPanels/VoicePanel', () => ({ VoicePanel: () => <p>VoicePanel stub</p> }));
 vi.mock('./settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => <p>PrivacyPanel stub</p> }));
 vi.mock('./settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => <p>ConnectionsPanel stub</p> }));
@@ -202,6 +203,7 @@ describe('UserSettingsModal deep links (#330)', () => {
 
   it.each([
     ['appearance', 'AppearancePanel stub'],
+    ['notifications', 'NotificationsPanel stub'],
     ['voice', 'VoicePanel stub'],
     ['keybinds', 'KeybindsPanel stub'],
   ])('opens on the %s tab a caller names', async (tab, marker) => {

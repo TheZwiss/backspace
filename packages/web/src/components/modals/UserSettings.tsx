@@ -10,6 +10,7 @@ import { useAuthStore } from '../../stores/authStore';
 import {
   AccountPanel,
   AppearancePanel,
+  NotificationsPanel,
   VoicePanel,
   PrivacyPanel,
   StickerLibraryPanel,
@@ -34,6 +35,7 @@ import { HiButton } from '../telemetry/answers/HiButton';
 const USER_SETTINGS_TABS = [
   { id: 'account', group: 'user', label: 'settings:nav.tabs.account', icon: 'account' },
   { id: 'appearance', group: 'user', label: 'settings:nav.tabs.appearance', icon: 'appearance' },
+  { id: 'notifications', group: 'user', label: 'settings:nav.tabs.notifications', icon: 'notifications' },
   { id: 'voice', group: 'user', label: 'settings:nav.tabs.voice', icon: 'voice' },
   { id: 'privacy', group: 'user', label: 'settings:nav.tabs.privacy', icon: 'privacy' },
   { id: 'stickers', group: 'user', label: 'settings:nav.tabs.stickers', icon: 'stickers' },
@@ -63,6 +65,7 @@ function SettingsNavIcon({ name }: { name: SettingsIconName }) {
       {name === 'account' && <><circle cx="12" cy="8" r="3.25" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></>}
       {name === 'appearance' && <><path d="M12 3a9 9 0 1 0 0 18h1.2a2 2 0 0 0 1.45-3.38 1.5 1.5 0 0 1 1.1-2.52H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z" /><circle cx="7.5" cy="11" r=".8" /><circle cx="10" cy="7.5" r=".8" /><circle cx="15" cy="7.5" r=".8" /></>}
       {name === 'voice' && <><path d="M12 3v18M8 7v10M4 10v4M16 7v10M20 10v4" /></>}
+      {name === 'notifications' && <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>}
       {name === 'privacy' && <><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>}
       {name === 'stickers' && <><rect x="3" y="4" width="18" height="16" rx="4" /><path d="M8 9h.01M16 9h.01M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" /></>}
       {name === 'connections' && <><path d="M9.5 14.5 14.5 9.5M7.5 16.5l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.5 7.5l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" transform="translate(1 1) scale(.92)" /></>}
@@ -222,6 +225,7 @@ export function UserSettingsModal() {
   const panels: Record<UserSettingsTab, () => ReactNode> = {
     account: () => <AccountPanel />,
     appearance: () => <AppearancePanel />,
+    notifications: () => <NotificationsPanel />,
     voice: () => <VoicePanel />,
     privacy: () => <PrivacyPanel />,
     stickers: () => <StickerLibraryPanel />,
