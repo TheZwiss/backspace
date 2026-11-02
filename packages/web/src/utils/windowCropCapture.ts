@@ -343,13 +343,14 @@ export async function openWindowCropTrack(
     output?.getTracks().forEach((track) => track.stop());
   };
 
+  let lastCard = '';
   const fitCanvas = (): void => {
     const frame = { width: video.videoWidth, height: video.videoHeight };
     if (!frame.width || !frame.height) return;
     const region = computeCropRegion(current.crop, current.monitor, frame);
     const size = computeDestinationSize(region, destination);
-    if (canvas.width !== size.width) canvas.width = size.width;
-    if (canvas.height !== size.height) canvas.height = size.height;
+    if (canvas.width !== size.width) { canvas.width = size.width; lastCard = ''; }
+    if (canvas.height !== size.height) { canvas.height = size.height; lastCard = ''; }
   };
 
   /**
@@ -361,6 +362,9 @@ export async function openWindowCropTrack(
     const width = canvas.width;
     const height = canvas.height;
     if (!width || !height) return;
+    const signature = `${message}:${accent}:${width}:${height}`;
+    if (lastCard === signature) return;
+    lastCard = signature;
     context.fillStyle = '#13131a';
     context.fillRect(0, 0, width, height);
     const icon = Math.max(24, Math.round(height * 0.16));
@@ -409,6 +413,7 @@ export async function openWindowCropTrack(
     const y = Math.round(drawnRegion.y);
     const width = Math.max(2, Math.round(drawnRegion.width));
     const height = Math.max(2, Math.round(drawnRegion.height));
+    lastCard = '';
     context.drawImage(video, x, y, width, height, 0, 0, canvas.width, canvas.height);
     requestCanvasFrame();
   };

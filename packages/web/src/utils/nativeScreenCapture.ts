@@ -76,7 +76,7 @@ export function takeAnnexBNals(data: Uint8Array<ArrayBufferLike>): AnnexBNals {
       const tail = Math.min(3, data.length);
       return {
         nals,
-        remainder: Uint8Array.from(data.slice(data.length - tail)),
+        remainder: data.subarray(data.length - tail) as Uint8Array<ArrayBuffer>,
       };
     }
     let next = -1;
@@ -87,9 +87,9 @@ export function takeAnnexBNals(data: Uint8Array<ArrayBufferLike>): AnnexBNals {
       }
     }
     if (next < 0) {
-      return { nals, remainder: Uint8Array.from(data.slice(start)) };
+      return { nals, remainder: data.subarray(start) as Uint8Array<ArrayBuffer> };
     }
-    nals.push(Uint8Array.from(data.slice(start, next)));
+    nals.push(data.subarray(start, next) as Uint8Array<ArrayBuffer>);
     cursor = next;
   }
 }
@@ -168,6 +168,7 @@ export async function openNativeScreenCaptureTrack(
   const writer = generator.writable.getWriter();
   const metrics = {
     startedAt: performance.now(), reads: 0, bytes: 0, accessUnits: 0,
+    captureEncoder: 'unknown',
     submitted: 0, decoded: 0, delivered: 0, writerDrops: 0,
     recoveryDrops: 0, bufferedDrops: 0, maxDecodeQueue: 0,
     writeTimeMs: 0, stoppedAt: 0,
@@ -180,6 +181,8 @@ export async function openNativeScreenCaptureTrack(
   let activeSession = session;
   let activeController = controller;
   let runGeneration = 0;
+  let desiredRevision = 0;
+  let appliedRevision = 0;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
   let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   let recoveryAttempt = 0;
@@ -262,13 +265,15 @@ export async function openNativeScreenCaptureTrack(
   });
 
   function scheduleRestart(): void {
+    desiredRevision++;
     if (stopped) return;
     if (restartTimer) clearTimeout(restartTimer);
     restartTimer = setTimeout(() => {
       restartTimer = null;
       restartQueue = restartQueue.then(async () => {
-        if (stopped) return;
+        if (stopped || appliedRevision === desiredRevision) return;
         const nextOptions = { ...desired };
+        const revision = desiredRevision;
         await stopCurrentSession();
         if (stopped) return;
         const nextSession = await api!.startNativeScreenCapture!(nextOptions).catch(() => null);
@@ -280,9 +285,10 @@ export async function openNativeScreenCaptureTrack(
           await api!.stopNativeScreenCapture!(nextSession.id).catch(() => undefined);
           return;
         }
+        appliedRevision = revision;
         activeSession = nextSession;
         activeController = new AbortController();
-        startDecodeSession(nextSession.url, activeController, ++runGeneration, desired, false);
+        startDecodeSession(nextSession.url, activeController, ++runGeneration, nextOptions, false);
       }).catch((error) => {
         if (!stopped) console.warn('[ScreenShare] Could not restart native capture:', error);
         finish();
@@ -355,6 +361,7 @@ export async function openNativeScreenCaptureTrack(
         signal: runController.signal,
       });
       if (!response.ok || !response.body) throw new Error(`native capture HTTP ${response.status}`);
+      metrics.captureEncoder = response.headers.get('x-backspace-capture-encoder') ?? 'unknown';
       const codec = response.headers.get('x-backspace-codec') ?? 'avc1.42E01E';
 
       const sessionDecoder = new VideoDecoder({
