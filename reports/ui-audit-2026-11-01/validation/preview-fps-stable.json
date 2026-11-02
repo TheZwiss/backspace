@@ -1,0 +1,29 @@
+[
+  {
+    "target": 30,
+    "elapsedMs": 5000.39999999851,
+    "decodedFrames": 144,
+    "presentedCallbacks": 144,
+    "maxPresentedGapMs": 66.69999999995343,
+    "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+    "captures": 29
+  },
+  {
+    "target": 45,
+    "elapsedMs": 5001,
+    "decodedFrames": 216,
+    "presentedCallbacks": 215,
+    "maxPresentedGapMs": 38.90000000002328,
+    "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+    "captures": 29
+  },
+  {
+    "target": 60,
+    "elapsedMs": 5001.5,
+    "decodedFrames": 271,
+    "presentedCallbacks": 271,
+    "maxPresentedGapMs": 33.40000000002328,
+    "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+    "captures": 29
+  }
+]

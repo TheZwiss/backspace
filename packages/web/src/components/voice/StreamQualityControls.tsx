@@ -75,9 +75,10 @@ export function StreamHostSubtitle({ className = '' }: { className?: string }) {
 }
 
 /** "4 Mbps · balanced" — the computed outcome of the current config. */
-export function StreamSummary({ className = '' }: { className?: string }) {
+export function StreamSummary({ className = '', config: override }: { className?: string; config?: ScreenShareConfig }) {
   const { t } = useTranslation(['voice', 'common']);
-  const config = useVoiceStore((s) => s.screenShareConfig);
+  const savedConfig = useVoiceStore((s) => s.screenShareConfig);
+  const config = override ?? savedConfig;
   const result = buildScreenShareOptions(config);
   return (
     <span className={`text-[12px] text-txt-tertiary ${className}`}>
@@ -119,15 +120,17 @@ const pillBase = 'px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-
 const pillSelected = 'bg-accent-primary text-white';
 const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
-export function StreamQualityControls() {
+export function StreamQualityControls({ config: override, onChange }: { config?: ScreenShareConfig; onChange?: (config: Partial<ScreenShareConfig>) => void } = {}) {
   const { t } = useTranslation(['voice', 'common']);
-  const config = useVoiceStore((s) => s.screenShareConfig);
-  const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
+  const savedConfig = useVoiceStore((s) => s.screenShareConfig);
+  const saveConfig = useVoiceStore((s) => s.setScreenShareConfig);
+  const config = override ?? savedConfig;
+  const setConfig = onChange ?? saveConfig;
   const { origin: hostOrigin, limits } = useStreamHostLimits();
   const electronPlatform = isElectron() ? window.backspace?.platform : null;
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const liveAudio = useVoiceStore((s) => s.screenShareAudio);
-  const audioSwitch = systemAudioSwitch(isScreenSharing, liveAudio, config.shareAudio);
+  const audioSwitch = systemAudioSwitch(!override && isScreenSharing, override ? null : liveAudio, config.shareAudio);
   const ownAudio = useOwnAudioInSystemAudio();
   const audioNote = systemAudioNote(electronPlatform ?? null, ownAudio, audioSwitch.checked);
 
@@ -303,6 +306,24 @@ export function StreamQualityControls() {
         </select>
         <p className="text-[10px] text-txt-tertiary mt-1.5">{t('voice:streamSettings.previewHint')}</p>
       </div>
+
+      {electronPlatform === 'win32' && (
+        <div>
+          <label className="block text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5" htmlFor="stream-cursor-mode">
+            {t('voice:streamSettings.cursorMode')}
+          </label>
+          <select
+            id="stream-cursor-mode"
+            className="input-standard w-full text-xs"
+            value={config.cursorMode ?? 'auto'}
+            onChange={(event) => setConfig({ cursorMode: event.target.value as NonNullable<ScreenShareConfig['cursorMode']> })}
+          >
+            <option value="auto">{t('voice:streamSettings.cursorAuto')}</option>
+            <option value="show">{t('voice:streamSettings.cursorShow')}</option>
+            <option value="hide">{t('voice:streamSettings.cursorHide')}</option>
+          </select>
+        </div>
+      )}
 
       {/* System Audio */}
       <div>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { useUIStore } from '../../stores/uiStore';
 import { isElectron } from '../../platform/platform';
 import { ImagePreview } from './ImagePreview';
@@ -40,5 +40,13 @@ describe('ImagePreview', () => {
 
     expect(container.firstElementChild).toHaveClass('top-[var(--titlebar-inset)]');
     expect(container.firstElementChild).not.toHaveClass('top-0');
+  });
+
+  it('closes on Escape while open', () => {
+    render(<ImagePreview />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(useUIStore.getState().imagePreviewUrl).toBeNull();
   });
 });

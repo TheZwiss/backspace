@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -36,6 +37,8 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
   const [isLoading, setIsLoading] = useState(false);
   const [federationResults, setFederationResults] = useState<FederationOpResult[]>([]);
   const [deletionComplete, setDeletionComplete] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(dialogRef, { open: isOpen, onClose, dismissible: !isLoading && step !== 'complete', label: t('settings:account.deletion.title') });
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -186,7 +189,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={step !== 'complete' ? onClose : undefined} />
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}

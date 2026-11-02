@@ -115,7 +115,7 @@ You own the server, the data, and the network it federates into.
 - Direct messages: 1-on-1 and group DMs (up to 10 people), with voice/video calls (ring, accept, reject)
 
 **Voice, video, and screen sharing** (via [LiveKit](https://livekit.io/)):
-- Screen sharing up to 4K/120fps: VP9 by default, optional H.264 (hardware acceleration depends on the browser, GPU, and driver), and a dynacast-managed VP8 simulcast fallback
+- Screen sharing up to 4K/120fps: H.264 by default, optional VP9 (hardware acceleration depends on the browser, GPU, and driver), and a dynacast-managed VP8 simulcast fallback
 - Per-stream quality controls: resolution, frame rate, codec, and bitrate, within admin-set bounds
 - Independent 0-200% volume for every participant and every screen-share
 - RNNoise noise suppression (on by default), plus echo-cancellation and auto-gain toggles and mic/speaker device selection

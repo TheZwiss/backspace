@@ -1,0 +1,622 @@
+{
+  "results": [
+    {
+      "joiner": "bob",
+      "observer": "alice",
+      "round": 0,
+      "commandAt": 1793579422335,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579422339,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "voice-user-store",
+          "at": 1793579422493
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579422502
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579422505
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579422520
+        },
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579424761,
+          "states": [
+            {
+              "state": 2,
+              "sid": "PA_qJsNftRoSEPG"
+            }
+          ]
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579424762
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579422494,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579422508,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 0
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579422505,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 0
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579422385,
+          "path": "/api/livekit/token",
+          "id": "12576.2323",
+          "finished": 1793579422392
+        }
+      ]
+    },
+    {
+      "joiner": "bob",
+      "observer": "alice",
+      "round": 1,
+      "commandAt": 1793579427847,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579427851,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "voice-user-store",
+          "at": 1793579428085
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579428093
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579428097
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579428110
+        },
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579430758,
+          "states": [
+            {
+              "state": 2,
+              "sid": "PA_peLssd5aBWQk"
+            }
+          ]
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579430759
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579428085,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579428107,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 6
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579428097,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 6
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579427872,
+          "path": "/api/livekit/token",
+          "id": "12576.2330",
+          "finished": 1793579427879
+        }
+      ]
+    },
+    {
+      "joiner": "bob",
+      "observer": "alice",
+      "round": 2,
+      "commandAt": 1793579436754,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397997229785088",
+            "identity": "375397997229785088:test_bob",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579436759,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "voice-user-store",
+          "at": 1793579436963
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579436972
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579436976
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579436992
+        },
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579439761,
+          "states": [
+            {
+              "state": 2,
+              "sid": "PA_4YqsaH4cAqUt"
+            }
+          ]
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579439761
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579436964,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579436993,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 15
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579436976,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397997229785088",
+            "action": "join",
+            "channelElapsedSeconds": 15
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579436787,
+          "path": "/api/livekit/token",
+          "id": "12576.2332",
+          "finished": 1793579436793
+        }
+      ]
+    },
+    {
+      "joiner": "alice",
+      "observer": "bob",
+      "round": 0,
+      "commandAt": 1793579441325,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579441332,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579441424,
+          "states": [
+            {
+              "state": 1,
+              "sid": "PA_Xc3AbaE7kFRL"
+            }
+          ]
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579441425
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579441425
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579441429
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579441431
+        },
+        {
+          "event": "voice-user-store",
+          "at": 1793579441555
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579441557,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579441578,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 0
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579441566,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 0
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579441348,
+          "path": "/api/livekit/token",
+          "id": "13448.2722",
+          "finished": 1793579441354
+        }
+      ]
+    },
+    {
+      "joiner": "alice",
+      "observer": "bob",
+      "round": 1,
+      "commandAt": 1793579442832,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579442838,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "voice-user-store",
+          "at": 1793579442956
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579442967
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579442971
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579442986
+        },
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579445758,
+          "states": [
+            {
+              "state": 2,
+              "sid": "PA_vABaA4nG6wT8"
+            }
+          ]
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579445759
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579442957,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579442984,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 1
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579442971,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 1
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579442857,
+          "path": "/api/livekit/token",
+          "id": "13448.2724",
+          "finished": 1793579442863
+        }
+      ]
+    },
+    {
+      "joiner": "alice",
+      "observer": "bob",
+      "round": 2,
+      "commandAt": 1793579452176,
+      "baseline": {
+        "store": false,
+        "users": false,
+        "dom": false
+      },
+      "reconciled": {
+        "rows": [
+          {
+            "id": "375397996164431872",
+            "identity": "375397996164431872:test_alice",
+            "track": false
+          }
+        ],
+        "tiles": 1
+      },
+      "trace": [
+        {
+          "event": "click",
+          "at": 1793579452179,
+          "text": "Entrar na voz"
+        }
+      ],
+      "events": [
+        {
+          "event": "voice-user-store",
+          "at": 1793579452351
+        },
+        {
+          "event": "participant-store",
+          "at": 1793579452358
+        },
+        {
+          "event": "tile-dom",
+          "at": 1793579452361
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579452377
+        },
+        {
+          "event": "sdk-signal-participant-update",
+          "at": 1793579454761,
+          "states": [
+            {
+              "state": 2,
+              "sid": "PA_zYFJkscmW2Ru"
+            }
+          ]
+        },
+        {
+          "event": "livekit-participant-connected",
+          "at": 1793579454761
+        }
+      ],
+      "longTasks": [],
+      "senderWs": [
+        {
+          "event": "Network.webSocketFrameSent",
+          "at": 1793579452352,
+          "message": {
+            "type": "voice_join",
+            "channelId": "375400147737526276"
+          }
+        },
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579452377,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 11
+          }
+        }
+      ],
+      "observerWs": [
+        {
+          "event": "Network.webSocketFrameReceived",
+          "at": 1793579452362,
+          "message": {
+            "type": "voice_state_update",
+            "channelId": "375400147737526276",
+            "userId": "375397996164431872",
+            "action": "join",
+            "channelElapsedSeconds": 11
+          }
+        }
+      ],
+      "http": [
+        {
+          "at": 1793579452197,
+          "path": "/api/livekit/token",
+          "id": "13448.2726",
+          "finished": 1793579452203
+        }
+      ]
+    }
+  ]
+}

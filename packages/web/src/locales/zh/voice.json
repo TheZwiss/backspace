@@ -131,6 +131,8 @@
     "remoteParticipant": "远端参与者"
   },
   "screenPicker": {
+    "captureReconnecting": "正在重新连接采集…",
+    "streamPaused": "直播已暂停",
     "title": "共享屏幕",
     "tabs": {
       "screens": "屏幕",
@@ -178,6 +180,11 @@
     "hostLimits": "限制由 {{host}} 设定",
     "resolution": "分辨率",
     "frameRate": "帧率",
+    "cursorMode": "鼠标光标",
+    "cursorAuto": "自动",
+    "cursorShow": "显示",
+    "cursorHide": "隐藏",
+    "cursorHideUnavailable": "此捕获源无法隐藏 Windows 光标。请启动受支持的 DXGI 捕获以应用此设置。",
     "contentMode": "内容模式",
     "mode": {
       "gaming": "游戏",
@@ -234,6 +241,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "推流端网络不稳定",
+    "publisherBandwidth": "可用带宽正在限制直播画质",
     "publisherCpu": "推流端电脑视频编码速度不足",
     "viewerNetwork": "您的网络连接不稳定",
     "reconnecting": "连接断开 — 正在重新连接…",

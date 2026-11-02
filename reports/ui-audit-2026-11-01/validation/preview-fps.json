@@ -1,0 +1,29 @@
+[
+  {
+    "target": 30,
+    "elapsed": 2501.5,
+    "frames": 61,
+    "videoSeconds": 2.092053999999999,
+    "trackId": "cf0acdad-76d5-4db2-9907-a05943dff999",
+    "captureCount": 1,
+    "canvasRate": 0
+  },
+  {
+    "target": 45,
+    "elapsed": 2500.5,
+    "frames": 109,
+    "videoSeconds": 2.50704,
+    "trackId": "cf0acdad-76d5-4db2-9907-a05943dff999",
+    "captureCount": 1,
+    "canvasRate": 0
+  },
+  {
+    "target": 60,
+    "elapsed": 2500.10000000149,
+    "frames": 144,
+    "videoSeconds": 2.494975,
+    "trackId": "cf0acdad-76d5-4db2-9907-a05943dff999",
+    "captureCount": 1,
+    "canvasRate": 0
+  }
+]

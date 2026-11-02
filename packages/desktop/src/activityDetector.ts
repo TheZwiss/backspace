@@ -555,6 +555,32 @@ export function matchesProcessName(entry: GameEntry, procName: string, cmdline: 
   return false;
 }
 
+/** Prepare dictionary fields once per poll instead of lowercasing every
+ * process and matcher again for every dictionary entry. */
+function createProcessMatcher(entry: GameEntry): (info: ProcessInfo) => boolean {
+  const processes = entry.processes.map((process) => process.toLowerCase());
+  const patterns = entry.cmdlinePatterns?.map((pattern) => pattern.toLowerCase()).filter(Boolean) ?? [];
+  const requiresObsStreaming = entry.id === 'obs' || entry.id === 'streamlabs';
+  let obsStreaming: boolean | undefined;
+  return (info) => {
+    if (requiresObsStreaming) {
+      obsStreaming ??= isObsStreaming();
+      if (!obsStreaming) return false;
+    }
+    for (const candidate of [info.name, ...(info.winExes ?? [])]) {
+      const nameLower = candidate.toLowerCase();
+      for (const process of processes) {
+        if (nameLower === process || (process.length > COMM_MAX && nameLower.length === COMM_MAX && process.startsWith(nameLower))) return true;
+      }
+    }
+    if (patterns.length && info.cmdline) {
+      const cmdline = info.cmdline.toLowerCase();
+      if (patterns.some((pattern) => cmdline.includes(pattern))) return true;
+    }
+    return false;
+  };
+}
+
 /**
  * First dictionary entry (dictionary order = priority) matched by any of the
  * running processes. A game entry listed before a launcher entry wins when
@@ -567,6 +593,14 @@ export function findMatchingGame(infos: ProcessInfo[], entries: GameEntry[]): Ga
     }
   }
   return null;
+}
+
+/** Whether a window's executable belongs to a detected or manually tied game. */
+export function isGameProcess(processName: string): boolean {
+  const name = processName.trim();
+  if (!name) return false;
+  if (manualBindings.some((binding) => binding.process.toLowerCase() === name.toLowerCase())) return true;
+  return detectActivity([{ pid: 0, name, exe: name, cmdline: name }], gameEntries)?.type === 'playing';
 }
 
 /**
@@ -779,7 +813,8 @@ export function detectActivitiesWithInfo(
   for (const binding of bindings) {
     const id = `${MANUAL_ID}:${binding.process.toLowerCase()}`;
     const entry: GameEntry = { id, name: binding.name, processes: [binding.process] };
-    const running = infos.filter((info) => matchesProcessName(entry, info.name, info.cmdline, info.winExes));
+    const matches = createProcessMatcher(entry);
+    const running = infos.filter(matches);
     const first = running[0];
     if (first && !ids.has(id)) {
       add({ id, name: binding.name, type: 'playing' }, first);
@@ -788,7 +823,7 @@ export function detectActivitiesWithInfo(
   }
 
   for (const entry of entries) {
-    const info = matchInfoFor(entry.id, infos, entries);
+    const info = infos.find(createProcessMatcher(entry));
     if (info && info.pid > 0 && claimedPids.has(info.pid)) continue;
     if (info && !ids.has(entry.id)) {
       add({ id: entry.id, name: entry.name, type: entry.type ?? 'playing' }, info);

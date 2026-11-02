@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { normalizeUserAssets } from '../../utils/assetUrls';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 
 function TransferMemberRow({
   member,
@@ -50,6 +51,7 @@ function TransferMemberRow({
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const { t } = useTranslation(['spaces', 'common']);
   const modalRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
   const currentUserId = useAuthStore((s) => s.user?.id);
   const transferOwnership = useSpaceStore((s) => s.transferOwnership);
@@ -60,6 +62,13 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   const [transferring, setTransferring] = useState(false);
   const [members, setMembers] = useState<MemberWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useDialogLayer(overlayRef, {
+    open: !!space,
+    onClose: () => selectedUserId ? setSelectedUserId(null) : onClose(),
+    dismissible: !transferring,
+    label: t('spaces:ownership.title'),
+  });
 
   // Fetch members for the target space on mount (federation-aware)
   useEffect(() => {
@@ -97,30 +106,20 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
 
   const selectedMember = selectedUserId ? members.find(m => m.userId === selectedUserId) : null;
 
-  // Close on click-outside and escape
+  // Close on click outside. Escape is managed by the shared dialog layer.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        if (transferring) return;
         onClose();
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (selectedUserId) {
-          setSelectedUserId(null);
-        } else {
-          onClose();
-        }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose, selectedUserId]);
+  }, [onClose, transferring]);
 
   if (!space) return null;
 
@@ -139,7 +138,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   };
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
+    <div ref={overlayRef} className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
         className="w-[380px] max-h-[480px] glass-modal rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-150"

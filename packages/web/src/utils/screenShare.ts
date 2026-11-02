@@ -11,6 +11,25 @@ import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 import i18n from '../i18n';
 import { isElectron, getElectronAPI } from '../platform/platform';
 import { acquireAppExcludedSystemAudio } from './systemAudioSource';
+import { enqueueTrackUpdate } from './activeTrackUpdates';
+import {
+  canUseNativeScreenCapture,
+  openNativeScreenCaptureTrack,
+  setNativeScreenCaptureBitrate,
+  setNativeScreenCaptureCursorMode,
+  setNativeScreenCaptureFrameRate,
+  setNativeScreenCaptureResolution,
+} from './nativeScreenCapture';
+import {
+  canCropCaptureWindow,
+  isWindowSourceId,
+  openWindowCropTrack,
+  setWindowCropCursorMode,
+  setWindowCropLive,
+  setWindowCropResolution,
+  setWindowCropFrameRate,
+  type WindowCaptureTarget,
+} from './windowCropCapture';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
@@ -43,6 +62,18 @@ export interface ScreenShareBuildResult {
   };
   overdrive: OverdriveOptions;
   contentHint: 'motion' | 'detail';
+}
+
+const cursorHideWarnings = new WeakSet<MediaStreamTrack>();
+
+function notifyCursorHideUnavailable(track?: MediaStreamTrack): void {
+  if (track && cursorHideWarnings.has(track)) return;
+  if (track) cursorHideWarnings.add(track);
+  useUIStore.getState().addToast(
+    i18n.t('voice:streamSettings.cursorHideUnavailable'),
+    'warning',
+    8000,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -337,29 +368,176 @@ export function isCaptureCancellation(err: unknown): boolean {
   return err.name === 'NotAllowedError' || err.name === 'AbortError';
 }
 
-/** Must run inside a user gesture in browsers (getDisplayMedia requires transient activation). */
-export async function stageScreenCapture(): Promise<MediaStream> {
-  const config = useVoiceStore.getState().screenShareConfig;
+/**
+ * Must run inside a user gesture in browsers (getDisplayMedia requires transient activation).
+ *
+ * `sourceId` is the tile the user picked, when the desktop app listed sources.
+ * A window on Windows is captured as its display and cropped to the window
+ * (windowCropCapture.ts): capturing the window itself would leave Windows
+ * Graphics Capture's yellow border around it for the whole share.
+ */
+export async function stageScreenCapture(
+  sourceId?: string | null,
+  audioTargetId?: string,
+  config: ScreenShareConfig = useVoiceStore.getState().screenShareConfig,
+): Promise<MediaStream> {
   const opts = buildScreenShareOptions(config);
   if (!isScreenCaptureSupported()) {
     throw new DOMException('getDisplayMedia is not available', 'NotSupportedError');
   }
+  const api = getElectronAPI();
+  // Looked up before the audio capture: one preselection names both the display
+  // to capture and the window whose process tree supplies the audio.
+  const cropTarget: WindowCaptureTarget | null = sourceId && isWindowSourceId(sourceId) && canCropCaptureWindow()
+    ? await api!.getWindowCaptureTarget!(sourceId).catch(() => null)
+    : null;
+  if (api?.preselectScreenSource && sourceId) {
+    // The preselection is awaited here, before getDisplayMedia(): the two
+    // travel different IPC pipes and the display-media handler must find it
+    // armed. A cropped window shares its display but keeps its own audio.
+    try {
+      await api.preselectScreenSource(cropTarget?.screenSourceId ?? sourceId, config.shareAudio, audioTargetId, cropTarget ? sourceId : undefined);
+    } catch (err) {
+      console.error('[ScreenShare] Could not preselect the source:', err);
+    }
+  }
   try {
     // Where the desktop app can build the system audio without Backspace's own
     // playback, that track stands in for the loopback one.
-    const ownFree = config.shareAudio ? await acquireAppExcludedSystemAudio() : null;
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia(
-        buildCaptureConstraints(ownFree ? { ...config, shareAudio: false } : config, opts),
-      );
-    } catch (err) {
+    let ownFree: MediaStreamTrack | null = null;
+    let withAudio = config.shareAudio;
+    if (config.shareAudio) {
+      try {
+        ownFree = await acquireAppExcludedSystemAudio();
+      } catch (err) {
+        // The process-audio helper could not start (binary missing, activation
+        // refused). That costs the audio, not the share: the video goes out
+        // silent and the System Audio toggle can retry, which is what the
+        // warning says. Asking Chromium for loopback instead would put
+        // Backspace's own call into the stream on Windows 10, so this falls
+        // back to no audio rather than to the wrong audio.
+        if (!(err instanceof Error) || err.message !== 'process-capture-failed') throw err;
+        withAudio = false;
+        useUIStore.getState().addToast(
+          i18n.t('voice:streamSettings.systemAudioAddFailed'),
+          'warning',
+          8000,
+        );
+      }
+    }
+    let stream: MediaStream | null = null;
+    const cursorMode = config.cursorMode ?? 'auto';
+    const hideWindowCursor = !!cropTarget && (
+      cursorMode === 'hide'
+      || (cursorMode !== 'show' && cropTarget.isGame === true)
+    );
+    let nativeWindowSource: MediaStreamTrack | null = null;
+    if (cropTarget && hideWindowCursor) {
+      if (!isElectron() || !canUseNativeScreenCapture()) {
+        notifyCursorHideUnavailable();
+        ownFree?.stop();
+        throw new Error('cursor-free-window-capture-unavailable');
+      }
+      nativeWindowSource = await openNativeScreenCaptureTrack({
+        sourceId: cropTarget.screenSourceId,
+        displaySourceId: cropTarget.screenSourceId,
+        frameRate: opts.capture.frameRate,
+        width: opts.capture.width || undefined,
+        height: opts.capture.height || undefined,
+        bitrateKbps: Math.round(opts.publish.videoEncoding.maxBitrate / 1_000),
+        cursorMode: 'hide',
+      }).catch((error) => {
+        console.warn('[ScreenShare] Cursor-free window source unavailable:', error);
+        return null;
+      });
+      if (!nativeWindowSource) {
+        notifyCursorHideUnavailable();
+        ownFree?.stop();
+        throw new Error('cursor-free-window-capture-unavailable');
+      }
+    }
+    const needsCursorFreeScreen = cursorMode === 'hide';
+    const useNativeScreen = config.mode === 'gaming' || needsCursorFreeScreen;
+    const nativeScreenTrack = useNativeScreen && sourceId && !isWindowSourceId(sourceId) && !cropTarget
+      && (!withAudio || !!ownFree)
+      && isElectron() && canUseNativeScreenCapture()
+      ? await openNativeScreenCaptureTrack({
+        sourceId,
+        frameRate: opts.capture.frameRate,
+        width: opts.capture.width || undefined,
+        height: opts.capture.height || undefined,
+        bitrateKbps: Math.round(opts.publish.videoEncoding.maxBitrate / 1_000),
+        cursorMode,
+      }).catch((error) => {
+        console.warn('[ScreenShare] Native capture unavailable, using Chromium fallback:', error);
+        return null;
+      })
+      : null;
+    if (needsCursorFreeScreen && !nativeScreenTrack && sourceId && !isWindowSourceId(sourceId) && !cropTarget) {
+      notifyCursorHideUnavailable();
       ownFree?.stop();
-      throw err;
+      throw new Error('cursor-free-screen-capture-unavailable');
+    }
+    if (nativeWindowSource) stream = new MediaStream([nativeWindowSource]);
+    if (nativeScreenTrack) {
+      stream = new MediaStream([nativeScreenTrack]);
+    }
+    if (!stream) {
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia(
+          buildCaptureConstraints(
+            ownFree || cropTarget ? { ...config, shareAudio: false } : { ...config, shareAudio: withAudio },
+            opts,
+          ),
+        );
+      } catch (err) {
+        ownFree?.stop();
+        throw err;
+      }
+    }
+    if (ownFree && stream.getAudioTracks().length > 0) {
+      for (const track of stream.getAudioTracks()) { stream.removeTrack(track); track.stop(); }
     }
     if (ownFree) {
-      for (const track of stream.getAudioTracks()) { stream.removeTrack(track); track.stop(); }
       stream.addTrack(ownFree);
+    }
+    if (cropTarget) {
+      const cropped = await openWindowCropTrack(stream, cropTarget, {
+        frameRate: opts.capture.frameRate,
+        destination: opts.capture.width > 0 && opts.capture.height > 0
+          ? { width: opts.capture.width, height: opts.capture.height }
+          : undefined,
+        cursorMode: config.cursorMode ?? 'auto',
+        reopenDisplay: async (screenSourceId, requestedMode) => {
+          const mustHide = requestedMode === 'hide'
+            || (requestedMode === 'auto' && cropTarget.isGame === true);
+          if (!mustHide) return undefined;
+          if (!isElectron() || !canUseNativeScreenCapture()) {
+            notifyCursorHideUnavailable();
+            return null;
+          }
+          const cursorFreeTrack = await openNativeScreenCaptureTrack({
+            sourceId: screenSourceId,
+            displaySourceId: screenSourceId,
+            frameRate: opts.capture.frameRate,
+            width: opts.capture.width || undefined,
+            height: opts.capture.height || undefined,
+            bitrateKbps: Math.round(opts.publish.videoEncoding.maxBitrate / 1_000),
+            cursorMode: 'hide',
+          });
+          if (!cursorFreeTrack) notifyCursorHideUnavailable();
+          return cursorFreeTrack;
+        },
+        sourceId: sourceId!,
+      });
+      if (cropped) {
+        const raw = stream.getVideoTracks()[0];
+        if (raw) stream.removeTrack(raw);
+        stream.addTrack(cropped);
+      } else {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error('window-crop-unavailable');
+      }
     }
     const video = stream.getVideoTracks()[0];
     if (video) video.contentHint = opts.contentHint;
@@ -384,16 +562,40 @@ export async function stageScreenCapture(): Promise<MediaStream> {
  * track is local only, so there is no SFU renegotiation. Lets the setup screen
  * reflect quality changes in the preview before anything is sent.
  */
-export async function applyStagedCaptureConfig(stream: MediaStream): Promise<void> {
+export async function applyStagedCaptureConfig(stream: MediaStream, config = useVoiceStore.getState().screenShareConfig): Promise<void> {
   const track = stream.getVideoTracks()[0];
   if (!track || track.readyState !== 'live') return;
-  const config = useVoiceStore.getState().screenShareConfig;
+  await applyScreenCaptureConfig(track, config);
+}
+
+export async function applyScreenCaptureConfig(track: MediaStreamTrack, config: ScreenShareConfig): Promise<void> {
   const opts = buildScreenShareOptions(config);
-  const constraints = buildCaptureConstraints(config, opts).video;
-  try {
-    if (typeof constraints === 'object') await track.applyConstraints(constraints);
-  } catch (err) {
-    console.warn('[ScreenShare] Failed to apply staged constraints:', err);
+  const size = opts.capture.width > 0 && opts.capture.height > 0
+    ? { width: opts.capture.width, height: opts.capture.height }
+    : undefined;
+  const nativeResolution = setNativeScreenCaptureResolution(track, size);
+  const nativeFrameRate = setNativeScreenCaptureFrameRate(track, opts.capture.frameRate);
+  setNativeScreenCaptureBitrate(track, Math.round(opts.publish.videoEncoding.maxBitrate / 1_000));
+  const cursorMode = config.cursorMode ?? 'auto';
+  const nativeCursorUpdated = setNativeScreenCaptureCursorMode(track, cursorMode);
+  const windowCursorUpdated = setWindowCropCursorMode(track, cursorMode);
+  if (cursorMode === 'hide' && !nativeCursorUpdated && !windowCursorUpdated) {
+    notifyCursorHideUnavailable(track);
+  }
+  // A cropped window is a canvas, not a camera: it is resized directly and has
+  // no capture constraints to satisfy.
+  const resized = setWindowCropResolution(
+    track,
+    size,
+  );
+  setWindowCropFrameRate(track, opts.capture.frameRate);
+  if (!resized && !nativeResolution && !nativeFrameRate) {
+    const constraints = buildCaptureConstraints(config, opts).video;
+    try {
+      if (typeof constraints === 'object') await track.applyConstraints(constraints);
+    } catch (err) {
+      console.warn('[ScreenShare] Failed to apply staged constraints:', err);
+    }
   }
   track.contentHint = opts.contentHint;
 }
@@ -443,6 +645,7 @@ function isReconnecting(room: Room): boolean {
  * flag keeps that from broadcasting a second `voice_status` for the one stop.
  */
 let _stopping = false;
+let _shareGeneration = 0;
 
 export interface PublishScreenShareOptions {
   /**
@@ -493,6 +696,9 @@ export async function publishScreenShare(
       } : {}),
     });
     videoPublished = true;
+    // From this moment the share is what viewers see, so a cropped window that
+    // loses focus shows the paused card instead of the window on top of it.
+    setWindowCropLive(videoTrack, true);
     if (audioToPublish) await publishScreenShareAudioTrack(room, audioToPublish);
 
     _requestedPublishedScreenShareCodec = opts.publish.videoCodec;
@@ -542,6 +748,7 @@ export async function publishScreenShare(
  * no second picker prompt.
  */
 export async function republishScreenShare(room: Room): Promise<void> {
+  const generation = _shareGeneration;
   const videoPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
   const audioPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
   const videoTrack = videoPub?.track?.mediaStreamTrack;
@@ -558,6 +765,7 @@ export async function republishScreenShare(room: Room): Promise<void> {
   } catch (err) {
     console.warn('[ScreenShare] Could not announce the republish to viewers:', err);
   }
+  if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) return;
 
   _republishing = true;
   try {
@@ -568,6 +776,11 @@ export async function republishScreenShare(room: Room): Promise<void> {
   }
   _publishedScreenShareCodec = null;
   _requestedPublishedScreenShareCodec = null;
+
+  if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) {
+    stopStagedCapture(stream);
+    return;
+  }
 
   const ok = await publishScreenShare(room, stream, {
     sourceId: _liveSource?.id ?? null,
@@ -585,6 +798,82 @@ export async function republishScreenShare(room: Room): Promise<void> {
     // while the sharer's own UI says they stopped.
     broadcastVoiceStatus();
   }
+}
+
+/** Commit a prepared source without withdrawing the existing video publication. */
+export function replaceScreenShare(room: Room, stream: MediaStream, options: PublishScreenShareOptions & { config?: ScreenShareConfig } = {}): Promise<boolean> {
+  return enqueueTrackUpdate(async () => {
+    const generation = _shareGeneration;
+    const state = useVoiceStore.getState();
+    const video = room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack;
+    const previousVideo = video?.mediaStreamTrack;
+    const nextVideo = stream.getVideoTracks()[0];
+    if (!state.isScreenSharing || !video || !previousVideo || !nextVideo || nextVideo.readyState !== 'live') {
+      stopStagedCapture(stream);
+      return false;
+    }
+    const config = options.config ?? state.screenShareConfig;
+    const capturedAudio = stream.getAudioTracks().find(track => track.readyState === 'live') ?? null;
+    const nextAudio = config.shareAudio ? capturedAudio : null;
+    const audio = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)?.audioTrack;
+    const previousAudio = audio?.mediaStreamTrack;
+    let videoReplaced = false;
+    let audioReplaced = false;
+    let audioCreated = false;
+    try {
+      await applyStagedCaptureConfig(stream, config);
+      if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) throw new Error('Screen share ended during replacement');
+      setWindowCropLive(nextVideo, true);
+      await video.replaceTrack(nextVideo, { userProvidedTrack: true });
+      videoReplaced = true;
+      if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) throw new Error('Screen share ended during replacement');
+      if (nextAudio && audio) {
+        await audio.replaceTrack(nextAudio, { userProvidedTrack: true });
+        audioReplaced = true;
+      } else if (nextAudio) {
+        await publishScreenShareAudioTrack(room, nextAudio, config);
+        audioCreated = true;
+      } else if (audio) {
+        await room.localParticipant.unpublishTrack(audio, false);
+      }
+      if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) throw new Error('Screen share ended during audio replacement');
+      _audioGeneration++;
+      _heldAudio?.stop();
+      _heldAudio = null;
+      _liveSource = options.sourceId ? { id: options.sourceId, pickerMode: options.pickerMode ?? null } : null;
+      if (capturedAudio && !nextAudio) setAsideScreenShareAudio(capturedAudio);
+      useVoiceStore.setState(current => ({
+        screenShareConfig: config,
+        screenShareAudio: nextAudio ? 'published' : idleScreenShareAudioState(),
+        participants: current.participants.map(participant => participant.isLocal
+          ? { ...participant, screenTrack: nextVideo, lkScreenTrack: video, screenAudioTrack: nextAudio }
+          : participant),
+      }));
+      if (previousVideo !== nextVideo) previousVideo.stop();
+      if (previousAudio && previousAudio !== nextAudio) previousAudio.stop();
+      scheduleScreenShareOverdrive(room);
+      scheduleEncoderDetection(room, _requestedPublishedScreenShareCodec ?? config.codec, nextVideo.id);
+      return true;
+    } catch (error) {
+      console.error('[ScreenShare] Failed to replace screen share:', error);
+      if (generation === _shareGeneration && useVoiceStore.getState().isScreenSharing) {
+        try {
+          if ((videoReplaced || video.mediaStreamTrack === nextVideo) && previousVideo.readyState === 'live') await video.replaceTrack(previousVideo, { userProvidedTrack: true });
+          if ((audioReplaced || audio?.mediaStreamTrack === nextAudio) && previousAudio?.readyState === 'live') await audio?.replaceTrack(previousAudio, { userProvidedTrack: true });
+        } catch (rollbackError) { console.error('[ScreenShare] Failed to restore previous capture:', rollbackError); }
+      }
+      if (audioCreated && nextAudio) {
+        try { await room.localParticipant.unpublishTrack(nextAudio, false); }
+        catch (cleanupError) { console.warn('[ScreenShare] Could not clean replacement audio:', cleanupError); }
+      }
+      if (generation !== _shareGeneration || !useVoiceStore.getState().isScreenSharing) {
+        previousVideo.stop();
+        previousAudio?.stop();
+      }
+      stopStagedCapture(stream);
+      return false;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -699,8 +988,8 @@ function endScreenShareAudio(room: Room): void {
   });
 }
 
-async function publishScreenShareAudioTrack(room: Room, track: MediaStreamTrack): Promise<void> {
-  const opts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
+async function publishScreenShareAudioTrack(room: Room, track: MediaStreamTrack, config = useVoiceStore.getState().screenShareConfig): Promise<void> {
+  const opts = buildScreenShareOptions(config);
   await room.localParticipant.publishTrack(track, {
     source: Track.Source.ScreenShareAudio,
     audioPreset: opts.publish.audioPreset,
@@ -898,20 +1187,7 @@ export function scheduleScreenShareOverdrive(room: Room): void {
       if (!captureConfigured) {
         captureConfigured = true;
         try {
-          if (freshOpts.capture.width > 0 && freshOpts.capture.height > 0) {
-            // Standard mode: apply resolution + frameRate together
-            await mediaTrack.applyConstraints({
-              width: { ideal: freshOpts.capture.width },
-              height: { ideal: freshOpts.capture.height },
-              frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
-            });
-          } else {
-            // Native mode: apply frameRate only — never pass 0 to width/height
-            await mediaTrack.applyConstraints({
-              frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
-            });
-          }
-          mediaTrack.contentHint = freshOpts.contentHint;
+          await applyScreenCaptureConfig(mediaTrack, useVoiceStore.getState().screenShareConfig);
         } catch (err) {
           // Capture constraints and sender parameters are independent. A browser
           // rejecting one constraint must not cancel the bounded sender retry.
@@ -1060,10 +1336,12 @@ function scheduleEncoderDetection(
 // ---------------------------------------------------------------------------
 
 export async function stopScreenShare(room: Room): Promise<void> {
+  _shareGeneration++;
   // Sent first and not awaited: a stop must not wait on the data channel.
   // Viewers handle the message on either side of the removal.
   announceShare(room, 'stream_stop');
   _stopping = true;
+  useVoiceStore.setState({ isScreenSharing: false });
   try {
     for (const source of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
       // Per publication, not per loop: a throw on the video track used to abort
@@ -1092,12 +1370,12 @@ export async function stopScreenShare(room: Room): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Change screen share source — stop, then reopen the setup screen
+// Change screen share source — stage a replacement while the current share stays live
 // ---------------------------------------------------------------------------
 
 export async function changeScreenShare(room: Room): Promise<void> {
-  await stopScreenShare(room);
-  openScreenShareSetup();
+  if (!useVoiceStore.getState().isScreenSharing || room.state === ConnectionState.Disconnected) return;
+  openScreenShareSetup(undefined, 'replace');
 }
 
 // ---------------------------------------------------------------------------
@@ -1115,13 +1393,13 @@ export async function changeScreenShare(room: Room): Promise<void> {
  * our codec swap or a full reconnect's; the caller keeps its per-share state.
  */
 export function handleScreenShareUnpublished(room: Room): boolean {
-  // A codec swap: the same share, published again by republishScreenShare.
-  if (_republishing) return false;
   // The explicit stop path unpublishes synchronously, so this handler runs from
   // inside stopScreenShare(), which clears the same state and broadcasts once
   // its publications are gone. Returning here keeps a single stop to a single
   // `voice_status` fan-out instead of two.
   if (_stopping) return true;
+  // A codec swap: the same share, published again by republishScreenShare.
+  if (_republishing) return false;
   // A full reconnect republishing every track (see _reconnectingRoom).
   if (isReconnecting(room) && useVoiceStore.getState().isScreenSharing) {
     _reconnectingRoom = room;
@@ -1173,6 +1451,7 @@ function announceShare(room: Room, signal: ShareSignal): void {
 
 /** The share is over without stopScreenShare: the OS stop bar, a source that ended, a reconnect that lost it. */
 function endLocalShare(room: Room): void {
+  _shareGeneration++;
   _reconnectingRoom = null;
   announceShare(room, 'stream_stop');
   deactivateHwOverdrive();

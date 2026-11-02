@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.20)
+project(backspace_dxgi_output_probe LANGUAGES CXX)
+
+add_executable(backspace-dxgi-output-probe main.cpp)
+target_compile_features(backspace-dxgi-output-probe PRIVATE cxx_std_17)
+target_compile_definitions(backspace-dxgi-output-probe PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(backspace-dxgi-output-probe PRIVATE d3d11 dxgi)
+if(MINGW)
+  target_link_options(backspace-dxgi-output-probe PRIVATE -static -static-libgcc -static-libstdc++ -municode)
+endif()
+set_target_properties(backspace-dxgi-output-probe PROPERTIES OUTPUT_NAME "backspace-dxgi-output-probe")

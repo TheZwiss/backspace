@@ -1,0 +1,370 @@
+{
+  "before": {
+    "alice": {
+      "time": 529158.1000000015,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 540,
+        "fps": 45,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "h264"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 114.349364,
+          "frames": 3798,
+          "paused": false,
+          "width": 822,
+          "height": 540,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n06:28\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n540P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n8 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n8 min decorridos"
+    },
+    "bob": {
+      "time": 529159.299999997,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 261.909,
+          "frames": 7430,
+          "paused": false,
+          "width": 822,
+          "height": 540,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n06:28\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n540P 46FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n8 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n8 min decorridos"
+    }
+  },
+  "staged": {
+    "alice": {
+      "time": 530814,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 540,
+        "fps": 45,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "h264"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 115.999072,
+          "frames": 3862,
+          "paused": false,
+          "width": 864,
+          "height": 540,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "ready": 4
+        },
+        {
+          "time": 0.818093,
+          "frames": 35,
+          "paused": false,
+          "width": 862,
+          "height": 540,
+          "track": "7e804bbc-3158-4959-bf10-7f5bace0cfab",
+          "ready": 4
+        }
+      ],
+      "dialog": "Compartilhar sua tela",
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n06:29\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n540P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n8 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n8 min decorridos\nCompartilhar sua tela\n\nEscolha o que compartilhar, ajuste a qualidade e comece.\n\nTelas2\nJanelas6\nNova notificação\nBackspace\n⠴ Abrir Electron com dois usuários | backspace-prort-android\nBackspace\nbackspace-prort-android\nNVIDIA GeForce Overlay\nPRONTO PARA ENTRAR AO VIVO · JANELA\nBackspace\nConfigurações da transmissão\nRESOLUÇÃO\n540p\n720p\n1080p\nTAXA DE QUADROS\n30\n45\n60\nMODO DE CONTEÚDO\nJogos\nTexto\nCODEC\nVP9\nH264\nTAXA DE BITS\nAutomática\nPersonalizada\nPRÉVIA DA TRANSMISSÃO\nNormal\nDesfocada\nSem imagem\n\nDefine a miniatura exibida antes de assistir. Não altera o vídeo da transmissão.\n\nÁUDIO DO SISTEMA\n2 Mbps · equilibrado\nConfigurações da transmissão\nCancelar\nIniciar transmissão"
+    },
+    "bob": {
+      "time": 530815.099999994,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 263.57,
+          "frames": 7492,
+          "paused": false,
+          "width": 864,
+          "height": 540,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n06:29\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n540P 46FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n8 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n8 min decorridos"
+    },
+    "geometry": [
+      {
+        "at": 529984.200000003,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530092.900000006,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530203.900000006,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530314.400000006,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530423.6000000015,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530532.700000003,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530641.700000003,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      },
+      {
+        "at": 530751.900000006,
+        "snapshot": {
+          "window": [
+            1965,
+            120,
+            1282,
+            801
+          ],
+          "monitor": [
+            1920,
+            0,
+            1920,
+            1080
+          ],
+          "minimized": false,
+          "foreground": false,
+          "exclusive": false,
+          "process": "electron.exe",
+          "processId": 33780
+        }
+      }
+    ]
+  }
+}

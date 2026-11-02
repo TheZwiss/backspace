@@ -27,8 +27,32 @@ export interface SteamGame {
 }
 
 const INDEX_TTL_MS = 60_000;
+const ROOTS_TTL_MS = 30_000;
+const REALPATH_CACHE_TTL_MS = 30_000;
+const REALPATH_CACHE_MAX_ENTRIES = 2_048;
 
 let indexCache: { at: number; games: SteamGame[] } | null = null;
+let rootsCache: { key: string; at: number; roots: string[] } | null = null;
+const realpathCache = new Map<string, { at: number; value: string | null }>();
+
+function cachedRealpath(candidate: string): string | null {
+  const now = Date.now();
+  const cached = realpathCache.get(candidate);
+  if (cached && now - cached.at < REALPATH_CACHE_TTL_MS) return cached.value;
+
+  let value: string | null;
+  try {
+    value = fs.realpathSync(candidate);
+  } catch {
+    value = null;
+  }
+  if (realpathCache.size >= REALPATH_CACHE_MAX_ENTRIES) {
+    const oldest = realpathCache.keys().next().value;
+    if (oldest !== undefined) realpathCache.delete(oldest);
+  }
+  realpathCache.set(candidate, { at: now, value });
+  return value;
+}
 
 // ─── VDF / ACF parsing ──────────────────────────────────────────────────────
 
@@ -132,6 +156,13 @@ export function getSteamRoots(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
+  const envKey = platform === 'win32'
+    ? [env['ProgramFiles(x86)'], env.ProgramFiles, env.ProgramW6432].join('\0')
+    : '';
+  const key = `${platform}\0${home}\0${envKey}`;
+  if (rootsCache?.key === key && Date.now() - rootsCache.at < ROOTS_TTL_MS) {
+    return rootsCache.roots;
+  }
   const candidates = candidateSteamRoots(home, platform, env);
 
   const roots: string[] = [];
@@ -139,7 +170,9 @@ export function getSteamRoots(
   for (const candidate of candidates) {
     let real: string;
     try {
-      real = fs.realpathSync(candidate);
+      const resolved = cachedRealpath(candidate);
+      if (!resolved) continue;
+      real = resolved;
     } catch {
       continue; // Not installed from this packaging
     }
@@ -148,6 +181,7 @@ export function getSteamRoots(
       roots.push(real);
     }
   }
+  rootsCache = { key, at: Date.now(), roots };
   return roots;
 }
 
@@ -166,7 +200,9 @@ function libraryPathsForRoot(root: string): string[] {
   for (const lib of [...libs, root]) {
     let real: string;
     try {
-      real = fs.realpathSync(lib);
+      const resolved = cachedRealpath(lib);
+      if (!resolved) continue;
+      real = resolved;
     } catch {
       continue; // Library on an unmounted disk
     }
@@ -226,6 +262,8 @@ function readManifests(lib: string): SteamGame[] {
 /** Drop the index cache (test hook; also used after library changes). */
 export function resetSteamIndexCache(): void {
   indexCache = null;
+  rootsCache = null;
+  realpathCache.clear();
 }
 
 /**
@@ -257,16 +295,18 @@ export function loadSteamIndex(roots: string[] = getSteamRoots(), force = false)
 
 // ─── Matching ───────────────────────────────────────────────────────────────
 
-function isUnder(exe: string, dir: string): boolean {
+function isUnder(exe: string, dir: string, realExe: string | null): boolean {
   const e = exe.toLowerCase();
   const d = dir.toLowerCase();
   if (d.length > 0 && (e === d || e.startsWith(d.endsWith(path.sep) ? d : d + path.sep))) {
     return true;
   }
   try {
-    const realExe = fs.realpathSync(exe).toLowerCase();
-    const realDir = fs.realpathSync(dir).toLowerCase();
-    return realDir.length > 0 && (realExe === realDir || realExe.startsWith(realDir.endsWith(path.sep) ? realDir : realDir + path.sep));
+    const resolvedDir = cachedRealpath(dir);
+    if (!realExe || !resolvedDir) return false;
+    const normalizedExe = realExe.toLowerCase();
+    const normalizedDir = resolvedDir.toLowerCase();
+    return normalizedDir.length > 0 && (normalizedExe === normalizedDir || normalizedExe.startsWith(normalizedDir.endsWith(path.sep) ? normalizedDir : normalizedDir + path.sep));
   } catch {
     return false;
   }
@@ -279,8 +319,14 @@ function isUnder(exe: string, dir: string): boolean {
  */
 export function findSteamGameForProcess(exe: string | null, games: SteamGame[]): SteamGame | null {
   if (!exe) return null;
+  const needsRealpath = games.some((game) => {
+    const e = exe.toLowerCase();
+    const d = game.installDir.toLowerCase();
+    return !(d.length > 0 && (e === d || e.startsWith(d.endsWith(path.sep) ? d : d + path.sep)));
+  });
+  const realExe = needsRealpath ? cachedRealpath(exe) : null;
   for (const game of games) {
-    if (isUnder(exe, game.installDir)) return game;
+    if (isUnder(exe, game.installDir, realExe)) return game;
   }
   return null;
 }

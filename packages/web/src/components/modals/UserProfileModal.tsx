@@ -1,5 +1,5 @@
 import { getFriendshipStatus, type FriendshipStatus } from '../../utils/friendshipStatus';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
@@ -27,6 +27,7 @@ import { ProfileRoles } from '../ui/ProfileRoles';
 import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
 import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { ProfileActivities } from '../ui/ProfileActivities';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 
 const EMPTY_ACTIVITIES: Activity[] = [];
 
@@ -48,6 +49,7 @@ export function UserProfileModal() {
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
   const cancelFriendRequest = useSocialStore((s) => s.cancelFriendRequest);
   const self = useSelfIdentity();
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const [user, setUser] = useState<User | null>(null);
   const [userOrigin, setUserOrigin] = useState('');
@@ -65,6 +67,13 @@ export function UserProfileModal() {
   const memberSpaceId = memberContext?.spaceId;
   const memberUserId = memberContext?.userId;
   const roles = useProfileMemberRoles(memberContext);
+
+  useDialogLayer(overlayRef, {
+    open: isOpen && !!user,
+    onClose: closeModal,
+    dismissible: !friendActionLoading,
+    label: user?.displayName ?? user?.username ?? 'User profile',
+  });
 
   const friendship: FriendshipStatus = user
     ? getFriendshipStatus({ viewedUser: user, origin: userOrigin, self, friends, requests })
@@ -140,16 +149,6 @@ export function UserProfileModal() {
       setMutualSpaces([]);
     }
   }, [isOpen]);
-
-  // Escape to close
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeModal();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [isOpen, closeModal]);
 
   const shownStatus = useShownStatus(user, userOrigin, user?.status);
 
@@ -246,7 +245,7 @@ export function UserProfileModal() {
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={overlayRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up overflow-hidden">
         {/* Banner */}

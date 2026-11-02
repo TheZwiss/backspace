@@ -1,0 +1,20 @@
+[
+  {
+    "port": 9223,
+    "authenticated": true,
+    "route": "/channels/@me",
+    "voice": "disconnected",
+    "sharing": false,
+    "videos": 0,
+    "departures": 0
+  },
+  {
+    "port": 9224,
+    "authenticated": true,
+    "route": "/channels/@me",
+    "voice": "disconnected",
+    "sharing": false,
+    "videos": 0,
+    "departures": 0
+  }
+]

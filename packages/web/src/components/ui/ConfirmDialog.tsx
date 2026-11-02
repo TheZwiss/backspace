@@ -1,4 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useRef } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
@@ -27,19 +28,8 @@ export function ConfirmDialog({
   loading = false,
 }: ConfirmDialogProps) {
   const { t } = useTranslation(['common']);
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !loading) {
-      e.stopPropagation();
-      onClose();
-    }
-  }, [onClose, loading]);
-
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown, true);
-      return () => document.removeEventListener('keydown', handleKeyDown, true);
-    }
-  }, [isOpen, handleKeyDown]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(dialogRef, { open: isOpen, onClose, dismissible: !loading, label: title });
 
   const portalContainer = usePortalContainer();
 
@@ -51,7 +41,7 @@ export function ConfirmDialog({
     : 'bg-accent-amber hover:bg-accent-amber/80';
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={() => { if (!loading) onClose(); }}

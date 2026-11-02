@@ -167,19 +167,23 @@ describe('a republish announces itself before it unpublishes', () => {
     };
   });
 
-  function makeSharingRoom(publishData: ReturnType<typeof vi.fn>) {
+  function makeSharingRoom(
+    publishData: ReturnType<typeof vi.fn>,
+    onUnpublish: (...args: unknown[]) => Promise<void> = async () => {},
+  ) {
     const calls: string[] = [];
     const mediaStreamTrack = { kind: 'video', readyState: 'live', contentHint: '', stop: vi.fn() };
-    const videoPub = { track: { mediaStreamTrack } };
+    const videoTrack = { mediaStreamTrack };
+    const videoPub = { track: videoTrack };
     const localParticipant = {
       getTrackPublication: vi.fn((source: string) => (source === 'screen_share' ? videoPub : undefined)),
       publishData: vi.fn(async (...args: unknown[]) => { calls.push('publishData'); return publishData(...args); }),
-      unpublishTrack: vi.fn(async () => { calls.push('unpublishTrack'); }),
+      unpublishTrack: vi.fn(async (...args: unknown[]) => { calls.push('unpublishTrack'); return onUnpublish(...args); }),
       publishTrack: vi.fn(async () => { calls.push('publishTrack'); }),
       // Read by the sender-parameter scheduler a successful publish starts.
       getTrackPublications: vi.fn(() => []),
     };
-    return { room: { localParticipant } as never, localParticipant, calls };
+    return { room: { localParticipant } as never, localParticipant, calls, mediaStreamTrack, videoTrack };
   }
 
   it('sends stream_republish on the reliable channel before the unpublish', async () => {
@@ -201,5 +205,126 @@ describe('a republish announces itself before it unpublishes', () => {
     expect(calls).toContain('unpublishTrack');
     expect(calls).toContain('publishTrack');
     expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+  });
+
+  it('does not resurrect a share stopped while the republish announcement is pending', async () => {
+    let finishAnnouncement!: () => void;
+    const announcement = new Promise<void>(resolve => { finishAnnouncement = resolve; });
+    const publishData = vi.fn()
+      .mockImplementationOnce(() => announcement)
+      .mockResolvedValue(undefined);
+    const { room, localParticipant, mediaStreamTrack, videoTrack } = makeSharingRoom(
+      publishData,
+      async (track, stopOnUnpublish) => {
+        if (stopOnUnpublish) (track as { mediaStreamTrack: { stop: () => void } }).mediaStreamTrack.stop();
+      },
+    );
+
+    const republishing = republishScreenShare(room);
+    await vi.waitFor(() => expect(publishData).toHaveBeenCalledOnce());
+    await stopScreenShare(room);
+    expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+
+    finishAnnouncement();
+    await republishing;
+
+    expect(localParticipant.unpublishTrack).toHaveBeenCalledOnce();
+    expect(localParticipant.unpublishTrack).toHaveBeenCalledWith(videoTrack, true);
+    expect(localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(mediaStreamTrack.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+  });
+
+  it('does not let an old announcement overwrite a newer sharing session', async () => {
+    let finishAnnouncement!: () => void;
+    const announcement = new Promise<void>(resolve => { finishAnnouncement = resolve; });
+    const publishData = vi.fn()
+      .mockImplementationOnce(() => announcement)
+      .mockResolvedValue(undefined);
+    const { room, localParticipant } = makeSharingRoom(publishData);
+    const nextConfig = {
+      ...useVoiceStore.getState().screenShareConfig,
+      height: 720,
+      fps: 45,
+      mode: 'text' as const,
+      customBitrateKbps: 3000,
+      codec: 'vp9' as const,
+    };
+
+    const republishing = republishScreenShare(room);
+    await vi.waitFor(() => expect(publishData).toHaveBeenCalledOnce());
+    await stopScreenShare(room);
+    useVoiceStore.setState({ isScreenSharing: true, screenShareConfig: nextConfig });
+
+    finishAnnouncement();
+    await republishing;
+
+    expect(localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+    expect(useVoiceStore.getState().screenShareConfig).toEqual(nextConfig);
+  });
+
+  it('does not republish after a stop lands while codec-swap unpublish is pending', async () => {
+    let finishUnpublish!: () => void;
+    const pendingUnpublish = new Promise<void>(resolve => { finishUnpublish = resolve; });
+    let unpublishCall = 0;
+    const { room, localParticipant, mediaStreamTrack, videoTrack } = makeSharingRoom(
+      vi.fn().mockResolvedValue(undefined),
+      async (track, stopOnUnpublish) => {
+        unpublishCall += 1;
+        if (unpublishCall === 1) return pendingUnpublish;
+        if (stopOnUnpublish) (track as { mediaStreamTrack: { stop: () => void } }).mediaStreamTrack.stop();
+      },
+    );
+
+    const republishing = republishScreenShare(room);
+    await vi.waitFor(() => expect(localParticipant.unpublishTrack).toHaveBeenCalledOnce());
+    await stopScreenShare(room);
+    expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+
+    finishUnpublish();
+    await republishing;
+
+    expect(localParticipant.unpublishTrack).toHaveBeenCalledTimes(2);
+    expect(localParticipant.unpublishTrack).toHaveBeenNthCalledWith(1, videoTrack, false);
+    expect(localParticipant.unpublishTrack).toHaveBeenNthCalledWith(2, videoTrack, true);
+    expect(localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(mediaStreamTrack.stop).toHaveBeenCalled();
+    expect(useVoiceStore.getState().isScreenSharing).toBe(false);
+  });
+
+  it('does not let an old unpublish clear or republish over a newer sharing session', async () => {
+    let finishUnpublish!: () => void;
+    const pendingUnpublish = new Promise<void>(resolve => { finishUnpublish = resolve; });
+    let unpublishCall = 0;
+    const { room, localParticipant, mediaStreamTrack } = makeSharingRoom(
+      vi.fn().mockResolvedValue(undefined),
+      async (track, stopOnUnpublish) => {
+        unpublishCall += 1;
+        if (unpublishCall === 1) return pendingUnpublish;
+        if (stopOnUnpublish) (track as { mediaStreamTrack: { stop: () => void } }).mediaStreamTrack.stop();
+      },
+    );
+    const nextConfig = {
+      ...useVoiceStore.getState().screenShareConfig,
+      height: 720,
+      fps: 45,
+      mode: 'text' as const,
+      customBitrateKbps: 3000,
+      codec: 'vp9' as const,
+    };
+
+    const republishing = republishScreenShare(room);
+    await vi.waitFor(() => expect(localParticipant.unpublishTrack).toHaveBeenCalledOnce());
+    await stopScreenShare(room);
+    useVoiceStore.setState({ isScreenSharing: true, screenShareConfig: nextConfig });
+
+    finishUnpublish();
+    await republishing;
+
+    expect(localParticipant.publishTrack).not.toHaveBeenCalled();
+    expect(useVoiceStore.getState().isScreenSharing).toBe(true);
+    expect(useVoiceStore.getState().screenShareConfig).toEqual(nextConfig);
+    expect(mediaStreamTrack.stop).toHaveBeenCalled();
   });
 });

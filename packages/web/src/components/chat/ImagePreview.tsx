@@ -3,14 +3,23 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
 import { isElectron } from '../../platform/platform';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
+import { useRef } from 'react';
 
 export function ImagePreview() {
   const { t } = useTranslation(['chat', 'common']);
   const imageUrl = useUIStore((s) => s.imagePreviewUrl);
   const closeImagePreview = useUIStore((s) => s.closeImagePreview);
   const activeModal = useUIStore((s) => s.activeModal);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const isOpen = activeModal === 'imagePreview' && !!imageUrl;
+  useDialogLayer(overlayRef, {
+    open: isOpen,
+    onClose: closeImagePreview,
+    label: t('chat:preview.alt'),
+  });
 
-  if (activeModal !== 'imagePreview' || !imageUrl) return null;
+  if (!isOpen) return null;
 
   // Fixed positioning escapes App's 32px title bar and 1px divider. Keep the
   // preview below that native-control area without changing browser layout.
@@ -18,6 +27,7 @@ export function ImagePreview() {
 
   return (
     <div
+      ref={overlayRef}
       className={`fixed inset-x-0 bottom-0 z-[200] flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer ${topInsetClass}`}
       onClick={closeImagePreview}
     >

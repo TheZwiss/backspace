@@ -1,0 +1,487 @@
+{
+  "before": {
+    "alice": {
+      "time": 413554.90000000596,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "h264"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "cf0acdad-76d5-4db2-9907-a05943dff999",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 203.468407,
+          "frames": 3561,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "cf0acdad-76d5-4db2-9907-a05943dff999",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n04:32\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n720P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n6 min decorridos"
+    },
+    "bob": {
+      "time": 413556,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 146.325,
+          "frames": 3536,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n04:32\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 55FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n6 min decorridos"
+    },
+    "pubs": 10
+  },
+  "picks": [
+    {
+      "at": 414154.30000000447,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "148220b0-a779-4081-9675-d37114ca2bc6"
+    },
+    {
+      "at": 414216.700000003,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "9ccdcb38-7a0a-487c-9103-8d8f211a681f"
+    },
+    {
+      "at": 414274.80000000447,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "008ee7aa-fcb3-4861-b0b6-a9162d521ed9"
+    },
+    {
+      "at": 414339,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "f5f60937-ef08-45d0-b24b-7c4b82760492"
+    },
+    {
+      "at": 414407.6000000015,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    },
+    {
+      "at": 414469.700000003,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    },
+    {
+      "at": 414520.6000000015,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    },
+    {
+      "at": 414587.6000000015,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    },
+    {
+      "at": 414649.5,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    },
+    {
+      "at": 414715.200000003,
+      "startDisabled": true,
+      "sharing": true,
+      "previewTrack": "d783afd5-a8b3-4155-b126-55fec7efdfad"
+    }
+  ],
+  "prepared": {
+    "captures": [
+      {
+        "start": 209821.90000000596,
+        "end": 210004,
+        "tracks": [
+          {
+            "id": "cf0acdad-76d5-4db2-9907-a05943dff999",
+            "state": "live"
+          }
+        ]
+      },
+      {
+        "start": 394766.200000003,
+        "end": 394767.90000000596,
+        "tracks": [
+          {
+            "id": "873cc5f2-3473-483f-8e88-399d4d674466",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 413733.5,
+        "end": 413734.700000003,
+        "tracks": [
+          {
+            "id": "148220b0-a779-4081-9675-d37114ca2bc6",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414193,
+        "end": 414194.1000000015,
+        "tracks": [
+          {
+            "id": "9ccdcb38-7a0a-487c-9103-8d8f211a681f",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414254.5,
+        "end": 414255.700000003,
+        "tracks": [
+          {
+            "id": "008ee7aa-fcb3-4861-b0b6-a9162d521ed9",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414316.40000000596,
+        "end": 414317.700000003,
+        "tracks": [
+          {
+            "id": "f5f60937-ef08-45d0-b24b-7c4b82760492",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414383.40000000596,
+        "end": 414384.90000000596,
+        "tracks": [
+          {
+            "id": "d783afd5-a8b3-4155-b126-55fec7efdfad",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414457.40000000596,
+        "end": 414471.80000000447,
+        "tracks": [
+          {
+            "id": "ec10616e-e9d1-45fd-b3d2-31ce98a259cf",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414548.90000000596,
+        "end": 414550.30000000447,
+        "tracks": [
+          {
+            "id": "11951d5f-5c57-412e-8cab-2100f329e6d5",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414612.5,
+        "end": 414615.80000000447,
+        "tracks": [
+          {
+            "id": "b9f18e40-45b4-4c40-9ea8-1ec38a326376",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414667.1000000015,
+        "end": 414668.6000000015,
+        "tracks": [
+          {
+            "id": "4e3f5a9c-528b-446e-9555-b9a6e605a968",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414715.5,
+        "end": 414716.80000000447,
+        "tracks": [
+          {
+            "id": "e0ef936a-90d1-4b0c-9d6d-80b76a95342c",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "start": 414765.700000003,
+        "end": 414766.80000000447,
+        "tracks": [
+          {
+            "id": "a3b9496d-08ae-4690-8798-bdb15037571d",
+            "state": "live"
+          }
+        ]
+      }
+    ],
+    "startDisabled": false
+  },
+  "after": {
+    "alice": {
+      "time": 417531.90000000596,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 540,
+        "fps": 45,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "h264"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 1.466425,
+          "frames": 2,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "a3b9496d-08ae-4690-8798-bdb15037571d",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n04:36\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n720P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n6 min decorridos"
+    },
+    "bob": {
+      "time": 417532.8999999985,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 149.146,
+          "frames": 3660,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "dde274cb-2312-45f8-9516-843f322b147e",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n04:36\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 56FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n6 min decorridos"
+    },
+    "pubs": 10,
+    "captures": [
+      {
+        "tracks": [
+          {
+            "id": "cf0acdad-76d5-4db2-9907-a05943dff999",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "873cc5f2-3473-483f-8e88-399d4d674466",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "148220b0-a779-4081-9675-d37114ca2bc6",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "9ccdcb38-7a0a-487c-9103-8d8f211a681f",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "008ee7aa-fcb3-4861-b0b6-a9162d521ed9",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "f5f60937-ef08-45d0-b24b-7c4b82760492",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "d783afd5-a8b3-4155-b126-55fec7efdfad",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "ec10616e-e9d1-45fd-b3d2-31ce98a259cf",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "11951d5f-5c57-412e-8cab-2100f329e6d5",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "b9f18e40-45b4-4c40-9ea8-1ec38a326376",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "4e3f5a9c-528b-446e-9555-b9a6e605a968",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "e0ef936a-90d1-4b0c-9d6d-80b76a95342c",
+            "state": "ended"
+          }
+        ]
+      },
+      {
+        "tracks": [
+          {
+            "id": "a3b9496d-08ae-4690-8798-bdb15037571d",
+            "state": "live"
+          }
+        ]
+      }
+    ]
+  }
+}

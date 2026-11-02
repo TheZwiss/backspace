@@ -1,0 +1,1105 @@
+{
+  "generatedAt": "2026-11-01T22:44:43.975Z",
+  "environment": {
+    "electronPorts": [
+      9223,
+      9224
+    ],
+    "auditedPort": 9223,
+    "development": "http://localhost:5175",
+    "production": "http://127.0.0.1:5180",
+    "productionBackend": "http://127.0.0.1:3006",
+    "viewports": [
+      "1280x800",
+      "1280x600",
+      "1280x500"
+    ]
+  },
+  "development": [
+    {
+      "surface": "page:friends",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 18.600000001490116,
+      "warmTwoFramesP50Ms": 14.300000000745058,
+      "warmTwoFramesP95Ms": 18,
+      "domQuietObservationP95Ms": 393.6000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:explore",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 13.5,
+      "warmTwoFramesP50Ms": 11.699999999254942,
+      "warmTwoFramesP95Ms": 14.5,
+      "domQuietObservationP95Ms": 395.29999999701977,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:backspace",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 12.5,
+      "warmTwoFramesP50Ms": 11.400000002235174,
+      "warmTwoFramesP95Ms": 13.700000002980232,
+      "domQuietObservationP95Ms": 470,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:text-channel",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 17.699999999254942,
+      "warmTwoFramesP50Ms": 16.800000000745058,
+      "warmTwoFramesP95Ms": 22.199999999254942,
+      "domQuietObservationP95Ms": 2622.60000000149,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:createSpace",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 11.399999998509884,
+      "warmTwoFramesP50Ms": 12.700000002980232,
+      "warmTwoFramesP95Ms": 15.199999999254942,
+      "domQuietObservationP95Ms": 390.0999999977648,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:joinSpace",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 14.5,
+      "warmTwoFramesP50Ms": 13.400000002235174,
+      "warmTwoFramesP95Ms": 16.400000002235174,
+      "domQuietObservationP95Ms": 389.80000000074506,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:createChannel",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 16.400000002235174,
+      "warmTwoFramesP50Ms": 11.899999998509884,
+      "warmTwoFramesP95Ms": 14.400000002235174,
+      "domQuietObservationP95Ms": 390.6000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:createCategory",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 12.799999997019768,
+      "warmTwoFramesP50Ms": 12.899999998509884,
+      "warmTwoFramesP95Ms": 14.5,
+      "domQuietObservationP95Ms": 391.3999999985099,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:invite",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 18.099999997764826,
+      "warmTwoFramesP50Ms": 13.199999999254942,
+      "warmTwoFramesP95Ms": 14.800000000745058,
+      "domQuietObservationP95Ms": 393,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:newDm",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 12.399999998509884,
+      "warmTwoFramesP50Ms": 12.200000002980232,
+      "warmTwoFramesP95Ms": 14.399999998509884,
+      "domQuietObservationP95Ms": 390.19999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:bookmarks",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 16.800000000745058,
+      "warmTwoFramesP50Ms": 13.200000002980232,
+      "warmTwoFramesP95Ms": 14.199999999254942,
+      "domQuietObservationP95Ms": 390.1000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:spaceProfile",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 16.399999998509884,
+      "warmTwoFramesP50Ms": 12.199999999254942,
+      "warmTwoFramesP95Ms": 14.899999998509884,
+      "domQuietObservationP95Ms": 392.5,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:soundboard",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 17.399999998509884,
+      "warmTwoFramesP50Ms": 13.699999999254942,
+      "warmTwoFramesP95Ms": 15.800000000745058,
+      "domQuietObservationP95Ms": 2428.7000000029802,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:channelSettings",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 20.5,
+      "warmTwoFramesP50Ms": 13.399999998509884,
+      "warmTwoFramesP95Ms": 16.399999998509884,
+      "domQuietObservationP95Ms": 961.8000000007451,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:categorySettings",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 14.300000000745058,
+      "warmTwoFramesP50Ms": 12.900000002235174,
+      "warmTwoFramesP95Ms": 15.399999998509884,
+      "domQuietObservationP95Ms": 2665.599999997765,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:userProfile",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 23.300000000745058,
+      "warmTwoFramesP50Ms": 11.300000000745058,
+      "warmTwoFramesP95Ms": 12.800000000745058,
+      "domQuietObservationP95Ms": 660.3999999985099,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:memberRoles",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 16.800000000745058,
+      "warmTwoFramesP50Ms": 13.5,
+      "warmTwoFramesP95Ms": 16.199999999254942,
+      "domQuietObservationP95Ms": 2652.5,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:account",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 20.300000000745058,
+      "warmTwoFramesP50Ms": 14.400000002235174,
+      "warmTwoFramesP95Ms": 17,
+      "domQuietObservationP95Ms": 678,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:appearance",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 21.100000001490116,
+      "warmTwoFramesP50Ms": 13.599999997764826,
+      "warmTwoFramesP95Ms": 15.600000001490116,
+      "domQuietObservationP95Ms": 673,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:voice",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 12,
+      "warmTwoFramesP50Ms": 16.199999999254942,
+      "warmTwoFramesP95Ms": 18.199999999254942,
+      "domQuietObservationP95Ms": 2705.39999999851,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:privacy",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 13.400000002235174,
+      "warmTwoFramesP50Ms": 13.399999998509884,
+      "warmTwoFramesP95Ms": 16.199999999254942,
+      "domQuietObservationP95Ms": 675.3000000007451,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:stickers",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 13.200000002980232,
+      "warmTwoFramesP50Ms": 14.199999999254942,
+      "warmTwoFramesP95Ms": 15.400000002235174,
+      "domQuietObservationP95Ms": 2781.699999999255,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:connections",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 11.900000002235174,
+      "warmTwoFramesP50Ms": 14.5,
+      "warmTwoFramesP95Ms": 16.300000000745058,
+      "domQuietObservationP95Ms": 673.5999999977648,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:keybinds",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 14.5,
+      "warmTwoFramesP50Ms": 13.099999997764826,
+      "warmTwoFramesP95Ms": 15.899999998509884,
+      "domQuietObservationP95Ms": 2743.60000000149,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:desktop",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 14,
+      "warmTwoFramesP50Ms": 14.099999997764826,
+      "warmTwoFramesP95Ms": 15.800000000745058,
+      "domQuietObservationP95Ms": 2766.5,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:overview",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 13.099999997764826,
+      "warmTwoFramesP50Ms": 14.199999999254942,
+      "warmTwoFramesP95Ms": 16,
+      "domQuietObservationP95Ms": 673.1000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:discovery",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 12.699999999254942,
+      "warmTwoFramesP50Ms": 12.800000000745058,
+      "warmTwoFramesP95Ms": 15.300000000745058,
+      "domQuietObservationP95Ms": 2731.2999999970198,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:members",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 10.400000002235174,
+      "warmTwoFramesP50Ms": 13,
+      "warmTwoFramesP95Ms": 15.800000000745058,
+      "domQuietObservationP95Ms": 674.6000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:roles",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 12.599999997764826,
+      "warmTwoFramesP50Ms": 12.200000002980232,
+      "warmTwoFramesP95Ms": 14.800000000745058,
+      "domQuietObservationP95Ms": 2758.699999999255,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:bans",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 11.799999997019768,
+      "warmTwoFramesP50Ms": 13.099999997764826,
+      "warmTwoFramesP95Ms": 15.299999997019768,
+      "domQuietObservationP95Ms": 673.5999999977648,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:soundboard",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 17.699999999254942,
+      "warmTwoFramesP50Ms": 12.800000000745058,
+      "warmTwoFramesP95Ms": 15.099999997764826,
+      "domQuietObservationP95Ms": 2741.89999999851,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "space-settings:stickers",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 13.199999999254942,
+      "warmTwoFramesP50Ms": 12.699999999254942,
+      "warmTwoFramesP95Ms": 14.899999998509884,
+      "domQuietObservationP95Ms": 671.0999999977648,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    }
+  ],
+  "production": [
+    {
+      "surface": "page:friends",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 13.100000001490116,
+      "warmTwoFramesP50Ms": 11,
+      "warmTwoFramesP95Ms": 15.199999999254942,
+      "domQuietObservationP95Ms": 385.8999999985099,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:explore",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 10.599999997764826,
+      "warmTwoFramesP50Ms": 11.099999997764826,
+      "warmTwoFramesP95Ms": 13.300000000745058,
+      "domQuietObservationP95Ms": 387.19999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:backspace",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 10.699999999254942,
+      "warmTwoFramesP50Ms": 10.200000002980232,
+      "warmTwoFramesP95Ms": 12.800000000745058,
+      "domQuietObservationP95Ms": 388.30000000074506,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "page:text-channel",
+      "trigger": "router-navigation",
+      "firstTwoFramesMs": 12.5,
+      "warmTwoFramesP50Ms": 11.5,
+      "warmTwoFramesP95Ms": 13.300000000745058,
+      "domQuietObservationP95Ms": 391.9000000022352,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "modal:channelSettings",
+      "trigger": "store-open",
+      "firstTwoFramesMs": 12.600000001490116,
+      "warmTwoFramesP50Ms": 11.099999997764826,
+      "warmTwoFramesP95Ms": 14,
+      "domQuietObservationP95Ms": 389.6000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:voice",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 13.400000002235174,
+      "warmTwoFramesP50Ms": 12.5,
+      "warmTwoFramesP95Ms": 14.600000001490116,
+      "domQuietObservationP95Ms": 486.1000000014901,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "settings:connections",
+      "trigger": "store-deep-link",
+      "firstTwoFramesMs": 15.199999999254942,
+      "warmTwoFramesP50Ms": 13.100000001490116,
+      "warmTwoFramesP95Ms": 14.5,
+      "domQuietObservationP95Ms": 392.19999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Geral",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 250.10000000149012,
+      "warmTwoFramesP50Ms": 24.600000001490116,
+      "warmTwoFramesP95Ms": 30.199999999254942,
+      "domQuietObservationP95Ms": 405.19999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Cadastro",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 73.89999999850988,
+      "warmTwoFramesP50Ms": 26.800000000745058,
+      "warmTwoFramesP95Ms": 39.399999998509884,
+      "domQuietObservationP95Ms": 412.5999999977648,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Federação",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 31.699999999254942,
+      "warmTwoFramesP50Ms": 30.300000000745058,
+      "warmTwoFramesP95Ms": 34.100000001490116,
+      "domQuietObservationP95Ms": 409.70000000298023,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Transmissão",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 36.79999999701977,
+      "warmTwoFramesP50Ms": 28.599999997764826,
+      "warmTwoFramesP95Ms": 35.30000000074506,
+      "domQuietObservationP95Ms": 409.69999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Armazenamento",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 31.199999999254942,
+      "warmTwoFramesP50Ms": 27.699999999254942,
+      "warmTwoFramesP95Ms": 34.400000002235174,
+      "domQuietObservationP95Ms": 408.69999999925494,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Usuários",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 50.100000001490116,
+      "warmTwoFramesP50Ms": 30.300000000745058,
+      "warmTwoFramesP95Ms": 36.399999998509884,
+      "domQuietObservationP95Ms": 681.8999999985099,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Atualizações",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 48.5,
+      "warmTwoFramesP50Ms": 31,
+      "warmTwoFramesP95Ms": 35.30000000074506,
+      "domQuietObservationP95Ms": 417.5,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    },
+    {
+      "surface": "admin:Oi",
+      "trigger": "real-pointer-after-open",
+      "firstTwoFramesMs": 45.900000002235174,
+      "warmTwoFramesP50Ms": 45.80000000074506,
+      "warmTwoFramesP95Ms": 56.100000001490116,
+      "domQuietObservationP95Ms": 426.8999999985099,
+      "samples": 21,
+      "blockedSamples": 0,
+      "longTasks": [],
+      "timeouts": 0
+    }
+  ],
+  "extras": [
+    {
+      "surface": "page:dm",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 12.5,
+        "p95": 16.199999999254942,
+        "max": 16.199999999254942
+      }
+    },
+    {
+      "surface": "page:group",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 13.800000000745058,
+        "p95": 20.900000002235174,
+        "max": 20.900000002235174
+      }
+    },
+    {
+      "surface": "group-settings:overview",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 11.5,
+        "p95": 12.600000001490116,
+        "max": 12.600000001490116
+      }
+    },
+    {
+      "surface": "group-settings:members",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 12,
+        "p95": 13.899999998509884,
+        "max": 13.899999998509884
+      }
+    },
+    {
+      "surface": "modal:addDmMember",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 10.199999999254942,
+        "p95": 12,
+        "max": 12
+      }
+    },
+    {
+      "surface": "channelSettings:permissions",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 10.900000002235174,
+        "p95": 17.599999997764826,
+        "max": 17.599999997764826
+      }
+    },
+    {
+      "surface": "categorySettings:permissions",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 10.699999999254942,
+        "p95": 12.899999998509884,
+        "max": 12.899999998509884
+      }
+    },
+    {
+      "surface": "profile:Amigos em comum",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 10.400000002235174,
+        "p95": 14.300000000745058,
+        "max": 14.300000000745058
+      }
+    },
+    {
+      "surface": "profile:Espaços em comum",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 10,
+        "p95": 10.600000001490116,
+        "max": 10.600000001490116
+      }
+    },
+    {
+      "surface": "modal:imagePreview",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 14.899999998509884,
+        "p95": 21.699999999254942,
+        "max": 21.699999999254942
+      }
+    },
+    {
+      "surface": "popover:notifications",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 11.300000000745058,
+        "p95": 14.5,
+        "max": 14.5
+      }
+    },
+    {
+      "surface": "modal:transfers",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 12.200000002980232,
+        "p95": 15.5,
+        "max": 15.5
+      }
+    },
+    {
+      "surface": "modal:ownerTitle",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 14.600000001490116,
+        "p95": 16.800000000745058,
+        "max": 16.800000000745058
+      }
+    },
+    {
+      "surface": "modal:avatarCrop",
+      "samples": 5,
+      "latency": {
+        "count": 5,
+        "p50": 17.199999999254942,
+        "p95": 23.800000000745058,
+        "max": 23.800000000745058
+      }
+    }
+  ],
+  "screenShare": {
+    "sourceList": {
+      "count": 10,
+      "p50": 516.0999999977648,
+      "p95": 722.6999999992549,
+      "max": 722.6999999992549
+    },
+    "preview": {
+      "count": 10,
+      "p50": 799.1000000014901,
+      "p95": 988.8000000007451,
+      "max": 988.8000000007451
+    },
+    "cancelObservation": {
+      "count": 10,
+      "p50": 107.90000000223517,
+      "p95": 120.19999999925494,
+      "max": 120.19999999925494
+    },
+    "nativeWithThumbnails": {
+      "count": 10,
+      "p50": 461.6000000014901,
+      "p95": 2659.60000000149,
+      "max": 2659.60000000149
+    },
+    "nativeWithoutThumbnails": {
+      "count": 10,
+      "p50": 423.69999999925494,
+      "p95": 2269.5,
+      "max": 2269.5
+    },
+    "sourceBursts": 5,
+    "previewQualityBursts": 3,
+    "liveQualityBursts": 3,
+    "remoteMissingVideoIntervals": [
+      {
+        "start": 10662,
+        "end": 10981,
+        "duration": 319
+      },
+      {
+        "start": 11632,
+        "end": 11959,
+        "duration": 327
+      },
+      {
+        "start": 12613,
+        "end": 12828,
+        "duration": 215
+      }
+    ],
+    "finalInstrumentedCapturesLive": 0,
+    "cacheProof": {
+      "metadataCount": 8,
+      "metadataThumbnails": 0,
+      "requestedThumbnailsCount": 8,
+      "returnedThumbnails": 0,
+      "cachedReplyMs": 0.30000000074505806
+    },
+    "minimumWindow": {
+      "viewport": {
+        "width": 1280,
+        "height": 500
+      },
+      "audio": {
+        "x": 738,
+        "y": 497.5,
+        "width": 44,
+        "height": 24,
+        "top": 497.5,
+        "right": 782,
+        "bottom": 521.5,
+        "left": 738
+      },
+      "stop": {
+        "x": 548,
+        "y": 578.5,
+        "width": 234,
+        "height": 35.5,
+        "top": 578.5,
+        "right": 782,
+        "bottom": 614,
+        "left": 548
+      },
+      "rootOverflow": "hidden",
+      "bodyOverflow": "hidden",
+      "panelOverflow": "hidden"
+    }
+  },
+  "api": {
+    "count": 490,
+    "p50": 4.991999998310348,
+    "p95": 9.38299999688752,
+    "max": 306.98000000120373,
+    "errors": 0
+  },
+  "keyboard": [
+    {
+      "phase": "settings-open-real-pointer",
+      "modal": "userSettings",
+      "focus": {
+        "tag": "BUTTON",
+        "text": "Configurações",
+        "insideModal": false
+      },
+      "dialogRoles": 0
+    },
+    {
+      "phase": "settings-first-tab",
+      "modal": "userSettings",
+      "focus": {
+        "tag": "BUTTON",
+        "text": "Configurações de notificação",
+        "insideModal": false
+      },
+      "dialogRoles": 0
+    },
+    {
+      "phase": "nested-delete-account-open",
+      "modal": "userSettings",
+      "focus": {
+        "tag": "BUTTON",
+        "text": "Excluir conta",
+        "insideModal": true
+      },
+      "dialogRoles": 0
+    },
+    {
+      "phase": "nested-delete-account-escape",
+      "modal": null,
+      "focus": {
+        "tag": "BODY",
+        "text": "\n    UUI Audit — disposabletext-channelsgeneralvoice-channelsvoice15:47TTest BobCriar canalCriar cat",
+        "insideModal": false
+      },
+      "dialogRoles": 0
+    }
+  ],
+  "totalNavigationAndPanelSamples": 1097,
+  "auth": [
+    {
+      "route": "/register",
+      "count": 20,
+      "twoFrameMs": {
+        "count": 20,
+        "p50": 10.799999997019768,
+        "p95": 12.600000001490116,
+        "max": 12.800000000745058
+      }
+    },
+    {
+      "route": "/login",
+      "count": 20,
+      "twoFrameMs": {
+        "count": 20,
+        "p50": 10.800000000745058,
+        "p95": 12.300000000745058,
+        "max": 12.300000000745058
+      }
+    },
+    {
+      "phase": "actual-login",
+      "user": "audit_login_1793571834424",
+      "admin": false,
+      "url": "/channels/@me"
+    },
+    {
+      "phase": "admin-access-denied",
+      "status": 403,
+      "endpoint": "/api/admin/storage/stats"
+    },
+    {
+      "phase": "invalid-invite",
+      "state": {
+        "url": "/join/ui_audit_invalid",
+        "text": "Convite inválido\n\nEsse código de convite não é válido.\n\nVoltar ao Backspace"
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "surface": "emoji-picker",
+      "status": "inspected"
+    },
+    {
+      "surface": "gif-picker",
+      "status": "unavailable",
+      "detail": "Button is conditional on gifEnabled; unavailable in the audited configuration."
+    },
+    {
+      "surface": "sticker-picker",
+      "status": "inspected"
+    },
+    {
+      "surface": "sticker-store",
+      "status": "inspected"
+    },
+    {
+      "surface": "sticker-store-Criados por mim",
+      "status": "inspected"
+    },
+    {
+      "surface": "sticker-store-Revisão",
+      "status": "inspected"
+    },
+    {
+      "surface": "sticker-pack-editor",
+      "status": "inspected"
+    },
+    {
+      "surface": "space-transfer-ownership",
+      "status": "inspected"
+    },
+    {
+      "surface": "space-notifications",
+      "status": "inspected"
+    },
+    {
+      "surface": "group-transfer-confirmation",
+      "status": "inspected"
+    },
+    {
+      "surface": "group-kick-confirmation",
+      "status": "inspected"
+    },
+    {
+      "surface": "voice-connection-info",
+      "status": "inspected"
+    },
+    {
+      "surface": "voice-input-devices",
+      "status": "inspected"
+    },
+    {
+      "surface": "voice-output-devices",
+      "status": "inspected"
+    },
+    {
+      "surface": "text-voice-composer",
+      "status": "inspected"
+    },
+    {
+      "surface": "soundboard-picker",
+      "status": "inspected"
+    },
+    {
+      "surface": "staged-fps-controller",
+      "status": "inspected"
+    },
+    {
+      "surface": "live-popover-minimum-window",
+      "status": "inspected"
+    },
+    {
+      "surface": "live-popover-500px",
+      "status": "inspected"
+    }
+  ],
+  "registrationAndIncomingCall": [
+    {
+      "phase": "registration-step-two",
+      "state": {
+        "text": "Deixe do seu jeito\n\nPersonalize seu perfil ou pule por enquanto\n\nA\nEnviar foto\nNOME DE EXIBIÇÃO\nCOR DO AVATAR\nComeçar\nVoltar\nPular por enquanto\nCódigo-fonte (AGPL) · v1.12.0",
+        "fields": [
+          {
+            "type": "file"
+          },
+          {
+            "type": "text"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "registration-complete",
+      "username": "audit_caller_1793571942281",
+      "admin": false
+    },
+    {
+      "phase": "admin-access-denied",
+      "status": 403
+    },
+    {
+      "phase": "incoming-call",
+      "visible": true,
+      "latencyMs": 52,
+      "events": [
+        {
+          "type": "ready"
+        },
+        {
+          "type": "dm_message_created"
+        },
+        {
+          "type": "channel_unread_count"
+        },
+        {
+          "type": "dm_message_updated"
+        },
+        {
+          "type": "dm_call_rejected"
+        }
+      ]
+    },
+    {
+      "phase": "call-declined",
+      "visible": false
+    }
+  ],
+  "finalState": {
+    "minimumWindow": {
+      "viewport": {
+        "width": 1280,
+        "height": 500
+      },
+      "audio": {
+        "x": 738,
+        "y": 497.5,
+        "width": 44,
+        "height": 24,
+        "top": 497.5,
+        "right": 782,
+        "bottom": 521.5,
+        "left": 738
+      },
+      "stop": {
+        "x": 548,
+        "y": 578.5,
+        "width": 234,
+        "height": 35.5,
+        "top": 578.5,
+        "right": 782,
+        "bottom": 614,
+        "left": 548
+      },
+      "rootOverflow": "hidden",
+      "bodyOverflow": "hidden",
+      "panelOverflow": "hidden"
+    },
+    "productionFinal": {
+      "videos": 0,
+      "liveBadge": false,
+      "connected": false
+    },
+    "original": {
+      "url": "http://localhost:5175/channels/@me",
+      "user": "test_alice",
+      "connected": false,
+      "sharing": false
+    }
+  },
+  "additionalDialogs": [
+    {
+      "name": "channel-topic-dialog",
+      "state": {
+        "text": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\nCriar canal\nCriar categoria\nT\nTest Alice\n@test_alice\n#\ngeneral\nMostrar tópico completo\nUI Audit — tópico de teste Segunda linha\nBoas-vindas ao canal!\n\nEste é o começo da conversa.\n\n​\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n1 h 6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n1 h 6 min decorridos\n#general\n\nUI Audit — tópico de teste\nSegunda linha",
+        "headings": [
+          "Boas-vindas ao canal!",
+          "Dono — 1",
+          "Online — 1",
+          "#general"
+        ]
+      }
+    },
+    {
+      "name": "member-nickname-dialog",
+      "state": {
+        "text": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\nCriar canal\nCriar categoria\nT\nTest Alice\n@test_alice\n#\ngeneral\nMostrar tópico completo\nUI Audit — tópico de teste Segunda linha\nBoas-vindas ao canal!\n\nEste é o começo da conversa.\n\n​\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n1 h 6 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n1 h 6 min decorridos\nAlterar apelido no espaço\n\nVale apenas neste espaço. O nome da conta de Test Bob não muda. Deixe em branco para mostrar o nome da conta.\n\nAPELIDO NO ESPAÇO\nCancelar\nSalvar",
+        "headings": [
+          "Boas-vindas ao canal!",
+          "Dono — 1",
+          "Online — 1",
+          "Alterar apelido no espaço"
+        ]
+      }
+    }
+  ]
+}

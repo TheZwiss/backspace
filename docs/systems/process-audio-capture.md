@@ -111,3 +111,100 @@ References:
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.hpp
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/audio-capture-helper.cpp
 - https://github.com/Ayrton09/win-capture-audio/blob/40358fd6d6acba7890774a03396b48491a8c7147/src/plugin.cpp
+
+## Verified on Windows 10 22H2 (build 19045), 2026-10-30
+
+The reported `ActivateAudioInterfaceAsync: 0x8000000e` was fixed by the agile
+completion handler described above; on this build it activates and captures.
+
+Evidence, all on a real Windows 10 x64 machine with the helper built from this
+source (MinGW-w64, statically linked):
+
+- `--self-test` → `SELF_TEST_OK IAgileObject IMarshal`, exit 0.
+- `exclude <pid>` while a 440 Hz WAV played in another process → `READY`, and
+  572,160 bytes of PCM in 3 s (~191 kB/s, the expected 48 kHz stereo s16le).
+  RMS 6354, peak 9119: the tone is in the capture, not silence.
+- Through the app: `startSystemAudio` returned `{ ok: true, pcm: true }`, and
+  `onProcessAudio` delivered 756,480 bytes in ~4 s.
+
+The local build needs two flags the CI (MSVC) build does not: `-municode`
+(entry point is `wmain`) and `-static -static-libgcc -static-libstdc++` (the
+helper is shipped as a single file). `CMakeLists.txt` sets them for MinGW.
+
+## Window geometry and borderless window capture
+
+Windows Graphics Capture draws a yellow border around a captured **window** for
+the whole session, and Windows 10 has no API to turn it off (`IsBorderRequired`
+arrives with `IGraphicsCaptureSession3` on Windows 11). Display capture draws no
+border. OBS shows the border with its WGC method and cannot see GPU-composited
+windows (Chrome, Brave, Electron) with BitBlt.
+
+Discord does not show the border, and its `discord_voice.node` explains why: the
+capture stack ("wumpus", Rust) has `graphics_capture_window_source`,
+`graphics_capture_display_source`, `dxgi_window_source`, `dxgi_display_source`
+and `gdi_window_source`, plus `window_validation` and a `WindowOccluded` error.
+Its window share is a display duplication cropped to the window rectangle
+(`DwmGetWindowAttribute` for the frame bounds), not a window capture.
+
+Backspace does the same: the helper's `geometry <hwnd>` mode prints the
+window's physical rectangle and its monitor's rectangle as one JSON line, the
+main process maps that monitor to a `desktopCapturer` screen source
+(`get-window-capture-target`), the renderer captures that display and crops
+each frame to the window on a canvas (`packages/web/src/utils/windowCropCapture.ts`),
+and the canvas track is what gets published. Audio still comes from the window's
+process tree, named separately in the preselection (`audioSourceId`).
+
+Measured on the same machine, counting yellow pixels on a 1920×1080 screenshot
+while a 900×620 Notepad was shared:
+
+| Capture | Yellow pixels |
+|---|---|
+| Nothing captured | 203 |
+| Window capture (WGC) | 694 |
+| Display capture cropped to the window | 203 |
+
+When the shared window is not the foreground window, the renderer draws a paused
+card (pause mark and the localized label) instead of the crop, and keeps the
+audio track publishing. The `geometry` line carries `foreground` for this
+(`GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT)`), polled every 500 ms
+while a share is live; before publishing, the crop is shown regardless, because
+the setup screen itself holds focus.
+
+A D3D app in **exclusive fullscreen** bypasses the compositor, so a display capture of
+that output can stop delivering frames. The helper reports `exclusive`
+(`SHQueryUserNotificationState` == `QUNS_RUNNING_D3D_FULL_SCREEN`, resolved at
+runtime so MinGW needs no header), and the renderer draws a "Reconnecting
+capture…" card until a frame arrives again — the share and its audio keep
+running, and recovery is automatic. Nothing is asked of the user.
+
+**Following the window.** When the window is dragged to another monitor, the renderer
+asks for the new target, captures that display and swaps it underneath the same
+canvas track: the publication and its audio never change, and viewers see the
+reconnecting card for about a second. If the display capture that Chromium ends
+(a display-mode change when a game enters or leaves exclusive fullscreen, a
+driver reset) cannot be restarted immediately, it is retried every two seconds
+(up to five times) with the card up, instead of ending the share. Only a closed
+window, or a run of failed restarts, ends the track.
+
+Limits, stated rather than hidden: a window on top of the shared one is inside
+the crop (as it is in Discord's), the crop follows moves and resizes but a
+window dragged to another display ends the track instead of showing the wrong
+monitor, and a minimized window shows the paused card and keeps the share alive — the helper reports the rectangle it will be restored to, and only a closed window ends the track (the helper exits).
+
+### End-to-end, two clients (2026-10-30)
+
+Alice on the Windows desktop app shared a Notepad window while Bob watched from
+Chrome in the same voice channel:
+
+- the published video track was `SCREEN_SHARE`, VP9, 856×720 (the crop of a
+  600×500 window fitted to 720p);
+- `SCREEN_SHARE_AUDIO` was published alongside it once System Audio was on —
+  the share had gone out silent in the first run only because the persisted
+  `shareAudio` preference was still `false` from an earlier session;
+- Bob's `<video>` played the share: `currentTime` advanced 8.87 s → 10.37 s
+  while `paused` stayed false;
+- yellow pixels around the shared window's screen rectangle: 39 before the
+  capture and 39 during it.
+
+The setup screen's own polling was exercised by the same run: the window list
+was enumerated when the screen opened and refreshed while it stayed open.

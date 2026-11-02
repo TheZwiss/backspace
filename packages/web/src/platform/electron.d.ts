@@ -146,8 +146,58 @@ interface BackspaceElectronAPI {
    * web client feature-detects them and falls back to the prompted flow
    * (getDisplayMedia → onScreenShareSources → selectScreenSource).
    */
-  getScreenSources?: () => Promise<ElectronScreenSource[]>;
-  preselectScreenSource?: (sourceId: string, shareAudio?: boolean, targetId?: string) => Promise<void>;
+  /**
+   * `thumbnails: false` asks for ids, names and icons only — the cheap poll the
+   * setup screen runs while it is open. Older desktop builds ignore the
+   * argument and always return previews.
+   */
+  getScreenSources?: (options?: { thumbnails?: boolean }) => Promise<ElectronScreenSource[]>;
+  preselectScreenSource?: (
+    sourceId: string,
+    shareAudio?: boolean,
+    targetId?: string,
+    /** A window source whose audio to take while `sourceId` is only its display. */
+    audioSourceId?: string,
+  ) => Promise<void>;
+  /**
+   * Where a window is on its display, for the borderless window-capture path.
+   * Null where the build or the machine cannot answer; the caller then shares
+   * the window through Chromium as before.
+   */
+  getWindowCaptureTarget?: (sourceId: string) => Promise<{
+    screenSourceId: string;
+    monitor: { x: number; y: number; width: number; height: number };
+    crop: { x: number; y: number; width: number; height: number };
+    minimized: boolean;
+    /** False while another window is focused: the share shows a paused card. */
+    foreground: boolean;
+    /** A D3D app holds the display in exclusive fullscreen; frames may stall. */
+    exclusive: boolean;
+    /** Executable basename owning the window, when the helper can read it. */
+    processName?: string | null;
+    /** Whether the owning executable matches a known or manually bound game. */
+    isGame?: boolean;
+  } | null>;
+  /** Optional Windows DXGI display capture; returns null when unavailable or for window sources. */
+  startNativeScreenCapture?: (options: {
+    sourceId: string;
+    displaySourceId?: string;
+    frameRate: number;
+    width?: number;
+    height?: number;
+    bitrateKbps?: number;
+    cursorMode?: 'auto' | 'show' | 'hide';
+    encodingDevice?: 'gpu' | 'cpu';
+    crop?: { x: number; y: number; width: number; height: number };
+  }) => Promise<{ id: string; url: string } | null>;
+  stopNativeScreenCapture?: (id: string) => Promise<void>;
+  holdScreenCaptureActivity?: () => Promise<void>;
+  releaseScreenCaptureActivity?: () => Promise<void>;
+  /** Follow a shared window's rectangle while it is captured (one helper process). */
+  startWindowGeometry?: (sourceId: string) => Promise<void>;
+  stopWindowGeometry?: (sourceId?: string) => Promise<void>;
+  /** A snapshot every 100 ms, or null when the window is gone. */
+  onWindowGeometry?: (callback: (geometry: unknown | null) => void) => () => void;
   /**
    * 'system' when the OS picks the source (Wayland screencast portal): the
    * renderer shows a "choose" card that triggers the portal on click instead

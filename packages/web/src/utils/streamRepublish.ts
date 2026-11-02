@@ -29,9 +29,11 @@
 export const STREAM_REPUBLISH_WINDOW_MS = 15_000;
 
 type Phase = 'announced' | 'bridging';
+let nextRepublishRevision = 0;
 
 interface Entry {
   phase: Phase;
+  revision: number;
   /** While bridging: a further republish was announced before the new track arrived. */
   nextAnnounced: boolean;
   timer: ReturnType<typeof setTimeout>;
@@ -40,17 +42,21 @@ interface Entry {
 export class StreamRepublishTracker {
   private readonly entries = new Map<string, Entry>();
 
-  constructor(private readonly onBridgeExpired: (identity: string) => void) {}
+  constructor(
+    private readonly onBridgeExpired: (identity: string) => void,
+    private readonly onAnnouncementExpired: (identity: string) => void = () => {},
+  ) {}
 
   /** The sharer announced that its next unpublish is a republish. */
   announce(identity: string): void {
+    const revision = ++nextRepublishRevision;
     if (this.entries.get(identity)?.phase === 'bridging') {
       // Still waiting for the previous republish's track: stay bridging, so
       // that track resumes the watch, and remember this one for after it.
-      this.arm(identity, 'bridging', true);
+      this.arm(identity, 'bridging', true, revision);
       return;
     }
-    this.arm(identity, 'announced');
+    this.arm(identity, 'announced', false, revision);
   }
 
   /**
@@ -69,6 +75,15 @@ export class StreamRepublishTracker {
     return this.entries.get(identity)?.phase === 'bridging';
   }
 
+  isRepublishing(identity: string): boolean {
+    return this.entries.has(identity);
+  }
+
+  /** Monotonically identifies each announce, including announces during a bridge. */
+  revision(identity: string): number {
+    return this.entries.get(identity)?.revision ?? 0;
+  }
+
   /**
    * A new screen-share publication arrived. Returns true when it continues a
    * bridged share, i.e. a viewer who was watching should be subscribed to it.
@@ -76,7 +91,7 @@ export class StreamRepublishTracker {
   completeWithPublication(identity: string): boolean {
     const entry = this.entries.get(identity);
     if (entry?.phase === 'bridging' && entry.nextAnnounced) {
-      this.arm(identity, 'announced');
+      this.arm(identity, 'announced', false, entry.revision);
       return true;
     }
     return this.drop(identity) === 'bridging';
@@ -93,15 +108,16 @@ export class StreamRepublishTracker {
     this.entries.clear();
   }
 
-  private arm(identity: string, phase: Phase, nextAnnounced = false): void {
+  private arm(identity: string, phase: Phase, nextAnnounced = false, revision?: number): void {
     const existing = this.entries.get(identity);
     if (existing) clearTimeout(existing.timer);
     const timer = setTimeout(() => {
       if (this.entries.get(identity)?.timer !== timer) return;
       this.entries.delete(identity);
       if (phase === 'bridging') this.onBridgeExpired(identity);
+      else this.onAnnouncementExpired(identity);
     }, STREAM_REPUBLISH_WINDOW_MS);
-    this.entries.set(identity, { phase, nextAnnounced, timer });
+    this.entries.set(identity, { phase, nextAnnounced, timer, revision: revision ?? existing?.revision ?? this.revision(identity) });
   }
 
   private drop(identity: string): Phase | null {

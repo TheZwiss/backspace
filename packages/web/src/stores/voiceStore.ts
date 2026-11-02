@@ -8,6 +8,7 @@ import { isElectron } from '../platform/platform';
 
 export interface ScreenShareConfig {
   previewMode?: 'normal' | 'blurred' | 'hidden';
+  cursorMode?: 'auto' | 'show' | 'hide';
   height: number | 'native';
   fps: number;
   mode: 'gaming' | 'text';
@@ -97,6 +98,8 @@ export interface VoiceChannelElapsed {
 export interface VoiceState {
   dmWaitingUntil: Map<string, number>;
   voiceUsers: Map<string, string[]>; // channelId → userIds
+  /** Confirmed departures in the current channel, until rejoin or a new session. */
+  departedVoiceUserIds: Set<string>;
   voiceChannelElapsedSeconds: Map<string, VoiceChannelElapsed>; // channelId → server duration + local observation time
   currentVoiceChannelId: string | null;
   isMuted: boolean;
@@ -310,6 +313,7 @@ export const useVoiceStore = create<VoiceState>()(
     (set, get) => ({
       dmWaitingUntil: new Map(),
       voiceUsers: new Map(),
+      departedVoiceUserIds: new Set(),
       voiceChannelElapsedSeconds: new Map(),
       currentVoiceChannelId: null,
       isMuted: false,
@@ -334,7 +338,7 @@ export const useVoiceStore = create<VoiceState>()(
       outputDeviceId: 'default',
       cameraDeviceId: null,
       focusedParticipantId: null,
-      screenShareConfig: { previewMode: 'normal', height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron(), codec: 'vp9' },
+      screenShareConfig: { previewMode: 'normal', cursorMode: 'auto', height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron(), codec: 'h264' },
       cameraConfig: { height: 720, fps: 30, customBitrateKbps: null },
       lastScreenShareSourceId: null,
       participantVolumes: new Map(),
@@ -509,7 +513,11 @@ export const useVoiceStore = create<VoiceState>()(
         set((state) => {
           const newMap = new Map(state.voiceUsers);
           newMap.set(channelId, userIds);
-          return { voiceUsers: newMap };
+          const departedVoiceUserIds = new Set(state.departedVoiceUserIds);
+          if (channelId === state.currentVoiceChannelId) {
+            for (const userId of userIds) departedVoiceUserIds.delete(userId);
+          }
+          return { voiceUsers: newMap, departedVoiceUserIds };
         });
       },
 
@@ -535,7 +543,9 @@ export const useVoiceStore = create<VoiceState>()(
           if (!current.includes(userId)) {
             newMap.set(channelId, [...current, userId]);
           }
-          return { voiceUsers: newMap };
+          const departedVoiceUserIds = new Set(state.departedVoiceUserIds);
+          if (channelId === state.currentVoiceChannelId) departedVoiceUserIds.delete(userId);
+          return { voiceUsers: newMap, departedVoiceUserIds };
         });
       },
 
@@ -545,16 +555,19 @@ export const useVoiceStore = create<VoiceState>()(
           const current = newMap.get(channelId) ?? [];
           const remaining = current.filter(id => id !== userId);
           newMap.set(channelId, remaining);
-          if (remaining.length > 0) return { voiceUsers: newMap };
+          const departedVoiceUserIds = new Set(state.departedVoiceUserIds);
+          if (channelId === state.currentVoiceChannelId) departedVoiceUserIds.add(userId);
+          if (remaining.length > 0) return { voiceUsers: newMap, departedVoiceUserIds };
 
           const voiceChannelElapsedSeconds = new Map(state.voiceChannelElapsedSeconds);
           voiceChannelElapsedSeconds.delete(channelId);
-          return { voiceUsers: newMap, voiceChannelElapsedSeconds };
+          return { voiceUsers: newMap, voiceChannelElapsedSeconds, departedVoiceUserIds };
         });
       },
 
       setCurrentVoiceChannel: (channelId) => set({ 
         currentVoiceChannelId: channelId,
+        departedVoiceUserIds: new Set(),
         activeDmCall: null // Clear active DM call when joining a server channel
       }),
 
@@ -650,7 +663,13 @@ export const useVoiceStore = create<VoiceState>()(
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
       setLastScreenShareSourceId: (sourceId) => set({ lastScreenShareSourceId: sourceId }),
       setScreenShareConfig: (config) => set((state) => ({
-        screenShareConfig: { ...state.screenShareConfig, ...config },
+        screenShareConfig: {
+          ...state.screenShareConfig,
+          ...config,
+          ...(config.cursorMode === undefined ? {} : {
+            cursorMode: ['auto', 'show', 'hide'].includes(config.cursorMode) ? config.cursorMode : 'auto',
+          }),
+        },
       })),
       setCameraConfig: (config) => set((state) => ({
         cameraConfig: { ...state.cameraConfig, ...config },
@@ -722,6 +741,7 @@ export const useVoiceStore = create<VoiceState>()(
       clearAllVoiceUsers: () => set({
         dmWaitingUntil: new Map(),
         voiceUsers: new Map(),
+        departedVoiceUserIds: new Set(),
         voiceChannelElapsedSeconds: new Map(),
         voiceUserStates: new Map(),
       }),
@@ -730,6 +750,7 @@ export const useVoiceStore = create<VoiceState>()(
         dmWaitingUntil: new Map(),
         // Connection state
         voiceUsers: new Map(),
+        departedVoiceUserIds: new Set(),
         voiceChannelElapsedSeconds: new Map(),
         voiceUserStates: new Map(),
         currentVoiceChannelId: null,
@@ -799,6 +820,7 @@ export const useVoiceStore = create<VoiceState>()(
 
           return {
             currentVoiceChannelId: null,
+            departedVoiceUserIds: new Set(),
             isCameraOn: false,
             isScreenSharing: false,
             participants: [],
@@ -844,6 +866,7 @@ export const useVoiceStore = create<VoiceState>()(
       handleForceDisconnect: () => {
         set({
           currentVoiceChannelId: null,
+          departedVoiceUserIds: new Set(),
           isCameraOn: false,
           isScreenSharing: false,
           participants: [],
@@ -871,6 +894,7 @@ export const useVoiceStore = create<VoiceState>()(
       reset: () => set({
         dmWaitingUntil: new Map(),
         voiceUsers: new Map(),
+        departedVoiceUserIds: new Set(),
         voiceChannelElapsedSeconds: new Map(),
         currentVoiceChannelId: null,
         isMuted: false,
@@ -911,7 +935,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 15,
+      version: 17,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -982,6 +1006,13 @@ export const useVoiceStore = create<VoiceState>()(
         }
         if (version < 15) {
           persistedState.cameraConfig = { height: 720, fps: 30, customBitrateKbps: null };
+        }
+        if (version < 16 && persistedState.screenShareConfig) {
+          persistedState.screenShareConfig.cursorMode = 'auto';
+        }
+        if (version < 17 && persistedState.screenShareConfig?.codec === 'vp9') {
+          // VP9 was the old default; make H.264 the default after upgrading.
+          persistedState.screenShareConfig.codec = 'h264';
         }
         return persistedState;
       },

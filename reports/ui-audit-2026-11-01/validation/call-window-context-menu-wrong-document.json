@@ -1,0 +1,12 @@
+{
+  "child": {
+    "menus": [],
+    "documentTitle": "Backspace — Call"
+  },
+  "main": {
+    "menus": [
+      "Parar transmissão\nTrocar transmissão\nQUALIDADE DA TRANSMISSÃO\n720p 60fps"
+    ],
+    "documentTitle": "Backspace"
+  }
+}

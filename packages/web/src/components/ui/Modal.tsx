@@ -1,5 +1,6 @@
 import { useExitMotion } from '../../hooks/useExitMotion';
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useRef } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -37,20 +38,10 @@ export function Modal(props: ModalProps) {
 function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', targetDocument = document }: ModalProps) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   useExitMotion(surfaceRef);
+  useDialogLayer(surfaceRef, { onClose, label: title, document: targetDocument });
   const { t } = useTranslation('common');
   const isMobile = useUIStore((s) => s.isMobile);
   const closeLabel = size === 'settings' ? t('chrome.closeSettings') : t('actions.close');
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    targetDocument.addEventListener('keydown', handleKeyDown);
-    return () => targetDocument.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown, targetDocument]);
 
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {

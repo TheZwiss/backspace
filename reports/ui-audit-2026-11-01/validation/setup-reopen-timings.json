@@ -1,0 +1,107 @@
+{
+  "rounds": [
+    {
+      "round": 0,
+      "sourcesMs": 526.8000000044703,
+      "previewMs": 789.8000000044703,
+      "focusInside": true,
+      "cancelMs": 12.199999995529652,
+      "liveCaptures": 0
+    },
+    {
+      "round": 1,
+      "sourcesMs": 545.3999999985099,
+      "previewMs": 855.8999999985099,
+      "focusInside": true,
+      "cancelMs": 12.800000004470348,
+      "liveCaptures": 0
+    },
+    {
+      "round": 2,
+      "sourcesMs": 3448.10000000149,
+      "previewMs": 3726.7000000029802,
+      "focusInside": true,
+      "cancelMs": 11.100000001490116,
+      "liveCaptures": 0
+    },
+    {
+      "round": 3,
+      "sourcesMs": 521.6000000014901,
+      "previewMs": 772.7000000029802,
+      "focusInside": true,
+      "cancelMs": 16.099999994039536,
+      "liveCaptures": 0
+    },
+    {
+      "round": 4,
+      "sourcesMs": 504,
+      "previewMs": 757.5,
+      "focusInside": true,
+      "cancelMs": 12.200000002980232,
+      "liveCaptures": 0
+    },
+    {
+      "round": 5,
+      "sourcesMs": 515,
+      "previewMs": 759.8999999985099,
+      "focusInside": true,
+      "cancelMs": 12.099999994039536,
+      "liveCaptures": 0
+    },
+    {
+      "round": 6,
+      "sourcesMs": 507.8999999985099,
+      "previewMs": 760.8999999985099,
+      "focusInside": true,
+      "cancelMs": 13,
+      "liveCaptures": 0
+    },
+    {
+      "round": 7,
+      "sourcesMs": 507.29999999701977,
+      "previewMs": 761.1000000014901,
+      "focusInside": true,
+      "cancelMs": 11.799999997019768,
+      "liveCaptures": 0
+    },
+    {
+      "round": 8,
+      "sourcesMs": 504.3999999985099,
+      "previewMs": 756.6999999955297,
+      "focusInside": true,
+      "cancelMs": 9.300000004470348,
+      "liveCaptures": 0
+    },
+    {
+      "round": 9,
+      "sourcesMs": 503.19999999552965,
+      "previewMs": 756.2999999970198,
+      "focusInside": true,
+      "cancelMs": 13.400000005960464,
+      "liveCaptures": 0
+    }
+  ],
+  "bursts": [
+    {
+      "cancelMs": 72.30000000447035,
+      "liveCaptures": 0
+    },
+    {
+      "cancelMs": 66.20000000298023,
+      "liveCaptures": 0
+    },
+    {
+      "cancelMs": 59.899999998509884,
+      "liveCaptures": 0
+    },
+    {
+      "cancelMs": 74.60000000149012,
+      "liveCaptures": 0
+    },
+    {
+      "cancelMs": 63,
+      "liveCaptures": 0
+    }
+  ],
+  "finalLive": 0
+}
