@@ -19,3 +19,16 @@ A deformação já está nos pixels do vídeo recebido; não é criada apenas pe
 Não foram alterados codec, captura, enquadramento, fontes nem código do aplicativo. Um próximo teste deve comparar uma entrada normalizada em superfície GPU com dimensões visíveis exatas contra a entrada NV12 atual, preservando as 1080 linhas; cortar a faixa do receptor esconderia o erro e manteria a compressão do restante da imagem.
 
 Artefatos locais ignorados pelo Git: tests/.tmp/edge-source.png, edge-local.png, edge-remote.png, edge-geometry.json; scripts edge-compare.mjs e inspect-receiver-edge.mjs.
+
+
+## Correção e validação
+
+As alterações anteriores foram preservadas no commit 1b4142a5 antes de iniciar esta correção. Um teste reversível inseriu uma superfície OffscreenCanvas de tamanho visível exato entre uma clone da faixa nativa e o sender WebRTC; restaurar a faixa original restaurou o caminho anterior. Com a superfície normalizada, a comparação passou a ter melhor correspondência na altura integral de 1080, não em 1072. Isso localiza o comportamento problemático no caminho que consome a superfície NV12 com padding para envio WebRTC; o decoder remoto continuou declarando 1088/1080 como antes.
+
+A implementação normaliza somente VideoFrames com padding ou offset visível, usando drawImage que respeita visibleRect e uma superfície reutilizada em displayWidth×displayHeight. Não há cópia explícita para buffers CPU, getImageData ou copyTo. Timestamp/duração são preservados, e tanto o frame original quanto o novo são fechados na etapa correta. Quadros sem padding passam direto. A conversão pode acrescentar trabalho de composição/conversão de cor; não se presume custo zero nem garantia de execução exclusivamente na GPU.
+
+Com o código incorporado, no receptor: bitmap local e remoto 1920×1080; fonte local após generator codedHeight=1080; decoder remoto codedHeight=1088, visibleRect 1080. Região estática esquerda: erro médio sem redimensionamento = 0,611; redimensionando a imagem local para 1072 = 19,262. A deformação foi eliminada na amostra.
+
+Teste com animação: saída 1920×1080 a 58,66 FPS, qualityLimitationReason=none; 593 frames normalizados no intervalo. Tempo médio de submissão da normalização no renderer = 0,154ms/frame, que não mede todo o tempo assíncrono da GPU. CPU média da árvore na coleta curta = 6,13%, working set = 1286 MiB; sem ensaio pareado suficiente para afirmar ganho de consumo. Testes unitários/de regressão: 43 passaram. Typecheck e build web passaram. A janela animada temporária foi fechada; a transmissão de tela permanece ativa para conferência visual.
+
+Artefatos: tests/.tmp/perf-edge-fixed-screen-rtc.json, perf-edge-fixed-screen-resources.json, edge-geometry.json, edge-local.png, edge-remote.png. A/B temporário: edge-normalize-live.mjs, edge-restore-live.mjs.

@@ -1,3 +1,4 @@
+import { createEncoderFrameNormalizer } from './encoderFrame';
 import { getElectronAPI } from '../platform/platform';
 
 interface NativeCaptureOptions {
@@ -168,7 +169,7 @@ export async function openNativeScreenCaptureTrack(
   const writer = generator.writable.getWriter();
   const metrics = {
     startedAt: performance.now(), reads: 0, bytes: 0, accessUnits: 0,
-    captureEncoder: 'unknown',
+    captureEncoder: 'unknown', normalizedFrames: 0, normalizationTimeMs: 0,
     submitted: 0, decoded: 0, delivered: 0, writerDrops: 0,
     recoveryDrops: 0, bufferedDrops: 0, maxDecodeQueue: 0,
     writeTimeMs: 0, stoppedAt: 0,
@@ -364,6 +365,7 @@ export async function openNativeScreenCaptureTrack(
       metrics.captureEncoder = response.headers.get('x-backspace-capture-encoder') ?? 'unknown';
       const codec = response.headers.get('x-backspace-codec') ?? 'avc1.42E01E';
 
+      const normalizeFrame = createEncoderFrameNormalizer();
       const sessionDecoder = new VideoDecoder({
         output: (frame) => {
           if (generation !== runGeneration || stopped) { frame.close(); return; }
@@ -374,16 +376,27 @@ export async function openNativeScreenCaptureTrack(
             frame.close();
             return;
           }
+          let encoderFrame: VideoFrame;
+          const normalizationStarted = performance.now();
+          try { encoderFrame = normalizeFrame(frame); }
+          catch (error) {
+            frame.close();
+            console.warn('[ScreenShare] Could not normalize encoder surface:', error);
+            finish();
+            return;
+          }
+          if (encoderFrame !== frame) { frame.close(); metrics.normalizedFrames += 1; }
+          metrics.normalizationTimeMs += performance.now() - normalizationStarted;
           if (initial) resolveFirstFrame(true);
           const writeStarted = performance.now();
-          void writer.write(frame).then(
+          void writer.write(encoderFrame).then(
             () => {
               metrics.delivered += 1;
               metrics.writeTimeMs += performance.now() - writeStarted;
-              frame.close();
+              encoderFrame.close();
             },
             () => {
-              frame.close();
+              encoderFrame.close();
               finish();
             },
           );
