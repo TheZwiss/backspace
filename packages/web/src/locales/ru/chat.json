@@ -294,5 +294,98 @@
     "action": "Толкнуть",
     "received": "{{actor}} толкнул(а) {{target}}",
     "disconnected": "Соединение разорвано. Действие не отправлено."
+  },
+  "nudge": {
+    "title": "Привлечь внимание",
+    "cooldown": "Подождите 10 секунд между отправками",
+    "choose": "Выбрать эффект внимания",
+    "originals": "MSN Messenger · Оригинальные подмигивания",
+    "footer": "Один сигнал внимания каждые 10 секунд.",
+    "effects": {
+      "shake": {
+        "title": "Тряска MSN",
+        "description": "Классическая быстрая тряска"
+      },
+      "wave": {
+        "title": "Волна",
+        "description": "Волна проходит по экрану"
+      },
+      "jelly": {
+        "title": "Желе",
+        "description": "Растягивается, качается и возвращается"
+      },
+      "knock": {
+        "title": "Стук по экрану",
+        "description": "Стук, чтобы привлечь внимание"
+      },
+      "confetti": {
+        "title": "Конфетти",
+        "description": "Небольшой праздник"
+      },
+      "pulse": {
+        "title": "Пульсация",
+        "description": "По краям загорается фиолетовая рамка"
+      },
+      "msn_bouncy_ball": {
+        "title": "Прыгающий мяч",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_bow": {
+        "title": "Поклон",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_dancing_pig": {
+        "title": "Танцующий поросёнок",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_eyeball": {
+        "title": "Любопытные глаза",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_frog": {
+        "title": "Лягушка",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_guitar_smash": {
+        "title": "Разбитая гитара",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_heart": {
+        "title": "Сердце",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_kiss": {
+        "title": "Поцелуй",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_lipstick_girl": {
+        "title": "Девушка с помадой",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_love_letter": {
+        "title": "Любовное письмо",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_notes": {
+        "title": "Музыкальные ноты",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_silly_face": {
+        "title": "Рожица",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_stars": {
+        "title": "Звёзды",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_water_balloon": {
+        "title": "Водяной шарик",
+        "description": "Оригинальное подмигивание MSN"
+      },
+      "msn_fart_guy": {
+        "title": "Пукающий толстяк",
+        "description": "Оригинальное подмигивание MSN"
+      }
+    }
   }
 }

@@ -411,6 +411,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   workerId: integer('worker_id'),
   instanceId: text('instance_id'),
   discoveryEnabled: integer('discovery_enabled').notNull().default(1),
+  peopleDiscoveryMode: text('people_discovery_mode').notNull().default('search'),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
   bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),

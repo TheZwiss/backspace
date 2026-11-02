@@ -1,3 +1,4 @@
+import { friendshipMenuItems } from './memberMenu/memberSocialActions';
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
@@ -102,7 +103,7 @@ export function DmMemberRow({
   const showGlobe = isFederationGlobeApplicable(canonical);
 
   const buildMenuItems = (): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
+    const items: ContextMenuItem[] = isSelf || isFriend ? [] : friendshipMenuItems(canonical, origin);
 
     items.push({
       key: 'profile',

@@ -50,7 +50,7 @@
     "sendRequest": "Enviar solicitação",
     "discover": "Descobrir pessoas",
     "noSearchResults": "Nenhum usuário corresponde à sua pesquisa.",
-    "noDiscoverable": "Nenhum usuário descobrível ainda — convide pessoas para entrar!"
+    "noDiscoverable": "Busque pelo nome de usuário ou adicione alguém por um servidor."
   },
   "mutuals": {
     "friends_one": "{{count}} amigo em comum",
@@ -78,6 +78,11 @@
     "playingNow": "Jogando agora"
   },
   "activity": {
+    "openSpace": "Ir para o servidor",
+    "joinChannel": "Entrar no canal",
+    "channelOptions": "Opções do canal {{channel}}",
+    "friendsInVoice": "Amigos em canais de voz",
+    "moreFriends": "Mais {{n}} amigos",
     "title": "Ativos agora",
     "quietTitle": "Está tudo quieto por enquanto...",
     "quietDescription": "Quando um amigo começar uma atividade, como jogar ou ficar num canal de voz, ela aparecerá aqui!",

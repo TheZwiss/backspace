@@ -268,5 +268,98 @@
     "action": "戳一戳",
     "received": "{{actor}} 戳了戳 {{target}}",
     "disconnected": "连接已断开，戳一戳未发送"
+  },
+  "nudge": {
+    "title": "引起注意",
+    "cooldown": "每次发送后请等待 10 秒",
+    "choose": "选择引起注意效果",
+    "originals": "MSN Messenger · 原版传情动漫",
+    "footer": "每 10 秒可发送一次。",
+    "effects": {
+      "shake": {
+        "title": "MSN 震动",
+        "description": "经典快速震动"
+      },
+      "wave": {
+        "title": "波浪",
+        "description": "一道波浪掠过屏幕"
+      },
+      "jelly": {
+        "title": "果冻",
+        "description": "拉伸、摇摆后恢复原状"
+      },
+      "knock": {
+        "title": "敲屏幕",
+        "description": "敲一敲，引起注意"
+      },
+      "confetti": {
+        "title": "彩纸",
+        "description": "小小庆祝一下"
+      },
+      "pulse": {
+        "title": "脉冲",
+        "description": "紫色边框亮起"
+      },
+      "msn_bouncy_ball": {
+        "title": "弹跳球",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_bow": {
+        "title": "鞠躬",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_dancing_pig": {
+        "title": "跳舞小猪",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_eyeball": {
+        "title": "好奇眼睛",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_frog": {
+        "title": "青蛙",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_guitar_smash": {
+        "title": "砸吉他",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_heart": {
+        "title": "爱心",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_kiss": {
+        "title": "亲吻",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_lipstick_girl": {
+        "title": "口红女孩",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_love_letter": {
+        "title": "情书",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_notes": {
+        "title": "音符",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_silly_face": {
+        "title": "鬼脸",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_stars": {
+        "title": "星星",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_water_balloon": {
+        "title": "水气球",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_fart_guy": {
+        "title": "放屁胖子",
+        "description": "MSN 原版传情动漫"
+      }
+    }
   }
 }

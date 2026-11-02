@@ -21,6 +21,7 @@ export const INSTANCE_SETTINGS_REFRESH_MS = 10_000;
 
 /** The fields this panel edits; everything else is read live from the store. */
 interface InstanceDraft {
+  peopleDiscoveryMode: NonNullable<InstanceAdminSettings['peopleDiscoveryMode']>;
   instanceName: string;
   discoveryEnabled: boolean;
   directoryEnabled: boolean;
@@ -31,6 +32,7 @@ interface InstanceDraft {
 function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
   return {
     instanceName: settings.instanceName,
+    peopleDiscoveryMode: settings.peopleDiscoveryMode ?? 'search',
     discoveryEnabled: settings.discoveryEnabled,
     directoryEnabled: settings.directoryEnabled,
     directoryBrowseEnabled: settings.directoryBrowseEnabled,
@@ -39,7 +41,8 @@ function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
 }
 
 function sameDraft(a: InstanceDraft, b: InstanceDraft): boolean {
-  return a.instanceName === b.instanceName
+  return a.peopleDiscoveryMode === b.peopleDiscoveryMode
+    && a.instanceName === b.instanceName
     && a.discoveryEnabled === b.discoveryEnabled
     && a.directoryEnabled === b.directoryEnabled
     && a.directoryBrowseEnabled === b.directoryBrowseEnabled
@@ -195,6 +198,7 @@ export function GeneralPanel() {
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft.instanceName,
+        peopleDiscoveryMode: draft.peopleDiscoveryMode,
         discoveryEnabled: draft.discoveryEnabled,
         directoryEnabled: draft.directoryEnabled,
         directoryBrowseEnabled: draft.directoryBrowseEnabled,
@@ -283,6 +287,16 @@ export function GeneralPanel() {
       <h2 className="text-lg font-semibold text-txt-primary">{t('admin:general.title')}</h2>
       <div className="text-xs text-txt-tertiary">
         {t('admin:general.description')}
+      </div>
+
+      <div>
+        <label htmlFor="people-discovery-mode" className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:general.peopleDiscovery.label')}</label>
+        <p className="text-xs text-txt-tertiary mt-1 mb-2">{t('admin:general.peopleDiscovery.description')}</p>
+        <select id="people-discovery-mode" className="input-standard w-full" value={draft.peopleDiscoveryMode} onChange={(e) => setDraft({ ...draft, peopleDiscoveryMode: e.target.value as InstanceDraft['peopleDiscoveryMode'] })}>
+          <option value="search">{t('admin:general.peopleDiscovery.search')}</option>
+          <option value="shared-spaces">{t('admin:general.peopleDiscovery.shared')}</option>
+          <option value="all">{t('admin:general.peopleDiscovery.all')}</option>
+        </select>
       </div>
 
       {/* Instance Name */}

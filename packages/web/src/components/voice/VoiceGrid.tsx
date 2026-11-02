@@ -11,11 +11,12 @@ import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 interface VoiceGridProps {
   participants: ParticipantInfo[];
+  cameraAspectRatio?: number;
   fullscreen?: boolean;
   chromeRevealed?: boolean;
 }
 
-export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = false }: VoiceGridProps) {
+export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = false, cameraAspectRatio = 16 / 9 }: VoiceGridProps) {
   const { t } = useTranslation(['voice', 'common']);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
@@ -31,7 +32,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
   // each tile multiplied full PeerConnection scans by the number of streams.
   const streamStats = useTrackStats(shouldCollectStreamStats);
 
-  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length);
+  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length, { aspectRatio: tiles.some(tile => tile.kind === 'stream') ? 16 / 9 : cameraAspectRatio });
 
   // Reset strip visibility when focus target changes
   useEffect(() => {

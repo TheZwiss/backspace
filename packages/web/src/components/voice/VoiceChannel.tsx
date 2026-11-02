@@ -1,3 +1,4 @@
+import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
 import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
 import { getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -117,6 +118,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
         key: 'profile', type: 'action', label: t('spaces:members.menu.profile'),
         onClick: () => useUIStore.getState().openUserProfile(user, getChannelOrigin(channelId), anchor, 'right', spaceId ? { spaceId, userId } : undefined),
       }] : [];
+      if (user) items.push(...friendshipMenuItems(user, getChannelOrigin(channelId)));
       // Build moderation items
       const modItems = buildVoiceModMenuItems(userId, channelId);
 

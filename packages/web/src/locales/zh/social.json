@@ -50,7 +50,7 @@
     "sendRequest": "发送申请",
     "discover": "发现用户",
     "noSearchResults": "没有匹配您搜索的用户。",
-    "noDiscoverable": "暂无可发现的用户 — 快邀请大家加入吧！"
+    "noDiscoverable": "按用户名搜索或从空间添加好友。"
   },
   "mutuals": {
     "friends_other": "{{count}} 位共同好友",
@@ -74,6 +74,11 @@
     "playingNow": "正在玩"
   },
   "activity": {
+    "openSpace": "打开服务器",
+    "joinChannel": "加入频道",
+    "channelOptions": "{{channel}}的选项",
+    "friendsInVoice": "语音频道中的好友",
+    "moreFriends": "另有 {{n}} 位好友",
     "title": "当前活跃",
     "quietTitle": "目前很安静…",
     "quietDescription": "当好友开始活动时（例如玩游戏或进行语音通话），我们将在此处展示！",

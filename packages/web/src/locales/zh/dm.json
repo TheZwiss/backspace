@@ -1,4 +1,10 @@
 {
+  "friendship": {
+    "title": "好友关系",
+    "none": "你们还不是好友。",
+    "incoming": "对方向你发送了好友请求。是否接受？",
+    "outgoing": "好友请求已发送，等待回复。"
+  },
   "names": {
     "group": "群组",
     "directMessage": "私信",
@@ -15,6 +21,7 @@
     "withSender": "{{name}}：{{text}}"
   },
   "system": {
+    "nudge": "{{actor}}使用{{effect}}发送了窗口抖动",
     "spaceInviteNamed": "📨 发送了 {{spaceName}} 的空间邀请",
     "memberAdded": "{{actor}} 添加了 {{target}}",
     "memberAddedToGroup": "{{actor}} 将 {{target}} 添加到了群组",

@@ -377,7 +377,7 @@ export function MobileVoiceFullScreen() {
           screen-share tiles, mute overlays, context menus. Identical
           rendering pipeline to desktop. */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <VoiceGrid participants={participants} />
+        <VoiceGrid participants={participants} cameraAspectRatio={9 / 16} />
       </div>
 
       {/* Control bar */}

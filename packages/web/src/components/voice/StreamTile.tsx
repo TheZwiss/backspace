@@ -1,3 +1,5 @@
+import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { useStreamFullscreen } from '../../hooks/useStreamFullscreen';
 import { useStreamPreviews } from '../../utils/streamPreviews';
 import { StreamLiveBadge } from './StreamLiveBadge';
 import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
@@ -238,6 +240,7 @@ function PreviewBackdrop({ src }: { src: string }) {
 export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamFullscreen = useStreamFullscreen(videoRef);
   const frozenCanvasRef = useRef<HTMLCanvasElement>(null);
   const [frozenFrame, setFrozenFrame] = useState<HTMLCanvasElement | null>(null);
 
@@ -248,7 +251,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   const preview = useStreamPreviews((state) => state.images[participant.identity]?.image);
   const userId = participant.userId;
   const avatarUserId = participant.homeUserId ?? userId;
-  const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
+  const { displayName, avatar, user, origin: userOrigin } = useVoiceParticipantMeta(participant);
 
   const isWatching = watchingStreams.has(userId);
   const isShareActive = participant.isScreenSharing;
@@ -453,7 +456,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       e.preventDefault();
       e.stopPropagation();
 
-      const items: ContextMenuItem[] = [];
+      const items: ContextMenuItem[] = user ? friendshipMenuItems(user, userOrigin) : [];
 
       if (isLocal) {
         // Local stream: stop, change, quality
@@ -561,7 +564,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, userId, participant.identity, openContextMenu, t],
+    [user, userOrigin, isLocal, userId, participant.identity, openContextMenu, t],
   );
 
   const handleWatch = useCallback(() => {
@@ -577,6 +580,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   return (
     <div
       data-context-menu
+      style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: '100dvw', height: '100dvh', zIndex: 1000 } : undefined}
       className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
@@ -649,6 +653,16 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
         </div>
       )}
 
+      {hasVideo && isWatching && <button
+        type="button"
+        aria-label={t(streamFullscreen.active ? 'voice:controls.exitFullscreen' : 'voice:controls.fullscreen')}
+        onClick={(event) => { event.stopPropagation(); streamFullscreen.toggle(); }}
+        className="absolute bottom-2 right-2 z-20 w-11 h-11 rounded-lg bg-black/70 text-white flex items-center justify-center"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d={streamFullscreen.active ? 'M4 9h5V4m11 5h-5V4M4 15h5v5m11-5h-5v5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} />
+        </svg>
+      </button>}
       {/* Bottom overlay */}
       {(hasVideo || !!frozenFrame) && isWatching && (!borderless || chromeRevealed) && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
         <div className="flex items-center gap-1.5 min-w-0">

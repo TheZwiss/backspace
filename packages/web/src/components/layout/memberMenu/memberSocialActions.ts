@@ -1,3 +1,6 @@
+import type { MouseEvent } from 'react';
+import { useContextMenuStore } from '../../../stores/contextMenuStore';
+import i18n from '../../../i18n';
 import { openDirectMessage } from '../../../utils/openDirectMessage';
 import { selfIdentityOf } from '../../../utils/identity';
 import type { User } from '@backspace/shared';
@@ -21,9 +24,10 @@ export async function sendMemberMessage(user: User, origin: string, navigate: (p
   navigate('/channels/@me/' + channelId);
 }
 
-export function friendshipMenuItems(user: User, origin: string, t: TFunction<readonly ['spaces', 'social', 'common']>): ContextMenuAction[] {
+export function friendshipMenuItems(user: Pick<User, 'id' | 'username' | 'homeInstance' | 'homeUserId' | 'isDeleted'>, origin: string, t: TFunction<readonly ['spaces', 'social', 'common']> = i18n.getFixedT(null, ['spaces', 'social', 'common'])): ContextMenuAction[] {
   const social = useSocialStore.getState();
   const auth = useAuthStore.getState();
+  if (!auth.user || user.isDeleted) return [];
   const friendship = getFriendshipStatus({ viewedUser: user, origin, self: selfIdentityOf(auth.user, auth.myRowIds), ...social });
   const action = (key: string, label: string, run: () => Promise<unknown>): ContextMenuAction => ({
     type: 'action', key, label, onClick: () => { void runMemberAction(run); },
@@ -41,4 +45,11 @@ export function friendshipMenuItems(user: User, origin: string, t: TFunction<rea
       return [action('add-friend', t('social:profile.addFriend'), () => social.sendFriendRequest(friendRequestTarget(user, origin)))];
     }
   }
+}
+
+export function openUserFriendshipMenu(event: MouseEvent, user: Pick<User, 'id' | 'username' | 'homeInstance' | 'homeUserId' | 'isDeleted'>, origin: string): void {
+  const items = friendshipMenuItems(user, origin);
+  if (!items.length) return;
+  event.preventDefault(); event.stopPropagation();
+  useContextMenuStore.getState().open({ x: event.clientX, y: event.clientY }, items);
 }

@@ -1,4 +1,10 @@
 {
+  "friendship": {
+    "title": "Friendship",
+    "none": "You are not friends yet.",
+    "incoming": "This person sent you a friend request. Would you like to accept?",
+    "outgoing": "Friend request sent. Waiting for a response."
+  },
   "names": {
     "group": "Group",
     "directMessage": "Direct Message",
@@ -16,6 +22,7 @@
     "withSender": "{{name}}: {{text}}"
   },
   "system": {
+    "nudge": "{{actor}} sent a nudge with {{effect}}",
     "spaceInviteNamed": "📨 Sent invite to {{spaceName}}",
     "memberAdded": "{{actor}} added {{target}}",
     "memberAddedToGroup": "{{actor}} added {{target}} to the group",

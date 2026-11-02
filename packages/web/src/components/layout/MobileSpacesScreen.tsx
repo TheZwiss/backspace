@@ -1,3 +1,4 @@
+import { friendshipMenuItems } from './memberMenu/memberSocialActions';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -563,7 +564,8 @@ export function MobileSpacesScreen() {
       e.stopPropagation();
 
       const modItems = buildVoiceModMenuItems(userId, channelId);
-      const items: ContextMenuItem[] = [...modItems];
+      const profileUser = members.find(m => m.userId === userId)?.user;
+      const items: ContextMenuItem[] = [...modItems, ...(profileUser ? friendshipMenuItems(profileUser, getChannelOrigin(channelId)) : [])];
 
       if (modItems.length > 0) {
         items.push({ key: 'mod-end-sep', type: 'separator' });
@@ -588,7 +590,7 @@ export function MobileSpacesScreen() {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [user?.id, openContextMenu, t],
+    [members, user?.id, openContextMenu, t],
   );
 
   const renderChannelItem = (channel: Channel) => {

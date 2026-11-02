@@ -27,6 +27,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
 import { describeError } from '../../i18n/errors';
+import { NudgeButton } from './NudgeButton';
 
 interface MessageInputProps {
   channelId: string;
@@ -908,6 +909,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             </button>
           )}
 
+          {isDm && <NudgeButton channelId={channelId} />}
           {/* Emoji button */}
           <button
             onClick={() => togglePopover('emoji')}

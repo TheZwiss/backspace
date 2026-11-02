@@ -81,6 +81,7 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
     federatedRegistrationOpen: row.federatedRegistrationOpen === 1,
     discoveryEnabled: row.discoveryEnabled === 1,
+    peopleDiscoveryMode: row.peopleDiscoveryMode === 'all' || row.peopleDiscoveryMode === 'shared-spaces' ? row.peopleDiscoveryMode : 'search',
     gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
     gifEnabled: !!gifKey,
     maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
@@ -409,6 +410,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.discoveryEnabled !== undefined) {
       updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
+    }
+
+    if (body.peopleDiscoveryMode !== undefined) {
+      if (!['search', 'shared-spaces', 'all'].includes(body.peopleDiscoveryMode)) {
+        return sendError(reply, 400, 'validation_failed', { field: 'peopleDiscoveryMode' });
+      }
+      updateData.peopleDiscoveryMode = body.peopleDiscoveryMode;
     }
 
     // The incoming directory axis. Deliberately not routed through

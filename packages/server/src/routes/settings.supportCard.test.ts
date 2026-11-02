@@ -170,3 +170,18 @@ describe('supportCardEnabled on the instance settings routes', () => {
     });
   });
 });
+describe('people discovery administration', () => {
+  it('defaults to search and persists each supported mode', async () => {
+    const initial = await app.inject({ method: 'GET', url: '/api/settings/instance', headers: { 'x-test-user': ADMIN_ID } });
+    expect(initial.json().peopleDiscoveryMode).toBe('search');
+    for (const peopleDiscoveryMode of ['all', 'shared-spaces', 'search']) {
+      const res = await patchAs(ADMIN_ID, { peopleDiscoveryMode });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().peopleDiscoveryMode).toBe(peopleDiscoveryMode);
+    }
+  });
+  it('rejects invalid modes and changes from non-admins', async () => {
+    expect((await patchAs(ADMIN_ID, { peopleDiscoveryMode: 'invalid' })).statusCode).toBe(400);
+    expect((await patchAs(MEMBER_ID, { peopleDiscoveryMode: 'all' })).statusCode).toBe(403);
+  });
+});

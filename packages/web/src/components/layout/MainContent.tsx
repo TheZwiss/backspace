@@ -1,3 +1,4 @@
+import { DmFriendshipBanner } from '../chat/DmFriendshipBanner';
 import { DmCallStatus } from '../voice/DmCallStatus';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -457,6 +458,7 @@ export function MainContent() {
             <MemberListToggleButton />
           </div>
         </div>
+        {!isGroupDm && firstOther && <DmFriendshipBanner key={firstOther.id} user={firstOther} origin={dmViewer.origin} />}
         <DmCallStatus channelId={currentChannelId} />
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpHandled={clearJumpRequest} />
         {dmPartnerDeleted

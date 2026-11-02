@@ -1,6 +1,5 @@
-import type { User } from '@backspace/shared';
 import { isOutgoingRequest, type TaggedFriend, type TaggedFriendRequest } from '../stores/socialStore';
-import { isMine, userKey, type SelfIdentity } from './identity';
+import { isMine, userKey, type IdentityFields, type SelfIdentity } from './identity';
 
 export type FriendshipStatus =
   | { state: 'self' }
@@ -14,7 +13,7 @@ export type FriendshipStatus =
  * issued the row). Friends and requests from any instance are matched by
  * person (`userKey`), never by id or username alone.
  */
-export function getFriendshipStatus({ viewedUser, origin, self, friends, requests }: { viewedUser: User; origin: string; self: SelfIdentity | null; friends: TaggedFriend[]; requests: TaggedFriendRequest[] }): FriendshipStatus {
+export function getFriendshipStatus({ viewedUser, origin, self, friends, requests }: { viewedUser: IdentityFields; origin: string; self: SelfIdentity | null; friends: TaggedFriend[]; requests: TaggedFriendRequest[] }): FriendshipStatus {
   if (!self) return { state: 'none' };
   if (isMine(viewedUser, origin, self)) return { state: 'self' };
 

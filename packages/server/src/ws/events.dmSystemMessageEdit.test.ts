@@ -77,6 +77,22 @@ describe('WS dm_message_edit on a system message', () => {
     }).run();
   });
 
+  it('persists an accepted nudge once and broadcasts its history to both members', async () => {
+    const { handleClientEvent } = await import('./events.js');
+    const socket = {} as WebSocket;
+    handleClientEvent({ type: 'dm_nudge', dmChannelId: 'dm1', effect: 'knock' }, 'alice', 'alice', socket, false);
+    handleClientEvent({ type: 'dm_nudge', dmChannelId: 'dm1', effect: 'shake' }, 'alice', 'alice', socket, false);
+    const rows = testDb.select().from(schema.dmMessages).all().filter(row => JSON.parse(row.content ?? '{}').event === 'nudge');
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    if (!row) throw new Error('Missing nudge history');
+    expect(rows[0]).toMatchObject({ userId: 'alice', type: 'system', content: JSON.stringify({ event: 'nudge', effect: 'knock' }) });
+    for (const userId of ['alice', 'bob']) {
+      expect(sendToUser).toHaveBeenCalledWith(userId, expect.objectContaining({ type: 'dm_message_created', message: expect.objectContaining({ id: row.id }) }));
+    }
+    expect(sendToUser.mock.calls.filter(([, event]) => event.type === 'dm_nudge')).toHaveLength(1);
+  });
+
   it('refuses the edit and leaves the row and the relay untouched', async () => {
     const { handleClientEvent } = await import('./events.js');
     const socket = {} as WebSocket;
