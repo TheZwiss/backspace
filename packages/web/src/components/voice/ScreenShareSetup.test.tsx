@@ -78,6 +78,7 @@ const source = { id: 'screen:0:0', name: 'Display 1', thumbnailDataUrl: '', appI
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Object.defineProperty(HTMLMediaElement.prototype, 'pause', { configurable: true, value: vi.fn() });
   Object.defineProperty(HTMLMediaElement.prototype, 'play', {
     configurable: true,
     value: vi.fn().mockResolvedValue(undefined),
@@ -180,4 +181,21 @@ describe('ScreenShareSetup replacement flow', () => {
       expect.objectContaining({ sourceId: source.id }),
     ));
   });
+});
+
+
+it('disconnects only the staged video player on blur and resumes it on focus', async () => {
+  const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  try {
+    useScreenShareSetupStore.getState().open(undefined, 'replace');
+    render(<ScreenShareSetup />);
+    await waitFor(() => expect(mocks.capture).toHaveBeenCalledOnce());
+    await waitFor(() => expect(document.querySelector('video')?.srcObject).toBe(mocks.stream));
+    const stoppedBefore = mocks.stopStaged.mock.calls.length;
+    focus.mockReturnValue(false); fireEvent(window, new Event('blur'));
+    expect(document.querySelector('video')?.srcObject).toBeNull();
+    expect(mocks.stopStaged).toHaveBeenCalledTimes(stoppedBefore);
+    focus.mockReturnValue(true); fireEvent(window, new Event('focus'));
+    expect(document.querySelector('video')?.srcObject).toBe(mocks.stream);
+  } finally { focus.mockRestore(); }
 });

@@ -25,6 +25,7 @@ export function startStreamPreviews(room: Room, options?: { getMode: () => Strea
   useStreamPreviews.setState({ room, images: {}, identities: {} });
   let video: HTMLVideoElement | null = null;
   let trackId = '';
+  let frameTimeout: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
   let busy = false;
   let mode = options?.getMode() ?? 'normal';
@@ -41,9 +42,10 @@ export function startStreamPreviews(room: Room, options?: { getMode: () => Strea
     const image = preview.image;
     if (current()) useStreamPreviews.setState((state) => ({ images: { ...state.images, [identity]: { ...preview, image, receivedAt: Date.now() } } }));
   };
-  const detach = () => { if (video) { video.onloadeddata = null; video.pause(); video.srcObject = null; video = null; } trackId = ''; };
+  const detach = () => { clearTimeout(frameTimeout); frameTimeout = undefined; if (video) { video.onloadeddata = null; video.pause(); video.srcObject = null; video = null; } trackId = ''; };
   const capture = async () => {
     if (!current() || busy) return;
+    if (room.remoteParticipants?.size === 0) { detach(); return; }
     const publication = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
     const track = publication?.track?.mediaStreamTrack;
     if (!track || track.readyState !== 'live' || publication.isMuted) {
@@ -59,6 +61,8 @@ export function startStreamPreviews(room: Room, options?: { getMode: () => Strea
         video.muted = true; video.playsInline = true;
         video.srcObject = new MediaStream([track]); trackId = track.id;
         video.onloadeddata = () => { void capture(); };
+        // A broken track must not leave a hidden player running indefinitely.
+        frameTimeout = setTimeout(detach, 1500);
         void video.play().catch(() => undefined);
       }
       if (!video.videoWidth || !video.videoHeight) return;
@@ -78,13 +82,15 @@ export function startStreamPreviews(room: Room, options?: { getMode: () => Strea
         if (image.length <= 12_000) break;
       }
       if (!current() || capturedRevision !== revision || image.length > 12_000 || room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.trackSid !== publication.trackSid) return;
+      // Only sample one frame; never play this full-rate track between samples.
+      detach();
       const preview = { trackSid: publication.trackSid, image, mode };
       const payload = new TextEncoder().encode(JSON.stringify({ type: TOPIC, ...preview }));
       if (payload.byteLength > MAX_PACKET) return;
       put(room.localParticipant.identity, preview);
       await room.localParticipant.publishData(payload, { reliable: true, topic: TOPIC });
     } catch { /* A thumbnail must never interrupt the actual share. */ }
-    finally { busy = false; if (capturedRevision !== revision) void capture(); }
+    finally { if (video?.videoWidth) detach(); busy = false; if (capturedRevision !== revision) void capture(); }
   };
   const received = (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
     if (!current() || !participant || topic !== TOPIC) return;
@@ -96,12 +102,16 @@ export function startStreamPreviews(room: Room, options?: { getMode: () => Strea
     put(participant.identity, preview);
   };
   const unpublished = (publication: TrackPublication, participant: { identity: string }) => {
-    if (publication.source === Track.Source.ScreenShare) remove(participant.identity);
+    if (publication.source === Track.Source.ScreenShare) {
+      remove(participant.identity);
+      if (participant.identity === room.localParticipant.identity) detach();
+    }
   };
-  const left = (participant: RemoteParticipant) => remove(participant.identity);
+  const left = (participant: RemoteParticipant) => { remove(participant.identity); if (room.remoteParticipants?.size === 0) detach(); };
   const peerJoined = (participant: RemoteParticipant) => {
     const preview = useStreamPreviews.getState().images[room.localParticipant.identity];
-    if (!current() || !preview || Date.now() - preview.receivedAt > PREVIEW_INTERVAL) return;
+    if (!current()) return;
+    if (!preview || Date.now() - preview.receivedAt > PREVIEW_INTERVAL) { void capture(); return; }
     const payload = new TextEncoder().encode(JSON.stringify({ type: TOPIC, trackSid: preview.trackSid, image: preview.image, mode: preview.mode }));
     void room.localParticipant.publishData(payload, { reliable: true, topic: TOPIC, destinationIdentities: [participant.identity] }).catch(() => undefined);
   };

@@ -242,3 +242,48 @@ describe('StreamTile codec republish continuity', () => {
     expect(screen.queryByTestId('stream-tile-frozen-frame')).toBeNull();
   });
 });
+
+
+describe('local screen preview resource policy', () => {
+  function localTile(track = makeMediaTrack()) {
+    const sdkTrack = makeTrack();
+    const tile = makeTile(track, sdkTrack);
+    tile.participant.isLocal = true;
+    return { tile, sdkTrack, track };
+  }
+  it('detaches on blur and reattaches on focus without stopping the published track', () => {
+    const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { tile, sdkTrack, track } = localTile();
+    const stop = vi.fn(); Object.assign(track, { stop });
+    render(<StreamTile tile={tile} stats={null} />);
+    expect(sdkTrack.attach).toHaveBeenCalledOnce();
+    focus.mockReturnValue(false); fireEvent(window, new Event('blur'));
+    expect(document.querySelector('video')).toBeNull();
+    expect(sdkTrack.detach).toHaveBeenCalledOnce();
+    expect(stop).not.toHaveBeenCalled();
+    focus.mockReturnValue(true); fireEvent(window, new Event('focus'));
+    expect(document.querySelector('video')).not.toBeNull();
+    expect(sdkTrack.attach).toHaveBeenCalledTimes(2);
+  });
+  it('restores a window preview on focus without stopping its track', () => {
+    const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const { tile, sdkTrack, track } = localTile();
+    Object.assign(track, { getSettings: () => ({ displaySurface: 'window', height: 720, frameRate: 30 }) });
+    render(<StreamTile tile={tile} stats={null} />);
+    expect(sdkTrack.attach).not.toHaveBeenCalled();
+    expect(document.querySelector('video')).toBeNull();
+    focus.mockReturnValue(true); fireEvent(window, new Event('focus'));
+    expect(sdkTrack.attach).toHaveBeenCalledOnce();
+    expect(document.querySelector('video')).not.toBeNull();
+    focus.mockReturnValue(false); fireEvent(window, new Event('blur'));
+    expect(sdkTrack.detach).toHaveBeenCalledOnce();
+    expect(track.readyState).toBe('live');
+  });
+  it('keeps the receiver attached when the receiver loses focus', () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const sdkTrack = makeTrack();
+    render(<StreamTile tile={makeTile(makeMediaTrack(), sdkTrack)} stats={null} />);
+    expect(sdkTrack.attach).toHaveBeenCalledOnce();
+    expect(document.querySelector('video')).not.toBeNull();
+  });
+});
