@@ -140,7 +140,7 @@ export function ImageCropModal({
             step={0.05}
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="flex-1 min-w-0 h-1.5 rounded-full appearance-none bg-surface-input accent-accent-primary cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-primary"
+            className="ui-range"
           />
         </div>
 
@@ -160,7 +160,7 @@ export function ImageCropModal({
             type="button"
             onClick={handleApply}
             disabled={isProcessing || !croppedAreaPixels || applyDisabled}
-            className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50"
           >
             {isProcessing ? t('uploads:crop.applying') : t('common:actions.apply')}
           </button>

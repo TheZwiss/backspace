@@ -37,7 +37,7 @@ export function FriendsVoiceCard({ group, children }: { group: VoiceGroup; child
     }}>
       <span className="flex items-center gap-1.5">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m11 5-6 4H2v6h3l6 4V5Zm4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" /></svg>
-      <span className="min-w-0 flex-1 text-left text-[11px] truncate">{group.channelName}</span>
+      <span className="min-w-0 flex-1 text-left text-ui-caption truncate">{group.channelName}</span>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
       </span>
       <span className="flex flex-wrap items-center gap-1 pt-2">{children}</span>

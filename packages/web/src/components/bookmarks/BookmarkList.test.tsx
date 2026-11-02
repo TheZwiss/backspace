@@ -18,6 +18,7 @@ vi.mock('../../utils/stickerMessages', () => ({ messageTextForPreview: (text: st
 vi.mock('../ui/Avatar', () => ({
   Avatar: ({ name, src }: { name: string; src?: string }) => <span data-testid="avatar" data-src={src ?? ''}>{name}</span>,
 }));
+vi.mock('../ui/Tooltip', () => ({ Tooltip: ({ children }: { children: import('react').ReactNode }) => <>{children}</> }));
 vi.mock('../../stores/uiStore', () => ({ useUIStore: { getState: () => ({ addToast }) } }));
 vi.mock('../../stores/jumpStore', () => ({ useJumpStore: { getState: () => ({ requestJump }) } }));
 vi.mock('../../stores/instanceStore', () => ({

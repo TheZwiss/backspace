@@ -213,7 +213,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             <button
               type="submit"
               disabled={loading || !password}
-              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {loading ? t('federation:connections.add.connecting') : t('federation:connections.add.connect')}
             </button>

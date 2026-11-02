@@ -5,7 +5,7 @@ import { useActivityStore } from '../../../stores/activityStore';
 import { moveKey, moveKeyTo, orderedKeys, renameKey } from '../../../utils/gameOverrides';
 
 const PRIMARY_BUTTON =
-  'px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 const LINK_BUTTON = 'text-xs text-txt-tertiary hover:text-txt-secondary transition-colors';
 const ICON_BUTTON =
   'w-6 h-6 flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:pointer-events-none';
@@ -264,7 +264,7 @@ export function ActivityGameSection() {
         >
           {canBind && (
             <select
-              className="input-standard w-1/3 min-w-0 px-2 py-1.5 text-sm"
+              className="ui-select w-1/3 min-w-0"
               value={program}
               aria-label={t('privacy.activity.game.programLabel')}
               onFocus={refreshPrograms}
@@ -334,7 +334,7 @@ export function ActivityGameSection() {
                       {t('privacy.activity.game.remove')}
                     </button>
                   </form>
-                  <div className="text-[11px] text-txt-tertiary">
+                  <div className="text-ui-caption text-txt-tertiary">
                     {game.process === null
                       ? t('privacy.activity.game.statusName')
                       : runningKeys.has(key)

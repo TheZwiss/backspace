@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { DmCallStatus } from './DmCallStatus';
 import { useEffect, useRef, useState } from 'react';
 import { usePointerReveal } from '../../hooks/usePointerReveal';
@@ -88,10 +89,10 @@ export function DetachedCallWindow() {
       {customTitlebar && !fullscreen && (
         <div className="titlebar-drag flex justify-end shrink-0 bg-[#0b0b10]" style={{ height: 'calc(32px / var(--interface-scale, 1))', fontFamily: 'sans-serif' }}>
           {([['minimize', '−', 'Minimize'], ['maximize', '□', 'Maximize or restore'], ['close', '×', 'Close']] as const).map(([action, symbol, label]) => (
-            <button key={action} type="button" title={label} aria-label={label}
+            <Tooltip content={label} position="top"><button key={action} type="button"  aria-label={label}
               className={`titlebar-no-drag text-[#d8d8de] ${action === 'close' ? 'hover:bg-[#c42b1c]' : 'hover:bg-white/10'}`}
               style={{ width: 'calc(46px / var(--interface-scale, 1))', height: '100%', padding: 0, border: 0, fontSize: 'calc(18px / var(--interface-scale, 1))', lineHeight: 'normal' }}
-              onClick={() => window.backspace?.controlCallWindow?.(action)}>{symbol}</button>
+              onClick={() => window.backspace?.controlCallWindow?.(action)}>{symbol}</button></Tooltip>
           ))}
         </div>
       )}

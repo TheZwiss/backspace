@@ -189,7 +189,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
   };
 
   return (
-    <div ref={dialogRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
       <div className="absolute inset-0 bg-surface-overlay" onClick={step !== 'complete' ? onClose : undefined} />
       <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
         {/* Header */}
@@ -253,7 +253,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                           <select
                             value={space.transferTo}
                             onChange={(e) => handleTransferTo(space.id, e.target.value)}
-                            className="input-standard w-full px-2.5 py-1.5 text-xs"
+                            className="ui-select w-full text-xs"
                           >
                             <option value="">{t('settings:account.deletion.ownedSpaces.selectOwner')}</option>
                             {space.members.map(m => (
@@ -279,7 +279,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   isLoading ||
                   (ownedSpaces.length > 0 && (!allOwnedHandled || ownedSpaces.some(s => s.action === 'transfer' && !s.transferTo)))
                 }
-                className="w-full py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-danger w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? t('settings:account.deletion.processing') : t('common:actions.continue')}
               </button>
@@ -337,7 +337,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                 <button
                   type="submit"
                   disabled={isLoading || confirmUsername !== user.username || !confirmPassword}
-                  className="flex-1 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="ui-button ui-button-danger flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? t('settings:account.deletion.confirm.deleting') : t('settings:account.deletion.confirm.submit')}
                 </button>
@@ -385,7 +385,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                 <button
                   onClick={handleDeleteAnyway}
                   disabled={isLoading}
-                  className="w-full py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-danger w-full transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('settings:account.deletion.confirm.deleting') : t('settings:account.deletion.federation.deleteAnyway')}
                 </button>

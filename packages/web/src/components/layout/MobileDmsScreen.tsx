@@ -61,7 +61,7 @@ function MobileFriendBubble({
           <PresenceIndicator status={friend.status} size={9} />
         </span>
       </div>
-      <span className="text-[10px] text-txt-secondary truncate w-full text-center">
+      <span className="text-ui-micro text-txt-secondary truncate w-full text-center">
         {displayName}
       </span>
     </button>
@@ -161,13 +161,13 @@ function MobileDmRow({
             )}
           </span>
           {previewTime && (
-            <span className="text-[11px] text-txt-tertiary shrink-0">
+            <span className="text-ui-caption text-txt-tertiary shrink-0">
               {formatTimestamp(previewTime)}
             </span>
           )}
         </div>
         {!isGroup && mainUser && isFederationGlobeApplicable(mainUser) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">
             @{parseFederatedUsername(mainUser.username).domain}
           </div>
         )}

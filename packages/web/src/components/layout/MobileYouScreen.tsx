@@ -141,7 +141,7 @@ export function MobileYouScreen() {
           {(() => {
             const { domain } = parseFederatedUsername(user.username);
             if (!domain) return null;
-            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">{t('mobile:you.homeInstance', { domain })}</div>;
+            return <div className="text-ui-micro leading-[1.3] text-txt-tertiary opacity-60">{t('mobile:you.homeInstance', { domain })}</div>;
           })()}
           {user.customStatus && (
             <p className="text-sm text-txt-secondary mt-1">{replaceEmojiShortcodes(user.customStatus)}</p>

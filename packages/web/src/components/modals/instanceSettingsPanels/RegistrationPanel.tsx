@@ -164,13 +164,13 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
       >
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
         {t('common:actions.filter')}
-        <span className="text-[10px]">▾</span>
+        <span className="text-ui-micro">▾</span>
       </button>
 
       {open && (
@@ -179,7 +179,7 @@ function FilterDropdown({
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
             {view === 'archived' && (
               <>
-                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
+                <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
                   {t('admin:invites.filter.status')}
                 </div>
                 {archivedStatusOptions.map((s) => (
@@ -200,7 +200,7 @@ function FilterDropdown({
                 <div className="h-px bg-white/[0.06] my-1" />
               </>
             )}
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
               {t('common:actions.sortBy')}
             </div>
             {view === 'active'
@@ -474,7 +474,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
         </div>
-        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+        <p className="text-ui-label text-txt-secondary leading-snug min-w-0">
           {t('admin:invites.createModal.description')}
         </p>
       </div>
@@ -488,7 +488,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
           <input
             ref={nameInputRef}
             type="text"
@@ -503,7 +503,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
 
         {/* Max uses */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.maxUses')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.maxUses')}</div>
           <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -544,7 +544,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -574,7 +574,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {submitting ? t('admin:invites.createModal.submitting') : t('admin:invites.createModal.submit')}
             </button>
@@ -696,7 +696,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
         </div>
-        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+        <p className="text-ui-label text-txt-secondary leading-snug min-w-0">
           {t('admin:invites.editModal.description')}
         </p>
       </div>
@@ -710,7 +710,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
       >
         {/* Name */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.name')}</div>
           <input
             ref={nameInputRef}
             type="text"
@@ -724,7 +724,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
 
         {/* Max uses */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
             {t('admin:invites.form.maxUses')} <span className="normal-case font-normal text-txt-tertiary">{t('admin:invites.editModal.used', { used: invite.usedCount })}</span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
@@ -767,7 +767,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -794,7 +794,7 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {submitting ? t('admin:invites.editModal.submitting') : t('admin:invites.editModal.submit')}
             </button>
@@ -920,7 +920,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
         </div>
-        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">{subtitle}</p>
+        <p className="text-ui-label text-txt-secondary leading-snug min-w-0">{subtitle}</p>
       </div>
 
       <form
@@ -932,14 +932,14 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
       >
         {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
         {isRevoked && (
-          <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
+          <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-ui-label text-accent-amber">
             {t('admin:invites.reinstateModal.newLinkWarning')}
           </div>
         )}
 
         {/* Max uses */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
             {t('admin:invites.form.maxUses')} <span className="normal-case font-normal text-txt-tertiary">{t('admin:invites.reinstateModal.maxUsesMeta', { max: invite.maxUses ?? '∞', used: invite.usedCount })}</span>
           </div>
           <div className="flex items-center gap-4 flex-wrap">
@@ -982,7 +982,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
 
         {/* Expiry */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('admin:invites.form.expires')}</div>
           <ExpirySelector
             value={expiryId}
             customDateTime={customDateTime}
@@ -1010,7 +1010,7 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {submitting
                 ? t('admin:invites.reinstateModal.submitting')
@@ -1080,7 +1080,7 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
         </div>
-        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+        <p className="text-ui-label text-txt-secondary leading-snug min-w-0">
           {t('admin:invites.redemptions.description')}
         </p>
       </div>
@@ -1285,13 +1285,13 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               >
                 {invite.name}
               </div>
-              <div className="text-[11px] text-txt-tertiary truncate">{subtitle}</div>
+              <div className="text-ui-caption text-txt-tertiary truncate">{subtitle}</div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-2">
             {!isActive && (
               <span
-                className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${inviteStatusPillColor(invite.status)}`}
+                className={`inline-flex items-center text-ui-micro font-medium px-1.5 py-0.5 rounded ${inviteStatusPillColor(invite.status)}`}
               >
                 {inviteStatusLabel(invite.status)}
               </span>
@@ -1307,7 +1307,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               {/* Row 1: USED · (EXPIRES | terminal-status AT) · CREATED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.used')}</div>
+                  <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.used')}</div>
                   <div
                     className={`text-xs ${
                       usageNearLimit ? 'text-accent-amber font-medium' : 'text-txt-secondary'
@@ -1318,19 +1318,19 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                 </div>
                 {isActive ? (
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.expires')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.expires')}</div>
                     <div className="text-xs text-txt-secondary">{formatExpiry(invite)}</div>
                   </div>
                 ) : (
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">
                       {archivedTerminalLabel}
                     </div>
                     <div className="text-xs text-txt-secondary">{archivedTerminalValue}</div>
                   </div>
                 )}
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.created')}</div>
+                  <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.created')}</div>
                   <div className="text-xs text-txt-secondary">{f.formatRelativeTime(invite.createdAt)}</div>
                 </div>
               </div>
@@ -1338,19 +1338,19 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
               {/* Row 2: CREATED BY · TOKEN · LAST REDEEMED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.createdByLabel')}</div>
+                  <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.createdByLabel')}</div>
                   <div className="text-xs text-txt-secondary truncate" title={createdByLabel}>
                     {createdByLabel}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.token')}</div>
+                  <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.token')}</div>
                   <div className="text-xs font-mono text-txt-secondary" title={invite.token}>
                     {tokenDisplay}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.lastRedeemed')}</div>
+                  <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('admin:invites.row.lastRedeemed')}</div>
                   <div className="text-xs text-txt-secondary">{lastRedeemedDisplay}</div>
                 </div>
               </div>
@@ -1383,7 +1383,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
-                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                      className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
                       {t('admin:invites.row.viewRedemptions')}
                     </button>
@@ -1407,7 +1407,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
-                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                      className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                     >
                       {t('admin:invites.row.viewRedemptions')}
                     </button>
@@ -1631,7 +1631,7 @@ export function RegistrationPanel() {
 
       {/* Public registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.public.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.public.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
@@ -1650,7 +1650,7 @@ export function RegistrationPanel() {
 
       {/* Federated registration */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.federated.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.federated.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
@@ -1671,11 +1671,11 @@ export function RegistrationPanel() {
       <div className="border-t border-white/[0.06] pt-5">
         {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:invites.label')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:invites.label')}</div>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
+            className="ui-button ui-button-primary transition-colors"
           >
             {t('admin:invites.create')}
           </button>
@@ -1691,7 +1691,7 @@ export function RegistrationPanel() {
                 tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              {t('admin:invites.tabs.active')} <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
+              {t('admin:invites.tabs.active')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{activeCount}</span>
             </button>
             <button
               type="button"
@@ -1700,7 +1700,7 @@ export function RegistrationPanel() {
                 tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              {t('admin:invites.tabs.archived')} <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
+              {t('admin:invites.tabs.archived')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{archivedCount}</span>
             </button>
           </div>
           <FilterDropdown
@@ -1721,7 +1721,7 @@ export function RegistrationPanel() {
             {tab === 'active' ? t('admin:invites.emptyActive') : t('admin:invites.emptyArchived')}
           </div>
         ) : displayInvites.length === 0 ? (
-          <div className="text-[11px] text-txt-tertiary py-3 text-center">
+          <div className="text-ui-caption text-txt-tertiary py-3 text-center">
             {t('admin:invites.noMatch')}
           </div>
         ) : (
@@ -1759,7 +1759,7 @@ export function RegistrationPanel() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>

@@ -46,10 +46,10 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
-      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex flex-col bg-surface-base animate-fade-in">
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
-            {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
+            {title ? <h2 className="ui-dialog-title">{title}</h2> : <div />}
             <button
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
@@ -71,7 +71,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile bottom sheet style
   if (isMobile && mobileStyle === 'sheet') {
     return (
-      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-end justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
@@ -79,7 +79,7 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
         <div className="relative w-full max-h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-t-2xl animate-slide-up" style={{ paddingBottom: 'var(--safe-bottom)' }}>
           {title && (
             <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
-              <h2 className="text-xl font-bold text-txt-primary">{title}</h2>
+              <h2 className="ui-dialog-title">{title}</h2>
               <button
                 onClick={onClose}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
@@ -102,12 +102,12 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Settings size variant — large glass overlay for settings screens
   if (size === 'settings') {
     return (
-      <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
         <div
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-xl animate-slide-up overflow-hidden">
+        <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col ui-dialog-surface animate-slide-up overflow-hidden">
           {/* Floating close button */}
           <button
             onClick={onClose}
@@ -126,15 +126,15 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
 
   // Default centered dialog (desktop and mobile default)
   return (
-    <div ref={surfaceRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up`}>
+      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col ui-dialog-surface animate-slide-up`}>
         {title && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
-            <h2 className="text-xl font-bold text-txt-primary">{title}</h2>
+            <h2 className="ui-dialog-title">{title}</h2>
             <button
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"

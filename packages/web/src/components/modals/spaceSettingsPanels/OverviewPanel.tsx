@@ -329,7 +329,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.nav.tabs.overview')}</h2>
         {/* Space Identity */}
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.overview.identity')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.overview.identity')}</div>
           <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
         {/* Space Icon */}
         <div>
@@ -453,7 +453,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                   <svg className="w-6 h-6 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
                   </svg>
-                  <span className="text-[11px]">{t('spaces:settings.overview.uploadBanner')}</span>
+                  <span className="text-ui-caption">{t('spaces:settings.overview.uploadBanner')}</span>
                 </div>
               )}
               {uploadingBanner && (
@@ -507,7 +507,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Danger Zone */}
         {isOwner && (
           <div>
-            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
+            <div className="text-ui-caption font-semibold text-txt-danger uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
             <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
               {/* Transfer Ownership */}
               <div>
@@ -537,7 +537,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         <button
                           onClick={handleTransfer}
                           disabled={transferring}
-                          className="px-3 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                          className="ui-button ui-button-warning transition-colors disabled:opacity-50"
                         >
                           {transferring ? t('spaces:settings.overview.transfer.transferring') : t('spaces:settings.overview.transfer.confirm')}
                         </button>
@@ -572,7 +572,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                                   {avatarUrl ? (
                                     <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
                                   ) : (
-                                    <span className="text-[10px] font-bold text-txt-secondary">
+                                    <span className="text-ui-micro font-bold text-txt-secondary">
                                       {(member.user.displayName || member.user.username).charAt(0).toUpperCase()}
                                     </span>
                                   )}
@@ -582,7 +582,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                                     {member.user.displayName || member.user.username}
                                   </span>
                                   {member.user.displayName && (
-                                    <span className="text-[11px] text-txt-tertiary truncate max-w-full">
+                                    <span className="text-ui-caption text-txt-tertiary truncate max-w-full">
                                       {member.user.username}
                                     </span>
                                   )}
@@ -603,7 +603,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 ) : (
                   <button
                     onClick={() => setShowTransfer(true)}
-                    className="px-4 py-2 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors"
+                    className="ui-button ui-button-warning transition-colors"
                   >
                     {t('spaces:settings.overview.transfer.button')}
                   </button>
@@ -618,7 +618,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 <p className="text-xs text-txt-tertiary mb-3">{t('spaces:settings.overview.delete.description')}</p>
                 <button
                   onClick={handleDelete}
-                  className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
+                  className="ui-button ui-button-danger transition-colors"
                 >
                   {confirmDelete ? t('spaces:settings.overview.delete.confirmAgain') : t('spaces:settings.overview.delete.button')}
                 </button>
@@ -640,7 +640,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 <button
                   onClick={handleSave}
                   disabled={saving || uploadingIcon || uploadingBanner || !spaceName.trim()}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {saving ? t('common:states.saving') : t('common:actions.save')}
                 </button>

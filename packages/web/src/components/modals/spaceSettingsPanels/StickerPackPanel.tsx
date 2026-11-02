@@ -184,7 +184,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
         <div className="rounded-xl border border-border-soft bg-surface-elevated/50 p-5 text-center">
           <p className="text-sm text-txt-secondary">{t('spaces:stickers.empty')}</p>
           {(canCreate || canManage) && (
-            <button type="button" disabled={busy} onClick={() => void createPack()} className="mt-3 rounded-lg bg-accent-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
+            <button type="button" disabled={busy} onClick={() => void createPack()} className="ui-button ui-button-primary mt-3 disabled:opacity-40">
               {t('spaces:stickers.create')}
             </button>
           )}
@@ -201,7 +201,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                 type="button"
                 disabled={busy || pack.itemCount >= MAX_SPACE_STICKERS}
                 onClick={() => inputRef.current?.click()}
-                className="rounded-lg bg-accent-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                className="ui-button ui-button-primary disabled:opacity-40"
               >
                 {t('spaces:stickers.add')}
               </button>
@@ -250,7 +250,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                     <button
                       type="button"
                       onClick={() => setRenamingItem({ id: item.id, name: item.name })}
-                      className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                      className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100"
                       aria-label={t('chat:stickers.renameNamed', { name: item.name })}
                     >
                       ✎
@@ -261,7 +261,7 @@ export function StickerPackPanel({ spaceId }: { spaceId: string }) {
                         await api.stickerLibrary.removeItem(pack.id, item.id);
                         await load();
                       })().catch((err) => setError(describeError(err)))}
-                      className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                      className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-100 transition-opacity focus-visible:opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100"
                       aria-label={t('chat:stickers.remove')}
                     >
                       ×

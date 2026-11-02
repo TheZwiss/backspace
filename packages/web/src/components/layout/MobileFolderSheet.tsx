@@ -57,7 +57,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
         type: 'custom',
         render: () => (
           <div className="px-5 py-3">
-            <p className="text-[11px] text-txt-tertiary mb-2">{t('spaces:sidebar.folder.color')}</p>
+            <p className="text-ui-caption text-txt-tertiary mb-2">{t('spaces:sidebar.folder.color')}</p>
             <div className="flex gap-2">
               <button
                 className={`w-6 h-6 rounded-full border-2 ${!folder.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}

@@ -1,4 +1,30 @@
 {
+"attentionMutes": {
+    "title": "Muted people",
+    "description": "Mute attention sounds, animations and notices from specific people on this device. Messages and calls remain available.",
+    "mute": "Mute attention effects",
+    "muteShort": "Mute",
+    "unmute": "Unmute attention effects",
+    "unmuteShort": "Unmute",
+    "minutes15": "For 15 minutes",
+    "hour1": "For 1 hour",
+    "hours8": "For 8 hours",
+    "hours24": "For 24 hours",
+    "forever": "Until unmuted",
+    "searchLabel": "Add a person",
+    "searchPlaceholder": "Search by username...",
+    "duration": "Mute duration",
+    "noResults": "No people found.",
+    "empty": "Nobody is muted.",
+    "until": "Muted until {{time}}"
+  },
+  "friendNotifications": {
+    "title": "Friend requests",
+    "description": "Show a card with a photo and quick actions when someone wants to add you. Do Not Disturb is respected.",
+    "enabled": "Show friend request cards",
+    "sound": "Play a sound",
+    "desktop": "Show over the desktop while in the background"
+  },
   "interfaceScale": {
     "label": "Interface scale",
     "description": "Resize text, buttons, and panels. Saved in this browser or app on this device.",

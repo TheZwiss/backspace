@@ -382,7 +382,7 @@ export function GroupDmSettings() {
             {isOwner && (
               <div
                 data-group-dm-icon-overlay
-                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-medium"
+                className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-ui-micro font-medium"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -422,7 +422,7 @@ export function GroupDmSettings() {
 
       {/* Group name */}
       <div>
-        <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <label className="block text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('dm:groupSettings.nameLabel')}
         </label>
         <input
@@ -437,7 +437,7 @@ export function GroupDmSettings() {
           aria-label={t('dm:groupSettings.nameAria')}
         />
         {isOwner && (
-          <div className="text-[11px] text-txt-tertiary text-right mt-1">
+          <div className="text-ui-caption text-txt-tertiary text-right mt-1">
             {t('dm:groupSettings.nameCount', { current: trimmedName.length, max: MAX_NAME_LENGTH })}
           </div>
         )}
@@ -464,7 +464,7 @@ export function GroupDmSettings() {
             type="button"
             onClick={handleSave}
             disabled={!isDirty || saving}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-group-dm-save
           >
             {saving ? t('common:states.saving') : t('common:actions.save')}
@@ -488,7 +488,7 @@ export function GroupDmSettings() {
 
       {/* Leave Group — destructive footer button, everyone */}
       <div className="pt-4 border-t border-border-soft">
-        <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-danger uppercase tracking-wider mb-1.5">
           {t('dm:leave.title')}
         </div>
         <p className="text-xs text-txt-tertiary mb-3">
@@ -498,7 +498,7 @@ export function GroupDmSettings() {
           type="button"
           onClick={handleLeaveClick}
           disabled={leaving}
-          className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+          className="ui-button ui-button-danger transition-colors disabled:opacity-50"
           data-group-dm-leave
         >
           {leaving ? t('dm:leave.inProgress') : t('dm:leave.title')}
@@ -522,7 +522,7 @@ export function GroupDmSettings() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-txt-primary">{t('common:labels.members')}</h2>
-        <span className="text-[12px] text-txt-tertiary">
+        <span className="text-ui-caption text-txt-tertiary">
           {t('dm:addMember.capacity', { current: memberCount, max: MAX_GROUP_MEMBERS })}
         </span>
       </div>
@@ -539,7 +539,7 @@ export function GroupDmSettings() {
         </svg>
         {t('dm:groupSettings.addMember')}
         {!canAddMembers && (
-          <span className="ml-auto text-[11px] text-txt-tertiary">{t('dm:groupSettings.groupFull')}</span>
+          <span className="ml-auto text-ui-caption text-txt-tertiary">{t('dm:groupSettings.groupFull')}</span>
         )}
       </button>
 
@@ -594,7 +594,7 @@ export function GroupDmSettings() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
               {t('dm:groupSettings.general')}
             </div>
             <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>
@@ -623,7 +623,7 @@ export function GroupDmSettings() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">
                 {t('dm:groupSettings.general')}
               </div>
               <button type="button" onClick={() => handleTabClick('overview')} className={tabBtnClass('overview')}>

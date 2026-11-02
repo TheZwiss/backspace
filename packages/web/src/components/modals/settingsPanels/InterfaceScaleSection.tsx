@@ -22,14 +22,14 @@ export function InterfaceScaleSection() {
   };
   return (
     <div>
-      <label htmlFor="interface-scale" className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <label htmlFor="interface-scale" className="block text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('interfaceScale.label')}
       </label>
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+      <div className="settings-section">
         <p id="interface-scale-description" className="text-xs text-txt-tertiary mb-2">{t('interfaceScale.description')}</p>
         <div className="flex flex-wrap gap-2">
           <select id="interface-scale" aria-describedby="interface-scale-description" value={scale}
-            onChange={event => changeScale(Number(event.target.value))} className="input-standard flex-1 min-w-0">
+            onChange={event => changeScale(Number(event.target.value))} className="ui-select flex-1 min-w-0">
             {INTERFACE_SCALES.map(value => <option key={value} value={value}>{value}%</option>)}
           </select>
           <button type="button" onClick={() => changeScale(100)} disabled={scale === 100}

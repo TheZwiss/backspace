@@ -76,7 +76,7 @@ export function BansPanel({ spaceId }: BansPanelProps) {
         <div className="text-center py-8 text-txt-tertiary text-sm">{t('spaces:bans.empty')}</div>
       ) : (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('spaces:bans.listHeading', { total: f.formatNumber(bans.length) })}
           </div>
           <div className="rounded-lg bg-white/[0.02] p-2">
@@ -97,7 +97,7 @@ export function BansPanel({ spaceId }: BansPanelProps) {
                       />
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">{displayName}</div>
-                        <div className="text-[11px] text-txt-tertiary truncate">
+                        <div className="text-ui-caption text-txt-tertiary truncate">
                           {ban.reason
                             ? t('spaces:bans.bannedByWithReason', { moderator: moderatorName, date: bannedDate, reason: ban.reason })
                             : t('spaces:bans.bannedBy', { moderator: moderatorName, date: bannedDate })}

@@ -1083,7 +1083,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   if (!canReadHistory) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <span className="text-txt-tertiary text-[14px]">{t('chat:list.noHistoryPermission')}</span>
+        <span className="text-txt-tertiary text-ui-body">{t('chat:list.noHistoryPermission')}</span>
       </div>
     );
   }
@@ -1160,7 +1160,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                 {dateLabel && !isUnreadStart && (
                   <div className="flex items-center px-5 my-2 select-none pointer-events-none">
                     <div className="flex-1 h-[1px] bg-border-hard" />
-                    <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
+                    <span className="px-[14px] text-ui-caption font-bold text-txt-tertiary leading-tight">
                       {dateLabel}
                     </span>
                     <div className="flex-1 h-[1px] bg-border-hard" />
@@ -1233,7 +1233,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
           </svg>
-          <span className="text-[13px] font-medium">{t('chat:list.jumpToPresent')}</span>
+          <span className="text-ui-label font-medium">{t('chat:list.jumpToPresent')}</span>
         </button>
       )}
     </div>
@@ -1255,12 +1255,12 @@ function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-chat px-6">
       <div role="alert" className="flex max-w-sm flex-col items-center gap-1 text-center">
-        <p className="text-[15px] font-semibold text-txt-primary">{title}</p>
-        <p className="text-[13px] text-txt-tertiary break-words">{detail}</p>
+        <p className="text-ui-message font-semibold text-txt-primary">{title}</p>
+        <p className="text-ui-label text-txt-tertiary break-words">{detail}</p>
         <button
           type="button"
           onClick={onRetry}
-          className="mt-3 rounded-full bg-accent-primary px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-accent-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
+          className="ui-button ui-button-primary mt-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
         >
           {retryLabel}
         </button>
@@ -1285,11 +1285,11 @@ function UnreadDivider({ label, name, dateLabel }: { label: string; name: string
       <div className="flex-1 h-px bg-accent-rose/50" />
       {dateLabel && (
         <>
-          <span className="px-[14px] text-[11px] font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
+          <span className="px-[14px] text-ui-caption font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
           <div className="flex-1 h-px bg-accent-rose/50" />
         </>
       )}
-      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
+      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-ui-caption font-bold leading-4 text-accent-rose">
         {label}
       </span>
     </div>
@@ -1343,7 +1343,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
             <AvatarStack members={otherMembers} origin={viewer.origin} size={80} border="chat" iconUrl={dm.icon} />
           </div>
           <h3 className="text-[32px] leading-10 font-bold text-txt-primary mt-2">{groupName}</h3>
-          <p className="text-txt-secondary text-[14px] mt-1">
+          <p className="text-txt-secondary text-ui-body mt-1">
             {t('chat:list.welcome.group.intro')}
           </p>
           <p className="text-xs text-txt-tertiary mt-1">
@@ -1372,13 +1372,13 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <div className="mt-4 flex items-center gap-2">
             <button
               onClick={handleOpenSettings}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-[14px] font-medium rounded-[3px] transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('chat:list.welcome.group.openSettings')}
             </button>
             <button
               onClick={handleLeaveGroup}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
+              className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               {t('chat:list.welcome.group.leave')}
             </button>
@@ -1405,7 +1405,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <ProfileAvatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} origin={viewer.origin} />
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
-        <p className="text-txt-secondary text-[14px] mt-1">
+        <p className="text-txt-secondary text-ui-body mt-1">
           <Trans
             t={t}
             i18nKey="chat:list.welcome.dm.intro"
@@ -1422,7 +1422,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <div className="mt-4">
             <button
               onClick={() => friend && removeFriend(friend, friend._instanceOrigin)}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
+              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               {t('chat:list.welcome.dm.removeFriend')}
             </button>
@@ -1441,7 +1441,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         </svg>
       </div>
       <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{t('chat:list.welcome.channel.title')}</h3>
-      <p className="text-txt-secondary text-[16px] mt-2">{t('chat:list.welcome.channel.description')}</p>
+      <p className="text-txt-secondary text-ui-lead mt-2">{t('chat:list.welcome.channel.description')}</p>
       <div className="mt-6 border-b border-interactive-muted" />
     </div>
   );

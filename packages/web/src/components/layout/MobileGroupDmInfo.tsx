@@ -535,7 +535,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             </svg>
             {t('dm:groupSettings.addMember')}
             {!canAddMembers && (
-              <span className="text-[11px] text-txt-tertiary">{t('dm:groupSettings.groupFullSuffix')}</span>
+              <span className="text-ui-caption text-txt-tertiary">{t('dm:groupSettings.groupFullSuffix')}</span>
             )}
           </button>
         </div>
@@ -544,7 +544,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         <div className="p-3">
           {ownerMember && (
             <div data-mobile-group-section="owner" className="mb-4">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.owner')}
               </h3>
               {renderMemberRow(ownerMember, true)}
@@ -553,7 +553,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {onlineMembers.length > 0 && (
             <div data-mobile-group-section="online" className="mb-4">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.sectionCount', { label: t('common:states.online'), total: onlineMembers.length })}
               </h3>
               {onlineMembers.map((m) => renderMemberRow(m, false))}
@@ -562,7 +562,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {offlineMembers.length > 0 && (
             <div data-mobile-group-section="offline" className="opacity-60">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.sectionCount', { label: t('common:states.offline'), total: offlineMembers.length })}
               </h3>
               {offlineMembers.map((m) => renderMemberRow(m, false))}
@@ -605,7 +605,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             type="button"
             onClick={handleSave}
             disabled={!isDirty || saving || !isOwner}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-mobile-group-save
           >
             {saving ? t('common:states.saving') : t('common:actions.save')}

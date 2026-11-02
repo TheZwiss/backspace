@@ -64,7 +64,7 @@ export function VoiceUserRow({
         avatarColor={avatarColor}
         className={isSoundboardPlaying ? 'rounded-full ring-2 ring-blue-500' : isSpeaking ? 'rounded-full ring-2 ring-status-online' : ''}
       />
-      <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">
+      <span className="text-ui-label text-txt-secondary truncate flex-1 min-w-0">
         {displayName}
       </span>
       {/* Status badges */}

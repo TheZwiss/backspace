@@ -206,12 +206,12 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
     const musicLine = `${music.name}${music.details ? ` · ${music.details}` : ''}`;
     content = (
       <div className="flex flex-col min-w-0">
-        <div className="text-[11px] leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={processActivity.name}>
+        <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={processActivity.name}>
           <AppIcon name={processActivity.name} type={processActivity.type} size={11} className="flex-shrink-0" />
           <span className="truncate">{processActivity.name}</span>
         </div>
         <div
-          className="text-[10px] leading-[1.3] text-accent-sky truncate flex items-center gap-1"
+          className="text-ui-micro leading-[1.3] text-accent-sky truncate flex items-center gap-1"
           title={musicLine}
         >
           <AppIcon name={music.assets?.smallText || music.name} type="listening" size={10} fallbackEmoji="🎵" className="flex-shrink-0" />
@@ -227,16 +227,16 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
         : null);
     content = (
       <div className="flex flex-col min-w-0">
-        <div className="text-[11px] leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={musicLine}>
+        <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={musicLine}>
           <AppIcon name={music.assets?.smallText || music.name} type="listening" size={11} fallbackEmoji="🎵" className="flex-shrink-0" />
           <span className="truncate">{musicLine}</span>
         </div>
         {musicTime ? (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary tabular-nums">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary tabular-nums">
             {musicTime}
           </div>
         ) : music.assets?.smallText ? (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate">
             {formatPlayerName(music.assets.smallText, t)}
           </div>
         ) : null}
@@ -252,17 +252,17 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
 
     content = (
       <div className="flex flex-col min-w-0">
-        <div className="text-[11px] leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={processActivity.name}>
+        <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate flex items-center gap-1.5" title={processActivity.name}>
           <AppIcon name={processActivity.name} type={processActivity.type} size={11} className="flex-shrink-0" />
           <span className="truncate" title={processActivity.name}>{processActivity.name}</span>
           {moreGames > 0 && (
-            <span className="shrink-0 text-[10px] font-normal text-txt-tertiary tabular-nums" title={otherGameNames(activities, processActivity)}>
+            <span className="shrink-0 text-ui-micro font-normal text-txt-tertiary tabular-nums" title={otherGameNames(activities, processActivity)}>
               +{moreGames}
             </span>
           )}
         </div>
         {timeText && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary tabular-nums">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary tabular-nums">
             {timeText}
           </div>
         )}
@@ -273,7 +273,7 @@ export function ActivityCard({ activities, fallbackCustomStatus }: ActivityCardP
     if (rawStatus) {
       const statusText = replaceEmojiShortcodes(rawStatus);
       content = (
-        <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate" title={statusText}>
+        <div className="text-ui-caption leading-[1.3] text-txt-tertiary truncate" title={statusText}>
           {statusText}
         </div>
       );
@@ -353,24 +353,24 @@ export function ActivityDetailCard({ activities }: { activities: Activity[] }) {
         }
       />
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-1.5 min-w-0 text-[13px] font-medium leading-[1.3] text-txt-primary">
+        <div className="flex items-baseline gap-1.5 min-w-0 text-ui-label font-medium leading-[1.3] text-txt-primary">
           <span className="truncate">{replaceEmojiShortcodes(headline)}</span>
           {moreGames > 0 && (
-            <span className="shrink-0 text-[12px] font-normal text-txt-tertiary tabular-nums" title={otherGameNames(activities, primary)}>+{moreGames}</span>
+            <span className="shrink-0 text-ui-caption font-normal text-txt-tertiary tabular-nums" title={otherGameNames(activities, primary)}>+{moreGames}</span>
           )}
         </div>
         {primary.details && primary.name && (
-          <div className="text-[12px] leading-[1.3] text-txt-secondary truncate">
+          <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate">
             {replaceEmojiShortcodes(primary.details)}
           </div>
         )}
         {primary.state && (
-          <div className="text-[12px] leading-[1.3] text-txt-secondary truncate">
+          <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate">
             {replaceEmojiShortcodes(primary.state)}
           </div>
         )}
         {timeText && (
-          <div className="text-[11px] leading-[1.3] text-txt-tertiary tabular-nums">
+          <div className="text-ui-caption leading-[1.3] text-txt-tertiary tabular-nums">
             {timeText}
           </div>
         )}
@@ -407,15 +407,15 @@ export function ProfileGamesList({ activities }: { activities: Activity[] }) {
               placeholder={<GameIconPlaceholder />}
             />
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium leading-[1.3] text-txt-primary truncate">{game.name}</div>
+              <div className="text-ui-label font-medium leading-[1.3] text-txt-primary truncate">{game.name}</div>
               {game.details && (
-                <div className="text-[12px] leading-[1.3] text-txt-secondary truncate">{replaceEmojiShortcodes(game.details)}</div>
+                <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate">{replaceEmojiShortcodes(game.details)}</div>
               )}
               {game.state && (
-                <div className="text-[12px] leading-[1.3] text-txt-secondary truncate">{replaceEmojiShortcodes(game.state)}</div>
+                <div className="text-ui-caption leading-[1.3] text-txt-secondary truncate">{replaceEmojiShortcodes(game.state)}</div>
               )}
               {timeText && (
-                <div className="text-[11px] leading-[1.3] text-txt-tertiary tabular-nums">{timeText}</div>
+                <div className="text-ui-caption leading-[1.3] text-txt-tertiary tabular-nums">{timeText}</div>
               )}
             </div>
           </li>

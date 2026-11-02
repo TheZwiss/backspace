@@ -1,4 +1,9 @@
 {
+  "friendNotification": {
+    "title": "好友请求",
+    "body": "想添加你为好友。",
+    "open": "打开与{{name}}的聊天"
+  },
   "tabs": {
     "all": "全部",
     "pending": "待处理",

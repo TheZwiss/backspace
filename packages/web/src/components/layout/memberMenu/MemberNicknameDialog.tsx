@@ -114,7 +114,7 @@ export function MemberNicknameDialog({ target, nickname, accountName, self, onCl
               <button
                 type="submit"
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.pleaseWait') : t('common:actions.save')}
               </button>

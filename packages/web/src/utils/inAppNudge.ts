@@ -1,3 +1,5 @@
+import theme from '../../../desktop/resources/ui-theme.json';
+import i18n from '../i18n';
 import type { NudgeEffect } from '@backspace/shared';
 import type { NudgePlan } from './nudgePolicy';
 
@@ -27,22 +29,22 @@ export async function playInAppNudge(sender: string, avatar: string | undefined,
   const notice = document.createElement('div');
   notice.setAttribute('role', 'status');
   Object.assign(notice.style, { position: 'fixed', right: '16px', top: 'calc(var(--titlebar-inset, 0px) + 16px)',
-    zIndex: '900', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', maxWidth: '320px',
-    background: 'rgb(var(--bg-elevated, 37 37 48))', color: 'rgb(var(--txt-primary, 238 238 243))',
+    zIndex: 'var(--layer-nudge, 800)', display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', maxWidth: '320px',
+    background: 'rgb(var(--bg-elevated, 37 37 48))', color: 'rgb(var(--text-primary, 239 239 239))',
     border: '1px solid rgb(var(--border-soft, 42 42 54))', borderLeft: '2px solid rgb(var(--accent-primary, 124 108 246))',
-    borderRadius: '10px', boxShadow: '0 4px 16px #0004', cursor: 'pointer', font: '13px system-ui' });
+    borderRadius: theme.radius + 'px', boxShadow: '0 2px 8px #0003', cursor: 'pointer', font: `13px ${theme.fontFamily}` });
   const face = document.createElement('span');
   Object.assign(face.style, { width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flex: 'none',
-    display: 'grid', placeItems: 'center', background: '#7c6cf633', color: '#c4b5fd' });
+    display: 'grid', placeItems: 'center', background: theme.accent + '22', color: theme.foreground });
   face.textContent = sender.charAt(0).toUpperCase();
   if (avatar) { const image = document.createElement('img'); image.src = avatar; Object.assign(image.style, { width: '36px', height: '36px', objectFit: 'cover' }); face.replaceChildren(image); }
   const text = document.createElement('div');
   const title = document.createElement('strong'); title.textContent = sender;
   Object.assign(title.style, { display: 'block', maxWidth: '205px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
-  const description = document.createElement('p'); description.textContent = 'Chamou sua atenção!'; description.style.margin = '3px 0 0';
+  const description = document.createElement('p'); description.textContent = i18n.t('chat:nudge.notice'); description.style.margin = '3px 0 0';
   text.append(title, description);
-  const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.setAttribute('aria-label', 'Fechar notificação');
-  Object.assign(close.style, { color: 'inherit', background: 'transparent', border: '0', width: '24px', height: '24px', cursor: 'pointer', fontSize: '20px' });
+  const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.setAttribute('aria-label', i18n.t('common:actions.close'));
+  Object.assign(close.style, { color: 'inherit', background: 'transparent', border: '0', width: '32px', height: '32px', cursor: 'pointer', fontSize: '20px' });
   close.onclick = event => { event.stopPropagation(); notice.remove(); };
   notice.onclick = () => { finishEffect(); notice.remove(); history.pushState({}, '', `/channels/@me/${channelId}`); dispatchEvent(new PopStateEvent('popstate')); };
   notice.append(face, text, close); document.body.append(notice);
@@ -53,7 +55,7 @@ export async function playInAppNudge(sender: string, avatar: string | undefined,
   const root = document.getElementById('root') ?? document.body;
   const layer = () => {
     const element = document.createElement('div');
-    Object.assign(element.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '899', overflow: 'hidden' });
+    Object.assign(element.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: 'calc(var(--layer-nudge, 800) - 1)', overflow: 'hidden' });
     document.body.append(element); layers.push(element); return element;
   };
   const animate = (element: HTMLElement, keyframes: Keyframe[]) => animations.push(element.animate(keyframes, { duration: 2000, easing: 'linear' }));

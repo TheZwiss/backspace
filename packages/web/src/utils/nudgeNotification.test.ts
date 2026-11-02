@@ -1,9 +1,13 @@
+import { useAuthStore } from '../stores/authStore';
+import { useAttentionMutes } from '../stores/attentionMutes';
+import { userKey } from './identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { notifyNudge } from './nudgeNotification';
 import { useNudgePreferences } from '../stores/nudgePreferences';
 import { playInAppNudge } from './inAppNudge';
 import type { NudgeContext } from './nudgePolicy';
 
+vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) } }));
 vi.mock('./inAppNudge', () => ({ playInAppNudge: vi.fn() }));
 const original = useNudgePreferences.getState();
 const descriptor = Object.getOwnPropertyDescriptor(window, 'backspace');
@@ -44,5 +48,14 @@ describe('nudge delivery obeys recipient preferences', () => {
     useNudgePreferences.setState({ scope: 'desktop' }); getContext.mockResolvedValue({ ...context, focused: true });
     await notifyNudge('Alice', null, '', '123');
     expect(native).not.toHaveBeenCalled(); expect(playInAppNudge).not.toHaveBeenCalled();
+  });
+  it('drops a muted sender before scanning displays or fetching their avatar', async () => {
+    const self = { id: 'viewer', username: 'viewer', homeUserId: null, homeInstance: null } as import('@backspace/shared').User;
+    useAuthStore.setState({ user: self });
+    useAttentionMutes.getState().mute(userKey(self, ''), { id: 'sender', username: 'sender' }, '', null);
+    getContext.mockClear(); native.mockClear(); vi.mocked(playInAppNudge).mockClear();
+    await notifyNudge('Sender', '/avatar.png', '', '123', 'shake', 'sender');
+    expect(getContext).not.toHaveBeenCalled(); expect(native).not.toHaveBeenCalled(); expect(playInAppNudge).not.toHaveBeenCalled();
+    useAttentionMutes.setState({ entries: [] }); useAuthStore.setState({ user: null });
   });
 });

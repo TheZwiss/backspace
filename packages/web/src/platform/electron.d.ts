@@ -90,7 +90,7 @@ interface LocalTextVoiceStatus {
 interface BackspaceElectronAPI {
   getNudgeContext?: (detectGames?: boolean) => Promise<import('../utils/nudgePolicy').NudgeContext | null>;
   getNudgeMedia?: (effect: string) => Promise<{ video: string; durationMs: number } | null>;
-  playNudge?: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: import('@backspace/shared').NudgeEffect; mode?: 'full' | 'reduced' | 'notification'; displayIds?: number[]; sound?: boolean; volume?: number }) => void;
+  playNudge?: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: import('@backspace/shared').NudgeEffect; mode?: 'full' | 'reduced' | 'notification'; displayIds?: number[]; sound?: boolean; volume?: number; labels?: { notice: string; close: string } }) => void;
   getTextVoiceStatus?: () => Promise<LocalTextVoiceStatus>;
   prepareTextVoice?: (device: 'auto' | 'cpu' | 'gpu') => Promise<LocalTextVoiceStatus>;
   synthesizeTextVoice?: (text: string, voice: string, speed: number) => Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }>;
@@ -105,6 +105,9 @@ interface BackspaceElectronAPI {
   close: () => void;
 
   // Notifications & badge
+  dismissFriendRequest?: (notice: { requestId: string; origin: string; userId: string }) => void;
+  showFriendRequest?: (notice: import('./friendRequestBridge').NativeFriendRequestNotice) => void;
+  onFriendRequestAction?: (callback: (action: import('./friendRequestBridge').NativeFriendRequestAction) => void) => () => void;
   showNotification: (title: string, body: string, options?: import('./notifications').NotificationOptions) => void;
   onNotificationClick?: (callback: (options: import('./notifications').NotificationOptions) => void) => () => void;
   setBadgeCount: (count: number) => void;

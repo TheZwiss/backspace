@@ -52,14 +52,14 @@ describe('desktop DM header call actions', () => {
   it('starts a call on the DM channel origin', () => {
     useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, 'https://remote.example']]) });
     renderDm();
-    fireEvent.click(screen.getByTitle('Start Voice Call'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Voice Call' }));
     expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id, withCamera: false });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_start', dmChannelId: dm.id }, 'https://remote.example');
   });
 
   it('starts a video call: the same call, with the camera to go on once connected', () => {
     renderDm();
-    fireEvent.click(screen.getByTitle('Start Video Call'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Video Call' }));
     expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id, withCamera: true });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_start', dmChannelId: dm.id }, '');
   });
@@ -74,7 +74,7 @@ describe('desktop DM header call actions', () => {
   it('cannot start a second call while an incoming call rings', () => {
     useVoiceStore.setState({ incomingCall: { dmChannelId: 'other', federatedCallId: null, callOrigin: null, callerId: 'bob', callerName: 'Bob', livekit: null } });
     renderDm();
-    const button = screen.getByTitle('Start Voice Call');
+    const button = screen.getByRole('button', { name: 'Start Voice Call' });
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(wsSend).not.toHaveBeenCalled();

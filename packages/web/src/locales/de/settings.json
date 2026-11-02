@@ -1,4 +1,30 @@
 {
+"attentionMutes": {
+    "title": "Stummgeschaltete Personen",
+    "description": "Unterdrücke Anstups-Töne, Animationen und Hinweise bestimmter Personen auf diesem Gerät. Nachrichten und Anrufe bleiben verfügbar.",
+    "mute": "Anstupser stummschalten",
+    "muteShort": "Stummschalten",
+    "unmute": "Anstupser wieder zulassen",
+    "unmuteShort": "Aufheben",
+    "minutes15": "Für 15 Minuten",
+    "hour1": "Für 1 Stunde",
+    "hours8": "Für 8 Stunden",
+    "hours24": "Für 24 Stunden",
+    "forever": "Bis zur Aufhebung",
+    "searchLabel": "Person hinzufügen",
+    "searchPlaceholder": "Nach Benutzernamen suchen...",
+    "duration": "Dauer der Stummschaltung",
+    "noResults": "Keine Personen gefunden.",
+    "empty": "Niemand ist stummgeschaltet.",
+    "until": "Stummgeschaltet bis {{time}}"
+  },
+  "friendNotifications": {
+    "title": "Freundschaftsanfragen",
+    "description": "Zeige bei neuen Anfragen eine Karte mit Foto und Schnellaktionen. Nicht stören wird berücksichtigt.",
+    "enabled": "Anfragekarten anzeigen",
+    "sound": "Ton abspielen",
+    "desktop": "Im Hintergrund über dem Desktop anzeigen"
+  },
   "interfaceScale": {
     "label": "Oberflächenskalierung",
     "description": "Größe von Text, Schaltflächen und Bereichen. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",

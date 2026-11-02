@@ -456,7 +456,7 @@ export function PictureInPicture() {
 
       {/* LIVE badge */}
       {isScreen && (
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-ui-caption font-bold text-white uppercase tracking-wide">
           {t('badges.live')}
         </div>
       )}
@@ -480,7 +480,7 @@ export function PictureInPicture() {
             <div className="w-2 h-2 rounded-full bg-status-online flex-shrink-0 animate-pulse" />
           )}
         </div>
-        <div className="text-white/50 text-[10px] truncate">{channelName}</div>
+        <div className="text-white/50 text-ui-micro truncate">{channelName}</div>
       </div>
 
       {/* Expand icon hint (bottom-right) */}

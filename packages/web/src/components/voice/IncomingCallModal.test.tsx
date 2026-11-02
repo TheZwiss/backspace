@@ -55,7 +55,7 @@ describe('IncomingCallModal decline', () => {
   it('declines through the ring\'s origin with the ring\'s ids', () => {
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.decline')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.decline') }));
 
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_reject', dmChannelId: null, federatedCallId: 'fed-1' }, HOST);
     expect(useVoiceStore.getState().incomingCall).toBeNull();
@@ -66,7 +66,7 @@ describe('IncomingCallModal decline', () => {
     useVoiceStore.setState({ activeDmCall: held });
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.decline')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.decline') }));
 
     expect(useVoiceStore.getState().activeDmCall).toEqual(held);
   });
@@ -78,7 +78,7 @@ describe('IncomingCallModal accept', () => {
     useVoiceStore.setState({ connectFn });
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.accept')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.accept') }));
 
     const active = useVoiceStore.getState().activeDmCall;
     expect(active?.dmChannelId).toBeNull();

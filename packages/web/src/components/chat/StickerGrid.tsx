@@ -62,7 +62,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
                 className="aspect-square w-full object-contain transition-transform group-hover:scale-105"
                 loading="lazy"
               />
-              <span className="mt-1 block truncate text-[10px] text-txt-tertiary">{item.name}</span>
+              <span className="mt-1 block truncate text-ui-micro text-txt-tertiary">{item.name}</span>
             </button>
             {managing && (
               <>

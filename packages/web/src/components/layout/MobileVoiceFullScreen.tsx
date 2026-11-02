@@ -301,7 +301,7 @@ export function MobileVoiceFullScreen() {
             {channelName}
           </h1>
           {spaceName && (
-            <p className="text-[11px] text-txt-tertiary truncate">{spaceName}</p>
+            <p className="text-ui-caption text-txt-tertiary truncate">{spaceName}</p>
           )}
         </div>
         <span className="text-xs text-txt-tertiary">
@@ -354,10 +354,10 @@ export function MobileVoiceFullScreen() {
             />
           </svg>
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-accent-amber">
+            <p className="text-ui-caption font-medium text-accent-amber">
               {t('voice:mobileCall.micDenied.title')}
             </p>
-            <p className="text-[11px] text-txt-tertiary leading-tight mt-0.5">
+            <p className="text-ui-caption text-txt-tertiary leading-tight mt-0.5">
               {t('voice:mobileCall.micDenied.description')}
             </p>
           </div>
@@ -366,7 +366,7 @@ export function MobileVoiceFullScreen() {
             onClick={() => {
               void requestMicPermission();
             }}
-            className="text-[11px] font-medium px-3 py-1.5 rounded-md bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30 transition-colors shrink-0"
+            className="text-ui-caption font-medium px-3 py-1.5 rounded-md bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30 transition-colors shrink-0"
           >
             {t('voice:mobileCall.micDenied.allow')}
           </button>
@@ -382,14 +382,14 @@ export function MobileVoiceFullScreen() {
 
       {/* Control bar */}
       <div
-        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 sm:gap-4 sm:px-4 shrink-0"
+        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 desktop:gap-4 desktop:px-4 shrink-0"
         style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
-        <div className="flex w-full justify-center gap-2 sm:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
+        <div className="flex w-full justify-center gap-2 desktop:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
         {/* Mute */}
         <button
           onClick={toggleMuteFromControl}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isMuted
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -421,7 +421,7 @@ export function MobileVoiceFullScreen() {
         {/* Deafen */}
         <button
           onClick={toggleDeafenFromControl}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isDeafened
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -457,7 +457,7 @@ export function MobileVoiceFullScreen() {
         <div className="relative" ref={cameraPickerAnchorRef}>
           <button
             onClick={handleCameraAction}
-            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+            className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
               isCameraOn
                 ? 'bg-accent-mint/20 text-accent-mint'
                 : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -519,7 +519,7 @@ export function MobileVoiceFullScreen() {
             only the boolean and never started capture. */}
         <button
           onClick={handleScreenShareAction}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isScreenSharing
               ? 'bg-accent-mint/20 text-accent-mint'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -546,7 +546,7 @@ export function MobileVoiceFullScreen() {
         {/* Disconnect */}
         <button
           onClick={handleDisconnect}
-          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
+          className="w-11 h-11 desktop:w-12 desktop:h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
           aria-label={t('voice:mobileCall.disconnect')}
         >
           <svg
@@ -593,7 +593,7 @@ export function MobileVoiceFullScreen() {
               role="menuitemradio"
               aria-checked={cameraDeviceId === null}
               onClick={() => handlePickCamera(null)}
-              className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+              className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                 cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >
@@ -606,7 +606,7 @@ export function MobileVoiceFullScreen() {
                 role="menuitemradio"
                 aria-checked={cameraDeviceId === d.deviceId}
                 onClick={() => handlePickCamera(d.deviceId)}
-                className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+                className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                   cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
                 } active:bg-interactive-hover`}
               >

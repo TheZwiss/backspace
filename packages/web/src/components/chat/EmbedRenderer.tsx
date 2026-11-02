@@ -27,7 +27,7 @@ export function EmbedRenderer({ embed }: EmbedRendererProps) {
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[14px] text-sky-400 font-semibold hover:underline block mb-2 truncate"
+              className="text-ui-body text-sky-400 font-semibold hover:underline block mb-2 truncate"
             >
               {embed.title}
             </a>

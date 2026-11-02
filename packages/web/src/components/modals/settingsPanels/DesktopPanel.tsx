@@ -182,7 +182,7 @@ function UpdateSettings() {
           {action && (
             <button
               onClick={action.onClick}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-accent-primary hover:bg-accent-primary/80 rounded-lg transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {action.label}
             </button>
@@ -243,7 +243,7 @@ export function DesktopPanel() {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('desktop.title')}</h2>
 
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+      <div className="settings-section space-y-3">
         {sandboxed === false && <AutoLaunchSettings />}
         <UpdateSettings />
 

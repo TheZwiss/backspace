@@ -33,10 +33,10 @@ export function VoicePanel() {
 
       {!isMobile && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('settings:voice.pip.sectionTitle')}
           </div>
-          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+          <div className="settings-section">
             <div className="flex items-center justify-between py-2">
               <div className="flex-1 mr-4">
                 <div className="text-sm text-txt-primary">{t('settings:voice.pip.showOnSwitch.label')}</div>
@@ -55,10 +55,10 @@ export function VoicePanel() {
       <VideoSection />
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:voice.processing.sectionTitle')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="settings-section">
           <div className="flex items-center justify-between py-2">
             <div className="flex-1 mr-4">
               <div className="text-sm text-txt-primary">{t('settings:voice.processing.noiseSuppression.label')}</div>

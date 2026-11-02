@@ -31,8 +31,8 @@ export function DictationControls() {
   return <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.025] p-3" aria-label={t('dictation.title')}>
     <div className="flex items-center gap-2 text-sm font-semibold text-txt-primary">{mic}{t('dictation.title')}</div>
     <div className="flex items-end gap-2">
-      <label className="min-w-0 flex-1 text-xs text-txt-secondary">{t('dictation.model')}<select className="input-standard mt-1 w-full" disabled={locked} value={state.model} onChange={(event) => state.setModel(event.target.value as typeof state.model)}>{SPEECH_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-      <label className="text-xs text-txt-secondary">{t('textVoice.processing')}<select className="input-standard mt-1 w-full" disabled={locked} value={state.device} onChange={(event) => state.setDevice(event.target.value as typeof state.device)}>{(['auto', 'cpu', 'gpu'] as const).map((item) => <option key={item} value={item}>{item === 'auto' ? t('textVoice.automatic') : item.toUpperCase()}</option>)}</select></label>
+      <label className="min-w-0 flex-1 text-xs text-txt-secondary">{t('dictation.model')}<select className="ui-select mt-1 w-full" disabled={locked} value={state.model} onChange={(event) => state.setModel(event.target.value as typeof state.model)}>{SPEECH_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+      <label className="text-xs text-txt-secondary">{t('textVoice.processing')}<select className="ui-select mt-1 w-full" disabled={locked} value={state.device} onChange={(event) => state.setDevice(event.target.value as typeof state.device)}>{(['auto', 'cpu', 'gpu'] as const).map((item) => <option key={item} value={item}>{item === 'auto' ? t('textVoice.automatic') : item.toUpperCase()}</option>)}</select></label>
     </div>
     <div className="flex flex-wrap items-center gap-2 text-xs text-txt-secondary">
       <span>{t('dictation.size', { size: f.formatNumber(Math.ceil(model.assets.reduce((sum, asset) => sum + asset.bytes, 0) / 1024 / 1024)) })}</span>
@@ -49,9 +49,9 @@ export function DictationControls() {
     </div>
     <p role="status" aria-live="polite" className="text-xs text-txt-secondary">{state.recording ? t('dictation.recording') : state.phase === 'downloading' ? t('dictation.downloading', { progress: f.formatPercent(state.progress) }) : state.phase === 'loading' || state.phase === 'transcribing' ? t('dictation.transcribing') : !supported ? t('dictation.secureContext') : voice.textVoiceEnabled && !canUseTextVoice() ? t('dictation.callHint') : t('dictation.hint')}</p>
     {state.phase === 'downloading' && <progress max={100} value={state.progress} aria-label={t('dictation.download')} className="h-1.5 w-full accent-accent-primary"/>}
-    {!working && !state.recording && state.backend && <p className="text-[11px] text-txt-tertiary">{t('textVoice.backendActive', { backend: state.backend === 'webgpu' ? 'GPU' : 'CPU' })}</p>}
+    {!working && !state.recording && state.backend && <p className="text-ui-caption text-txt-tertiary">{t('textVoice.backendActive', { backend: state.backend === 'webgpu' ? 'GPU' : 'CPU' })}</p>}
     {state.error && <p role="alert" className="text-xs text-accent-rose">{t(`dictation.${errorKey}`)}</p>}
-    <p className="text-[11px] leading-relaxed text-txt-tertiary">{t('dictation.shortcut', { shortcut: shortcut ?? t('dictation.unassigned') })}</p>
+    <p className="text-ui-caption leading-relaxed text-txt-tertiary">{t('dictation.shortcut', { shortcut: shortcut ?? t('dictation.unassigned') })}</p>
     <label className="flex cursor-pointer items-center gap-2 text-xs text-txt-secondary"><input type="checkbox" checked={voice.textVoiceMonitor} onChange={(event) => voice.setTextVoiceMonitor(event.target.checked)} className="accent-accent-primary"/>{t('dictation.monitor')}</label>
   </section>;
 }

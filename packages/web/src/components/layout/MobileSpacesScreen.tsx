@@ -1,4 +1,4 @@
-import { friendshipMenuItems } from './memberMenu/memberSocialActions';
+import { userSocialMenuItems } from './memberMenu/memberSocialActions';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -565,7 +565,7 @@ export function MobileSpacesScreen() {
 
       const modItems = buildVoiceModMenuItems(userId, channelId);
       const profileUser = members.find(m => m.userId === userId)?.user;
-      const items: ContextMenuItem[] = [...modItems, ...(profileUser ? friendshipMenuItems(profileUser, getChannelOrigin(channelId)) : [])];
+      const items: ContextMenuItem[] = [...modItems, ...(profileUser ? userSocialMenuItems(profileUser, getChannelOrigin(channelId)) : [])];
 
       if (modItems.length > 0) {
         items.push({ key: 'mod-end-sep', type: 'separator' });
@@ -760,7 +760,7 @@ export function MobileSpacesScreen() {
                 {iconUrl ? (
                   <img src={iconUrl} alt={space.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[15px] font-bold text-white">
+                  <span className="text-ui-message font-bold text-white">
                     {space.name.charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -904,7 +904,7 @@ export function MobileSpacesScreen() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-txt-tertiary truncate">
+                      <span className="text-ui-caption font-semibold uppercase tracking-wide text-txt-tertiary truncate">
                         {category.name}
                       </span>
                     </button>

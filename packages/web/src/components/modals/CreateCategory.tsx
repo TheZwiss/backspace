@@ -79,7 +79,7 @@ export function CreateCategoryModal() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {isLoading ? t('spaces:category.create.submitting') : t('spaces:category.create.submit')}
               </button>

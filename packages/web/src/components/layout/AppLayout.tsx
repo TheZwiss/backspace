@@ -1,3 +1,4 @@
+import { FriendRequestNotifications } from '../FriendRequestNotifications';
 import { SoundboardManagerModal } from '../voice/Soundboard';
 import { useNavigationMotion } from '../../hooks/useNavigationMotion';
 import { SpaceProfileModal } from '../modals/SpaceProfileModal';
@@ -452,6 +453,7 @@ export function AppLayout() {
         <SoundController />
         <GlobalAudioRenderer />
         <NotificationController />
+        <FriendRequestNotifications />
         <UpdateToast />
         <InstanceUpdateToast />
         <MediaSetupHint />
@@ -502,6 +504,7 @@ export function AppLayout() {
       <SoundController />
       <GlobalAudioRenderer />
       <NotificationController />
+        <FriendRequestNotifications />
       <UpdateToast />
 
       <UserProfilePopoutLayer />

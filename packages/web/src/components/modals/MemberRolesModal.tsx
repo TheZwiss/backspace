@@ -332,7 +332,7 @@ function MemberRolesBody({
       <div className="flex-1 min-h-0 flex">
         {/* Left pane: membership checkboxes; clicking a row edits that role */}
         <div className="w-72 flex-shrink-0 border-r border-white/[0.06] overflow-y-auto scrollbar-thin p-4">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('spaces:roles.listHeading')}
           </div>
           <div className="rounded-lg bg-white/[0.02] p-2">
@@ -410,7 +410,7 @@ function MemberRolesBody({
 
               {PERMISSION_GROUPS.map((group) => (
                 <div key={group.id} className="mb-5">
-                  <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+                  <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
                     {groupTitle(group.id)}
                   </div>
                   <div className="rounded-lg bg-white/[0.02] p-3.5">
@@ -506,7 +506,7 @@ function MemberRolesBody({
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {saving ? t('common:states.saving') : t('common:actions.save')}
                   </button>

@@ -4,7 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('backspace', {
   getNudgeContext: (detectGames = true) => ipcRenderer.invoke('nudge-context', detectGames),
   getNudgeMedia: (effect: string) => ipcRenderer.invoke('nudge-media', effect),
-  playNudge: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: string; mode?: string; displayIds?: number[]; sound?: boolean; volume?: number }) => ipcRenderer.send('play-nudge', sender, avatar, channelId, options),
+  playNudge: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: string; mode?: string; displayIds?: number[]; sound?: boolean; volume?: number; labels?: { notice: string; close: string } }) => ipcRenderer.send('play-nudge', sender, avatar, channelId, options),
   getTextVoiceStatus: () => ipcRenderer.invoke('local-text-voice-status'),
   prepareTextVoice: (device: 'auto' | 'cpu' | 'gpu') => ipcRenderer.invoke('local-text-voice-prepare', device),
   synthesizeTextVoice: (text: string, voice: string, speed: number) => ipcRenderer.invoke('local-text-voice-speech', { text, voice, speed }),
@@ -30,6 +30,13 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.send('close-window');
   },
 
+  showFriendRequest: (notice: import('./friendRequestToast').FriendRequestToastData) => ipcRenderer.send('friend-request-notification', notice),
+  dismissFriendRequest: (notice: { requestId: string; origin: string; userId: string }) => ipcRenderer.send('friend-request-dismiss', notice),
+  onFriendRequestAction: (callback: (action: { requestId: string; origin: string; userId: string; action: 'open' | 'accepted' | 'declined' | 'dismiss' }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, action: Parameters<typeof callback>[0]) => callback(action);
+    ipcRenderer.on('friend-request-action', handler);
+    return () => { ipcRenderer.removeListener('friend-request-action', handler); };
+  },
   // Notifications & badge
   showNotification: (title: string, body: string, options?: { channelId?: string; spaceId?: string; userId?: string }) => {
     ipcRenderer.send('show-notification', { title, body, options });

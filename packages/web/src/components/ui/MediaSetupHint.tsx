@@ -95,7 +95,7 @@ export function MediaSetupHint() {
           <button
             type="button"
             onClick={dismiss}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent-primary hover:bg-accent-primary/80 text-white transition-colors"
+            className="ui-button ui-button-primary transition-colors"
           >
             {t('mediaSetup.neteaseSmtc.gotIt')}
           </button>

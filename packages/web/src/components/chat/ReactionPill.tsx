@@ -158,8 +158,8 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
           {imageUrl ? <div className="w-full p-4">
             <img src={imageUrl} alt={t('chat:stickers.preview')} className="w-full h-40 object-contain" />
           </div>
-            : <span className="text-[16px] leading-none flex-shrink-0">{emoji}</span>}
-          <span className={`text-[13px] leading-[18px] text-txt-secondary [overflow-wrap:anywhere] ${imageUrl ? 'w-full border-t border-border-soft px-3 py-2.5 text-center' : ''}`}>
+            : <span className="text-ui-lead leading-none flex-shrink-0">{emoji}</span>}
+          <span className={`text-ui-label leading-[18px] text-txt-secondary [overflow-wrap:anywhere] ${imageUrl ? 'w-full border-t border-border-soft px-3 py-2.5 text-center' : ''}`}>
             {before}
             <span className="font-medium text-txt-primary">{names}</span>
             {after}

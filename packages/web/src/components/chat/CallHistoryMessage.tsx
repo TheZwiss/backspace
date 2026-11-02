@@ -31,10 +31,10 @@ export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEve
   const date = f.formatMediumDate;
   const clock = (value: number) => f.formatTime(value, true);
   const timestamp = (label: string, value: number) => <div className="min-w-0">
-    <div className="text-[10px] uppercase tracking-wider text-txt-tertiary mb-1">{label}</div>
+    <div className="text-ui-micro uppercase tracking-wider text-txt-tertiary mb-1">{label}</div>
     <time dateTime={new Date(value).toISOString()} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
       <span className="text-xs font-medium tabular-nums text-txt-secondary">{clock(value)}</span>
-      <span className="text-[10px] text-txt-tertiary">{date(value)}</span>
+      <span className="text-ui-micro text-txt-tertiary">{date(value)}</span>
     </time>
   </div>;
   return <div className="px-4 py-2">
@@ -47,7 +47,7 @@ export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEve
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <div className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${look.badge} ${look.text}`}>
+          <div className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-ui-micro font-semibold ${look.badge} ${look.text}`}>
             <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${event.status === 'active' ? 'motion-safe:animate-pulse' : ''}`} />
             {t(`history.status.${event.status}`)}
           </div>
@@ -55,7 +55,7 @@ export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEve
         </div>
         {seconds !== null && <div className="shrink-0 text-right">
           <div className={`text-xl font-semibold leading-none tracking-tight tabular-nums ${look.text}`}>{duration}</div>
-          <div className="mt-1 text-[10px] text-txt-tertiary">{t('history.duration')}</div>
+          <div className="mt-1 text-ui-micro text-txt-tertiary">{t('history.duration')}</div>
         </div>}
       </div>
       <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-3 border-t border-white/5 bg-black/10 px-4 py-3">

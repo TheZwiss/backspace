@@ -1,5 +1,5 @@
 import { FriendsVoiceCard } from './FriendsVoiceCard';
-import { friendshipMenuItems, runMemberAction, sendMemberMessage } from './memberMenu/memberSocialActions';
+import { userSocialMenuItems, runMemberAction, sendMemberMessage } from './memberMenu/memberSocialActions';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { useNavigate } from 'react-router-dom';
 import React, { useEffect, useMemo } from 'react';
@@ -55,9 +55,9 @@ function ActivityFriendRow({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <span className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
+        <span className={`text-ui-label leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -161,7 +161,7 @@ export function ActivityPanel() {
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
         {voiceGroups.length > 0 && <section className="mb-4" aria-label={t('social:activity.friendsInVoice')}>
-          <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-2">{t('social:activity.friendsInVoice')}</h3>
+          <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-2">{t('social:activity.friendsInVoice')}</h3>
           {voiceGroups.map(group => <FriendsVoiceCard key={group.channelId} group={group}>
               {group.friends.slice(0, 5).map(friend => <span key={friend.id} title={friend.displayName ?? friend.username} aria-label={friend.displayName ?? friend.username} onContextMenu={e => {
                 e.preventDefault(); e.stopPropagation();
@@ -170,19 +170,19 @@ export function ActivityPanel() {
                 useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, [
                   { type: 'action', key: 'profile', label: t('spaces:members.menu.profile'), onClick: () => openUserProfile(user, friend._instanceOrigin, anchor, 'left') },
                   { type: 'action', key: 'message', label: t('social:profile.sendMessage'), onClick: () => { void runMemberAction(() => sendMemberMessage(user, friend._instanceOrigin, navigate)); } },
-                  ...friendshipMenuItems(user, friend._instanceOrigin),
+                  ...userSocialMenuItems(user, friend._instanceOrigin),
                 ]);
               }} className="shrink-0 rounded-full hover:opacity-80">
                 <Avatar src={friend.avatar} name={friend.displayName ?? friend.username} size={28} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
               </span>)}
-              {group.friends.length > 5 && <span className="shrink-0 text-[10px] font-semibold text-txt-tertiary" title={t('social:activity.moreFriends', { n: group.friends.length - 5 })} aria-label={t('social:activity.moreFriends', { n: group.friends.length - 5 })}>+{group.friends.length - 5}</span>}
+              {group.friends.length > 5 && <span className="shrink-0 text-ui-micro font-semibold text-txt-tertiary" title={t('social:activity.moreFriends', { n: group.friends.length - 5 })} aria-label={t('social:activity.moreFriends', { n: group.friends.length - 5 })}>+{group.friends.length - 5}</span>}
           </FriendsVoiceCard>)}
         </section>}
 
         {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
           <div className="text-center py-8">
-            <div className="text-[16px] font-bold text-txt-primary mb-1">{t('social:activity.quietTitle')}</div>
-            <div className="text-[14px] text-txt-tertiary max-w-[200px] mx-auto">
+            <div className="text-ui-lead font-bold text-txt-primary mb-1">{t('social:activity.quietTitle')}</div>
+            <div className="text-ui-body text-txt-tertiary max-w-[200px] mx-auto">
               {t('social:activity.quietDescription')}
             </div>
           </div>
@@ -195,7 +195,7 @@ export function ActivityPanel() {
             )}
             {onlineFriends.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   {t('social:activity.online', { n: onlineFriends.length })}
                 </h3>
                 {onlineFriends.map(f => renderFriend(f))}
@@ -203,7 +203,7 @@ export function ActivityPanel() {
             )}
             {offlineFriends.length > 0 && (
               <div>
-                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   {t('social:activity.offline', { n: offlineFriends.length })}
                 </h3>
                 {offlineFriends.map(f => renderFriend(f, true))}

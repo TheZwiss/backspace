@@ -79,9 +79,9 @@ export function ToastContainer() {
         left: '12px',
         right: '12px',
         bottom: resolveMobileBottomOffset(mobileStack.length > 0, topScreen, inVoice),
-        zIndex: 300,
+        zIndex: 'var(--layer-toast)',
       }
-    : { position: 'fixed', bottom: '24px', right: '24px', zIndex: 300 };
+    : { position: 'fixed', bottom: '24px', right: '24px', zIndex: 'var(--layer-toast)' };
 
   return (
     <div

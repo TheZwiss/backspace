@@ -214,7 +214,7 @@ export function useFloatingPosition(
       position: 'fixed',
       top: result.top,
       left: result.left,
-      zIndex: 200,
+      zIndex: 'var(--layer-menu)',
     },
     actualPlacement: result.actualPlacement,
   };

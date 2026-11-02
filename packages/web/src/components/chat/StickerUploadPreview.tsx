@@ -176,7 +176,7 @@ export function StickerUploadPreview({
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center justify-between gap-1 text-[11px] text-txt-tertiary">
+                    <div className="mb-1 flex items-center justify-between gap-1 text-ui-caption text-txt-tertiary">
                       <span className="truncate" title={item.file.name}>{item.file.name}</span>
                       <span className="shrink-0">{formatBytes(item.file.size)}</span>
                     </div>
@@ -189,7 +189,7 @@ export function StickerUploadPreview({
                       onChange={event => updateName(item.id, event.target.value)}
                       className="input-search h-7 w-full text-xs px-2 py-1"
                     />
-                    {item.error && <p className="mt-1 text-[11px] leading-4 text-txt-danger">{item.error}</p>}
+                    {item.error && <p className="mt-1 text-ui-caption leading-4 text-txt-danger">{item.error}</p>}
                   </div>
                   <button
                     type="button"

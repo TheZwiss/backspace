@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -68,13 +69,13 @@ export function TextVoiceComposer() {
   return <div className="space-y-4">
     <TextVoiceSettings />
     <div className="flex items-end gap-3">
-      <label className="flex-1 text-xs text-txt-secondary">{t('textVoice.processing')}<select value={device} disabled={busy || preparing} onChange={(e) => useVoiceStore.getState().setTextVoiceDevice(e.target.value as 'auto' | 'cpu' | 'gpu')} className="input-standard mt-1 w-full">{[{ id: 'auto', label: t('textVoice.automatic') }, { id: 'cpu', label: 'CPU' }, { id: 'gpu', label: 'GPU (NVIDIA / AMD)' }].map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+      <label className="flex-1 text-xs text-txt-secondary">{t('textVoice.processing')}<select value={device} disabled={busy || preparing} onChange={(e) => useVoiceStore.getState().setTextVoiceDevice(e.target.value as 'auto' | 'cpu' | 'gpu')} className="ui-select mt-1 w-full">{[{ id: 'auto', label: t('textVoice.automatic') }, { id: 'cpu', label: 'CPU' }, { id: 'gpu', label: 'GPU (NVIDIA / AMD)' }].map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
       <button type="button" disabled={preparing || busy || !supportsLocalTextVoice()} onClick={() => void prepare()} className="rounded-lg bg-white/5 px-3 py-2 text-xs text-txt-secondary disabled:opacity-40">{t('textVoice.prepare')}</button>
     </div>
-    <p className="text-[11px] leading-relaxed text-txt-tertiary">{t('textVoice.downloadHint')}</p>
+    <p className="text-ui-caption leading-relaxed text-txt-tertiary">{t('textVoice.downloadHint')}</p>
     <div className="grid grid-cols-2 gap-3">
-      <label className="text-xs text-txt-secondary">{t('textVoice.voice')}<select value={voice} onChange={(e) => useVoiceStore.getState().setTextVoice(e.target.value)} className="input-standard mt-1 w-full">{[{ id: 'pf_dora', name: 'Dora' }, { id: 'pm_alex', name: 'Alex' }, { id: 'pm_santa', name: 'Santa' }].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      <label className="text-xs text-txt-secondary">{t('textVoice.speed')}<select value={speed} onChange={(e) => useVoiceStore.getState().setTextVoiceSpeed(Number(e.target.value))} className="input-standard mt-1 w-full">{[0.8, 1, 1.15, 1.3].map((value) => <option key={value} value={value}>{value}×</option>)}</select></label>
+      <label className="text-xs text-txt-secondary">{t('textVoice.voice')}<select value={voice} onChange={(e) => useVoiceStore.getState().setTextVoice(e.target.value)} className="ui-select mt-1 w-full">{[{ id: 'pf_dora', name: 'Dora' }, { id: 'pm_alex', name: 'Alex' }, { id: 'pm_santa', name: 'Santa' }].map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="text-xs text-txt-secondary">{t('textVoice.speed')}<select value={speed} onChange={(e) => useVoiceStore.getState().setTextVoiceSpeed(Number(e.target.value))} className="ui-select mt-1 w-full">{[0.8, 1, 1.15, 1.3].map((value) => <option key={value} value={value}>{value}×</option>)}</select></label>
     </div>
     <textarea ref={input} autoFocus value={draft} maxLength={2000} rows={4} onChange={(e) => useVoiceStore.getState().setTextVoiceDraft(e.target.value)} onKeyDown={(e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.stopPropagation(); void send(); }
@@ -85,11 +86,11 @@ export function TextVoiceComposer() {
     <p role="status" className="text-xs text-txt-secondary">{!supportsLocalTextVoice() ? t('textVoice.unsupported') : status.phase === 'downloading' ? t('textVoice.downloadProgress', { progress: f.formatPercent(status.progress ?? 0) }) : preparing ? t('textVoice.checking') : !available ? t(status.error === 'gpu-unavailable' ? 'textVoice.gpuUnavailable' : 'textVoice.unavailable') : voiceBusy ? t('textVoice.speaking') : enabled && !allowed ? t('textVoice.muted') : t('textVoice.backendActive', { backend: status.backend === 'webgpu' ? `GPU · ${status.adapter?.vendor ?? ''}` : 'CPU' })}</p>
     {error && <p role="alert" className="text-sm text-accent-rose">{error}</p>}
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" disabled={!allowed || !available || busy || !draft.trim()} onClick={() => void send()} className="rounded-xl bg-accent-primary px-5 py-2.5 text-sm font-semibold text-white transition-opacity disabled:opacity-40">{t('textVoice.speak')}</button>
+      <button type="button" disabled={!allowed || !available || busy || !draft.trim()} onClick={() => void send()} className="ui-button ui-button-primary transition-opacity disabled:opacity-40">{t('textVoice.speak')}</button>
       <button type="button" disabled={!available || busy || !draft.trim()} onClick={() => void send(true)} className="rounded-xl bg-white/5 px-4 py-2.5 text-sm text-txt-secondary disabled:opacity-40">{t('textVoice.preview')}</button>
       {busy && <button type="button" onClick={stopDictationAndVoice} className="rounded-xl bg-accent-rose/10 px-4 py-2.5 text-sm text-accent-rose">{t('textVoice.stop')}</button>}
     </div>
-    <p className="text-[11px] leading-relaxed text-txt-tertiary">{t('textVoice.privacy')}</p>
+    <p className="text-ui-caption leading-relaxed text-txt-tertiary">{t('textVoice.privacy')}</p>
   </div>;
 }
 
@@ -100,5 +101,5 @@ export function TextVoiceButton({ className = 'w-10 h-10', variant = 'call' }: {
   const [open, setOpen] = useState(false);
   const [targetDocument, setTargetDocument] = useState<Document | undefined>();
   if (!supportsLocalTextVoice() && !enabled) return null;
-  return <><button type="button" onClick={(event) => { setTargetDocument(event.currentTarget.ownerDocument); setOpen(true); }} title={t(recording ? 'dictation.recording' : 'textVoice.title')} aria-label={t(recording ? 'dictation.recording' : 'textVoice.title')} aria-pressed={recording} className={`${className} flex items-center justify-center transition-colors ${variant === 'toolbar' ? 'rounded-[4px]' : 'shrink-0 rounded-full'} ${recording ? 'bg-accent-rose/20 text-accent-rose' : enabled ? 'bg-accent-primary/20 text-accent-primary' : variant === 'toolbar' ? 'text-txt-tertiary hover:bg-surface-channel hover:text-txt-secondary' : 'text-txt-secondary hover:bg-white/10 hover:text-txt-primary'}`}>{icon}</button><Modal isOpen={open} onClose={() => setOpen(false)} targetDocument={targetDocument} title={t('textVoice.title')} maxWidth="max-w-xl" mobileStyle="sheet">{open && <TextVoiceComposer />}</Modal></>;
+  return <><Tooltip content={t(recording ? 'dictation.recording' : 'textVoice.title')} position="top"><button type="button" onClick={(event) => { setTargetDocument(event.currentTarget.ownerDocument); setOpen(true); }}  aria-label={t(recording ? 'dictation.recording' : 'textVoice.title')} aria-pressed={recording} className={`${className} flex items-center justify-center transition-colors ${variant === 'toolbar' ? 'rounded-[4px]' : 'shrink-0 rounded-full'} ${recording ? 'bg-accent-rose/20 text-accent-rose' : enabled ? 'bg-accent-primary/20 text-accent-primary' : variant === 'toolbar' ? 'text-txt-tertiary hover:bg-surface-channel hover:text-txt-secondary' : 'text-txt-secondary hover:bg-white/10 hover:text-txt-primary'}`}>{icon}</button></Tooltip><Modal isOpen={open} onClose={() => setOpen(false)} targetDocument={targetDocument} title={t('textVoice.title')} maxWidth="max-w-xl" mobileStyle="sheet">{open && <TextVoiceComposer />}</Modal></>;
 }

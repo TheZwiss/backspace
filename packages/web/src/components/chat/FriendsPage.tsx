@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { openUserFriendshipMenu } from '../layout/memberMenu/memberSocialActions';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -78,7 +79,7 @@ function ActivityFriendItem({
       <div className="flex-1 min-w-0">
         <span className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>{friendDisplayName}</span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -358,14 +359,14 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
               {t('social:tabs.pending')}
               {(pendingIncoming.length > 0) && (
-                <span className="ml-2 px-1.5 py-0.5 bg-accent-rose text-white text-[10px] rounded-full leading-none">
+                <span className="ml-2 px-1.5 py-0.5 bg-accent-rose text-white text-ui-micro rounded-full leading-none">
                   {pendingIncoming.length}
                 </span>
               )}
             </TabButton>
             <button
               onClick={() => setActiveTab('add')}
-              className={`px-2 py-0.5 rounded text-[14px] font-medium transition-all ${
+              className={`px-2 py-0.5 rounded text-ui-body font-medium transition-all ${
                 activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
               }`}
             >
@@ -611,7 +612,7 @@ function AddFriendTab({
             <button
               onClick={handleDirectAdd}
               disabled={directAddLoading}
-              className="px-3 py-1.5 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50 flex-shrink-0"
             >
               {directAddLoading ? t('social:request.sending') : t('social:add.sendRequest')}
             </button>
@@ -780,7 +781,7 @@ function UserDiscoverCard({
         />
         {originLabel && (
           <div className="absolute top-2 right-2 z-[2]">
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur-sm bg-black/30 text-txt-secondary">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-micro font-semibold backdrop-blur-sm bg-black/30 text-txt-secondary">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
               </svg>
@@ -813,18 +814,18 @@ function UserDiscoverCard({
       {/* Content */}
       <div className="px-4 pt-1.5 pb-3.5 flex flex-col flex-1">
         <button onContextMenu={event => openUserFriendshipMenu(event, user, user._instanceOrigin)} onClick={handleOpenProfile} className="text-left group">
-          <h3 className="text-[14px] font-bold text-txt-primary truncate group-hover:underline">{displayName}</h3>
-          <p className="text-[12px] text-txt-tertiary truncate">@{user.username}</p>
+          <h3 className="text-ui-body font-bold text-txt-primary truncate group-hover:underline">{displayName}</h3>
+          <p className="text-ui-caption text-txt-tertiary truncate">@{user.username}</p>
         </button>
 
         {user.bio && (
-          <p className="text-[12px] text-txt-secondary line-clamp-2 mt-1.5 flex-1">{replaceEmojiShortcodes(user.bio)}</p>
+          <p className="text-ui-caption text-txt-secondary line-clamp-2 mt-1.5 flex-1">{replaceEmojiShortcodes(user.bio)}</p>
         )}
         {!user.bio && <div className="flex-1" />}
 
         {/* Mutuals */}
         {(user.mutualFriendCount > 0 || user.mutualSpaceCount > 0) && (
-          <div className="flex items-center gap-2.5 text-[11px] text-txt-tertiary mt-2 mb-2.5">
+          <div className="flex items-center gap-2.5 text-ui-caption text-txt-tertiary mt-2 mb-2.5">
             {user.mutualFriendCount > 0 && (
               <span>{t('social:mutuals.friends', { count: user.mutualFriendCount })}</span>
             )}
@@ -840,7 +841,7 @@ function UserDiscoverCard({
 
         {/* Error */}
         {error && (
-          <div className="text-[11px] text-txt-danger mb-1.5 truncate">{error}</div>
+          <div className="text-ui-caption text-txt-danger mb-1.5 truncate">{error}</div>
         )}
 
         {/* Action button */}
@@ -848,7 +849,7 @@ function UserDiscoverCard({
           <button
             onClick={handleSendRequest}
             disabled={actionLoading}
-            className="w-full py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50"
           >
             {actionLoading ? t('social:request.sending') : t('social:request.send')}
           </button>
@@ -857,7 +858,7 @@ function UserDiscoverCard({
           <button
             onClick={handleCancelRequest}
             disabled={actionLoading || !user.requestId}
-            className="w-full py-1.5 bg-accent-amber/15 hover:bg-accent-amber/25 text-accent-amber text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+            className="w-full py-1.5 bg-accent-amber/15 hover:bg-accent-amber/25 text-accent-amber text-ui-label font-medium rounded transition-colors disabled:opacity-50"
           >
             {actionLoading ? t('social:request.cancelling') : t('social:request.pending')}
           </button>
@@ -867,14 +868,14 @@ function UserDiscoverCard({
             <button
               onClick={handleAccept}
               disabled={actionLoading}
-              className="flex-1 py-1.5 bg-status-online/20 hover:bg-status-online/30 text-status-online text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+              className="flex-1 py-1.5 bg-status-online/20 hover:bg-status-online/30 text-status-online text-ui-label font-medium rounded transition-colors disabled:opacity-50"
             >
               {t('common:actions.accept')}
             </button>
             <button
               onClick={handleDecline}
               disabled={actionLoading}
-              className="flex-1 py-1.5 bg-accent-rose/15 hover:bg-accent-rose/25 text-accent-rose text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+              className="flex-1 py-1.5 bg-accent-rose/15 hover:bg-accent-rose/25 text-accent-rose text-ui-label font-medium rounded transition-colors disabled:opacity-50"
             >
               {t('common:actions.decline')}
             </button>
@@ -883,7 +884,7 @@ function UserDiscoverCard({
         {user.relationship === 'friends' && (
           <button
             onClick={handleMessage}
-            className="w-full py-1.5 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-[13px] font-medium rounded transition-colors"
+            className="w-full py-1.5 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-ui-label font-medium rounded transition-colors"
           >
             {t('social:friend.message')}
           </button>
@@ -899,7 +900,7 @@ function TabButton({ children, active, onClick }: { children: React.ReactNode, a
   return (
     <button
       onClick={onClick}
-      className={`px-2 py-0.5 rounded-[4px] text-[16px] font-medium transition-colors ${
+      className={`px-2 py-0.5 rounded-[4px] text-ui-lead font-medium transition-colors ${
         active ? 'bg-interactive-selected text-white' : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
       }`}
     >
@@ -919,36 +920,36 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
         <Avatar src={canonical.avatar} name={friendDisplayName} size={32} status={canonical.status} userId={canonical.homeUserId ?? canonical.id} avatarColor={canonical.avatarColor} />
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
-            <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
-            <span className="text-txt-tertiary text-[13px] opacity-60 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
+            <span className="text-txt-primary font-semibold text-ui-message">{friendDisplayName}</span>
+            <span className="text-txt-tertiary text-ui-label opacity-60 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[12px] text-txt-tertiary font-medium">{presenceLabel(t, friend.status)}</span>
+            <span className="text-ui-caption text-txt-tertiary font-medium">{presenceLabel(t, friend.status)}</span>
             {instanceLabel && (
-              <span className="text-[11px] text-txt-tertiary/60 font-medium">{t('social:friend.viaInstance', { host: instanceLabel })}</span>
+              <span className="text-ui-caption text-txt-tertiary/60 font-medium">{t('social:friend.viaInstance', { host: instanceLabel })}</span>
             )}
           </div>
         </div>
       </div>
       <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity pr-2">
-        <button
+        <Tooltip content={t('social:friend.message')} position="top"><button aria-label={t('social:friend.message')}
           onClick={(e) => { e.stopPropagation(); onDm(); }}
           className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-primary transition-colors"
-          title={t('social:friend.message')}
+
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z" />
           </svg>
-        </button>
-        <button
+        </button></Tooltip>
+        <Tooltip content={t('social:friend.remove')} position="top"><button aria-label={t('social:friend.remove')}
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-colors"
-          title={t('social:friend.remove')}
+
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
           </svg>
-        </button>
+        </button></Tooltip>
       </div>
     </div>
   );
@@ -982,7 +983,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-txt-tertiary">{type === 'incoming' ? t('social:request.incoming') : t('social:request.outgoing')}</span>
             {instanceLabel && (
-              <span className="text-[11px] text-txt-tertiary/60 font-medium">{t('social:friend.viaInstance', { host: instanceLabel })}</span>
+              <span className="text-ui-caption text-txt-tertiary/60 font-medium">{t('social:friend.viaInstance', { host: instanceLabel })}</span>
             )}
           </div>
         </div>
@@ -990,35 +991,35 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
       <div className="flex items-center gap-2">
         {type === 'incoming' ? (
           <>
-            <button
+            <Tooltip content={t('common:actions.accept')} position="top"><button aria-label={t('common:actions.accept')}
               onClick={() => onAccept?.()}
               className="p-2 bg-surface-base rounded-full text-status-online hover:bg-status-online hover:text-white transition-all"
-              title={t('common:actions.accept')}
+
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
               </svg>
-            </button>
-            <button
+            </button></Tooltip>
+            <Tooltip content={t('common:actions.decline')} position="top"><button aria-label={t('common:actions.decline')}
               onClick={() => onDecline?.()}
               className="p-2 bg-surface-base rounded-full text-txt-danger hover:bg-accent-rose hover:text-white transition-all"
-              title={t('common:actions.decline')}
+
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
               </svg>
-            </button>
+            </button></Tooltip>
           </>
         ) : (
-          <button
+          <Tooltip content={t('social:request.cancel')} position="top"><button aria-label={t('social:request.cancel')}
             onClick={() => onCancel?.()}
             className="p-2 bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-all"
-            title={t('social:request.cancel')}
+
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
             </svg>
-          </button>
+          </button></Tooltip>
         )}
       </div>
     </div>

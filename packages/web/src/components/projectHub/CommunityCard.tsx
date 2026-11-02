@@ -156,7 +156,7 @@ async function loadListing(target: CommunityTarget): Promise<DirectoryListing> {
 
 // ─── Presentation ───────────────────────────────────────────────────────────
 
-const noteClass = 'w-full text-[12px] text-txt-danger';
+const noteClass = 'w-full text-ui-caption text-txt-danger';
 
 function CommunityIcon() {
   return (
@@ -264,7 +264,7 @@ function HomeCommunityJoin({
           type="button"
           onClick={() => void sendRequest()}
           disabled={joining}
-          className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-sm font-medium rounded transition-colors disabled:opacity-50"
+          className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
         >
           {joining ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
         </button>

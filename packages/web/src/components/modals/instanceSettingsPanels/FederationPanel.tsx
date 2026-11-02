@@ -1,3 +1,4 @@
+import { Tooltip } from '../../ui/Tooltip';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -73,7 +74,7 @@ function FederationGlobalSettings() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('federation:admin.relay.title')}</div>
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('federation:admin.relay.title')}</div>
       <p className="text-xs text-txt-tertiary mb-2">
         {t('federation:admin.relay.description')}
       </p>
@@ -145,7 +146,7 @@ function FederationGlobalSettings() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
@@ -314,13 +315,13 @@ function FilterDropdown({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
       >
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
         {t('common:actions.filter')}
-        <span className="text-[10px]">▾</span>
+        <span className="text-ui-micro">▾</span>
       </button>
 
       {open && (
@@ -329,7 +330,7 @@ function FilterDropdown({
           <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
             {view === 'active' && (
               <>
-                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:admin.filter.statusHeading')}</div>
+                <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('federation:admin.filter.statusHeading')}</div>
                 {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention'] as StatusFilter[]).map((s) => (
                   <button
                     key={s}
@@ -346,7 +347,7 @@ function FilterDropdown({
                 <div className="h-px bg-white/[0.06] my-1" />
               </>
             )}
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
             {sortOptions.map((opt) => (
               <button
                 key={opt.key}
@@ -398,7 +399,7 @@ function PeerListControls({
             view === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
         >
-          {t('federation:admin.views.active')} <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
+          {t('federation:admin.views.active')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{activeCount}</span>
         </button>
         <button
           type="button"
@@ -407,7 +408,7 @@ function PeerListControls({
             view === 'revoked' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
         >
-          {t('federation:admin.views.revoked')} <span className="text-[10px] text-txt-tertiary ml-0.5">{revokedCount}</span>
+          {t('federation:admin.views.revoked')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{revokedCount}</span>
         </button>
       </div>
       <FilterDropdown
@@ -526,13 +527,13 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
             <div className={`text-sm font-medium truncate ${isGone ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`}>
               {host}
             </div>
-            <div className={`text-[11px] truncate ${reason ? 'text-accent-rose' : 'text-txt-tertiary'}`}>
+            <div className={`text-ui-caption truncate ${reason ? 'text-accent-rose' : 'text-txt-tertiary'}`}>
               {metaText}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${peerStatusColor(peer.status)}`}>
+          <span className={`inline-flex items-center text-ui-micro font-medium px-1.5 py-0.5 rounded ${peerStatusColor(peer.status)}`}>
             {peerStatusLabel(t, peer.status)}
           </span>
           <span className="text-txt-tertiary text-xs">{expanded ? '▾' : '▸'}</span>
@@ -545,7 +546,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
           <div className="border-t border-white/[0.05] pt-3">
             {peer.instanceName && (
               <div className="mb-3 min-w-0">
-                <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.instanceName')}</div>
+                <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.instanceName')}</div>
                 <div className="text-xs text-txt-secondary truncate">{peer.instanceName}</div>
               </div>
             )}
@@ -577,36 +578,36 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                 {/* Stats grid */}
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.consecutiveFailures')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.consecutiveFailures')}</div>
                     <div className={`text-xs ${(peer.consecutiveFailures ?? 0) > 0 ? 'text-accent-amber font-medium' : 'text-txt-secondary'}`}>
                       {formatters.formatNumber(peer.consecutiveFailures ?? 0)}
                     </div>
                   </div>
                   {peer.status === 'needs_attention' && (
                     <div>
-                      <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.authFailures')}</div>
+                      <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.authFailures')}</div>
                       <div className="text-xs text-accent-rose font-medium">
                         {formatters.formatNumber(peer.consecutiveAuthFailures)}
                       </div>
                     </div>
                   )}
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.lastFailure')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.lastFailure')}</div>
                     <div className="text-xs text-txt-secondary">{formatRelativeTime(t, formatters, peer.lastFailureAt)}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.peeredSince')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.peeredSince')}</div>
                     <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(peer.createdAt)}</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-3">
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.secretRotated')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.secretRotated')}</div>
                     <div className="text-xs text-txt-secondary">{formatRelativeTime(t, formatters, peer.secretRotatedAt)}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.autoRotate')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.autoRotate')}</div>
                     {editingInterval ? (
                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -623,14 +624,14 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                           type="button"
                           onClick={handleSaveInterval}
                           disabled={intervalSaving}
-                          className="text-[10px] text-accent-primary hover:text-accent-primary/80 disabled:opacity-50"
+                          className="text-ui-micro text-accent-primary hover:text-accent-primary/80 disabled:opacity-50"
                         >
                           {intervalSaving ? '…' : t('common:actions.save')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setEditingInterval(false); setIntervalDraft(peer.autoRotateIntervalDays); setIntervalError(''); }}
-                          className="text-[10px] text-txt-tertiary hover:text-txt-secondary"
+                          className="text-ui-micro text-txt-tertiary hover:text-txt-secondary"
                         >
                           {t('common:actions.cancel')}
                         </button>
@@ -638,13 +639,13 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                     ) : (
                       <div className="text-xs text-txt-secondary">
                         {t('federation:admin.peer.rotateEvery', { count: peer.autoRotateIntervalDays })}
-                        {isDefault && <span className="text-[10px] text-txt-tertiary ml-1">{t('federation:admin.peer.defaultTag')}</span>}
+                        {isDefault && <span className="text-ui-micro text-txt-tertiary ml-1">{t('federation:admin.peer.defaultTag')}</span>}
                       </div>
                     )}
-                    {intervalError && <div className="text-[10px] text-txt-danger mt-0.5">{intervalError}</div>}
+                    {intervalError && <div className="text-ui-micro text-txt-danger mt-0.5">{intervalError}</div>}
                   </div>
                   <div>
-                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.rotationStatus')}</div>
+                    <div className="text-ui-micro text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:admin.peer.rotationStatus')}</div>
                     <div className="text-xs text-txt-secondary">
                       {peer.rotationInProgress ? t('federation:admin.peer.inProgress') : t('federation:admin.peer.idle')}
                     </div>
@@ -673,15 +674,15 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                     </button>
                   ) : (
                     <>
-                      <button
+                      <Tooltip content={peer.rotationInProgress ? t('federation:admin.peer.rotationInProgress') : undefined} position="top"><button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
                         disabled={peer.rotationInProgress}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors disabled:opacity-50"
-                        title={peer.rotationInProgress ? t('federation:admin.peer.rotationInProgress') : undefined}
+
                       >
                         {t('federation:admin.peer.rotateSecret')}
-                      </button>
+                      </button></Tooltip>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
@@ -693,7 +694,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, on
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
-                          className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                          className="text-ui-caption text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
                         >
                           {t('federation:admin.peer.editInterval')}
                         </button>
@@ -786,8 +787,8 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.approvals.title')}</div>
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.approvals.title')}</div>
+        <span className="text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
           {requests.length}
         </span>
       </div>
@@ -808,9 +809,9 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-txt-primary truncate">{titleText}</div>
                   {req.instanceName && (
-                    <div className="text-[11px] text-txt-tertiary truncate">{req.instanceName}</div>
+                    <div className="text-ui-caption text-txt-tertiary truncate">{req.instanceName}</div>
                   )}
-                  <div className="text-[11px] text-txt-tertiary mt-0.5">
+                  <div className="text-ui-caption text-txt-tertiary mt-0.5">
                     {t('federation:admin.approvals.requested', { time: formatRelativeTime(t, formatters, req.requestedAt) })}
                   </div>
                   {isOutbound && req.subscribers && req.subscribers.length > 0 && (
@@ -818,7 +819,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                       {req.subscribers.map((sub) => (
                         <div
                           key={`${sub.userId}:${sub.triggerReason}:${sub.triggerTarget}`}
-                          className="text-[11px] text-txt-tertiary"
+                          className="text-ui-caption text-txt-tertiary"
                         >
                           <span className="font-medium text-txt-secondary">{sub.username}</span>
                           {' — '}
@@ -848,7 +849,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
                 </div>
               </div>
               {errors[req.id] && (
-                <div className="mt-2 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-[11px]">
+                <div className="mt-2 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-ui-caption">
                   {errors[req.id]}
                   <button
                     type="button"
@@ -1057,8 +1058,8 @@ function ResetCleanup() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.resetCleanup.title')}</div>
-        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-rose/15 text-accent-rose">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.resetCleanup.title')}</div>
+        <span className="text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-rose/15 text-accent-rose">
           {resetPeers.length + eventsWithOrphans.length}
         </span>
       </div>
@@ -1077,7 +1078,7 @@ function ResetCleanup() {
                     {t('federation:admin.resetCleanup.peerReset', { name: originHost(peer.origin) })}
                   </div>
                   {peer.instanceName && (
-                    <div className="text-[11px] text-txt-tertiary truncate">{peer.instanceName}</div>
+                    <div className="text-ui-caption text-txt-tertiary truncate">{peer.instanceName}</div>
                   )}
                   <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
                     {t('federation:admin.resetCleanup.peerResetDescription')}
@@ -1122,14 +1123,14 @@ function ResetCleanup() {
                         <div className="text-sm font-medium text-txt-primary truncate">
                           {account.displayName || account.username}
                         </div>
-                        <div className="text-[11px] text-txt-tertiary truncate">{account.username}</div>
-                        <div className="text-[11px] text-txt-tertiary mt-0.5">
+                        <div className="text-ui-caption text-txt-tertiary truncate">{account.username}</div>
+                        <div className="text-ui-caption text-txt-tertiary mt-0.5">
                           {t('federation:admin.resetCleanup.memberships', { count: account.spaceMemberCount })}
                           {' · '}
                           {t('federation:admin.resetCleanup.messages', { count: account.messageCount })}
                         </div>
                         {account.ownedSpaces.length > 0 && (
-                          <div className="text-[11px] text-accent-amber mt-0.5 truncate">
+                          <div className="text-ui-caption text-accent-amber mt-0.5 truncate">
                             {t('federation:admin.resetCleanup.owns', { spaces: account.ownedSpaces.map((s) => s.name).join(', ') })}
                           </div>
                         )}
@@ -1396,12 +1397,12 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       {/* Peered Instances */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.peers.title')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('federation:admin.peers.title')}</div>
           <button
             type="button"
             onClick={fetchPeers}
             disabled={peersLoading}
-            className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+            className="text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
             {peersLoading ? t('common:states.loading') : t('common:actions.refresh')}
           </button>

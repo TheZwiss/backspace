@@ -69,15 +69,15 @@
     --accent-coral: 251 146 60;
 
     /* ── Primary Action (replaces blurple) ── */
-    --accent-primary: 124 108 246;
-    --accent-primary-hover: 107 92 224;
-    --accent-primary-active: 95 79 208;
+    --accent-primary: 107 92 224;
+    --accent-primary-hover: 95 79 208;
+    --accent-primary-active: 83 67 188;
 
     /* ── Text Hierarchy ── */
     --text-primary: 239 239 239;
     --text-secondary: 160 160 170;
-    --text-tertiary: 92 92 104;
-    --text-category: 72 72 84;
+    --text-tertiary: 145 145 158;
+    --text-category: 145 145 158;
     --text-message: 216 216 222;
     --text-link: 125 211 252;
     --text-positive: 134 239 172;
@@ -104,11 +104,23 @@
 
     /* ── Notification ── */
     --notification: 253 164 175;
+    --layer-modal: 200;
+    --layer-menu-backdrop: 399;
+    --layer-menu: 400;
+    --layer-menu-submenu: 401;
+    --layer-tooltip: 500;
+    --layer-confirm: 600;
+    --layer-toast: 700;
+    --layer-nudge: 800;
+    --layer-fullscreen: 100;
+    --control-radius: 8px;
+    --control-height: 36px;
+    --control-touch-height: 44px;
   }
 
   * {
     @apply border-0;
-    outline: none !important;
+
   }
 
   ::selection {
@@ -415,7 +427,7 @@
   .rounded-inherit {
     border-radius: inherit;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
   }
@@ -738,4 +750,71 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+
+@layer components {
+  :where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid rgb(var(--accent-primary));
+    outline-offset: 3px;
+  }
+  .ui-button {
+    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+    @apply focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .ui-button:focus-visible, .ui-select:focus-visible, .input-standard:focus-visible, .input-search:focus-visible, .input-danger:focus-visible { outline: none; }
+  .input-embedded:focus-visible { outline: none; box-shadow: inset 0 -2px 0 rgb(var(--accent-primary)); }
+  .ui-button-primary { @apply bg-accent-primary text-white hover:bg-accent-primary-hover active:bg-accent-primary-active; }
+  .ui-button-secondary { @apply bg-interactive-hover text-txt-primary hover:bg-interactive-selected active:bg-interactive-active; }
+  .ui-button-danger { @apply bg-accent-rose text-surface-base hover:bg-accent-rose/90 active:bg-accent-rose/80; }
+  .ui-button-warning { @apply bg-accent-amber text-surface-base hover:bg-accent-amber/90 active:bg-accent-amber/80; }
+  .settings-section { @apply rounded-lg border border-white/[0.06] bg-white/[0.03] p-4; }
+  .ui-select {
+    @apply input-standard w-full min-h-9 pr-9;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+  }
+  .ui-range { width: 100%; height: 6px; border-radius: 9999px; appearance: none; cursor: pointer; accent-color: rgb(var(--accent-primary)); }
+  .ui-range::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border: 2px solid rgb(var(--accent-primary)); border-radius: 50%; background: rgb(var(--text-primary)); }
+  .ui-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid rgb(var(--accent-primary)); border-radius: 50%; background: rgb(var(--text-primary)); }
+  .ui-range::-moz-range-track { background: transparent; }
+  .ui-range:disabled { cursor: not-allowed; opacity: .5; }
+  .ui-dialog-surface { @apply glass-modal rounded-lg; }
+  .ui-dialog-title { @apply text-lg font-semibold text-txt-primary; }
+  .ui-notice { @apply border-b border-border-soft bg-surface-channel; }
+}
+
+@layer utilities {
+
+  html[data-viewport="mobile"] :where(button, [role="button"], [role="switch"]) { min-height: var(--control-touch-height); min-width: var(--control-touch-height); }
+  html[data-viewport="mobile"] button:has(> svg:only-child) { min-width: var(--control-touch-height); }
+  html[data-viewport="mobile"] .ui-range { height: 8px; margin-block: 18px; }
+  html[data-viewport="mobile"] .ui-range::-webkit-slider-thumb { width: 24px; height: 24px; }
+  html[data-viewport="mobile"] .ui-range::-moz-range-thumb { width: 20px; height: 20px; }
+  html[data-viewport="mobile"] select.ui-select { appearance: auto; background-image: none; }
+}
+
+button.bg-accent-rose, button.bg-accent-amber, button.bg-accent-mint, button.bg-status-online, button.bg-status-dnd { color: rgb(var(--bg-base)); }
+
+@layer utilities {
+  .z-modal { z-index: var(--layer-modal); }
+  .z-menu-backdrop { z-index: var(--layer-menu-backdrop); }
+  .z-menu { z-index: var(--layer-menu); }
+  .z-menu-submenu { z-index: var(--layer-menu-submenu); }
+  .z-tooltip { z-index: var(--layer-tooltip); }
+  .z-confirm { z-index: var(--layer-confirm); }
+  .z-toast { z-index: var(--layer-toast); }
+}
+
+@layer utilities {
+  .text-ui-title { font-size: 18px; line-height: 1.4; }
+  .text-ui-lead { font-size: 16px; line-height: 1.5; }
+  .text-ui-message { font-size: 15px; line-height: 1.5; }
+  .text-ui-body { font-size: 14px; line-height: 1.5; }
+  .text-ui-label { font-size: 13px; line-height: 1.4; }
+  .text-ui-caption { font-size: 12px; line-height: 1.4; }
+  .text-ui-micro { font-size: 10px; line-height: 1.4; }
 }

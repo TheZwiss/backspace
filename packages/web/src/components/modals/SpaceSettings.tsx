@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
@@ -343,13 +344,13 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.discovery.title')}</h2>
       {!flagsUnknown && !discoveryEnabled && (
-        <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+        <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber">
           {t('spaces:settings.discovery.disabledNotice')}
         </div>
       )}
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.visibility.hint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <div className="space-y-1.5">
@@ -381,7 +382,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2.5">
           <label className={`flex items-center justify-between gap-4 ${directoryLocked ? 'cursor-default' : 'cursor-pointer'}`}>
             <div>
@@ -442,7 +443,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.description.hint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <textarea
@@ -452,7 +453,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             rows={3}
             className="input-standard w-full resize-none"
           />
-          <div className="text-[11px] text-txt-tertiary text-right">
+          <div className="text-ui-caption text-txt-tertiary text-right">
             {t('spaces:settings.discovery.description.counter', { length: description.length, max: DESCRIPTION_MAX_LENGTH })}
           </div>
         </div>
@@ -479,7 +480,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
@@ -526,7 +527,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
 
   return (
     <div className="pt-4 border-t border-border-soft">
-      <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+      <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
         {t('spaces:settings.discovery.requests.title')}
       </div>
 
@@ -564,29 +565,29 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   {req.message && (
                     <p className="text-xs text-txt-secondary mt-0.5 line-clamp-2">{req.message}</p>
                   )}
-                  <span className="text-[10px] text-txt-tertiary">
+                  <span className="text-ui-micro text-txt-tertiary">
                     {f.formatNumericDate(req.createdAt)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
+                  <Tooltip content={t('common:actions.accept')} position="top"><button aria-label={t('common:actions.accept')}
                     onClick={() => handleDecide(req.id, 'accept')}
                     className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
-                    title={t('common:actions.accept')}
+
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                     </svg>
-                  </button>
-                  <button
+                  </button></Tooltip>
+                  <Tooltip content={t('common:actions.decline')} position="top"><button aria-label={t('common:actions.decline')}
                     onClick={() => handleDecide(req.id, 'decline')}
                     className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
-                    title={t('common:actions.decline')}
+
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                     </svg>
-                  </button>
+                  </button></Tooltip>
                 </div>
               </div>
             );
@@ -685,7 +686,7 @@ export function SpaceSettingsModal() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
             <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
             <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
             {canManageStickers && (
@@ -696,7 +697,7 @@ export function SpaceSettingsModal() {
             )}
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
             <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
             {canManageRoles && (
               <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
@@ -726,7 +727,7 @@ export function SpaceSettingsModal() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
               <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
               <button onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
               {canManageStickers && (
@@ -737,7 +738,7 @@ export function SpaceSettingsModal() {
               )}
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
               <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
               {canManageRoles && (
                 <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>

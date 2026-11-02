@@ -276,7 +276,7 @@ function ConnectAndJoinDialog({ entry }: { entry: DirectoryEntry }) {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50"
                   >
                     {isLoading ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
                   </button>

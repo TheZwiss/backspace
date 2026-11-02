@@ -253,11 +253,11 @@ export function JoinSpaceModal() {
                   ))}
                 </div>
               ) : discoveryError ? (
-                <div className="p-2.5 rounded-lg bg-surface-channel border border-border-soft text-[13px] text-txt-tertiary">
+                <div className="p-2.5 rounded-lg bg-surface-channel border border-border-soft text-ui-label text-txt-tertiary">
                   {t('spaces:join.discoverError')}
                 </div>
               ) : previewSpaces.length === 0 ? (
-                <div className="p-3 rounded-lg bg-surface-channel border border-border-soft text-[13px] text-txt-tertiary text-center">
+                <div className="p-3 rounded-lg bg-surface-channel border border-border-soft text-ui-label text-txt-tertiary text-center">
                   {t('spaces:join.discoverEmpty')}
                 </div>
               ) : (
@@ -284,7 +284,7 @@ export function JoinSpaceModal() {
               </button>
             </div>
           ) : (
-            <div className="mb-1 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-[13px] text-accent-amber">
+            <div className="mb-1 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-ui-label text-accent-amber">
               {t('spaces:join.discoveryOff')}
             </div>
           )}
@@ -292,7 +292,7 @@ export function JoinSpaceModal() {
           {/* Divider */}
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">
+            <span className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">
               {t('spaces:join.inviteDivider')}
             </span>
             <div className="flex-1 h-px bg-white/[0.06]" />
@@ -322,7 +322,7 @@ export function JoinSpaceModal() {
                   <button
                     type="submit"
                     disabled={isLoading || !inviteCode.trim()}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {isLoading ? t('spaces:join.submitting') : t('spaces:join.submit')}
                   </button>
@@ -389,7 +389,7 @@ export function JoinSpaceModal() {
                 <button
                   type="submit"
                   disabled={isLoading || !password}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.connect.submitting') : t('spaces:join.connect.submit')}
                 </button>
@@ -438,7 +438,7 @@ export function JoinSpaceModal() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
                 </button>
@@ -458,7 +458,7 @@ export function JoinSpaceModal() {
             <button
               type="button"
               onClick={closeModal}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('common:actions.done')}
             </button>
@@ -521,7 +521,7 @@ export function JoinSpaceModal() {
                 <button
                   type="submit"
                   disabled={isLoading || !fallbackUsername || !fallbackPassword}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.fallback.submitting') : t('spaces:join.fallback.submit')}
                 </button>
