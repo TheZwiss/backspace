@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -28,44 +29,44 @@ export function ImagePreview() {
   return (
     <div
       ref={overlayRef}
-      className={`fixed inset-x-0 bottom-0 z-[200] flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer ${topInsetClass}`}
+      className={`fixed inset-x-0 bottom-0 z-modal flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer ${topInsetClass}`}
       onClick={closeImagePreview}
     >
       {/* Toolbar: download, copy, close */}
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        <button
+        <Tooltip content={t('chat:preview.save')} position="top"><button aria-label={t('chat:preview.save')}
           className="text-white/70 hover:text-white transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             saveImage(imageUrl);
           }}
-          title={t('chat:preview.save')}
+
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
           </svg>
-        </button>
-        <button
+        </button></Tooltip>
+        <Tooltip content={t('chat:preview.copy')} position="top"><button aria-label={t('chat:preview.copy')}
           className="text-white/70 hover:text-white transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             copyImageToClipboard(imageUrl);
           }}
-          title={t('chat:preview.copy')}
+
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21 9v10c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h7l6 6zm-2 1h-5V4H8v15h11V10zM3 15V3c0-1.1.9-2 2-2h9v2H5v12H3z" />
           </svg>
-        </button>
-        <button
+        </button></Tooltip>
+        <Tooltip content={t('common:actions.close')} position="top"><button aria-label={t('common:actions.close')}
           className="text-white/70 hover:text-white transition-colors"
           onClick={closeImagePreview}
-          title={t('common:actions.close')}
+
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
           </svg>
-        </button>
+        </button></Tooltip>
       </div>
       <img
         src={imageUrl}

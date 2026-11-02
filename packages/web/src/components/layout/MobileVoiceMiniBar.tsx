@@ -72,11 +72,11 @@ export function MobileVoiceMiniBar() {
         <div className="min-w-0">
           <p className={`text-xs font-medium truncate ${accentClass}`}>{channelName}</p>
           {isReconnecting ? (
-            <p className="text-[10px] text-txt-tertiary">{t('voice:status.reconnecting')}</p>
+            <p className="text-ui-micro text-txt-tertiary">{t('voice:status.reconnecting')}</p>
           ) : isDropped ? (
-            <p className="text-[10px] text-txt-tertiary">{t('voice:status.disconnected')}</p>
+            <p className="text-ui-micro text-txt-tertiary">{t('voice:status.disconnected')}</p>
           ) : participantCount > 0 ? (
-            <p className="text-[10px] text-txt-tertiary">{t('spaces:main.voice.participants', { count: participantCount })}</p>
+            <p className="text-ui-micro text-txt-tertiary">{t('spaces:main.voice.participants', { count: participantCount })}</p>
           ) : null}
         </div>
       </button>
@@ -84,7 +84,7 @@ export function MobileVoiceMiniBar() {
       {isDropped && (
         <button
           onClick={(e) => { e.stopPropagation(); reconnectVoice(); }}
-          className="px-2 h-8 rounded-full text-[11px] font-medium text-accent-primary hover:bg-interactive-hover transition-colors shrink-0"
+          className="px-2 h-8 rounded-full text-ui-caption font-medium text-accent-primary hover:bg-interactive-hover transition-colors shrink-0"
         >
           {t('voice:status.retry')}
         </button>

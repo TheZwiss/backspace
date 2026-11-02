@@ -180,7 +180,7 @@ function buildComponents(): Components {
       // Inline code
       return (
         <code
-          className="px-[6px] py-px bg-[#111115] border border-border-soft rounded text-[13.5px] font-mono text-accent-lavender"
+          className="px-[6px] py-px bg-[#111115] border border-border-soft rounded text-ui-label font-mono text-accent-lavender"
           {...rest}
         >
           {children}

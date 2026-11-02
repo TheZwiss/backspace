@@ -1,4 +1,5 @@
-import { friendshipMenuItems } from './memberMenu/memberSocialActions';
+import { attentionMuteMenuItems } from '../../utils/attentionMuteMenu';
+import { userSocialMenuItems } from './memberMenu/memberSocialActions';
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
@@ -103,7 +104,7 @@ export function DmMemberRow({
   const showGlobe = isFederationGlobeApplicable(canonical);
 
   const buildMenuItems = (): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = isSelf || isFriend ? [] : friendshipMenuItems(canonical, origin);
+    const items: ContextMenuItem[] = isSelf ? [] : isFriend ? attentionMuteMenuItems(canonical, origin) : userSocialMenuItems(canonical, origin);
 
     items.push({
       key: 'profile',
@@ -201,7 +202,7 @@ export function DmMemberRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span
-            className={`text-[13.5px] leading-[1.2] font-medium truncate ${
+            className={`text-ui-label leading-[1.2] font-medium truncate ${
               isOffline ? 'text-txt-tertiary' : 'text-txt-primary'
             }`}
           >
@@ -224,13 +225,13 @@ export function DmMemberRow({
         </div>
 
         {showGlobe && domain && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">
             @{domain}
           </div>
         )}
 
         {!isOffline && canonical.customStatus && (
-          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">
+          <div className="text-ui-caption leading-[1.3] text-txt-tertiary truncate">
             {replaceEmojiShortcodes(canonical.customStatus)}
           </div>
         )}

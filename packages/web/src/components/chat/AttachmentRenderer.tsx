@@ -116,7 +116,7 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
                 <svg className="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                 </svg>
-                <span className="text-[12px] font-medium">{t('chat:attachment.video.cannotPlayDownload')}</span>
+                <span className="text-ui-caption font-medium">{t('chat:attachment.video.cannotPlayDownload')}</span>
               </div>
             </div>
           )}
@@ -129,8 +129,8 @@ function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-txt-link text-[14px] font-medium truncate group-hover/vid:underline">{originalName}</p>
-              <p className="text-[12px] text-txt-tertiary">
+              <p className="text-txt-link text-ui-body font-medium truncate group-hover/vid:underline">{originalName}</p>
+              <p className="text-ui-caption text-txt-tertiary">
                 {meta ? `${meta} · ` : ''}{t('chat:attachment.video.unsupportedFormat')}
               </p>
             </div>
@@ -281,9 +281,9 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
             </svg>
           </div>
           <div className="min-w-0">
-            <p className="text-txt-primary text-[14px] font-medium truncate">{originalName}</p>
+            <p className="text-txt-primary text-ui-body font-medium truncate">{originalName}</p>
             <div className="flex items-center gap-2">
-              <p className="text-[12px] text-txt-tertiary">{formatBytes(size)}</p>
+              <p className="text-ui-caption text-txt-tertiary">{formatBytes(size)}</p>
               {federationInlineBadge}
             </div>
           </div>
@@ -330,9 +330,9 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
         </svg>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-txt-link text-[15px] font-medium truncate hover:underline">{originalName}</p>
+        <p className="text-txt-link text-ui-message font-medium truncate hover:underline">{originalName}</p>
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-[12px] text-txt-tertiary font-medium">{formatBytes(size)}</p>
+          <p className="text-ui-caption text-txt-tertiary font-medium">{formatBytes(size)}</p>
           {federationInlineBadge}
         </div>
       </div>

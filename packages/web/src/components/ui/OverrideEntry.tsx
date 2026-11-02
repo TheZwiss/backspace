@@ -128,7 +128,7 @@ export function OverrideEntry({
           />
           <span className="text-sm font-medium text-txt-primary flex-1 truncate">{label}</span>
           {!expanded && summary.length > 0 && (
-            <span className="text-[11px] text-txt-tertiary flex-shrink-0">
+            <span className="text-ui-caption text-txt-tertiary flex-shrink-0">
               {t('spaces:permissions.overrideCount', { count: summary.length })}
             </span>
           )}
@@ -173,7 +173,7 @@ export function OverrideEntry({
           className="px-3 pb-3 space-y-1.5 border-t border-white/[0.04] pt-2"
         >
           {(readOnly || hasLockedRow) && (
-            <div className="flex items-start gap-2 pb-1 text-[12px] leading-snug text-txt-tertiary">
+            <div className="flex items-start gap-2 pb-1 text-ui-caption leading-snug text-txt-tertiary">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-[2px]">
                 <path d={LOCK_ICON} />
               </svg>
@@ -186,7 +186,7 @@ export function OverrideEntry({
             const name = permissionNames[perm.key];
             return (
               <div key={perm.key} className="flex items-center justify-between gap-3">
-                <span className={`text-[13px] text-txt-secondary${locked ? ' opacity-60' : ''}`}>{name}</span>
+                <span className={`text-ui-label text-txt-secondary${locked ? ' opacity-60' : ''}`}>{name}</span>
                 <span className="flex items-center gap-2 flex-shrink-0">
                   {unheld && (
                     <svg
@@ -211,14 +211,14 @@ export function OverrideEntry({
           })}
           {removable && !readOnly && (
             <div className="flex items-center justify-between gap-3 pt-2.5 !mt-2.5 border-t border-white/[0.04]">
-              <span className="text-[12px] leading-snug text-txt-tertiary">
+              <span className="text-ui-caption leading-snug text-txt-tertiary">
                 {t(removeLocked ? 'spaces:permissions.removeUnheld' : 'spaces:permissions.removeOverrideHint')}
               </span>
               <button
                 type="button"
                 onClick={removeLocked ? undefined : onRemove}
                 disabled={removeLocked}
-                className={`flex-shrink-0 px-2.5 py-1 rounded text-[12.5px] font-medium text-accent-rose transition-colors ${
+                className={`flex-shrink-0 px-2.5 py-1 rounded text-ui-label font-medium text-accent-rose transition-colors ${
                   removeLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-accent-rose/10'
                 }`}
               >

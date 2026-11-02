@@ -85,15 +85,15 @@ export function BookmarkList({ onOpened }: BookmarkListProps) {
   }, [origins]);
 
   if (loading) {
-    return <div className="p-6 text-center text-[13px] text-txt-tertiary">{t('list.loading')}</div>;
+    return <div className="p-6 text-center text-ui-label text-txt-tertiary">{t('list.loading')}</div>;
   }
 
   return (
     <div className="flex flex-col">
       {entries.length === 0 && (
         <div className="p-8 text-center">
-          <div className="text-[14px] text-txt-secondary">{t('list.empty')}</div>
-          <div className="mt-1 text-[12px] text-txt-tertiary">{t('list.emptyHint')}</div>
+          <div className="text-ui-body text-txt-secondary">{t('list.empty')}</div>
+          <div className="mt-1 text-ui-caption text-txt-tertiary">{t('list.emptyHint')}</div>
         </div>
       )}
       {entries.map(({ origin, bookmark }) => (
@@ -111,7 +111,7 @@ export function BookmarkList({ onOpened }: BookmarkListProps) {
           type="button"
           onClick={showMore}
           disabled={loadingMore}
-          className="mx-3 my-3 py-2 rounded text-[13px] text-accent-primary hover:bg-interactive-hover disabled:opacity-50 transition-colors"
+          className="mx-3 my-3 py-2 rounded text-ui-label text-accent-primary hover:bg-interactive-hover disabled:opacity-50 transition-colors"
         >
           {loadingMore ? t('list.loading') : t('list.showMore')}
         </button>

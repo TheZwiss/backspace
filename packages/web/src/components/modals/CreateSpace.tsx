@@ -160,7 +160,7 @@ export function CreateSpaceModal() {
                 ) : (
                   <>
                     <span className="text-2xl font-bold">{(name || 'S').charAt(0).toUpperCase()}</span>
-                    <span className="text-[9px] font-medium opacity-60">{t('spaces:create.icon.upload')}</span>
+                    <span className="text-ui-micro font-medium opacity-60">{t('spaces:create.icon.upload')}</span>
                   </>
                 )}
               </div>
@@ -227,7 +227,7 @@ export function CreateSpaceModal() {
 
         {/* Visibility */}
         <div className="mb-4">
-          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+          <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
             {t('spaces:create.visibilityLabel')}
           </div>
           <div className="space-y-1.5">
@@ -259,7 +259,7 @@ export function CreateSpaceModal() {
 
         {/* Description */}
         <div className="mb-4">
-          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             {t('spaces:create.description.label')}
           </div>
           <textarea
@@ -269,7 +269,7 @@ export function CreateSpaceModal() {
             rows={3}
             className="input-standard w-full resize-none"
           />
-          <div className="text-[11px] text-txt-tertiary text-right">
+          <div className="text-ui-caption text-txt-tertiary text-right">
             {t('spaces:create.description.counter', { length: description.length, max: DESCRIPTION_MAX_LENGTH })}
           </div>
         </div>
@@ -288,7 +288,7 @@ export function CreateSpaceModal() {
               <button
                 type="submit"
                 disabled={isLoading || uploadingIcon}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {isLoading ? t('spaces:create.submitting') : t('spaces:create.submit')}
               </button>

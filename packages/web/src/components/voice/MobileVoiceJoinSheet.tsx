@@ -482,7 +482,7 @@ export function MobileVoiceJoinSheet({
                 <button
                   type="button"
                   onClick={startPreviewFromUser}
-                  className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
+                  className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
                   {t('common:actions.tryAgain')}
                 </button>
@@ -496,7 +496,7 @@ export function MobileVoiceJoinSheet({
                 <button
                   type="button"
                   onClick={startPreviewFromUser}
-                  className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
+                  className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
                   {t('common:actions.tryAgain')}
                 </button>
@@ -508,7 +508,7 @@ export function MobileVoiceJoinSheet({
               <button
                 type="button"
                 onClick={stopPreviewFromUser}
-                className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5"
+                className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5"
               >
                 {t('voice:joinSheet.stopPreview')}
               </button>
@@ -523,7 +523,7 @@ export function MobileVoiceJoinSheet({
                 <button
                   type="button"
                   onClick={() => setPickerOpen((v) => !v)}
-                  className="rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
+                  className="rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
                 >
                   <span className="truncate">{selectedCameraLabel}</span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}>
@@ -659,7 +659,7 @@ export function MobileVoiceJoinSheet({
               setCameraDeviceId(null);
               setPickerOpen(false);
             }}
-            className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+            className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
               cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
             } active:bg-interactive-hover`}
           >
@@ -673,7 +673,7 @@ export function MobileVoiceJoinSheet({
                 setCameraDeviceId(d.deviceId);
                 setPickerOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+              className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                 cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >

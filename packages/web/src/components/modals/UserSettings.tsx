@@ -110,7 +110,7 @@ export function SidebarSubLinks() {
         >
           <span className="flex-1 min-w-0 truncate">{section.label}</span>
           {section.badgeCount !== undefined && section.badgeCount > 0 && (
-            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+            <span className="shrink-0 text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
               {section.badgeCount}
             </span>
           )}
@@ -192,7 +192,7 @@ export function UserSettingsModal() {
     GROUP_ORDER.filter((group) => group !== 'admin' || isAdmin).map((group, index) => (
       <Fragment key={group}>
         {index > 0 && <div className="border-t border-white/[0.04] my-2 mx-2" />}
-        <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
+        <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
         {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
           entry.id === 'instance' && layout === 'desktop' ? (
             <Fragment key={entry.id}>

@@ -382,7 +382,7 @@ export function AccountPanel() {
       )}
       {/* ── Profile Customization ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:account.profile.sectionTitle')}
         </div>
 
@@ -408,13 +408,13 @@ export function AccountPanel() {
               className="mt-[-32px] mb-2"
             />
             <div
-              className="font-semibold text-[15px] leading-tight text-txt-primary"
+              className="font-semibold text-ui-message leading-tight text-txt-primary"
             >
               {effectiveDisplayName}
             </div>
-            <div className="text-[12px] text-txt-tertiary">@{user.username}</div>
+            <div className="text-ui-caption text-txt-tertiary">@{user.username}</div>
             {bio.trim() && (
-              <div className="text-[12px] text-txt-secondary mt-1.5 whitespace-pre-wrap break-words line-clamp-3">
+              <div className="text-ui-caption text-txt-secondary mt-1.5 whitespace-pre-wrap break-words line-clamp-3">
                 {bio.trim()}
               </div>
             )}
@@ -422,7 +422,7 @@ export function AccountPanel() {
         </div>
 
         {/* Upload controls */}
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-4">
+        <div className="settings-section space-y-4">
           {/* Avatar upload */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.avatar.label')}</label>
@@ -649,7 +649,7 @@ export function AccountPanel() {
                 className="input-standard w-full resize-none"
                 maxLength={BIO_MAX_LENGTH}
               />
-              <span className="absolute bottom-2 right-2 text-[10px] text-txt-tertiary">
+              <span className="absolute bottom-2 right-2 text-ui-micro text-txt-tertiary">
                 {t('settings:account.profile.bio.counter', { used: bio.length, max: BIO_MAX_LENGTH })}
               </span>
             </div>
@@ -659,8 +659,8 @@ export function AccountPanel() {
 
       {/* ── Account ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.details.sectionTitle')}</div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-4">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.details.sectionTitle')}</div>
+        <div className="settings-section space-y-4">
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.status.label')}</label>
             <div className="relative">
@@ -724,8 +724,8 @@ export function AccountPanel() {
 
       {/* ── Password ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.password')}</div>
-        <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.password')}</div>
+        <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="settings-section space-y-3">
           <input type="text" autoComplete="username" value={user.username} readOnly tabIndex={-1} className="sr-only" />
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.password.current.label')}</label>
@@ -805,7 +805,7 @@ export function AccountPanel() {
           <button
             type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {passwordLoading ? t('settings:account.password.submitting') : t('settings:account.password.submit')}
           </button>
@@ -814,14 +814,14 @@ export function AccountPanel() {
 
       {/* ── Danger Zone ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
         <div className="rounded-lg bg-accent-rose/5 border border-accent-rose/20 p-3.5">
           <p className="text-sm text-txt-secondary mb-3">
             {t('settings:account.danger.description')}
           </p>
           <button
             onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors"
+            className="ui-button ui-button-danger transition-colors"
           >
             {t('settings:account.danger.deleteButton')}
           </button>
@@ -845,7 +845,7 @@ export function AccountPanel() {
               <button
                 onClick={handleSave}
                 disabled={isLoading || uploadingAvatar || uploadingBanner}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {isLoading ? t('common:states.saving') : t('common:actions.save')}
               </button>

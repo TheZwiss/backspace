@@ -1,3 +1,5 @@
+import { attentionMuteMenuItems } from '../../../utils/attentionMuteMenu';
+import type { ContextMenuItem } from '../../../stores/contextMenuStore';
 import type { MouseEvent } from 'react';
 import { useContextMenuStore } from '../../../stores/contextMenuStore';
 import i18n from '../../../i18n';
@@ -47,8 +49,12 @@ export function friendshipMenuItems(user: Pick<User, 'id' | 'username' | 'homeIn
   }
 }
 
+export function userSocialMenuItems(user: Pick<User, 'id' | 'username' | 'homeInstance' | 'homeUserId' | 'isDeleted'>, origin: string): ContextMenuItem[] {
+  return [...friendshipMenuItems(user, origin), ...attentionMuteMenuItems(user, origin)];
+}
+
 export function openUserFriendshipMenu(event: MouseEvent, user: Pick<User, 'id' | 'username' | 'homeInstance' | 'homeUserId' | 'isDeleted'>, origin: string): void {
-  const items = friendshipMenuItems(user, origin);
+  const items = userSocialMenuItems(user, origin);
   if (!items.length) return;
   event.preventDefault(); event.stopPropagation();
   useContextMenuStore.getState().open({ x: event.clientX, y: event.clientY }, items);

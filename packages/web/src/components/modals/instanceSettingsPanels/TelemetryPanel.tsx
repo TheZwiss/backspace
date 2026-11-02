@@ -218,7 +218,7 @@ export function TelemetryPanel() {
 
       {/* The real payload, not a description of one */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('telemetry:panel.previewTitle')}
         </div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2">

@@ -278,6 +278,7 @@
     "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
   },
   "nudge": {
+    "notice": "Hat dich angestupst!",
     "title": "Aufmerksamkeit erregen",
     "cooldown": "Warte 10 Sekunden zwischen Aufmerksamkeitsrufen",
     "choose": "Aufmerksamkeitseffekt auswählen",

@@ -1,3 +1,5 @@
+import { notifyFriendRequest } from '../utils/friendRequestNotification';
+import { userKey } from '../utils/identity';
 import { receiveChannelPoke } from '../components/chat/channelPoke';
 import { useChannelPokeStore } from '../stores/channelPokeStore';
 import { applySpaceMemberUpdate } from '../stores/spaceMemberUpdates';
@@ -1042,7 +1044,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
 
     case 'dm_nudge': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
-      void notifyNudge(event.displayName || event.username, event.avatar, origin, event.dmChannelId, event.effect);
+      void notifyNudge(event.displayName || event.username, event.avatar, origin, event.dmChannelId, event.effect, event.userId);
       break;
     }
     case 'dm_typing': {
@@ -1076,8 +1078,10 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
     case 'friend_request_received': {
       if (!isHome && event.request.user) normalizeUserAssets(event.request.user, origin);
       if (event.request.user) upsertUserView(event.request.user, origin);
-      const { addIncomingRequest } = useSocialStore.getState();
+      const { addIncomingRequest, requests } = useSocialStore.getState();
+      const alreadyPending = requests.some(r => (r.id === event.request.id && r._instanceOrigin === origin) || (r.user && event.request.user && userKey(r.user, r._instanceOrigin) === userKey(event.request.user, origin)));
       addIncomingRequest(event.request, origin);
+      if (!alreadyPending) void notifyFriendRequest(event.request, origin);
       break;
     }
 

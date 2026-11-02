@@ -438,7 +438,7 @@ export function PermissionsEditor({
       <button
         onClick={handleSave}
         disabled={saving}
-        className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+        className="ui-button ui-button-primary transition-colors disabled:opacity-50"
       >
         {saving ? t('common:states.saving') : t('common:actions.save')}
       </button>
@@ -456,11 +456,11 @@ export function PermissionsEditor({
 
       {/* Role Overrides */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.roleOverrides')}
         </div>
         {roleOverrides.length === 0 && (
-          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noRoleOverrides')}</p>
+          <p className="text-ui-label text-txt-tertiary">{t('spaces:permissions.noRoleOverrides')}</p>
         )}
         <div className="space-y-1.5">
           {roleOverrides.map(({ key, role }) => {
@@ -488,7 +488,7 @@ export function PermissionsEditor({
           {!showAddRole ? (
             <button
               onClick={() => setShowAddRole(true)}
-              className="flex items-center gap-1.5 text-[13px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+              className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -531,11 +531,11 @@ export function PermissionsEditor({
 
       {/* Member Overrides */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.memberOverrides')}
         </div>
         {memberOverrides.length === 0 && (
-          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noMemberOverrides')}</p>
+          <p className="text-ui-label text-txt-tertiary">{t('spaces:permissions.noMemberOverrides')}</p>
         )}
         <div className="space-y-1.5">
           {memberOverrides.map(({ key, member }) => {
@@ -562,7 +562,7 @@ export function PermissionsEditor({
           {!showAddMember ? (
             <button
               onClick={() => setShowAddMember(true)}
-              className="flex items-center gap-1.5 text-[13px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+              className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />

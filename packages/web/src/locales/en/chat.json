@@ -278,6 +278,7 @@
     "disconnected": "Disconnected. Poke was not sent."
   },
   "nudge": {
+    "notice": "Nudged you!",
     "title": "Nudge",
     "cooldown": "Wait 10 seconds between nudges",
     "choose": "Choose an attention effect",

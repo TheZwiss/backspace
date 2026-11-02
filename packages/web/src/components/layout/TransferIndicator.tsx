@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTransferStore, type Transfer } from '../../stores/transferStore';
@@ -53,25 +54,25 @@ export function TransferIndicator() {
 
   return (
     <div className="relative" ref={ref}>
-      <button
+      <Tooltip content={t('uploads:transfers.title')} position="top"><button
         onClick={() => setOpen((v) => !v)}
         className={`relative w-8 h-8 flex items-center justify-center rounded-[6px] transition-colors ${
           idle
             ? 'text-txt-tertiary/60 hover:text-txt-tertiary hover:bg-interactive-hover'
             : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'
         }`}
-        title={t('uploads:transfers.title')}
+
         aria-label={t('uploads:transfers.title')}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
         </svg>
         {active.length > 0 && (
-          <span className={`absolute -top-0.5 -right-0.5 ${badgeColor} text-black text-[10px] font-medium rounded-full px-1.5 leading-4 min-w-[16px] text-center`}>
+          <span className={`absolute -top-0.5 -right-0.5 ${badgeColor} text-black text-ui-micro font-medium rounded-full px-1.5 leading-4 min-w-[16px] text-center`}>
             {active.length}
           </span>
         )}
-      </button>
+      </button></Tooltip>
       {open && (
         // Desktop: anchor below the trigger via `absolute right-0 top-full`.
         // Mobile (<768px): switch to `fixed` so the panel pins to the viewport
@@ -146,8 +147,8 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
       : 'bg-accent-mint/70';
   return (
     <div className="px-3 py-2 border-b border-border-soft last:border-none">
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className="text-txt-tertiary text-[10px]">
+      <div className="flex items-center gap-2 text-ui-caption">
+        <span className="text-txt-tertiary text-ui-micro">
           {transfer.type === 'upload' ? '↑' : '↓'}
         </span>
         <span className="text-txt-primary truncate flex-1">{transfer.file.name}</span>
@@ -155,7 +156,7 @@ function TransferRow({ transfer, onPause, onResume, onAbort, onDismiss }: Transf
       <div className="mt-1 h-[3px] bg-surface-input rounded overflow-hidden">
         <div className={`h-full ${barColor} transition-[width]`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="mt-1 flex justify-between items-center text-[10px] text-txt-tertiary gap-2">
+      <div className="mt-1 flex justify-between items-center text-ui-micro text-txt-tertiary gap-2">
         <span className="truncate">
           {transfer.state === 'completed'
             ? t('uploads:transfers.status.done')

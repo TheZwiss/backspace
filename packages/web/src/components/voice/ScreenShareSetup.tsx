@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -567,20 +568,20 @@ export function ScreenShareSetup() {
     : t('voice:screenPicker.stageReady');
 
   return createPortal(
-    <div ref={dialogRef} className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
       {/* Card — fixed to the viewport so the layout never jumps with its content */}
       <div
         data-testid="screen-share-setup"
-        className="relative w-[calc(calc(100*var(--app-vw))-6rem)] max-w-6xl h-[calc(88*var(--app-vh))] glass-modal rounded-xl animate-slide-up flex flex-col"
+        className="relative w-[calc(calc(100*var(--app-vw))-6rem)] max-w-6xl h-[calc(88*var(--app-vh))] ui-dialog-surface animate-slide-up flex flex-col"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3 flex-shrink-0">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-txt-primary leading-tight">{t('voice:screenPicker.title')}</h2>
-            <p className="text-[13px] text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
+            <h2 className="ui-dialog-title leading-tight">{t('voice:screenPicker.title')}</h2>
+            <p className="text-ui-label text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
           </div>
           <button
             onClick={handleClose}
@@ -597,7 +598,7 @@ export function ScreenShareSetup() {
         {api?.platform === 'linux' && api.getSystemAudioTargets && (activeTab === 'windows' || systemPicker) && config.shareAudio && (
           <label className="block px-6 pb-3 text-xs text-txt-secondary">
             {t('voice:screenPicker.audioApplication')}
-            <select className="block w-full mt-1 rounded-lg bg-surface-input p-2" value={audioTargetId} onChange={(event) => {
+            <select className="ui-select block w-full mt-1 p-2" value={audioTargetId} onChange={(event) => {
               setAudioTargetId(event.target.value);
               if (systemPicker) void api.setSystemAudioTarget?.(event.target.value);
               replaceStaged(null);
@@ -670,14 +671,14 @@ export function ScreenShareSetup() {
                       {sources.length === 0 && (
                         <>
                           {isElectronMac() && (
-                            <p className="text-[13px] text-txt-tertiary max-w-sm">
+                            <p className="text-ui-label text-txt-tertiary max-w-sm">
                               {t('voice:screenPicker.permissionHintMac')}
                             </p>
                           )}
                           <button
                             onClick={() => setSourcesNonce((n) => n + 1)}
                             disabled={loadingSources}
-                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                           >
                             {t('voice:screenPicker.retrySources')}
                           </button>
@@ -709,12 +710,12 @@ export function ScreenShareSetup() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
-                      <div className="text-[14px] font-semibold text-txt-primary truncate mt-0.5">
+                      <div className="text-ui-caption font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
+                      <div className="text-ui-body font-semibold text-txt-primary truncate mt-0.5">
                         {stagedName ?? t('voice:screenPicker.preview')}
                       </div>
                       {audioNeedsRepick && (
-                        <div className="text-[11px] text-accent-amber/80 mt-1">{t('voice:screenPicker.audioNeedsRepick')}</div>
+                        <div className="text-ui-caption text-accent-amber/80 mt-1">{t('voice:screenPicker.audioNeedsRepick')}</div>
                       )}
                     </div>
                   </div>
@@ -730,23 +731,23 @@ export function ScreenShareSetup() {
                 {staged ? (
                   <>
                     <video ref={previewRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black/70" />
-                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white/80">
+                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-ui-micro font-bold uppercase tracking-wide text-white/80">
                       {t('voice:screenPicker.preview')}
                     </div>
                     <div className="absolute inset-x-0 bottom-0 px-4 py-3 flex flex-col items-start gap-2 desktop:flex-row desktop:items-center desktop:justify-between desktop:gap-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
+                        <div className="text-ui-caption font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
                         {stagedName && (
-                          <div className="text-[13px] font-semibold text-white truncate mt-0.5">{stagedName}</div>
+                          <div className="text-ui-label font-semibold text-white truncate mt-0.5">{stagedName}</div>
                         )}
                         {audioNeedsRepick && (
-                          <div className="text-[11px] text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
+                          <div className="text-ui-caption text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
                         )}
                       </div>
                       <button
                         onClick={stageNow}
                         disabled={staging}
-                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                       >
                         {t('voice:screenPicker.chooseAgain')}
                       </button>
@@ -769,21 +770,21 @@ export function ScreenShareSetup() {
                       </defs>
                     </svg>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">{t('voice:screenPicker.stageIdle')}</div>
+                      <div className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">{t('voice:screenPicker.stageIdle')}</div>
                       <div className="text-[17px] font-bold text-txt-primary mt-1">{t('voice:screenPicker.chooseTitle')}</div>
                       {chooseHint && (
-                        <div className="text-[13px] text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
+                        <div className="text-ui-label text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
                       )}
                     </div>
                     <button
                       onClick={stageNow}
                       disabled={staging || !supported || (electron && pickerMode === null)}
-                      className="px-5 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                      className="ui-button ui-button-primary transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                     >
                       {t('voice:screenPicker.choose')}
                     </button>
                     {!supported && (
-                      <div className="text-[12px] text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
+                      <div className="text-ui-caption text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
                     )}
                   </div>
                 )}
@@ -809,7 +810,7 @@ export function ScreenShareSetup() {
           >
             <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border-hard flex-shrink-0">
               <div className="min-w-0">
-                <div className="text-[15px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
+                <div className="text-ui-message font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
                 <StreamHostSubtitle className="mt-0.5" />
               </div>
               <button
@@ -833,26 +834,26 @@ export function ScreenShareSetup() {
         {/* Footer */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-6 pt-3 pb-4 border-t border-border-hard">
           <div className="min-w-0 flex flex-col">
-            <button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button
               onClick={() => setSettingsOpen(true)}
               className="text-left hover:text-txt-secondary transition-colors truncate"
-              title={t('voice:streamSettings.title')}
+
             >
               <StreamSummary config={config} />
-            </button>
+            </button></Tooltip>
             {error && (
-              <span className="text-[12px] text-txt-danger truncate" role="alert">
+              <span className="text-ui-caption text-txt-danger truncate" role="alert">
                 {t(`voice:screenPicker.${error}`)}
               </span>
             )}
           </div>
           <div className="glass-bubble rounded-full px-2 py-2 flex items-center gap-1 flex-shrink-0">
-            <button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button
               onClick={() => setSettingsOpen((open) => !open)}
               aria-expanded={settingsOpen}
               aria-controls="stream-settings-drawer-panel"
-              aria-label={t('voice:streamSettings.title')}
-              title={t('voice:streamSettings.title')}
+
+
               className={`flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 settingsOpen
                   ? 'bg-white/[0.1] text-txt-primary'
@@ -863,7 +864,7 @@ export function ScreenShareSetup() {
                 <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
               </svg>
               <span className="hidden desktop:inline">{t('voice:streamSettings.title')}</span>
-            </button>
+            </button></Tooltip>
             <div className="w-px h-5 bg-white/10 mx-1" />
             <button
               onClick={handleClose}
@@ -875,7 +876,7 @@ export function ScreenShareSetup() {
             <button
               onClick={() => void handleStart()}
               disabled={!canStart}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t('voice:screenPicker.start')}
             </button>

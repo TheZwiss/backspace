@@ -47,7 +47,7 @@ export function safeHost(origin: string): string {
 }
 
 const submitBase =
-  'px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
+  'px-4 py-2 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
 const submitClass = `w-full ${submitBase}`;
 
 function PasswordForm({

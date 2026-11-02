@@ -156,7 +156,7 @@ export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
       </div>
 
       {/* Attribution */}
-      <div className="px-3 py-1 text-[10px] text-txt-tertiary text-right shrink-0">
+      <div className="px-3 py-1 text-ui-micro text-txt-tertiary text-right shrink-0">
         {t('chat:gif.attribution')}
       </div>
     </div>

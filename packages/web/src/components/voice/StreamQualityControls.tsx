@@ -68,7 +68,7 @@ export function StreamHostSubtitle({ className = '' }: { className?: string }) {
   const { origin } = useStreamHostLimits();
   if (!origin) return null;
   return (
-    <div className={`text-[11px] text-txt-tertiary break-all ${className}`}>
+    <div className={`text-ui-caption text-txt-tertiary break-all ${className}`}>
       {t('voice:streamSettings.hostLimits', { host: hostOf(origin) })}
     </div>
   );
@@ -81,7 +81,7 @@ export function StreamSummary({ className = '', config: override }: { className?
   const config = override ?? savedConfig;
   const result = buildScreenShareOptions(config);
   return (
-    <span className={`text-[12px] text-txt-tertiary ${className}`}>
+    <span className={`text-ui-caption text-txt-tertiary ${className}`}>
       {t('voice:streamSettings.summary', {
         bitrate: formatBitrate(result.publish.videoEncoding.maxBitrate),
         degradation: formatDegradation(result.overdrive.degradationPreference),
@@ -116,7 +116,7 @@ export function systemAudioSwitch(
   }
 }
 
-const pillBase = 'px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-colors cursor-pointer select-none text-center';
+const pillBase = 'px-2.5 py-1.5 rounded-full text-ui-label font-medium transition-colors cursor-pointer select-none text-center';
 const pillSelected = 'bg-accent-primary text-white';
 const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
@@ -156,7 +156,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
     <div className="flex flex-col gap-3">
       {/* Resolution */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           {t('voice:streamSettings.resolution')}
         </div>
         <div className="grid grid-cols-3 gap-1.5">
@@ -175,7 +175,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
 
       {/* Frame Rate */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           {t('voice:streamSettings.frameRate')}
         </div>
         <div className="grid grid-cols-3 gap-1.5">
@@ -194,7 +194,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
 
       {/* Content Mode */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           {t('voice:streamSettings.contentMode')}
         </div>
         <div className="flex gap-1.5">
@@ -213,7 +213,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
 
       {/* Codec */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           {t('voice:streamSettings.codec')}
         </div>
         <div className="flex gap-1.5">
@@ -235,7 +235,7 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
 
       {/* Bitrate — Auto | Custom pills like every other row; the slider only exists in Custom */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           {t('voice:streamSettings.bitrate')}
         </div>
         {hostLimits.allowCustomBitrate ? (
@@ -268,14 +268,9 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
                   step={hostLimits.bitrateStepKbps}
                   value={effective.customBitrateKbps}
                   onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
-                  className="flex-1 min-w-0 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
-                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
-                    [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full
-                    [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                  className="ui-range"
                 />
-                <span className="text-[12px] font-medium text-txt-primary min-w-[64px] flex-shrink-0 text-right">
+                <span className="text-ui-caption font-medium text-txt-primary min-w-[64px] flex-shrink-0 text-right">
                   {formatKbps(effective.customBitrateKbps)}
                 </span>
               </div>
@@ -283,10 +278,10 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
           </>
         ) : (
           <div>
-            <div className="text-[12px] text-txt-secondary font-medium">
+            <div className="text-ui-caption text-txt-secondary font-medium">
               {formatKbps(autoKbps)}
             </div>
-            <div className="text-[10px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-micro text-txt-tertiary mt-0.5">
               {hostOrigin
                 ? t('voice:streamSettings.customBitrateDisabledByHost', { host: hostOf(hostOrigin) })
                 : t('voice:streamSettings.customBitrateDisabled')}
@@ -297,24 +292,24 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
 
       {/* Preview privacy is applied by the sender before thumbnail transmission. */}
       <div>
-        <label className="block text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2" htmlFor="stream-preview-mode">{t('voice:streamSettings.previewLabel')}</label>
-        <select id="stream-preview-mode" className="input-standard w-full text-xs" value={config.previewMode ?? 'normal'}
+        <label className="block text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-2" htmlFor="stream-preview-mode">{t('voice:streamSettings.previewLabel')}</label>
+        <select id="stream-preview-mode" className="ui-select w-full text-xs" value={config.previewMode ?? 'normal'}
           onChange={(event) => setConfig({ previewMode: event.target.value as 'normal' | 'blurred' | 'hidden' })}>
           <option value="normal">{t('voice:streamSettings.previewNormal')}</option>
           <option value="blurred">{t('voice:streamSettings.previewBlurred')}</option>
           <option value="hidden">{t('voice:streamSettings.previewHidden')}</option>
         </select>
-        <p className="text-[10px] text-txt-tertiary mt-1.5">{t('voice:streamSettings.previewHint')}</p>
+        <p className="text-ui-micro text-txt-tertiary mt-1.5">{t('voice:streamSettings.previewHint')}</p>
       </div>
 
       {electronPlatform === 'win32' && (
         <div>
-          <label className="block text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5" htmlFor="stream-cursor-mode">
+          <label className="block text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5" htmlFor="stream-cursor-mode">
             {t('voice:streamSettings.cursorMode')}
           </label>
           <select
             id="stream-cursor-mode"
-            className="input-standard w-full text-xs"
+            className="ui-select w-full text-xs"
             value={config.cursorMode ?? 'auto'}
             onChange={(event) => setConfig({ cursorMode: event.target.value as NonNullable<ScreenShareConfig['cursorMode']> })}
           >
@@ -329,22 +324,22 @@ export function StreamQualityControls({ config: override, onChange }: { config?:
       <div>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1 pt-1">
-            <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
+            <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider">
               {t('voice:streamSettings.systemAudio')}
             </div>
             {audioSwitch.cannotAddLive && (
-              <div className="text-[10px] text-txt-tertiary mt-0.5">
+              <div className="text-ui-micro text-txt-tertiary mt-0.5">
                 {t('voice:streamSettings.systemAudioLiveUnavailable')}
               </div>
             )}
             {audioSwitch.adding && (
-              <div className="text-[10px] text-txt-tertiary mt-0.5" role="status">
+              <div className="text-ui-micro text-txt-tertiary mt-0.5" role="status">
                 {t('voice:streamSettings.systemAudioAdding')}
               </div>
             )}
             {audioNote && !audioSwitch.adding && (
               <div
-                className={`text-[10px] mt-0.5 ${audioNote.tone === 'warning' ? 'text-accent-amber/80' : 'text-txt-tertiary'}`}
+                className={`text-ui-micro mt-0.5 ${audioNote.tone === 'warning' ? 'text-accent-amber/80' : 'text-txt-tertiary'}`}
               >
                 {t(SYSTEM_AUDIO_NOTE_I18N_KEYS[audioNote.key])}
               </div>

@@ -119,7 +119,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
         <p className="text-xs text-txt-tertiary">{t('spaces:roles.description')}</p>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:roles.hierarchyHint')}</p>
         <div className="rounded-lg bg-white/[0.02] p-2">
@@ -360,7 +360,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
           {/* A disabled fieldset disables every control inside it. */}
           <fieldset disabled={!canEdit} className={`rounded-lg bg-white/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
             <div>
@@ -425,7 +425,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       {/* Permission groups — each gets its own section card */}
       {PERMISSION_GROUPS.map((group) => (
         <div key={group.id}>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {groupTitle(group.id)}
           </div>
           <div className="rounded-lg bg-white/[0.02] p-3.5">
@@ -513,7 +513,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                   <button
                     onClick={handleSave}
                     disabled={saving || (!isEveryone && !draftName.trim()) || !!nameError}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {saving ? t('common:states.saving') : t('common:actions.save')}
                   </button>

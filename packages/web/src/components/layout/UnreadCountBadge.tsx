@@ -10,7 +10,7 @@ export function UnreadCountBadge({ count, label, muted = false }: { count: numbe
     <span className="absolute -right-1.5 -top-1.5 z-10 pointer-events-none">
       <span
         aria-hidden="true"
-        className={`block min-w-[18px] h-[18px] px-1 rounded-full text-[10px] leading-[18px] font-bold text-center ring-2 ring-surface-base ${
+        className={`block min-w-[18px] h-[18px] px-1 rounded-full text-ui-micro leading-[18px] font-bold text-center ring-2 ring-surface-base ${
           muted ? 'bg-interactive-muted text-txt-secondary' : 'bg-notification text-surface-base'
         }`}
       >

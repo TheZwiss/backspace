@@ -112,7 +112,7 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
           </>
         )}
         {isRecording && (
-          <span className="text-[10px] text-txt-tertiary">{t('keybinds.row.escToCancel')}</span>
+          <span className="text-ui-micro text-txt-tertiary">{t('keybinds.row.escToCancel')}</span>
         )}
       </div>
     </div>
@@ -410,7 +410,7 @@ export function KeybindsPanel() {
 
       {/* Keybind rows */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('keybinds.section.voice')}
         </div>
         <div className="space-y-1.5">

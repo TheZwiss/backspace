@@ -1,4 +1,30 @@
 {
+"attentionMutes": {
+    "title": "已静音的用户",
+    "description": "在此设备上屏蔽指定用户的提醒声音、动画和通知。消息和通话仍可正常使用。",
+    "mute": "静音窗口提醒",
+    "muteShort": "静音",
+    "unmute": "恢复窗口提醒",
+    "unmuteShort": "恢复",
+    "minutes15": "15 分钟",
+    "hour1": "1 小时",
+    "hours8": "8 小时",
+    "hours24": "24 小时",
+    "forever": "直到手动恢复",
+    "searchLabel": "添加用户",
+    "searchPlaceholder": "按用户名搜索...",
+    "duration": "静音时长",
+    "noResults": "未找到用户。",
+    "empty": "没有已静音的用户。",
+    "until": "静音至 {{time}}"
+  },
+  "friendNotifications": {
+    "title": "好友请求",
+    "description": "收到好友请求时显示带头像和快捷操作的卡片，并遵守勿扰模式。",
+    "enabled": "显示好友请求卡片",
+    "sound": "播放声音",
+    "desktop": "在后台时显示桌面通知"
+  },
   "interfaceScale": {
     "label": "界面缩放",
     "description": "调整文字、按钮和面板的大小。设置保存在此设备上的当前浏览器或应用中。",

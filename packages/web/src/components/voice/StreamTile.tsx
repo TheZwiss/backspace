@@ -1,4 +1,4 @@
-import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import { useStreamFullscreen } from '../../hooks/useStreamFullscreen';
 import { useStreamPreviews } from '../../utils/streamPreviews';
 import { StreamLiveBadge } from './StreamLiveBadge';
@@ -114,7 +114,7 @@ function StreamVolumeItem({ userId }: { userId: string }) {
           max="200"
           value={streamVolume}
           onChange={(e) => setStreamVolume(userId, parseInt(e.target.value))}
-          className="flex-1 min-w-0 accent-accent-primary h-1"
+          className="ui-range"
         />
         <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
           {f.formatPercent(streamVolume)}
@@ -169,7 +169,7 @@ function StreamAttenuationItem() {
               max="100"
               value={streamAttenuationStrength}
               onChange={(e) => setAttenuationStrength(parseInt(e.target.value))}
-              className="flex-1 min-w-0 accent-accent-primary h-1"
+              className="ui-range"
             />
             <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
               {f.formatPercent(streamAttenuationStrength)}
@@ -456,7 +456,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       e.preventDefault();
       e.stopPropagation();
 
-      const items: ContextMenuItem[] = user ? friendshipMenuItems(user, userOrigin) : [];
+      const items: ContextMenuItem[] = user ? userSocialMenuItems(user, userOrigin) : [];
 
       if (isLocal) {
         // Local stream: stop, change, quality
@@ -580,7 +580,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   return (
     <div
       data-context-menu
-      style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: '100dvw', height: '100dvh', zIndex: 1000 } : undefined}
+      style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: 'calc(100 * var(--app-vw))', height: 'calc(100 * var(--app-dvh))', zIndex: 'var(--layer-fullscreen)' } : undefined}
       className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
@@ -618,7 +618,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
                 <button
                   onClick={handleWatch}
                   aria-label={t('voice:stream.watch')}
-                  className={`${large ? 'mt-2 px-4 py-1.5' : 'mt-2 w-full min-h-7 px-3 py-1 text-[11px]'} whitespace-nowrap bg-accent-primary hover:bg-accent-primary/80 rounded text-white font-semibold transition-colors`}
+                  className={`${large ? 'mt-2 px-4 py-1.5' : 'mt-2 w-full min-h-7 px-3 py-1 text-ui-caption'} whitespace-nowrap bg-accent-primary hover:bg-accent-primary-hover rounded text-white font-semibold transition-colors`}
                 >
                   {t(large ? 'voice:stream.watch' : 'voice:stream.watchShort')}
                 </button>
@@ -638,12 +638,12 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       {(!borderless || chromeRevealed) && (healthWarning || (qualityBadge && hasVideo)) && (
         <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none`}>
           {healthWarning && (
-            <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-[10px] leading-[15px] text-white/90 truncate`}>
+            <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-ui-micro leading-[15px] text-white/90 truncate`}>
               {t(STREAM_HEALTH_KEYS[healthWarning])}
             </div>
           )}
           {qualityBadge && hasVideo && (
-            <div data-testid="stream-quality-badge" className={`${large ? 'h-7 px-3 rounded-lg' : 'px-1.5 py-0.5 rounded'} flex-shrink-0 bg-black/60 flex items-center text-[10px] font-bold text-white/70 uppercase tracking-wide`}>
+            <div data-testid="stream-quality-badge" className={`${large ? 'h-7 px-3 rounded-lg' : 'px-1.5 py-0.5 rounded'} flex-shrink-0 bg-black/60 flex items-center text-ui-micro font-bold text-white/70 uppercase tracking-wide`}>
               {qualityBadge.fps !== null
                 ? t('voice:stream.qualityValue', { height: qualityBadge.height, fps: qualityBadge.fps })
                 // i18n-check: allow-literal "720p" is the format's name and reads the same in every language
@@ -677,12 +677,12 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
             <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" />
           </svg>
           <span
-            className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
+            className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-ui-label'}`}
           >
             {displayName}
           </span>
           {isLocal && (
-            <span className="text-[10px] text-white/40 font-medium">{t('voice:badges.you')}</span>
+            <span className="text-ui-micro text-white/40 font-medium">{t('voice:badges.you')}</span>
           )}
         </div>
       </div>}

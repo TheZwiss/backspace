@@ -1,3 +1,4 @@
+import { Tooltip } from './Tooltip';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -148,7 +149,7 @@ export function InlineNameEditor({
           <button
             type="submit"
             disabled={isSaving}
-            className="flex-shrink-0 px-2.5 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary flex-shrink-0 transition-colors disabled:opacity-50"
           >
             {isSaving ? t('states.saving') : t('actions.save')}
           </button>
@@ -162,11 +163,11 @@ export function InlineNameEditor({
           </button>
         </form>
       ) : (
-        <button
+        <Tooltip content={editLabel} position="top"><button aria-label={editLabel}
           ref={editButtonRef}
           type="button"
           onClick={startEditing}
-          title={editLabel}
+
           className="group -mx-1 flex min-w-0 items-center gap-1.5 rounded px-1 text-left text-sm font-medium transition-colors hover:bg-interactive-hover"
         >
           <span className="min-w-0 truncate">{name}</span>
@@ -181,7 +182,7 @@ export function InlineNameEditor({
           >
             <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
           </svg>
-        </button>
+        </button></Tooltip>
       )}
     </div>
   );

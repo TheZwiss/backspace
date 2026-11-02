@@ -1,3 +1,4 @@
+import { showFriendRequestToast, dismissFriendRequestToast } from './friendRequestToast';
 import { WindowsProcessAudio } from './windowsProcessAudio';
 import { playNudge } from './nudge';
 import { getMsnWinkAsset, isMsnWinkEffect } from './msnWinkCatalog';
@@ -602,9 +603,9 @@ function createTray(): void {
  */
 const shownNotifications = new NotificationRetainer<Notification>();
 
-function showNotification(title: string, body: string, onClick?: () => void): void {
+function showNotification(title: string, body: string, onClick?: () => void, silent = false): void {
   if (!Notification.isSupported()) return;
-  const notification = new Notification({ title, body, silent: false });
+  const notification = new Notification({ title, body, silent });
   notification.on('click', onClick ?? (() => {
     mainWindow?.show();
     mainWindow?.focus();
@@ -939,7 +940,7 @@ function registerIpcHandlers(): void {
     if (isMsnWinkEffect(effect)) return getMsnWinkAsset(effect);
     return null;
   });
-  ipcMain.on('play-nudge', (event, sender: unknown, avatar: unknown, channelId: unknown, options?: { effect?: unknown; mode?: unknown; displayIds?: unknown; sound?: unknown; volume?: unknown }) => {
+  ipcMain.on('play-nudge', (event, sender: unknown, avatar: unknown, channelId: unknown, options?: { effect?: unknown; mode?: unknown; displayIds?: unknown; sound?: unknown; volume?: unknown; labels?: { notice?: unknown; close?: unknown } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const openConversation = () => {
       if (!mainWindow || mainWindow.isDestroyed() || typeof channelId !== 'string' || !/^\d{1,20}$/.test(channelId)) return;
@@ -952,9 +953,25 @@ function registerIpcHandlers(): void {
     const mode = typeof options?.mode === 'string' && ['full', 'reduced', 'notification'].includes(options.mode) ? options.mode : 'full';
     const displayIds = Array.isArray(options?.displayIds) ? options.displayIds.filter((id): id is number => typeof id === 'number' && Number.isFinite(id)).slice(0, 32) : undefined;
     void playNudge(typeof sender === 'string' ? sender : undefined, typeof avatar === 'string' ? avatar : undefined, openConversation, effect, mode,
-      { displayIds, sound: options?.sound !== false, volume: typeof options?.volume === 'number' && Number.isFinite(options.volume) ? Math.max(0, Math.min(1, options.volume)) : .6 }).catch(error => console.warn('[Nudge]', error));
+      { labels: typeof options?.labels?.notice === 'string' && typeof options?.labels?.close === 'string' ? { notice: options.labels.notice.slice(0, 160), close: options.labels.close.slice(0, 80) } : undefined, displayIds, sound: options?.sound !== false, volume: typeof options?.volume === 'number' && Number.isFinite(options.volume) ? Math.max(0, Math.min(1, options.volume)) : .6 }).catch(error => console.warn('[Nudge]', error));
   });
-  ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
+  ipcMain.on('friend-request-notification', (event, data: import('./friendRequestToast').FriendRequestToastData) => {
+    if (event.sender !== mainWindow?.webContents || !data || typeof data.requestId !== 'string' || data.requestId.length > 128 || typeof data.userId !== 'string' || data.userId.length > 128 || typeof data.origin !== 'string' || data.origin.length > 2048 || typeof data.sender !== 'string' || !data.labels) return;
+    if (![data.labels.body, data.labels.accept, data.labels.decline, data.labels.close].every(value => typeof value === 'string' && value.length <= 200)) return;
+    const sender = event.sender, sourceOrigin = new URL(sender.getURL()).origin;
+    const notice = { ...data, sender: data.sender.slice(0, 80), avatar: typeof data.avatar === 'string' ? data.avatar : undefined };
+    void showFriendRequestToast(notice, action => {
+      if (!mainWindow || mainWindow.isDestroyed() || sender.isDestroyed() || sender !== mainWindow.webContents || new URL(sender.getURL()).origin !== sourceOrigin) return;
+      if (action === 'open') { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+      sender.send('friend-request-action', { requestId: data.requestId, origin: data.origin, userId: data.userId, action });
+    });
+  });
+  ipcMain.on('friend-request-dismiss', (event, data: { requestId: string; origin: string; userId: string }) => {
+    if (event.sender !== mainWindow?.webContents || !data || ![data.requestId, data.origin, data.userId].every(value => typeof value === 'string')) return;
+    dismissFriendRequestToast(data);
+  });
+
+  ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string; silent?: boolean } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const sender = event.sender;
     const origin = new URL(sender.getURL()).origin;
@@ -967,7 +984,7 @@ function registerIpcHandlers(): void {
       if (sender === mainWindow.webContents && new URL(sender.getURL()).origin === origin && data.options) {
         sender.send('notification-click', data.options);
       }
-    });
+    }, data.options?.silent === true);
   });
 
   ipcMain.on('set-badge-count', (_event, count: number) => {

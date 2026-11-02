@@ -39,7 +39,7 @@ function TransferMemberRow({
           {displayName}
         </span>
         {canonical.displayName && (
-          <span className="text-[11px] text-txt-tertiary truncate max-w-full">
+          <span className="text-ui-caption text-txt-tertiary truncate max-w-full">
             {canonical.username}
           </span>
         )}
@@ -138,10 +138,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   };
 
   return ReactDOM.createPortal(
-    <div ref={overlayRef} className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
+    <div ref={overlayRef} className="fixed inset-0 z-confirm flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
-        className="w-[380px] max-h-[480px] glass-modal rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        className="w-[380px] max-h-[480px] ui-dialog-surface flex flex-col animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
@@ -181,7 +181,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               <button
                 onClick={handleTransfer}
                 disabled={transferring}
-                className="flex-1 py-2.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
               >
                 {transferring ? t('spaces:ownership.transferring') : t('spaces:ownership.confirm')}
               </button>

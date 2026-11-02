@@ -129,7 +129,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={isDisabled}
-            className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {retryAfter > 0
               ? t('auth:login.rateLimited.retryIn', { seconds: retryAfter })

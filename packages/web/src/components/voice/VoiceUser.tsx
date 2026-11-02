@@ -1,4 +1,4 @@
-import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -80,7 +80,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       // Build moderation items
       const modItems = channelId ? buildVoiceModMenuItems(targetUserId, channelId) : [];
 
-      const items: ContextMenuItem[] = [...modItems, ...(user ? friendshipMenuItems(user, userOrigin) : [])];
+      const items: ContextMenuItem[] = [...modItems, ...(user ? userSocialMenuItems(user, userOrigin) : [])];
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -181,7 +181,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
             )}
           </div>
           {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
-            <button type="button" className="px-3 py-1.5 rounded bg-accent-primary text-white text-xs font-semibold hover:bg-accent-primary/80 transition-colors"
+            <button type="button" className="ui-button ui-button-primary transition-colors"
               onClick={() => { useVoiceStore.getState().rewatchCamera(participant.userId); setCameraSubscription(getActiveRoom(), participant.identity, true); }}>
               {t('voice:participantMenu.watchCamera')}
             </button>
@@ -193,12 +193,12 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
-              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
+              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-ui-label'}`}
             >
               {displayName}
             </span>
             {isLocal && (
-              <span className="text-[10px] text-white/40 font-medium">
+              <span className="text-ui-micro text-white/40 font-medium">
                 {t('voice:badges.you')}
               </span>
             )}

@@ -35,7 +35,7 @@ export function MentionTextarea({ model, textareaRef, mentionAnchorRef, mentionS
   }, [textareaRef, model.text]);
   return <div className="relative flex-1 min-w-0">
     <div aria-hidden="true" className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div ref={mirrorRef} className="py-[10px] px-1 text-[15px] leading-[1.375rem] text-txt-primary whitespace-pre-wrap break-words">
+      <div ref={mirrorRef} className="py-[10px] px-1 text-ui-message leading-[1.375rem] text-txt-primary whitespace-pre-wrap break-words">
         {model.parts.map((part, index) => {
           const offset = anchor - part.start;
           const content = offset >= 0 && offset < part.text.length

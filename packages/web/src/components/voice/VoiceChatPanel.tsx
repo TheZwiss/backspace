@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { MessageList } from '../chat/MessageList';
@@ -26,9 +27,9 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
     >
       {/* Chat header */}
       <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0">
-        <span className="font-bold text-txt-primary text-[16px]">{t('voice:chatPanel.title')}</span>
+        <span className="font-bold text-txt-primary text-ui-lead">{t('voice:chatPanel.title')}</span>
         <div className="flex items-center gap-1">
-          <button
+          <Tooltip content={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')} position="top"><button aria-label={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')}
             onClick={toggleVoiceChatFocus}
             aria-pressed={voiceChatFocus}
             className={`w-7 h-7 flex items-center justify-center transition-colors rounded ${
@@ -36,7 +37,7 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
                 ? 'text-txt-primary bg-interactive-hover'
                 : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={voiceChatFocus ? t('voice:chatPanel.collapse') : t('voice:chatPanel.expand')}
+
           >
             {voiceChatFocus ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -47,16 +48,16 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
                 <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
               </svg>
             )}
-          </button>
-          <button
+          </button></Tooltip>
+          <Tooltip content={t('voice:chatPanel.close')} position="top"><button aria-label={t('voice:chatPanel.close')}
             onClick={toggleVoiceChat}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
-            title={t('voice:chatPanel.close')}
+
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
             </svg>
-          </button>
+          </button></Tooltip>
         </div>
       </div>
 

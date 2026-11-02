@@ -1,4 +1,4 @@
-import { friendshipMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
 import { getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -24,7 +24,7 @@ function VoiceChannelTimer({ observation }: { observation: VoiceChannelElapsed }
   const duration = formatDuration(elapsedSeconds);
   return (
     <span
-      className="flex flex-shrink-0 items-center gap-1 text-[11px] leading-none tabular-nums text-txt-tertiary"
+      className="flex flex-shrink-0 items-center gap-1 text-ui-caption leading-none tabular-nums text-txt-tertiary"
       title={t('channelDuration', { duration })}
       // The row is a button, and a label on a child becomes part of that
       // button's accessible name. A duration that ticks every second would
@@ -118,7 +118,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
         key: 'profile', type: 'action', label: t('spaces:members.menu.profile'),
         onClick: () => useUIStore.getState().openUserProfile(user, getChannelOrigin(channelId), anchor, 'right', spaceId ? { spaceId, userId } : undefined),
       }] : [];
-      if (user) items.push(...friendshipMenuItems(user, getChannelOrigin(channelId)));
+      if (user) items.push(...userSocialMenuItems(user, getChannelOrigin(channelId)));
       // Build moderation items
       const modItems = buildVoiceModMenuItems(userId, channelId);
 
@@ -188,7 +188,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
           </svg>
         )}
-        <span className="truncate text-[15px] font-medium flex-1 text-left">{channelName}</span>
+        <span className="truncate text-ui-message font-medium flex-1 text-left">{channelName}</span>
         <span className="relative flex flex-shrink-0 items-center">
           {canManage && (
             <svg

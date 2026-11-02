@@ -99,7 +99,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
             </span>
           )}
         </div>
-        <p className="text-[13px] text-txt-tertiary">{t('spaces:explore.outer.subtitle')}</p>
+        <p className="text-ui-label text-txt-tertiary">{t('spaces:explore.outer.subtitle')}</p>
       </div>
 
       {isLoading && !hasEntries ? (
@@ -133,7 +133,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
           )}
 
           {notice === 'unreachable' && (
-            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber">
               {t('errors:directory_unreachable')}
             </div>
           )}

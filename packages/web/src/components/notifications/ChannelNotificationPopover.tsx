@@ -69,7 +69,7 @@ export function ChannelNotificationPopover({ open, onClose, anchorRef, channelId
       style={style}
       className="w-[300px] glass rounded-lg shadow-xl p-3 animate-fade-in"
     >
-      <div className="px-1 pb-2 text-[14px] font-semibold text-txt-primary truncate">
+      <div className="px-1 pb-2 text-ui-body font-semibold text-txt-primary truncate">
         {t('spaces:notifications.channelTitle', { channel: channelName })}
       </div>
       <NotificationSettingsControls origin={location.origin} spaceId={location.spaceId} channelId={channelId} />

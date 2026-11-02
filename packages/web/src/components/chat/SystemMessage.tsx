@@ -52,7 +52,7 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
           <time
             dateTime={new Date(message.createdAt).toISOString()}
             title={`${f.formatMediumDate(message.createdAt)} ${f.formatTime(message.createdAt, true)}`}
-            className="ml-2 whitespace-nowrap tabular-nums text-[10px]"
+            className="ml-2 whitespace-nowrap tabular-nums text-ui-micro"
           >
             {f.formatTime(message.createdAt)}
           </time>

@@ -6,6 +6,7 @@ export default {
   ],
   theme: {
     extend: {
+      zIndex: { modal: 'var(--layer-modal)', menu: 'var(--layer-menu)', 'menu-backdrop': 'var(--layer-menu-backdrop)', tooltip: 'var(--layer-tooltip)', confirm: 'var(--layer-confirm)', toast: 'var(--layer-toast)' },
       height: { screen: 'calc(100 * var(--app-vh))' },
       minHeight: { screen: 'calc(100 * var(--app-vh))' },
       colors: {

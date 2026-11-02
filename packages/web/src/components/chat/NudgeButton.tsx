@@ -1,3 +1,5 @@
+import { Tooltip } from '../ui/Tooltip';
+import { ControlIcon } from '../ui/ControlIcon';
 import { useTranslation } from 'react-i18next';
 import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -60,15 +62,15 @@ export function NudgeButton({ channelId }: { channelId: string }) {
   }, [open]);
   const close = () => { setOpen(false); button.current?.focus(); };
   return <>
-    <button ref={button} type="button" title={cooling ? t('chat:nudge.cooldown') : t('chat:nudge.title')}
+    <Tooltip content={cooling ? t('chat:nudge.cooldown') : t('chat:nudge.title')} position="top"><button ref={button} type="button"
       aria-label={t('chat:nudge.title')} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
       disabled={cooling} onClick={() => {
         const rect = button.current!.getBoundingClientRect();
         setPosition({ left: Math.max(8, Math.min(rect.left, innerWidth - 280)), bottom: Math.max(8, innerHeight - rect.top + 8) });
         setOpen(value => !value);
-      }} className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] rounded-[6px] text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] disabled:opacity-40">🔔</button>
+      }} className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] rounded-[6px] text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] disabled:opacity-40"><ControlIcon name="bell" /></button></Tooltip>
     {open && createPortal(<div ref={menu} id={id} role="menu" aria-label={t('chat:nudge.choose')}
-      style={{ position: 'fixed', ...position, zIndex: 500, width: 264, maxHeight: 'min(420px, 75vh)', overflowY: 'auto' }}
+      style={{ position: 'fixed', ...position, zIndex: 'var(--layer-menu)', width: 264, maxHeight: 'min(420px, calc(75 * var(--app-vh)))', overflowY: 'auto' }}
       className="rounded-[10px] border border-border-soft bg-surface-elevated p-1.5 shadow-xl"
       onKeyDown={event => {
         if (event.key === 'Escape' || event.key === 'Tab') { if (event.key === 'Escape') event.preventDefault(); close(); }
@@ -90,7 +92,7 @@ export function NudgeButton({ channelId }: { channelId: string }) {
           }
           close();
         }}><span aria-hidden="true" className="text-lg">{effect.icon}</span><span><span className="block text-sm text-txt-primary">{t(`chat:nudge.effects.${effect.value}.title`)}</span><span className="block text-xs text-txt-tertiary">{t(`chat:nudge.effects.${effect.value}.description`)}</span></span></button></Fragment>)}
-      <p className="border-t border-border-soft px-2 pt-2 pb-1 text-[11px] text-txt-tertiary">{t('chat:nudge.footer')}</p>
+      <p className="border-t border-border-soft px-2 pt-2 pb-1 text-ui-caption text-txt-tertiary">{t('chat:nudge.footer')}</p>
     </div>, document.body)}
   </>;
 }

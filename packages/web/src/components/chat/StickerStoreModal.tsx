@@ -237,7 +237,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
       onMouseDown={e => e.stopPropagation()}
     >
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-3xl h-[620px] max-h-[calc(calc(100*var(--app-vh))-2rem)] mx-4 glass-modal rounded-xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+      <div className="relative w-full max-w-3xl h-[620px] max-h-[calc(calc(100*var(--app-vh))-2rem)] mx-4 ui-dialog-surface shadow-2xl flex flex-col overflow-hidden animate-slide-up">
         {/* Modal Top Bar */}
         <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-border-soft">
           <div className="flex items-center gap-4">
@@ -275,7 +275,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                 >
                   <span>{t('stickers.reviews')}</span>
                   {reviews.length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-accent-amber/20 text-accent-amber font-bold">
+                    <span className="px-1.5 py-0.2 rounded-full text-ui-micro bg-accent-amber/20 text-accent-amber font-bold">
                       {reviews.length}
                     </span>
                   )}
@@ -368,7 +368,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         <div className="flex items-start justify-between gap-1 mb-1">
                           <h4 className="text-sm font-semibold text-txt-primary truncate">{pack.name}</h4>
                           {pack.originType === 'replica' && (
-                            <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-accent-lavender/10 text-accent-lavender border border-accent-lavender/20">
+                            <span className="shrink-0 px-1.5 py-0.5 text-ui-micro font-medium rounded-md bg-accent-lavender/10 text-accent-lavender border border-accent-lavender/20">
                               {t('stickers.replicaBadge')}
                             </span>
                           )}
@@ -380,7 +380,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                       </div>
 
                       <div className="flex items-center justify-between pt-2 border-t border-border-soft/60 mt-2">
-                        <span className="text-[11px] text-txt-tertiary">
+                        <span className="text-ui-caption text-txt-tertiary">
                           {t('stickers.stickersCount', { count: pack.itemCount })}
                         </span>
 
@@ -447,7 +447,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h4 className="text-sm font-semibold text-txt-primary truncate">{pack.name}</h4>
-                              <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
+                              <span className={`px-2 py-0.5 text-ui-micro font-medium rounded-full ${
                                 pack.status === 'approved' || pack.status === 'active' ? 'bg-accent-mint/10 text-accent-mint border border-accent-mint/20' :
                                 pack.status === 'pending_review' ? 'bg-accent-amber/10 text-accent-amber border border-accent-amber/20' :
                                 pack.status === 'rejected' ? 'bg-accent-rose/10 text-accent-rose border border-accent-rose/20' :
@@ -505,7 +505,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                       </div>
 
                       {pack.status === 'pending_review' && (
-                        <div className="text-[11px] text-accent-amber/90 flex items-center gap-1.5 pl-1">
+                        <div className="text-ui-caption text-accent-amber/90 flex items-center gap-1.5 pl-1">
                           <span>⏳</span>
                           <span>{t('stickers.pendingReviewHint')}</span>
                         </div>
@@ -597,7 +597,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <h4 className="text-sm font-semibold text-txt-primary truncate">{pack.name}</h4>
-                            <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-accent-amber/10 text-accent-amber border border-accent-amber/20">
+                            <span className="px-2 py-0.5 text-ui-micro font-medium rounded-full bg-accent-amber/10 text-accent-amber border border-accent-amber/20">
                               {t('stickers.pendingReview')}
                             </span>
                           </div>
@@ -658,7 +658,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
           onMouseDown={e => e.stopPropagation()}
         >
           <div className="absolute inset-0 bg-black/60" onClick={() => setPreviewPack(null)} />
-          <div className="relative w-full max-w-md mx-4 glass-modal rounded-xl shadow-2xl p-6 flex flex-col max-h-[calc(80*var(--app-vh))] animate-slide-up">
+          <div className="relative w-full max-w-md mx-4 ui-dialog-surface shadow-2xl p-6 flex flex-col max-h-[calc(80*var(--app-vh))] animate-slide-up">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h4 className="text-base font-bold text-txt-primary">{previewPack.name}</h4>
@@ -739,7 +739,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
           onMouseDown={e => e.stopPropagation()}
         >
           <div className="absolute inset-0 bg-black/60" onClick={() => setRejectingPack(null)} />
-          <div className="relative w-full max-w-md mx-4 glass-modal rounded-xl shadow-2xl p-6 flex flex-col animate-slide-up">
+          <div className="relative w-full max-w-md mx-4 ui-dialog-surface shadow-2xl p-6 flex flex-col animate-slide-up">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-base font-bold text-txt-primary flex items-center gap-2">
                 <span className="text-accent-rose">⚠️</span>
@@ -785,7 +785,7 @@ export function StickerStoreModal({ onClose, onPacksChanged, spaceId }: StickerS
                 type="button"
                 disabled={actionLoading === rejectingPack.id}
                 onClick={handleConfirmReject}
-                className="px-3.5 py-1.5 text-xs font-medium rounded-lg text-white bg-accent-rose hover:bg-accent-rose/90 transition-colors disabled:opacity-50"
+                className="ui-button ui-button-danger transition-colors disabled:opacity-50"
               >
                 {actionLoading === rejectingPack.id ? '…' : t('stickers.rejectConfirm')}
               </button>

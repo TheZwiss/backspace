@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -171,7 +172,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             <button
               onClick={handleProbe}
               disabled={isLoading || !url.trim()}
-              className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {isLoading ? t('federation:connections.add.probing') : t('federation:connections.add.connect')}
             </button>
@@ -282,7 +283,7 @@ function RegistryFilterBar({
               filter === tab.key ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            {tab.label} <span className="text-[10px] text-txt-tertiary ml-0.5">{tab.count}</span>
+            {tab.label} <span className="text-ui-micro text-txt-tertiary ml-0.5">{tab.count}</span>
           </button>
         ))}
       </div>
@@ -291,20 +292,20 @@ function RegistryFilterBar({
         <button
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           {t('common:actions.sort')}
-          <span className="text-[10px]">&#9662;</span>
+          <span className="text-ui-micro">&#9662;</span>
         </button>
 
         {sortOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
               {sortOptions.map((opt) => (
                 <button
                   key={opt.key}
@@ -418,12 +419,12 @@ function DeleteIdentityDialog({
   ];
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
+    <div className="fixed inset-0 z-confirm flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
         onClick={loading ? undefined : onClose}
       />
-      <div className="relative max-w-md w-full mx-4 glass-modal rounded-xl p-6 animate-slide-up">
+      <div className="relative max-w-md w-full mx-4 ui-dialog-surface p-6 animate-slide-up">
         <h3 className="text-base font-semibold text-txt-primary mb-1">{t('federation:connections.deleteIdentity.title')}</h3>
         <p className="text-xs text-txt-tertiary mb-4">
           <Trans
@@ -448,7 +449,7 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.leave.title')}</div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.leave.description')}
             </div>
           </button>
@@ -465,7 +466,7 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.soft.title')}</div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.soft.description')}
             </div>
           </button>
@@ -484,7 +485,7 @@ function DeleteIdentityDialog({
             <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
               {t('federation:connections.deleteIdentity.full.title')}
             </div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.full.description')}
             </div>
           </button>
@@ -492,7 +493,7 @@ function DeleteIdentityDialog({
 
         {/* Scope selector */}
         <div className="mb-4">
-          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
+          <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
           <div className="flex gap-1.5">
             {scopeOptions.map((opt) => (
               <button
@@ -500,7 +501,7 @@ function DeleteIdentityDialog({
                 type="button"
                 onClick={() => setScope(opt.key)}
                 disabled={loading}
-                className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
+                className={`flex-1 px-2 py-1.5 text-ui-caption font-medium rounded transition-colors ${
                   scope === opt.key
                     ? 'bg-accent-lavender/15 text-accent-lavender'
                     : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
@@ -555,7 +556,7 @@ function DeleteIdentityDialog({
           <button
             onClick={handleConfirm}
             disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
-            className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-danger flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading
               ? t('federation:connections.deleteIdentity.deleting')
@@ -645,17 +646,17 @@ function RegistryRow({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-txt-primary truncate">{name}</span>
-                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${registryStatusColor(entry.status)}`}>
+                <span className={`inline-flex items-center text-ui-micro font-medium px-1.5 py-0.5 rounded ${registryStatusColor(entry.status)}`}>
                   {registryStatusLabel(t, entry.status)}
                 </span>
               </div>
-              <div className="text-[11px] text-txt-tertiary truncate">
+              <div className="text-ui-caption text-txt-tertiary truncate">
                 {safeHost(entry.origin)}
                 {entry.username && (
                   <span className="ml-1">{t('federation:connections.row.asUser', { username: entry.username })}</span>
                 )}
               </div>
-              <div className="text-[10px] text-txt-tertiary">{metadataText}</div>
+              <div className="text-ui-micro text-txt-tertiary">{metadataText}</div>
             </div>
           </div>
           <span className="text-txt-tertiary text-xs shrink-0 ml-2">{expanded ? '▾' : '▸'}</span>
@@ -668,24 +669,24 @@ function RegistryRow({
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.remoteUserId')}</div>
+                  <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.remoteUserId')}</div>
                   <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || t('common:states.unknown')}>
                     {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : t('common:states.unknown')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.addedLabel')}</div>
+                  <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.addedLabel')}</div>
                   <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.addedAt)}</div>
                 </div>
                 <div>
                   {isDisconnected && entry.disconnectedAt ? (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.disconnectedLabel')}</div>
+                      <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.disconnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.disconnectedAt)}</div>
                     </>
                   ) : (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
+                      <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">
                         {entry.lastConnectedAt ? formatters.formatMediumDate(entry.lastConnectedAt) : t('common:time.never')}
                       </div>
@@ -723,14 +724,14 @@ function RegistryRow({
                     >
                       {t('federation:connections.row.disconnect')}
                     </button>
-                    <button
+                    <Tooltip content={t('federation:connections.row.deleteIdentityDisabled')} position="top"><button
                       type="button"
                       disabled
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger rounded opacity-50 cursor-not-allowed"
-                      title={t('federation:connections.row.deleteIdentityDisabled')}
+
                     >
                       {t('federation:connections.row.deleteIdentity')}
-                    </button>
+                    </button></Tooltip>
                   </>
                 )}
 
@@ -900,7 +901,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
         <div className="text-sm text-txt-primary truncate">
           {actionVerbPhrase(t, subscription.triggerReason, subscription.triggerTarget)}
         </div>
-        <div className="text-[11px] text-txt-tertiary truncate">
+        <div className="text-ui-caption text-txt-tertiary truncate">
           <Trans
             t={t}
             i18nKey="federation:connections.pending.onPeer"
@@ -932,7 +933,7 @@ function PendingPeeringSubscriptionsSection() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('federation:connections.pending.title')}
       </div>
       <p className="text-xs text-txt-tertiary mb-2">
@@ -1056,7 +1057,7 @@ function PeeringNotificationCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-txt-primary">{primaryText}</div>
-          <div className="text-[11px] text-txt-tertiary mt-0.5">{contextText}</div>
+          <div className="text-ui-caption text-txt-tertiary mt-0.5">{contextText}</div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {showRetry && (
               <button
@@ -1140,7 +1141,7 @@ function RecentPeeringOutcomesSection() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">
           {t('federation:connections.outcomes.title')}
         </div>
         {notifications.length > 1 && (
@@ -1148,7 +1149,7 @@ function RecentPeeringOutcomesSection() {
             type="button"
             onClick={handleDismissAll}
             disabled={bulkBusy}
-            className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+            className="text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
             {bulkBusy ? t('federation:connections.outcomes.dismissing') : t('common:actions.dismissAll')}
           </button>
@@ -1242,7 +1243,7 @@ export function ConnectedInstances() {
       <PendingPeeringSubscriptionsSection />
 
       <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('federation:connections.title')}
       </div>
       <p className="text-xs text-txt-tertiary mb-2">{t('federation:connections.description')}</p>

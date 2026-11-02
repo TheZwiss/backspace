@@ -1,4 +1,30 @@
 {
+"attentionMutes": {
+    "title": "Pessoas silenciadas",
+    "description": "Silencie sons, animações e avisos de atenção de pessoas específicas neste dispositivo. Mensagens e chamadas continuam disponíveis.",
+    "mute": "Silenciar chamadas de atenção",
+    "muteShort": "Silenciar",
+    "unmute": "Reativar chamadas de atenção",
+    "unmuteShort": "Reativar",
+    "minutes15": "Por 15 minutos",
+    "hour1": "Por 1 hora",
+    "hours8": "Por 8 horas",
+    "hours24": "Por 24 horas",
+    "forever": "Até reativar",
+    "searchLabel": "Adicionar pessoa",
+    "searchPlaceholder": "Buscar por nome de usuário...",
+    "duration": "Duração do silêncio",
+    "noResults": "Nenhuma pessoa encontrada.",
+    "empty": "Ninguém está silenciado.",
+    "until": "Silenciado até {{time}}"
+  },
+  "friendNotifications": {
+    "title": "Solicitações de amizade",
+    "description": "Mostre um cartão com foto e ações rápidas quando alguém quiser adicionar você. O modo Não perturbar é respeitado.",
+    "enabled": "Mostrar solicitações na tela",
+    "sound": "Reproduzir som",
+    "desktop": "Mostrar sobre o desktop em segundo plano"
+  },
   "interfaceScale": {
     "label": "Escala da interface",
     "description": "Redimensiona textos, botões e painéis. Salva neste navegador ou app, neste dispositivo.",

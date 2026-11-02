@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { MAX_OWNER_TITLE_LENGTH, normalizeOwnerTitle } from '@backspace/shared/src/constants.js';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -111,7 +112,7 @@ function OwnerTitleEditor({ space, onClose }: { space: TaggedSpace; onClose: () 
               <button
                 type="submit"
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
@@ -145,15 +146,15 @@ export function OwnerTitleHeading({ space, count, touch = false }: { space: Tagg
   return (
     <>
       <div className="flex items-center gap-1 px-2 mb-1">
-        <h3 title={title} className={`min-w-0 truncate text-[10.5px] font-bold text-txt-tertiary tracking-[0.06em] ${ownerTitle === null ? 'uppercase' : ''}`}>
+        <h3 title={title} className={`min-w-0 truncate text-xs font-bold text-txt-tertiary tracking-[0.06em] ${ownerTitle === null ? 'uppercase' : ''}`}>
           {title} — {formatNumber(count)}
         </h3>
         {canEdit && (
-          <button type="button" onClick={() => setEditing(true)} aria-label={t('members.ownerTitle.edit')} title={t('members.ownerTitle.edit')} className={`shrink-0 rounded text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover ${touch ? '-my-4 flex h-11 w-11 items-center justify-center active:bg-interactive-hover' : '-my-1 p-1'}`}>
+          <Tooltip content={t('members.ownerTitle.edit')} position="top"><button type="button" onClick={() => setEditing(true)} aria-label={t('members.ownerTitle.edit')}  className={`shrink-0 rounded text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover ${touch ? '-my-4 flex h-11 w-11 items-center justify-center active:bg-interactive-hover' : '-my-1 p-1'}`}>
             <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="m16 3 5 5M4 15 16 3l5 5L9 20l-6 1 1-6Z" />
             </svg>
-          </button>
+          </button></Tooltip>
         )}
       </div>
       {canEdit && editing && <OwnerTitleEditor space={space} onClose={() => setEditing(false)} />}

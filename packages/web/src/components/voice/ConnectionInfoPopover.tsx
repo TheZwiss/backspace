@@ -73,15 +73,15 @@ function trackLabel(direction: 'send' | 'recv', source: string, participantName:
 
 const Row = ({ label, value, colorClass }: { label: string; value: string; colorClass?: string }) => (
   <div className="flex items-center justify-between py-[3px]">
-    <span className="text-[12px] text-txt-tertiary">{label}</span>
-    <span className={`text-[12px] font-medium ${colorClass ?? 'text-txt-secondary'}`}>{value}</span>
+    <span className="text-ui-caption text-txt-tertiary">{label}</span>
+    <span className={`text-ui-caption font-medium ${colorClass ?? 'text-txt-secondary'}`}>{value}</span>
   </div>
 );
 
 const Divider = () => <div className="border-t border-border-soft my-1" />;
 
 const SectionHeader = ({ title }: { title: string }) => (
-  <div className="text-[10px] font-bold text-txt-tertiary uppercase tracking-wider pt-1 pb-[2px]">
+  <div className="text-ui-micro font-bold text-txt-tertiary uppercase tracking-wider pt-1 pb-[2px]">
     {title}
   </div>
 );
@@ -90,8 +90,8 @@ function AudioTrackRow({ track }: { track: AudioTrackStat }) {
   const label = trackLabel(track.direction, track.source, track.participantName);
   return (
     <div className="flex items-center justify-between py-[3px]">
-      <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
-      <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
+      <span className="text-ui-caption text-txt-tertiary truncate mr-2">{label}</span>
+      <span className="text-ui-caption font-medium text-txt-secondary whitespace-nowrap">
         {formatBitrate(track.bitrate)}
         {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
       </span>
@@ -106,19 +106,19 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
   return (
     <div className="py-[3px]">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
-        <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
+        <span className="text-ui-caption text-txt-tertiary truncate mr-2">{label}</span>
+        <span className="text-ui-caption font-medium text-txt-secondary whitespace-nowrap">
           {formatBitrate(track.bitrate)}
           {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
         </span>
       </div>
       {(resolution || track.fps !== null || track.qualityLimitation || track.simulcastLayer || track.encoderImpl) && (
         <div className="flex items-center justify-between pl-3">
-          <span className="text-[11px] text-txt-tertiary">
+          <span className="text-ui-caption text-txt-tertiary">
             {resolution && `${resolution}`}
             {track.fps !== null && ` @${track.fps}`}
           </span>
-          <span className="text-[11px] text-txt-tertiary">
+          <span className="text-ui-caption text-txt-tertiary">
             {track.direction === 'send' && (() => {
               const parts: string[] = [];
               if (track.encoderImpl) parts.push(track.encoderImpl);
@@ -162,8 +162,8 @@ function MiniGraph({ values, floor, colorClass }: { values: Array<number | null>
 function NetworkGraph({ label, value, values, floor, colorClass }: { label: string; value: string; values: Array<number | null>; floor: number; colorClass?: string }) {
   return (
     <div className="min-w-0 rounded-lg bg-black/20 border border-white/5 px-2 py-2">
-      <div className="text-[10px] text-txt-tertiary truncate" title={label}>{label}</div>
-      <div className={`text-[13px] font-semibold tabular-nums mt-0.5 ${colorClass ?? 'text-txt-secondary'}`}>{value}</div>
+      <div className="text-ui-micro text-txt-tertiary truncate" title={label}>{label}</div>
+      <div className={`text-ui-label font-semibold tabular-nums mt-0.5 ${colorClass ?? 'text-txt-secondary'}`}>{value}</div>
       <MiniGraph values={values} floor={floor} colorClass={colorClass ?? 'text-txt-tertiary'} />
     </div>
   );
@@ -223,14 +223,14 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
       className="w-[300px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
+        <span className="text-ui-body font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
       </div>
 
       <div className="px-3 py-2 max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
+          <div className="text-ui-caption text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
         ) : !stats ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.gathering')}</div>
+          <div className="text-ui-caption text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.gathering')}</div>
         ) : (
           <>
             {/* Network */}

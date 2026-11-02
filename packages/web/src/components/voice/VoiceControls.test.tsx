@@ -23,7 +23,7 @@ it('places the existing text voice control directly next to soundboard in the co
   const textVoice = screen.getByRole('button', { name: 'Text voice' });
   const soundboard = screen.getByRole('button', { name: 'Soundboard' });
   expect(textVoice.nextElementSibling).toBe(soundboard);
-  expect(textVoice.parentElement).toBe(screen.getByTitle('voice:controls.noiseSuppressionOff').parentElement);
+  expect(textVoice.closest('.relative.flex')).toBe(screen.getByRole('button', { name: 'voice:controls.noiseSuppressionOff' }).closest('.relative.flex'));
   expect(textVoice.className).toContain('h-[34px]');
   expect(textVoice).toHaveAttribute('data-variant', 'toolbar');
 });

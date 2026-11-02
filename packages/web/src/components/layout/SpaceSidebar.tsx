@@ -124,7 +124,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   };
 
   const buttonContent = (
-    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name} aria-current={active ? 'page' : undefined}>
+    <Tooltip content={tooltipText ? undefined : name} position="top"><button aria-label={name} onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle}  aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
         <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
@@ -144,9 +144,9 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
       ) : icon ? (
         <SpaceIconImage icon={icon} alt={name} animate={isHovered} className="w-full h-full object-cover" />
       ) : (
-        <span className="text-[15px] font-bold">{firstLetter}</span>
+        <span className="text-ui-message font-bold">{firstLetter}</span>
       )}
-    </button>
+    </button></Tooltip>
   );
 
   const innerContent = (
@@ -223,7 +223,7 @@ function MiniSpaceIcon({ space, animate }: { space: TaggedSpace; animate: boolea
       className="w-full h-full rounded-[3px] flex items-center justify-center text-white"
       style={{ background: grad.gradient }}
     >
-      <span className="text-[7px] font-bold leading-none">{space.name.charAt(0).toUpperCase()}</span>
+      <span className="text-ui-micro font-bold leading-none">{space.name.charAt(0).toUpperCase()}</span>
     </div>
   );
 }
@@ -252,7 +252,7 @@ function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpac
         ))}
       </div>
       {remaining > 0 && (
-        <div className="absolute bottom-0 right-0 text-[7px] font-bold text-txt-tertiary bg-surface-base rounded-tl-sm px-0.5">
+        <div className="absolute bottom-0 right-0 text-ui-micro font-bold text-txt-tertiary bg-surface-base rounded-tl-sm px-0.5">
           +{remaining}
         </div>
       )}
@@ -413,7 +413,7 @@ function FolderFlyout({
           {isRenaming ? (
             <input
               autoFocus
-              className="input-search w-full px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary"
+              className="input-search w-full px-1.5 py-0.5 text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary"
               defaultValue={folder.name || ''}
               onBlur={(e) => onRename(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -422,7 +422,7 @@ function FolderFlyout({
               }}
             />
           ) : (
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">
+            <span className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">
               {folder.name}
             </span>
           )}
@@ -473,7 +473,7 @@ function FolderFlyout({
                   {icon ? (
                     <SpaceIconImage icon={icon} alt="" animate={hoveredSpaceId === space.id} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
+                    <span className="text-ui-label font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
               </div>
@@ -1169,7 +1169,7 @@ export function SpaceSidebar() {
                   type: 'custom',
                   render: () => (
                     <div className="px-3 py-1.5">
-                      <p className="text-[11px] text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
+                      <p className="text-ui-caption text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
                       <div className="flex gap-1.5">
                         <button
                           className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}

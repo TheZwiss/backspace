@@ -1,4 +1,9 @@
 {
+  "friendNotification": {
+    "title": "Solicitação de amizade",
+    "body": "Quer adicionar você como amigo.",
+    "open": "Abrir conversa com {{name}}"
+  },
   "tabs": {
     "all": "Todos",
     "pending": "Pendentes",

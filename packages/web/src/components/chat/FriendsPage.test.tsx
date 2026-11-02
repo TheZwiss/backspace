@@ -428,7 +428,7 @@ describe('FriendsPage', () => {
       await user.click(screen.getByText('All'));
 
       // Find the Message button by title
-      const dmButton = screen.getByTitle('Message');
+      const dmButton = screen.getByRole('button', { name: 'Message' });
       await user.click(dmButton);
 
       await waitFor(() => {
@@ -461,7 +461,7 @@ describe('FriendsPage', () => {
 
       renderFriendsPage();
       await user.click(screen.getByText('All'));
-      await user.click(screen.getByTitle('Message'));
+      await user.click(screen.getByRole('button', { name: 'Message' }));
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/channels/@me/dm-home-copy');
@@ -491,7 +491,7 @@ describe('FriendsPage', () => {
 
       renderFriendsPage();
       await user.click(screen.getByText('All'));
-      await user.click(screen.getByTitle('Message'));
+      await user.click(screen.getByRole('button', { name: 'Message' }));
 
       await waitFor(() => expect(addToast).toHaveBeenCalledWith('Could not open the conversation: No user with that name was found.', 'warning'));
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -542,7 +542,7 @@ describe('FriendsPage', () => {
       expect(screen.getByText('Outgoing Friend Request')).toBeInTheDocument();
 
       // Click the cancel button (the X icon button with title "Cancel Request")
-      const cancelButton = screen.getByTitle('Cancel Request');
+      const cancelButton = screen.getByRole('button', { name: 'Cancel Request' });
       await user.click(cancelButton);
 
       await waitFor(() => {
@@ -592,7 +592,7 @@ describe('FriendsPage', () => {
       expect(screen.getByText('Incoming Friend Request')).toBeInTheDocument();
 
       // Click accept button (title "Accept")
-      const acceptButton = screen.getByTitle('Accept');
+      const acceptButton = screen.getByRole('button', { name: 'Accept' });
       await user.click(acceptButton);
 
       await waitFor(() => {
@@ -636,7 +636,7 @@ describe('FriendsPage', () => {
       renderFriendsPage();
       await user.click(screen.getByText('Pending'));
 
-      const declineButton = screen.getByTitle('Decline');
+      const declineButton = screen.getByRole('button', { name: 'Decline' });
       await user.click(declineButton);
 
       await waitFor(() => {

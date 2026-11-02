@@ -161,7 +161,7 @@ export function UpdatesPanel() {
 
       {/* What is running now */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('admin:updates.running.label')}
         </div>
         <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
@@ -178,7 +178,7 @@ export function UpdatesPanel() {
       {/* What to do about it */}
       {updateAvailable && status.latest !== null ? (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('admin:updates.available.label')}
           </div>
           <div className="rounded-lg bg-accent-primary/[0.06] border border-accent-primary/25 p-3.5 space-y-3">

@@ -53,14 +53,14 @@ function MentionMemberRow({
           box, so a username squeezed to nothing takes its gap with it. */}
       <div className="flex items-center min-w-0 flex-1">
         <span
-          className={`${mobile ? 'text-[15px]' : 'text-[14px]'} font-medium shrink-0 max-w-full truncate`}
+          className={`${mobile ? 'text-ui-message' : 'text-ui-body'} font-medium shrink-0 max-w-full truncate`}
           style={roleColor ? { color: roleColor } : undefined}
         >
           {displayName}
         </span>
         {showUsername && (
           <span className="flex min-w-0 overflow-hidden">
-            <span className={`text-[12px] text-txt-tertiary min-w-0 truncate ${mobile ? 'pl-3' : 'pl-2.5'}`}>
+            <span className={`text-ui-caption text-txt-tertiary min-w-0 truncate ${mobile ? 'pl-3' : 'pl-2.5'}`}>
               @{canonical.username}
             </span>
           </span>
@@ -100,7 +100,7 @@ function MemberList({
   const { t } = useTranslation(['chat', 'common']);
   return (
     <>
-      <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
+      <div className="px-2 py-1.5 text-ui-caption font-bold text-txt-tertiary uppercase tracking-wider">
         {t('common:labels.members')}
       </div>
       {candidates.map((candidate, i) => (

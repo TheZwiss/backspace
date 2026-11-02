@@ -1,6 +1,10 @@
 import { isElectron } from './platform';
 
 export interface NotificationOptions {
+  silent?: boolean;
+  kind?: 'friend_request';
+  requestId?: string;
+  origin?: string;
   channelId?: string;
   spaceId?: string;
   userId?: string;
@@ -23,7 +27,7 @@ export function sendNotification(title: string, body: string, options?: Notifica
   if (isElectron()) {
     window.backspace!.showNotification(title, body, options);
   } else if ('Notification' in window && Notification.permission === 'granted') {
-    const notification = new Notification(title, { body, icon: '/icons/icon-192.png' });
+    const notification = new Notification(title, { body, icon: '/icons/icon-192.png', silent: options?.silent });
     notification.onclick = () => {
       window.focus();
       notification.close();

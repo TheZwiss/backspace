@@ -423,3 +423,17 @@ Every floating surface places itself with `computeFloatingPosition` (`hooks/useF
 | `GroupDmSettings.tsx` (modal hero + member-row previews) | varies | `modal` | Modal Overview tab |
 | `MobileGroupDmInfo.tsx` (pushed-screen hero) | 80 | `modal` | Mobile info screen hero |
 | `MobileDmsScreen.tsx` (DM list rows) | 40 | `channel` | Mobile sidebar parity with desktop `DmListItem` |
+
+## Shared visual controls (2026-11-02)
+
+- Use `ui-button` plus `ui-button-primary`, `ui-button-secondary`, `ui-button-danger` or `ui-button-warning`; the React `Button` primitive exports the same variants. Filled pastel warning/danger controls use a dark foreground. Primary hover and active have dedicated tokens.
+- `settings-section` is the default matte settings card. `ui-dialog-surface` and `ui-dialog-title` provide common dialog chrome; preserve purpose-specific widths and mobile sheets.
+- Native selects use `ui-select`; ranges use `ui-range`, with WebKit and Firefox thumb styling. Keep the native selection UI on touch layouts.
+- Typography roles: `text-ui-title` 18px, `text-ui-lead` 16px, `text-ui-message` 15px, `text-ui-body` 14px, `text-ui-label` 13px, `text-ui-caption` 12px, `text-ui-micro` 10px. Micro is for decorative badges, never essential instructions.
+- Mobile buttons/switches have at least 44px targets. The switch's visual track remains 24px high inside its target.
+- Keyboard focus must remain visible. Input rings and button rings replace, rather than stack on, the generic outline. Do not restore a universal `outline: none !important`.
+- Use the shared `Tooltip` for nonessential hover/focus explanations; keep an accessible name on icon buttons. Its `display: contents` wrapper preserves the child's layout and positioning. Long text wraps within the viewport. Touch interfaces do not depend on hover.
+- Overlay order is defined by `--layer-*`: fullscreen 100, modal 200, menu backdrop 399, menu 400, submenu 401, tooltip 500, confirmation 600, toast 700, attention notification 800. Portals still respect the active fullscreen container.
+- Native and in-app attention notices share `packages/desktop/resources/ui-theme.json`. Keep its colors synchronized with the CSS tokens (covered by `visualTheme.test.ts`). Native DM Sans is bundled with its OFL license. Localized labels must be escaped when interpolated into native HTML.
+
+The implementation and validation record is in `docs/audits/2026-11-02-ui-visual-implementation.md`.

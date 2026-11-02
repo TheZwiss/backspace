@@ -243,7 +243,7 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
         />
 
         {items.length === 0 && (
-          <p className="text-center text-[11px] text-txt-tertiary">{t('stickers.limits', { max: maxMb })}</p>
+          <p className="text-center text-ui-caption text-txt-tertiary">{t('stickers.limits', { max: maxMb })}</p>
         )}
 
         {error && (

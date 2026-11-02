@@ -54,14 +54,14 @@ export function DirectoryListingHint({ saveFirst, saving }: {
   };
 
   return (
-    <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
+    <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber space-y-2">
       <p>{t('admin:general.directory.listingHint', { setting: t('spaces:settings.discovery.directory.label') })}</p>
       {target !== null && (
         <button
           type="button"
           onClick={() => { void showMeWhere(); }}
           disabled={saving}
-          className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-[13px] font-medium transition-colors disabled:opacity-50"
+          className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-ui-label font-medium transition-colors disabled:opacity-50"
         >
           {saveFirst !== null ? t('admin:general.directory.saveAndShowMeWhere') : t('admin:general.directory.showMeWhere')}
         </button>

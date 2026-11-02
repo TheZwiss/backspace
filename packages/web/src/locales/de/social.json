@@ -1,4 +1,9 @@
 {
+  "friendNotification": {
+    "title": "Freundschaftsanfrage",
+    "body": "Möchte dich als Freund hinzufügen.",
+    "open": "Unterhaltung mit {{name}} öffnen"
+  },
   "tabs": {
     "all": "Alle",
     "pending": "Ausstehend",

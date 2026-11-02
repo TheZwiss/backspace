@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -56,7 +57,7 @@ function PackStickerGrid({ pack, query, onSelect }: { pack: StickerPackDetail; q
               className="aspect-square w-full object-contain transition-transform group-hover:scale-105"
               loading="lazy"
             />
-            <span className="mt-1 block truncate text-[10px] text-txt-tertiary">{item.name}</span>
+            <span className="mt-1 block truncate text-ui-micro text-txt-tertiary">{item.name}</span>
           </button>
         ))}
       </div>
@@ -89,7 +90,7 @@ function TokenStickerGrid({ items, query, onSelect }: {
               className="aspect-square w-full object-contain"
               loading="lazy"
             />
-            <span className="mt-1 block truncate text-[10px] text-txt-tertiary">{item.name}</span>
+            <span className="mt-1 block truncate text-ui-micro text-txt-tertiary">{item.name}</span>
           </button>
         ))}
       </div>
@@ -330,13 +331,13 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   selected ? 'h-7 opacity-100' : 'h-2 opacity-0 group-hover:h-4 group-hover:opacity-70'
                 }`}
               />
-              <button
+              <Tooltip content={space.name} position="top"><button
                 type="button"
                 onClick={() => setActiveTab(`space:${space.spaceId}`)}
                 aria-label={space.name}
-                title={space.name}
+
                 aria-current={selected ? 'page' : undefined}
-                className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-[11px] font-bold text-white shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
+                className={`relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-ui-caption font-bold text-white shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
                   selected
                     ? 'rounded-[11px] ring-1 ring-white/30'
                     : 'rounded-[16px] opacity-80 hover:-translate-y-0.5 hover:rounded-[11px] hover:opacity-100'
@@ -347,7 +348,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   ? <img src={icon} alt="" className="h-full w-full object-cover" loading="lazy" />
                   : <span aria-hidden="true">{space.name.slice(0, 2).toUpperCase()}</span>}
                 <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-b from-white/10 to-transparent" />
-              </button>
+              </button></Tooltip>
             </div>
           );
         })}
@@ -470,7 +471,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 <span className="flex h-8 w-8 items-center justify-center rounded-[11px] bg-accent-amber/15 text-base text-accent-amber">★</span>
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold">{t('stickers.favoritesTitle')}</h3>
-                  <p className="text-[11px] text-txt-tertiary">{t('stickers.stickersCount', { count: library?.favorites.length ?? 0 })}</p>
+                  <p className="text-ui-caption text-txt-tertiary">{t('stickers.stickersCount', { count: library?.favorites.length ?? 0 })}</p>
                 </div>
               </div>
               {(library?.favorites.length ?? 0) > 0 && <StickerSearchInput value={search} onChange={setSearch} />}
@@ -480,7 +481,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
             <>
               <div className="flex shrink-0 items-center gap-2.5 px-4 pb-2 pt-3">
                 <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[11px] text-[10px] font-bold text-white shadow-sm"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[11px] text-ui-micro font-bold text-white shadow-sm"
                   style={activeSpace?.icon ? undefined : { background: activeSpaceGradient?.gradient }}
                 >
                   {activeSpace?.icon
@@ -495,7 +496,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 </span>
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold">{currentPackDetail.name}</h3>
-                  <p className="truncate text-[11px] text-txt-tertiary">
+                  <p className="truncate text-ui-caption text-txt-tertiary">
                     {activeSpace?.name ?? t('stickers.packs')} · {t('stickers.stickersCount', { count: currentPackDetail.items.length })}
                   </p>
                 </div>
@@ -532,7 +533,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
           )}
 
           {/* Limits note */}
-          <div className="shrink-0 border-t border-border-soft px-4 py-2.5 text-[11px] text-txt-tertiary">{t('stickers.limits')}</div>
+          <div className="shrink-0 border-t border-border-soft px-4 py-2.5 text-ui-caption text-txt-tertiary">{t('stickers.limits')}</div>
 
           {/* Bottom Tabs & Store Button */}
           <div className="shrink-0 flex items-center justify-between border-t border-border-soft px-3 py-1.5 bg-surface-base/50">
@@ -541,10 +542,10 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 px-1"
             >
               {/* Personal Stickers tab */}
-              <button
+              <Tooltip content={t('stickers.title')} position="top"><button
                 type="button"
                 onClick={() => setActiveTab('personal')}
-                title={t('stickers.title')}
+
                 aria-label={t('stickers.title')}
                 className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
                   activeTab === 'personal'
@@ -555,14 +556,14 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                 </svg>
-              </button>
+              </button></Tooltip>
 
               {library && library.favorites.length > 0 && (
-                <button
+                <Tooltip content={t('stickers.favoritesTitle')} position="top"><button aria-label={t('stickers.favoritesTitle')}
                   type="button"
                   onClick={() => setActiveTab('favorites')}
-                  title={t('stickers.favoritesTitle')}
-                  aria-label={t('stickers.favoritesTitle')}
+
+
                   className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-sm transition-colors ${
                     activeTab === 'favorites'
                       ? 'bg-accent-amber/10 text-accent-amber shadow-sm ring-1 ring-inset ring-accent-amber/30'
@@ -570,17 +571,17 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   }`}
                 >
                   ★
-                </button>
+                </button></Tooltip>
               )}
 
               {library?.privatePacks.map(pack => (
-                <button
+                <Tooltip content={pack.name} position="top"><button
                   key={pack.id}
                   type="button"
                   onClick={() => setActiveTab(`user:${pack.id}`)}
-                  title={pack.name}
+
                   aria-label={pack.name}
-                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[10px] font-bold transition-colors ${
+                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-ui-micro font-bold transition-colors ${
                     activeTab === `user:${pack.id}`
                       ? 'bg-white/[0.08] ring-1 ring-inset ring-accent-primary/50 text-accent-primary'
                       : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
@@ -589,17 +590,17 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   {pack.items[0]
                     ? <img src={stickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
                     : pack.name.slice(0, 1)}
-                </button>
+                </button></Tooltip>
               ))}
 
               {library?.spaces.map(space => space.pack && (
-                <button
+                <Tooltip content={space.pack.name} position="top"><button
                   key={`pack:${space.spaceId}`}
                   type="button"
                   onClick={() => setActiveTab(`space:${space.spaceId}`)}
-                  title={space.pack.name}
+
                   aria-label={space.pack.name}
-                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-[11px] font-bold transition-colors ${
+                  className={`shrink-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg text-ui-caption font-bold transition-colors ${
                     activeTab === `space:${space.spaceId}`
                       ? 'bg-white/[0.08] ring-1 ring-inset ring-accent-primary/50 text-accent-primary'
                       : 'text-txt-tertiary opacity-70 hover:bg-interactive-hover hover:text-txt-primary hover:opacity-100'
@@ -608,7 +609,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   {space.pack.items[0]
                     ? <img src={stickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
                     : space.pack.name.slice(0, 1)}
-                </button>
+                </button></Tooltip>
               ))}
 
               {/* Installed packs tabs */}
@@ -621,11 +622,11 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                 const tabId = `store:${pack.id}`;
                 const isActive = activeTab === tabId;
                 return (
-                  <button
+                  <Tooltip content={pack.name} position="top"><button
                     key={pack.id}
                     type="button"
                     onClick={() => setActiveTab(tabId)}
-                    title={pack.name}
+
                     aria-label={pack.name}
                     className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg overflow-hidden transition-colors ${
                       isActive
@@ -636,20 +637,20 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                     {cover ? (
                       <img src={cover} alt={pack.name} className="h-5 w-5 object-contain" />
                     ) : (
-                      <span className="text-[11px] font-bold">{pack.name[0]}</span>
+                      <span className="text-ui-caption font-bold">{pack.name[0]}</span>
                     )}
-                  </button>
+                  </button></Tooltip>
                 );
               })}
             </nav>
 
             {/* Sticker Store modal button */}
             {manageable && (
-              <button
+              <Tooltip content={t('stickers.store')} position="top"><button
                 type="button"
                 onClick={() => setShowStore(true)}
-                title={t('stickers.store')}
-                aria-label={t('stickers.store')}
+
+
                 className="flex h-7 px-2 items-center gap-1.5 rounded-lg text-xs font-medium text-accent-primary hover:bg-accent-primary/10 transition-colors shrink-0 ml-1"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -658,7 +659,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   <path d="M16 10a4 4 0 0 1-8 0" />
                 </svg>
                 <span>{t('stickers.store')}</span>
-              </button>
+              </button></Tooltip>
             )}
           </div>
 

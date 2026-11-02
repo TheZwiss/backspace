@@ -287,6 +287,7 @@
     "disconnected": "Não foi possível cutucar: sem conexão com o servidor"
   },
   "nudge": {
+    "notice": "Chamou sua atenção!",
     "title": "Chamar atenção",
     "cooldown": "Aguarde 10 segundos entre envios",
     "choose": "Escolher efeito de atenção",

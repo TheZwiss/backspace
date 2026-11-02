@@ -51,3 +51,13 @@ desktop overlays or load the Electron-packaged original wink movies.
 Native display changes abort active desktop overlays; future receipts use the
 new display list. Preferences are evaluated when a call arrives. They do not
 install a continuous game watcher for an already playing animation.
+
+## Silenciamento individual de chamadas de atenção
+
+Em Configurações do usuário → Notificações → Pessoas silenciadas, selecione uma pessoa e um prazo: 15 minutos, 1 hora, 8 horas, 24 horas ou até reativar. Amigos e participantes de DMs conhecidas aparecem na lista; a busca direta também permite localizar usuários da instância. O menu de clique direito oferece as mesmas durações e a ação de reativar, com ícone de sino silenciado.
+
+O estado é salvo em `backspace-attention-mutes`, separado pela identidade da conta. A identidade canônica e o identificador da réplica são guardados para reconhecer a mesma pessoa nas instâncias conhecidas. O prazo é um timestamp absoluto: ao expirar, o próximo efeito é permitido sem depender de um timer em segundo plano. A lista aberta atualiza a expiração com um único timeout para o próximo prazo.
+
+`notifyNudge` verifica o silêncio antes de consultar monitores ou carregar a foto e verifica novamente antes de executar o efeito. Isso bloqueia som, animação e aviso; não bloqueia mensagens, chamadas, solicitações de amizade ou o registro de histórico da DM. O registro de nudge é passivo para os alertas normais de mensagem, evitando que contorne o silêncio tocando um segundo som.
+
+Validação: testes de prazo exato, silêncio permanente, reativação, isolamento entre contas/instâncias, persistência e bloqueio antes de consultar o contexto. A lista e a opção do menu foram conferidas no cliente de Alice; o Bob foi reativado após a verificação.

@@ -111,26 +111,26 @@ function MembersPanelRow({
             <div className="text-sm font-medium truncate">
               {displayName}
               {isFederationGlobeApplicable(canonical) && (
-                <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{parseFederatedUsername(canonical.username).domain}</span>
+                <span className="ml-1 text-ui-micro text-txt-tertiary opacity-60">@{parseFederatedUsername(canonical.username).domain}</span>
               )}
             </div>
             <div className="flex items-center gap-1 flex-wrap">
               {isOwner && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
+                <span className="text-ui-micro px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
                   {t('spaces:settings.members.owner')}
                 </span>
               )}
               {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
                 <span
                   key={r.id}
-                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  className="text-ui-micro px-1.5 py-0.5 rounded font-medium"
                   style={{ backgroundColor: `${r.color}20`, color: r.color }}
                 >
                   {r.name}
                 </span>
               ))}
               {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
-                <span className="text-[10px] text-txt-tertiary">{t('spaces:settings.members.noRoles')}</span>
+                <span className="text-ui-micro text-txt-tertiary">{t('spaces:settings.members.noRoles')}</span>
               )}
             </div>
           </div>
@@ -196,7 +196,7 @@ function MembersPanelRow({
             );
           })}
           {lockKinds.length > 0 && (
-            <div className="flex items-start gap-2 pt-1 text-[12px] leading-snug text-txt-tertiary">
+            <div className="flex items-start gap-2 pt-1 text-ui-caption leading-snug text-txt-tertiary">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="flex-shrink-0 mt-[2px]">
                 <path d={LOCK_ICON} />
               </svg>
@@ -209,7 +209,7 @@ function MembersPanelRow({
             <div className="flex items-center gap-2 mt-1.5">
               <button
                 onClick={() => onSaveRoles(member.userId)}
-                className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
+                className="ui-button ui-button-primary transition-colors"
               >
                 {t('common:actions.save')}
               </button>
@@ -337,7 +337,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
       <p className="text-xs text-txt-tertiary">{t('spaces:settings.members.description')}</p>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('spaces:settings.members.listHeading', { total: f.formatNumber(members.length) })}
         </div>
         <div className="rounded-lg bg-white/[0.02] p-2">

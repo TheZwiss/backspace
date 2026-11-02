@@ -100,13 +100,13 @@ export function HubCard(props: {
         >
           {icon}
         </div>
-        <h3 id={titleId} className="text-[15px] font-bold text-txt-primary min-w-0">
+        <h3 id={titleId} className="text-ui-message font-bold text-txt-primary min-w-0">
           {title}
         </h3>
       </div>
 
       {body !== undefined && body !== null && (
-        <div data-hub-card-body className="text-[13px] text-txt-secondary flex-1">
+        <div data-hub-card-body className="text-ui-label text-txt-secondary flex-1">
           {body}
         </div>
       )}
