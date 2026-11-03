@@ -1,4 +1,4 @@
-import workletUrl from '../audio/worklets/processAudio.worklet.js?url';
+import workletUrl from '../audio/worklets/processAudio.worklet.js?url&no-inline';
 import { getElectronAPI } from '../platform/platform';
 
 /** No local playback: the destination is published to LiveKit only. */
