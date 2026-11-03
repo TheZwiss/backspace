@@ -29,6 +29,7 @@ import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
 import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { ProfileActivities } from '../ui/ProfileActivities';
 import { useDialogLayer } from '../../hooks/useDialogLayer';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 const EMPTY_ACTIVITIES: Activity[] = [];
 
@@ -59,9 +60,11 @@ export function UserProfileModal() {
   const [mutualSpaces, setMutualSpaces] = useState<MutualSpace[]>([]);
   const [loadingMutuals, setLoadingMutuals] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [confirmRemoveFriend, setConfirmRemoveFriend] = useState(false);
 
   const isOpen = activeModal === 'userProfile';
   const userId = modalData?.userId as string | undefined;
+  useEffect(() => { setConfirmRemoveFriend(false); }, [userId, modalData?.origin, isOpen]);
   const passedUser = modalData?.user as User | undefined;
   const passedOrigin = (modalData?.origin as string | undefined) ?? '';
   const memberContext = (modalData?.member as ProfileMemberContext | null | undefined) ?? null;
@@ -195,7 +198,10 @@ export function UserProfileModal() {
   const handleRemoveFriend = async () => {
     if (friendship.state !== 'friends') return;
     setFriendActionLoading(true);
-    try { await removeFriend(friendship.friend, friendship.friend._instanceOrigin); }
+    try {
+      await removeFriend(friendship.friend, friendship.friend._instanceOrigin);
+      setConfirmRemoveFriend(false);
+    }
     catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
@@ -514,7 +520,7 @@ export function UserProfileModal() {
             )}
 
             {friendship.state === 'friends' && (
-              <button data-icon-motion="press" onClick={handleRemoveFriend} disabled={friendActionLoading}
+              <button data-icon-motion="press" onClick={() => setConfirmRemoveFriend(true)} disabled={friendActionLoading}
                 className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:friend.remove')}
               </button>
@@ -522,7 +528,16 @@ export function UserProfileModal() {
           </div>
         )}
       </div>
-
+      <ConfirmDialog
+        isOpen={confirmRemoveFriend && friendship.state === 'friends'}
+        onClose={() => setConfirmRemoveFriend(false)}
+        onConfirm={handleRemoveFriend}
+        title={t('social:removeFriend.title')}
+        description={t('social:removeFriend.description', { name: user?.displayName ?? user?.username ?? t('social:removeFriend.fallbackName') })}
+        confirmLabel={t('common:actions.remove')}
+        variant="danger"
+        loading={friendActionLoading}
+      />
     </div>
   );
 }

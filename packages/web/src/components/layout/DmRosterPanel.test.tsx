@@ -27,7 +27,7 @@ type UIStateShape = {
   addToast: ReturnType<typeof vi.fn>;
 };
 type AuthStateShape = { user: User | null };
-type SocialStateShape = { friends: { id: string; _instanceOrigin: string }[]; removeFriend: ReturnType<typeof vi.fn> };
+type SocialStateShape = { friends: { id: string; _instanceOrigin: string }[]; requests: []; removeFriend: ReturnType<typeof vi.fn> };
 
 const chatState: ChatStateShape = { currentChannelId: 'dm-1' };
 const spaceState: SpaceStateShape = {
@@ -44,7 +44,7 @@ const uiState: UIStateShape = {
   addToast: vi.fn(),
 };
 const authState: AuthStateShape = { user: null };
-const socialState: SocialStateShape = { friends: [], removeFriend: vi.fn() };
+const socialState: SocialStateShape = { friends: [], requests: [], removeFriend: vi.fn() };
 
 vi.mock('../../stores/chatStore', () => ({
   useChatStore: Object.assign(
@@ -211,7 +211,7 @@ function renderPanel() {
 }
 
 function getMenuLabels(): string[] {
-  const buttons = document.querySelectorAll<HTMLButtonElement>('div.fixed.z-\\[200\\] button');
+  const buttons = document.querySelectorAll<HTMLButtonElement>('[role="menu"] button');
   return Array.from(buttons).map((b) => b.textContent?.trim() ?? '');
 }
 
@@ -359,7 +359,7 @@ describe('DmRosterPanel — action wiring', () => {
     expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', expect.objectContaining({ id: 'tgt' }));
   });
 
-  it('remove-friend action: calls socialStore.removeFriend with the member row and the DM origin', async () => {
+  it('does not offer friendship removal in the group roster', async () => {
     const u = userEvent.setup();
     const me = makeUser({ id: 'me' });
     const friend = makeUser({ id: 'friend-1', username: 'friend', displayName: 'Friend' });
@@ -380,12 +380,9 @@ describe('DmRosterPanel — action wiring', () => {
     expect(friendRow).toBeTruthy();
     friendRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 50 }));
 
-    const removeBtn = await screen.findByText('Remove Friend');
-    await u.click(removeBtn);
-
-    await waitFor(() => {
-      expect(socialState.removeFriend).toHaveBeenCalledWith(expect.objectContaining({ id: 'friend-1' }), '');
-    });
+    await waitFor(() => expect(screen.getByText('View Profile')).toBeInTheDocument());
+    expect(screen.queryByText('Remove Friend')).not.toBeInTheDocument();
+    expect(socialState.removeFriend).not.toHaveBeenCalled();
   });
 
   it('profile action: calls openUserProfile with the row user', async () => {

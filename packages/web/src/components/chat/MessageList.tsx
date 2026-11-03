@@ -8,7 +8,6 @@ import { Message } from './Message';
 import { useChatStore, type LoadAroundResult, type LoadNewerResult } from '../../stores/chatStore';
 import { useSpaceStore, useIsDmChannel, getChannelOrigin } from '../../stores/spaceStore';
 import { isMe, useMyRowForOrigin } from '../../stores/authStore';
-import { useSocialStore } from '../../stores/socialStore';
 import {
   usePendingMessageStore,
   isPendingMessage,
@@ -21,7 +20,7 @@ import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { isMine, parseFederatedUsername } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
 import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -1299,8 +1298,6 @@ function UnreadDivider({ label, name, dateLabel }: { label: string; name: string
 function WelcomeHeader({ channelId }: { channelId: string }) {
   const { t } = useTranslation(['chat', 'common']);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const removeFriend = useSocialStore((s) => s.removeFriend);
-  const friends = useSocialStore((s) => s.friends);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const openModal = useUIStore((s) => s.openModal);
   const isDm = useIsDmChannel(channelId);
@@ -1393,11 +1390,6 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const { baseName } = parseFederatedUsername(otherUser?.username ?? '');
     const displayName = otherUser?.displayName ?? (baseName || t('chat:list.welcome.dm.fallbackName'));
     const mentionName = otherUser?.displayName ?? baseName;
-    // The same person (`userKey`), whichever instance's row each list holds.
-    const friend = otherUser
-      ? friends.find(f => userKey(f, f._instanceOrigin) === userKey(otherUser, viewer.origin))
-      : undefined;
-    const isFriend = !!friend;
 
     return (
       <div className="px-4 pt-8 pb-4">
@@ -1417,16 +1409,6 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <p className="text-xs text-txt-tertiary mt-1">
             {t('chat:list.welcome.dm.federatedNotice')}
           </p>
-        )}
-        {isFriend && otherUser && (
-          <div className="mt-4">
-            <button data-icon-motion="press"
-              onClick={() => friend && removeFriend(friend, friend._instanceOrigin)}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
-            >
-              {t('chat:list.welcome.dm.removeFriend')}
-            </button>
-          </div>
         )}
         <div className="mt-6 border-b border-interactive-muted" />
       </div>

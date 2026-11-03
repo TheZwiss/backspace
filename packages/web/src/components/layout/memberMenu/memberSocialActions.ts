@@ -36,7 +36,7 @@ export function friendshipMenuItems(user: Pick<User, 'id' | 'username' | 'homeIn
   });
   switch (friendship.state) {
     case 'self': return [];
-    case 'friends': return [action('remove-friend', t('social:friend.remove'), () => social.removeFriend(friendship.friend, friendship.friend._instanceOrigin))];
+    case 'friends': return [];
     case 'outbound_pending': return [action('cancel-friend', t('social:request.cancel'), () => social.cancelFriendRequest(friendship.request.id, friendship.request._instanceOrigin, friendship.request.user ?? undefined))];
     case 'inbound_pending': return [
       action('accept-friend', t('common:actions.accept'), () => social.updateFriendRequest(friendship.request.id, friendship.request._instanceOrigin, 'accepted', friendship.request.user ?? undefined)),
