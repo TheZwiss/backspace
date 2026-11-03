@@ -11,7 +11,7 @@ export function MobileNav() {
   return (
     <>
       {/* Hamburger button in header */}
-      <button
+      <button data-icon-motion="press"
         onClick={toggleSidebar}
         className="fixed top-3 left-3 z-[120] p-1.5 rounded bg-surface-channel text-txt-primary desktop:hidden"
       >
@@ -26,7 +26,7 @@ export function MobileNav() {
 
       {/* Backdrop when sidebar is open on mobile */}
       {sidebarOpen && (
-        <div
+        <div data-icon-motion="press"
           className="fixed inset-0 bg-black/50 z-[35] desktop:hidden"
           onClick={toggleSidebar}
         />

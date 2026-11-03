@@ -1,0 +1,96 @@
+{
+  "before": {
+    "count": 1,
+    "focusInside": true,
+    "inert": 2
+  },
+  "nested": {
+    "count": 2,
+    "dialogs": [
+      {
+        "label": null,
+        "heading": "Minha conta",
+        "inert": false
+      },
+      {
+        "label": "Excluir conta",
+        "heading": "Excluir conta",
+        "inert": false
+      }
+    ],
+    "focus": "<button class=\"text-txt-tertiary hover:text-txt-primary transition-colors p-1\" aria-label=\"Fechar\"><svg class=\"w-5 h-5\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"2\"><path str"
+  },
+  "focus": [
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    },
+    {
+      "inside": true,
+      "active": "BUTTON"
+    }
+  ],
+  "afterEscape": {
+    "count": 1,
+    "focusInside": true,
+    "hasSettings": true
+  },
+  "closed": {
+    "count": 1,
+    "inert": 1,
+    "activeTitle": "Configurações",
+    "activeAria": "Configurações"
+  }
+}

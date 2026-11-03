@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
@@ -22,16 +23,16 @@ export function ChannelHeaderTopic({ channelName, topic }: ChannelHeaderTopicPro
   return (
     <>
       <div className="w-[1px] h-5 bg-border-soft mx-2 flex-shrink-0" aria-hidden="true" />
-      <button
+      <Tooltip content={topic} position="top"><button data-icon-motion="press"
         type="button"
         onClick={() => setIsOpen(true)}
-        title={topic}
+
         aria-haspopup="dialog"
-        className="min-w-0 truncate rounded-[4px] px-1 -mx-1 text-left text-[13px] leading-tight text-txt-tertiary transition-colors hover:text-txt-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+        className="min-w-0 truncate rounded-[4px] px-1 -mx-1 text-left text-ui-label leading-tight text-txt-tertiary transition-colors hover:text-txt-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
       >
         <span className="sr-only">{t('main.topic.show')}</span>{' '}
         {topic}
-      </button>
+      </button></Tooltip>
       <Modal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}

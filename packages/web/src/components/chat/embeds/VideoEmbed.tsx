@@ -45,7 +45,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
             allowFullScreen
           />
         ) : (
-          <button
+          <button data-icon-motion="toggle"
             type="button"
             data-embed-thumbnail
             onClick={() => setIsPlaying(true)}
@@ -80,16 +80,16 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
       {(embed.title || providerLabel) && (
         <div className="px-3 py-2">
           {providerLabel && (
-            <div className="text-[12px] text-txt-tertiary font-medium mb-0.5">
+            <div className="text-ui-caption text-txt-tertiary font-medium mb-0.5">
               {providerLabel}
             </div>
           )}
           {embed.title && (
-            <a
+            <a data-icon-motion="press"
               href={embed.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[14px] text-sky-400 font-semibold hover:underline line-clamp-2"
+              className="text-ui-body text-sky-400 font-semibold hover:underline line-clamp-2"
             >
               {embed.title}
             </a>

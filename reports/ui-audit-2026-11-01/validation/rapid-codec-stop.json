@@ -1,0 +1,76 @@
+{
+  "events": [
+    {
+      "event": "localTrackUnpublished",
+      "at": 1058855.6000000015,
+      "sid": "TR_VSG3JtJCHSEoof"
+    }
+  ],
+  "alice": {
+    "time": 1060686.700000003,
+    "route": "/channels/375400147737526272/375400147737526276",
+    "voice": "connected",
+    "sharing": false,
+    "config": {
+      "previewMode": "normal",
+      "height": 720,
+      "fps": 60,
+      "mode": "gaming",
+      "customBitrateKbps": null,
+      "shareAudio": false,
+      "codec": "h264"
+    },
+    "participants": [
+      {
+        "userId": "375397996164431872",
+        "identity": "375397996164431872:test_alice",
+        "local": true,
+        "sharing": false,
+        "republishing": false
+      },
+      {
+        "userId": "375397997229785088",
+        "identity": "375397997229785088:test_bob",
+        "local": false,
+        "sharing": false,
+        "republishing": false
+      }
+    ],
+    "videos": [],
+    "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n15:19\nT\nTest Alice\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\nONLINE — 1\nT\nTest Bob"
+  },
+  "bob": {
+    "time": 169392.1000000015,
+    "route": "/channels/375400147737526272/375400147737526276",
+    "voice": "connected",
+    "sharing": false,
+    "config": {
+      "previewMode": "normal",
+      "height": 720,
+      "fps": 60,
+      "mode": "gaming",
+      "customBitrateKbps": null,
+      "shareAudio": false,
+      "codec": "vp9"
+    },
+    "participants": [
+      {
+        "userId": "375397997229785088",
+        "identity": "375397997229785088:test_bob",
+        "local": true,
+        "sharing": false,
+        "republishing": false
+      },
+      {
+        "userId": "375397996164431872",
+        "identity": "375397996164431872:test_alice",
+        "local": false,
+        "sharing": false,
+        "republishing": false
+      }
+    ],
+    "videos": [],
+    "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n15:19\nT\nTest Bob\nT\nTest Alice\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nDONO — 1\nT\nTest Alice\nONLINE — 1\nT\nTest Bob"
+  },
+  "liveCaptures": 0
+}

@@ -273,7 +273,7 @@ export function StickerLibraryPanel() {
         <h3 className="text-sm font-semibold text-txt-primary">{t('settings:stickers.packs')}</h3>
         <div className="mt-3 flex flex-wrap gap-2">
           {items.privatePacks.map((pack) => (
-            <button
+            <button data-icon-motion="press"
               key={pack.id}
               type="button"
               onClick={() => setActivePackId(pack.id)}
@@ -291,7 +291,7 @@ export function StickerLibraryPanel() {
             placeholder={t('settings:stickers.newPack')}
             className="input-standard min-w-0 flex-1"
           />
-          <button type="button" disabled={busy || !newPackName.trim()} onClick={() => void createPack()} className="rounded-lg bg-accent-primary px-3 py-2 text-sm text-white disabled:opacity-40">
+          <button data-icon-motion="press" type="button" disabled={busy || !newPackName.trim()} onClick={() => void createPack()} className="ui-button ui-button-primary disabled:opacity-40">
             {t('settings:stickers.createPack')}
           </button>
         </div>
@@ -316,10 +316,10 @@ export function StickerLibraryPanel() {
                   aria-label={t('chat:stickers.packName')}
                   className="input-standard min-w-48 flex-1"
                 />
-                <button type="submit" disabled={busy || !normalizeStickerName(packNameDraft)} className="sticker-primary-button">
+                <button data-icon-motion="press" type="submit" disabled={busy || !normalizeStickerName(packNameDraft)} className="sticker-primary-button">
                   {t('chat:stickers.save')}
                 </button>
-                <button type="button" disabled={busy} onClick={() => setRenamingPack(false)} className="sticker-secondary-button">
+                <button data-icon-motion="press" type="button" disabled={busy} onClick={() => setRenamingPack(false)} className="sticker-secondary-button">
                   {t('chat:stickers.cancel')}
                 </button>
               </form>
@@ -331,7 +331,7 @@ export function StickerLibraryPanel() {
             )}
             {!renamingPack && (
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={busy}
                   onClick={() => {
@@ -342,7 +342,7 @@ export function StickerLibraryPanel() {
                 >
                   {t('chat:stickers.rename')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={busy}
                   onClick={() => setPackToDelete(activePack)}
@@ -350,11 +350,11 @@ export function StickerLibraryPanel() {
                 >
                   {t('settings:stickers.deletePack')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={busy || activePack.itemCount >= MAX_PRIVATE_STICKERS_PER_PACK}
                   onClick={() => fileRef.current?.click()}
-                  className="rounded-lg bg-accent-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                  className="ui-button ui-button-primary disabled:opacity-40"
                 >
                   {t('chat:stickers.addMore')}
                 </button>
@@ -387,10 +387,10 @@ export function StickerLibraryPanel() {
                 aria-label={t('settings:stickers.itemName')}
                 className="input-standard min-w-48 flex-1"
               />
-              <button type="submit" disabled={busy || !normalizeStickerName(renamingItem.name)} className="sticker-primary-button">
+              <button data-icon-motion="press" type="submit" disabled={busy || !normalizeStickerName(renamingItem.name)} className="sticker-primary-button">
                 {t('chat:stickers.save')}
               </button>
-              <button type="button" disabled={busy} onClick={() => setRenamingItem(null)} className="sticker-secondary-button">
+              <button data-icon-motion="press" type="button" disabled={busy} onClick={() => setRenamingItem(null)} className="sticker-secondary-button">
                 {t('chat:stickers.cancel')}
               </button>
             </form>
@@ -399,22 +399,22 @@ export function StickerLibraryPanel() {
             {activePack.items.map((item) => (
               <div key={item.id} className="group relative aspect-square rounded-xl bg-surface-base p-2">
                 <img src={stickerImage(item.token)} alt={item.name} className="h-full w-full object-contain" />
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   aria-label={t('chat:stickers.renameNamed', { name: item.name })}
                   onClick={() => setRenamingItem({ id: item.id, name: item.name })}
-                  className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                  className="absolute left-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-txt-secondary opacity-100 transition-opacity focus-visible:opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100"
                 >
                   ✎
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   aria-label={t('chat:stickers.remove')}
                   onClick={() => void (async () => {
                     await api.stickerLibrary.removeItem(activePack.id, item.id);
                     await load();
                   })().catch((err) => setError(describeError(err)))}
-                  className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                  className="absolute right-1 top-1 rounded-full bg-surface-overlay px-1.5 text-xs text-accent-rose opacity-100 transition-opacity focus-visible:opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100"
                 >
                   ×
                 </button>
@@ -443,10 +443,10 @@ export function StickerLibraryPanel() {
               aria-label={t('settings:stickers.itemName')}
               className="input-standard min-w-48 flex-1"
             />
-            <button type="submit" disabled={busy || !normalizeStickerName(favoriteNameDraft)} className="sticker-primary-button">
+            <button data-icon-motion="press" type="submit" disabled={busy || !normalizeStickerName(favoriteNameDraft)} className="sticker-primary-button">
               {t('chat:stickers.addMore')}
             </button>
-            <button type="button" disabled={busy} onClick={() => setFavoriteToAdd(null)} className="sticker-secondary-button">
+            <button data-icon-motion="pulse" type="button" disabled={busy} onClick={() => setFavoriteToAdd(null)} className="sticker-secondary-button">
               {t('chat:stickers.cancel')}
             </button>
           </form>
@@ -455,8 +455,8 @@ export function StickerLibraryPanel() {
           {items.favorites.map((favorite) => (
             <div key={favorite.id} className="group relative aspect-square rounded-lg bg-surface-base p-1.5">
               <img src={stickerImage(favorite.token)} alt={favorite.name} className="h-full w-full object-contain" />
-              <div className="absolute inset-x-1 bottom-1 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                <button
+              <div className="absolute inset-x-1 bottom-1 flex gap-1 opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 desktop:group-focus-within:opacity-100">
+                <button data-icon-motion="pulse"
                   type="button"
                   disabled={!activePack}
                   aria-label={`${t('settings:stickers.itemName')}: ${favorite.name}`}
@@ -464,18 +464,18 @@ export function StickerLibraryPanel() {
                     setFavoriteToAdd(favorite);
                     setFavoriteNameDraft(favorite.name);
                   }}
-                  className="min-w-0 flex-1 truncate rounded bg-accent-primary px-1 py-0.5 text-[10px] text-white disabled:opacity-40"
+                  className="ui-button ui-button-primary min-w-0 flex-1 truncate disabled:opacity-40"
                 >
                   +
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   aria-label={`${t('chat:stickers.remove')}: ${favorite.name}`}
                   onClick={() => void (async () => {
                     await api.stickerLibrary.unfavorite(favorite.id);
                     await load();
                   })().catch((err) => setError(describeError(err)))}
-                  className="rounded bg-surface-overlay px-1 py-0.5 text-[10px] text-accent-rose"
+                  className="rounded bg-surface-overlay px-1 py-0.5 text-ui-micro text-accent-rose"
                 >
                   ×
                 </button>
@@ -493,14 +493,14 @@ export function StickerLibraryPanel() {
             <select
               value={shareTargets[activePack.id] ?? 'instance'}
               onChange={(event) => setShareTargets((current) => ({ ...current, [activePack.id]: event.target.value }))}
-              className="input-standard min-w-48"
+              className="ui-select min-w-48"
             >
               <option value="instance">{t('settings:stickers.instance')}</option>
               {items.spaces.map((space) => (
                 <option key={space.spaceId} value={space.spaceId}>{space.name}</option>
               ))}
             </select>
-            <button type="button" disabled={busy} onClick={() => void sharePack()} className="rounded-lg bg-accent-primary px-3 py-2 text-sm text-white disabled:opacity-40">
+            <button data-icon-motion="press" type="button" disabled={busy} onClick={() => void sharePack()} className="ui-button ui-button-primary disabled:opacity-40">
               {t('settings:stickers.requestShare')}
             </button>
           </div>

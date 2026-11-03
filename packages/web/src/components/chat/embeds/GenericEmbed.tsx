@@ -22,20 +22,20 @@ export function GenericEmbed({ embed }: GenericEmbedProps) {
     <div className="mt-2 max-w-[400px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard flex overflow-hidden">
       <div className="flex-1 p-3 min-w-0">
         {providerName && (
-          <div className="text-[12px] text-txt-tertiary font-medium mb-1 truncate">
+          <div className="text-ui-caption text-txt-tertiary font-medium mb-1 truncate">
             {providerName}
           </div>
         )}
-        <a
+        <a data-icon-motion="press"
           href={embed.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[16px] text-sky-400 font-semibold hover:underline block mb-2 truncate"
+          className="text-ui-lead text-sky-400 font-semibold hover:underline block mb-2 truncate"
         >
           {embed.title}
         </a>
         {embed.description && (
-          <div className="text-[14px] text-txt-message leading-[1.125rem] line-clamp-3">
+          <div className="text-ui-body text-txt-message leading-[1.125rem] line-clamp-3">
             {embed.description}
           </div>
         )}

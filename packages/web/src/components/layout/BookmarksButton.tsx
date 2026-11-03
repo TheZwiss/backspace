@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { BookmarkIcon } from '../ui/BookmarkIcon';
@@ -12,16 +13,16 @@ export function BookmarksButton() {
   const openModal = useUIStore((s) => s.openModal);
   const open = useUIStore((s) => s.activeModal === 'bookmarks');
   return (
-    <button
+    <Tooltip content={t('title')} position="top"><button data-icon-motion="pulse"
       type="button"
       onClick={() => openModal('bookmarks')}
       className="w-8 h-8 flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"
-      title={t('title')}
+
       aria-label={t('title')}
       aria-haspopup="dialog"
       aria-expanded={open}
     >
       <BookmarkIcon size={20} />
-    </button>
+    </button></Tooltip>
   );
 }

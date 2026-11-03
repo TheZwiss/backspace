@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "Personensuche",
+      "description": "Wähle, wer vor einer Suche erscheint. Die direkte Suche und das Hinzufügen über einen Space bleiben verfügbar.",
+      "search": "Nur direkte Suche (Standard)",
+      "shared": "Personen aus gemeinsamen Spaces",
+      "all": "Alle Personen dieser Instanz"
+    },
     "title": "Allgemein",
     "description": "Richte deine Backspace-Instanz ein. Diese Einstellungen gelten für alle Nutzer.",
     "instanceName": {

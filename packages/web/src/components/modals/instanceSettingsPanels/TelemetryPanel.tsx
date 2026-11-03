@@ -124,7 +124,7 @@ export function TelemetryPanel() {
           <div className="rounded-lg bg-accent-rose/10 border border-accent-rose/20 p-3.5 text-sm text-txt-secondary">
             {loadError}
           </div>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => void loadStatus()}
             className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
@@ -218,13 +218,13 @@ export function TelemetryPanel() {
 
       {/* The real payload, not a description of one */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('telemetry:panel.previewTitle')}
         </div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2">
           <PayloadPreview preview={preview} defaultOpen />
           {previewError && <p className="text-xs text-txt-danger">{previewError}</p>}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => void loadPreview()}
             disabled={refreshing}
@@ -235,7 +235,7 @@ export function TelemetryPanel() {
         </div>
       </div>
 
-      <a
+      <a data-icon-motion="press"
         href={DOC_URL}
         target="_blank"
         rel="noopener noreferrer"

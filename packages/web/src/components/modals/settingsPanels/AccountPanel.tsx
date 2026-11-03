@@ -363,7 +363,7 @@ export function AccountPanel() {
           {homeConnection && (
             <>
               {' '}{t('settings:account.detached.reattachHint', { username: homeConnection.username, homeInstance: formerHome })}
-              <button
+              <button data-icon-motion="attach"
                 type="button"
                 onClick={handleReattach}
                 disabled={reattaching}
@@ -382,7 +382,7 @@ export function AccountPanel() {
       )}
       {/* ── Profile Customization ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:account.profile.sectionTitle')}
         </div>
 
@@ -408,13 +408,13 @@ export function AccountPanel() {
               className="mt-[-32px] mb-2"
             />
             <div
-              className="font-semibold text-[15px] leading-tight text-txt-primary"
+              className="font-semibold text-ui-message leading-tight text-txt-primary"
             >
               {effectiveDisplayName}
             </div>
-            <div className="text-[12px] text-txt-tertiary">@{user.username}</div>
+            <div className="text-ui-caption text-txt-tertiary">@{user.username}</div>
             {bio.trim() && (
-              <div className="text-[12px] text-txt-secondary mt-1.5 whitespace-pre-wrap break-words line-clamp-3">
+              <div className="text-ui-caption text-txt-secondary mt-1.5 whitespace-pre-wrap break-words line-clamp-3">
                 {bio.trim()}
               </div>
             )}
@@ -422,12 +422,12 @@ export function AccountPanel() {
         </div>
 
         {/* Upload controls */}
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-4">
+        <div className="settings-section space-y-4">
           {/* Avatar upload */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.avatar.label')}</label>
             <div className="flex items-center gap-3">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={uploadingAvatar}
@@ -462,7 +462,7 @@ export function AccountPanel() {
                 )}
               </button>
               <div className="flex flex-col gap-1">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={uploadingAvatar}
@@ -471,7 +471,7 @@ export function AccountPanel() {
                   {t('settings:account.profile.avatar.change')}
                 </button>
                 {(displayAvatarSrc || user.avatar) && avatarFilename !== '' && (
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleRemoveAvatar}
                     className="text-xs text-txt-danger hover:underline text-left"
@@ -493,7 +493,7 @@ export function AccountPanel() {
           {/* Banner upload */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.profile.banner.label')}</label>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => bannerInputRef.current?.click()}
               disabled={uploadingBanner}
@@ -526,7 +526,7 @@ export function AccountPanel() {
               )}
             </button>
             <div className="flex gap-2 mt-1">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => bannerInputRef.current?.click()}
                 disabled={uploadingBanner}
@@ -535,7 +535,7 @@ export function AccountPanel() {
                 {t('settings:account.profile.banner.change')}
               </button>
               {(displayBannerSrc || user.banner) && bannerFilename !== '' && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={handleRemoveBanner}
                   className="text-xs text-txt-danger hover:underline"
@@ -560,7 +560,7 @@ export function AccountPanel() {
               {AVATAR_COLORS.map((key) => {
                 const entry = AVATAR_GRADIENT_MAP[key];
                 return (
-                  <button
+                  <button data-icon-motion="press"
                     key={key}
                     type="button"
                     onClick={() => setAvatarColorState(key)}
@@ -586,7 +586,7 @@ export function AccountPanel() {
                 BANNER_COLOR_PRESETS.map((family) => {
                   const color = family[row]!;
                   return (
-                    <button
+                    <button data-icon-motion="press"
                       key={color}
                       type="button"
                       onClick={() => { setAccentColor(color); setCustomHex(color); }}
@@ -624,7 +624,7 @@ export function AccountPanel() {
                 />
               )}
               {accentColor && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setAccentColor(null); setCustomHex(''); }}
                   className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -649,7 +649,7 @@ export function AccountPanel() {
                 className="input-standard w-full resize-none"
                 maxLength={BIO_MAX_LENGTH}
               />
-              <span className="absolute bottom-2 right-2 text-[10px] text-txt-tertiary">
+              <span className="absolute bottom-2 right-2 text-ui-micro text-txt-tertiary">
                 {t('settings:account.profile.bio.counter', { used: bio.length, max: BIO_MAX_LENGTH })}
               </span>
             </div>
@@ -659,12 +659,12 @@ export function AccountPanel() {
 
       {/* ── Account ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.details.sectionTitle')}</div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-4">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('settings:account.details.sectionTitle')}</div>
+        <div className="settings-section space-y-4">
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.details.status.label')}</label>
             <div className="relative">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={statusOpen}
@@ -682,7 +682,7 @@ export function AccountPanel() {
               {statusOpen && (
                 <MotionMenu role="listbox" aria-label={t('settings:account.details.status.label')} className="motion-menu-enter absolute z-20 mt-1 w-full rounded-md border border-border-hard bg-surface-channel p-1 shadow-lg">
                   {CHOSEN_STATUS_OPTIONS.map((option) => (
-                    <button
+                    <button data-icon-motion="press"
                       key={option.value}
                       type="button"
                       role="option"
@@ -724,8 +724,8 @@ export function AccountPanel() {
 
       {/* ── Password ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.password')}</div>
-        <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.password')}</div>
+        <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="settings-section space-y-3">
           <input type="text" autoComplete="username" value={user.username} readOnly tabIndex={-1} className="sr-only" />
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">{t('settings:account.password.current.label')}</label>
@@ -738,7 +738,7 @@ export function AccountPanel() {
                 placeholder={t('settings:account.password.current.placeholder')}
                 autoComplete="current-password"
               />
-              <button
+              <button data-icon-motion="toggle"
                 type="button"
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                 aria-label={showCurrentPassword ? t('settings:account.password.hide') : t('settings:account.password.show')}
@@ -768,7 +768,7 @@ export function AccountPanel() {
                 placeholder={t('settings:account.password.new.placeholder', { min: PASSWORD_MIN_LENGTH })}
                 autoComplete="new-password"
               />
-              <button
+              <button data-icon-motion="toggle"
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
                 aria-label={showNewPassword ? t('settings:account.password.hide') : t('settings:account.password.show')}
@@ -802,10 +802,10 @@ export function AccountPanel() {
           {passwordError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
           )}
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {passwordLoading ? t('settings:account.password.submitting') : t('settings:account.password.submit')}
           </button>
@@ -814,14 +814,14 @@ export function AccountPanel() {
 
       {/* ── Danger Zone ── */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
         <div className="rounded-lg bg-accent-rose/5 border border-accent-rose/20 p-3.5">
           <p className="text-sm text-txt-secondary mb-3">
             {t('settings:account.danger.description')}
           </p>
-          <button
+          <button data-icon-motion="press"
             onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors"
+            className="ui-button ui-button-danger transition-colors"
           >
             {t('settings:account.danger.deleteButton')}
           </button>
@@ -836,16 +836,16 @@ export function AccountPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={isLoading || uploadingAvatar || uploadingBanner}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {isLoading ? t('common:states.saving') : t('common:actions.save')}
               </button>

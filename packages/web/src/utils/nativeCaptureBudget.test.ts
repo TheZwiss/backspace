@@ -1,0 +1,31 @@
+import { EventEmitter } from 'events';
+import { RoomEvent, type Room } from 'livekit-client';
+import { afterEach, expect, it, vi } from 'vitest';
+import { installNativeCaptureBudget } from './nativeCaptureBudget';
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
+it('reduces cadence only without peers and focus, restoring the requested rate on peer arrival', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+  const room = Object.assign(new EventEmitter(), { remoteParticipants: new Map() });
+  const setRate = vi.fn(), stop = vi.fn();
+  const track = Object.assign(new EventTarget(), { captureMetrics: {}, setFrameRate: setRate, stop });
+  installNativeCaptureBudget(room as unknown as Room, track as never, 60);
+  expect(setRate).toHaveBeenLastCalledWith(60); setRate.mockClear();
+  await vi.advanceTimersByTimeAsync(4999); expect(setRate).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1); expect(setRate).toHaveBeenLastCalledWith(5);
+  room.remoteParticipants.set('bob', {}); room.emit(RoomEvent.ParticipantConnected);
+  expect(setRate).toHaveBeenLastCalledWith(60);
+  track.setFrameRate(30); expect(setRate).toHaveBeenLastCalledWith(30);
+  track.stop(); expect(stop).toHaveBeenCalledOnce();
+  expect(room.listenerCount(RoomEvent.ParticipantConnected)).toBe(0);
+});
+it('keeps full cadence for a local visible preview with no peers', async () => {
+  vi.useFakeTimers(); vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+  const room = Object.assign(new EventEmitter(), { remoteParticipants: new Map() });
+  const setRate = vi.fn();
+  const track = Object.assign(new EventTarget(), { captureMetrics: {}, setFrameRate: setRate, stop: vi.fn() });
+  installNativeCaptureBudget(room as unknown as Room, track as never, 60);
+  setRate.mockClear();
+  await vi.advanceTimersByTimeAsync(6000); expect(setRate).not.toHaveBeenCalled();
+  track.stop();
+});

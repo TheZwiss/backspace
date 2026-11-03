@@ -65,7 +65,7 @@ function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
     : disabled ? ITEM_DISABLED_CLASS : ITEM_CLASS;
 
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       className={className}
       style={isMobile ? undefined : ITEM_STYLE}
@@ -136,7 +136,7 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
 
     const tRect = layoutRect(trigger.getBoundingClientRect());
     const fRect = layoutRect(flyout.getBoundingClientRect());
-    const gap = 4;
+    const gap = 0;
 
     let left = tRect.right + gap;
     if (left + fRect.width > layoutPixels(window.innerWidth)) {
@@ -182,7 +182,7 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
       aria-label={submenu.label}
       onKeyDown={handleKeyDown}
       onContextMenu={suppressNativeMenu}
-      className="fixed z-[210] glass rounded-md py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
+      className="fixed z-menu-submenu glass rounded-md py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: -9999, top: -9999 }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -221,7 +221,7 @@ function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
           ? ITEM_DANGER_CLASS
           : ITEM_CLASS;
       return (
-        <button
+        <button data-icon-motion="press"
           type="button"
           role="menuitem"
           className={className}
@@ -278,9 +278,9 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
   const handleTriggerLeave = useCallback(() => {
     cancelTimers();
     closeTimer.current = setTimeout(() => {
-      setOpenSubmenu(null);
-    }, 150);
-  }, [cancelTimers, setOpenSubmenu]);
+      if (useContextMenuStore.getState().openSubmenuKey === item.key) setOpenSubmenu(null);
+    }, 250);
+  }, [cancelTimers, setOpenSubmenu, item.key]);
 
   const handleFlyoutEnter = useCallback(() => {
     cancelTimers();
@@ -289,9 +289,9 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
   const handleFlyoutLeave = useCallback(() => {
     cancelTimers();
     closeTimer.current = setTimeout(() => {
-      setOpenSubmenu(null);
-    }, 150);
-  }, [cancelTimers, setOpenSubmenu]);
+      if (useContextMenuStore.getState().openSubmenuKey === item.key) setOpenSubmenu(null);
+    }, 250);
+  }, [cancelTimers, setOpenSubmenu, item.key]);
 
   useEffect(() => {
     return () => {
@@ -301,7 +301,7 @@ function DesktopSubmenuItem({ item, close }: DesktopSubmenuItemProps) {
 
   return (
     <>
-      <button
+      <button data-icon-motion="arrow"
         ref={triggerRef}
         type="button"
         role="menuitem"
@@ -422,7 +422,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[199]"
+        className="fixed inset-0 z-menu-backdrop"
         onMouseDown={(e) => {
           if (!closeGuard) {
             close();
@@ -440,7 +440,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
         ref={menuRef}
         role="menu"
         tabIndex={-1}
-        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md motion-menu-enter max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
+        className="fixed z-menu min-w-[180px] py-1.5 glass rounded-md motion-menu-enter max-h-[calc(calc(100*var(--app-vh))-16px)] overflow-y-auto scrollbar-thin outline-none"
         style={{ left: position.x, top: position.y }}
         onKeyDown={handleKeyDown}
         onContextMenu={suppressNativeMenu}
@@ -476,7 +476,7 @@ function MobileLeafItem({ item, close }: MobileLeafItemProps) {
     case 'action': {
       const colorClass = item.danger ? 'text-txt-danger' : 'text-txt-primary';
       return (
-        <button
+        <button data-icon-motion="press"
           type="button"
           role="menuitem"
           className={`${MOBILE_ITEM_CLASS} ${colorClass} ${item.disabled ? 'opacity-50' : ''}`}
@@ -529,19 +529,19 @@ function MobileMenu({ items, close }: MobileMenuProps) {
   return createPortal(
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-[300] bg-black/50" onClick={close} />
+      <div data-icon-motion="press" className="fixed inset-0 z-menu-backdrop bg-black/50" onClick={close} />
       {/* Bottom sheet */}
       <div
         role="menu"
         ref={exitRef}
         aria-label={submenuStack?.label}
-        className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
+        className="fixed bottom-0 left-0 right-0 z-menu rounded-t-2xl glass-bubble animate-slide-up-sheet"
         style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
         <div aria-hidden="true" className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
         {/* Back button for submenu */}
         {submenuStack && (
-          <button
+          <button data-icon-motion="arrow"
             type="button"
             role="menuitem"
             className={`${MOBILE_ITEM_CLASS} text-txt-secondary`}
@@ -559,7 +559,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
               // Render submenu trigger as a button that switches sheet content
               const colorClass = 'text-txt-primary';
               return (
-                <button
+                <button data-icon-motion="arrow"
                   key={item.key}
                   type="button"
                   role="menuitem"

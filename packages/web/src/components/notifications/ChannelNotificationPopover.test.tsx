@@ -77,7 +77,7 @@ afterEach(() => {
 
 function openPopover() {
   render(<ChannelNotificationButton channelId={CHANNEL} channelName="general" />);
-  fireEvent.click(screen.getByTitle(/^Notification Settings/));
+  fireEvent.click(screen.getByRole('button', { name: /^Notification Settings/ }));
   return screen.getByRole('dialog', { name: 'Notifications for #general' });
 }
 
@@ -126,7 +126,7 @@ describe('ChannelNotificationPopover', () => {
     expect(updateChannel).toHaveBeenCalledWith(CHANNEL, { mute: '8h' });
     expect(screen.getByText(/^Muted until /)).toBeInTheDocument();
     // The bell turns into the muted bell.
-    expect(screen.getByTitle('Notification Settings (Muted)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Notification Settings (Muted)' })).toBeInTheDocument();
   });
 
   it('shows an indefinite mute and lifts it with Unmute', async () => {
@@ -163,7 +163,7 @@ describe('ChannelNotificationPopover', () => {
     openPopover();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle('Notification Settings'));
+    fireEvent.click(screen.getByRole('button', { name: 'Notification Settings' }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -172,7 +172,7 @@ describe('ChannelNotificationPopover', () => {
   it('does not open for a channel no listing has named yet', () => {
     useSpaceStore.setState({ channelToSpaceMap: new Map(), channelOriginMap: new Map() });
     render(<ChannelNotificationButton channelId="unknown" channelName="unknown" />);
-    fireEvent.click(screen.getByTitle('Notification Settings'));
+    fireEvent.click(screen.getByRole('button', { name: 'Notification Settings' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

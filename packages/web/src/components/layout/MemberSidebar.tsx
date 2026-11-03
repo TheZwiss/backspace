@@ -61,7 +61,7 @@ function MemberSidebarRow({
   };
 
   return (
-    <div
+    <div data-icon-motion="press"
       key={member.userId}
       onClick={(e) => onClickMember(e, member, canonical)}
       onContextMenu={(e) => onContextMenuMember(e, member, canonical)}
@@ -82,13 +82,13 @@ function MemberSidebarRow({
       />
       <div className="flex-1 min-w-0">
         <span
-          className={`text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
+          className={`text-ui-label leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
           style={colorStyle}
         >
           {displayName}
         </span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -197,7 +197,7 @@ export function MemberSidebar() {
             {group.kind === 'owner' && space ? (
               <OwnerTitleHeading key={space.id} space={space} count={group.members.length} />
             ) : (
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
               </h3>
             )}
@@ -208,7 +208,7 @@ export function MemberSidebar() {
         {/* Offline */}
         {offlineMembers.length > 0 && (
           <div>
-            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+            <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
               {t('common:states.offline')} — {formatNumber(offlineMembers.length)}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}

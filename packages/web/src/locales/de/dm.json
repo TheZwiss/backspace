@@ -1,4 +1,10 @@
 {
+  "friendship": {
+    "title": "Freundschaft",
+    "none": "Ihr seid noch nicht befreundet.",
+    "incoming": "Diese Person hat dir eine Freundschaftsanfrage gesendet. Möchtest du sie annehmen?",
+    "outgoing": "Freundschaftsanfrage gesendet. Antwort ausstehend."
+  },
   "names": {
     "group": "Gruppe",
     "directMessage": "Direktnachricht",
@@ -16,6 +22,7 @@
     "withSender": "{{name}}: {{text}}"
   },
   "system": {
+    "nudge": "{{actor}} hat mit {{effect}} angestupst",
     "spaceInviteNamed": "📨 Einladung zu {{spaceName}} gesendet",
     "memberAdded": "{{actor}} hat {{target}} hinzugefügt",
     "memberAddedToGroup": "{{actor}} hat {{target}} zur Gruppe hinzugefügt",

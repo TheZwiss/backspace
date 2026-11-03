@@ -65,6 +65,7 @@ it('samples immediately and every 30 seconds without publishing video or audio',
   const leave = startStreamPreviews(room as unknown as Room);
   await Promise.resolve();
   expect(publishData).toHaveBeenCalledTimes(1);
+  expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledOnce();
   expect(publishData.mock.calls[0]![0].byteLength).toBeLessThan(14_000);
   expect(publishData.mock.calls[0]![1]).toEqual({ reliable: true, topic });
   await vi.advanceTimersByTimeAsync(29_999);
@@ -119,5 +120,37 @@ it('removes an existing preview on a privacy clear even inside the rate limit', 
   const clear = new TextEncoder().encode(JSON.stringify({ type: topic, trackSid: 'screen', mode: 'hidden', image: null }));
   room.emit(RoomEvent.DataReceived, clear, participant, undefined, topic);
   expect(useStreamPreviews.getState().images.friend).toBeUndefined();
+  leave();
+});
+
+
+it('does not create a thumbnail player while nobody else is in the room', () => {
+  vi.useFakeTimers();
+  const createElement = vi.spyOn(document, 'createElement');
+  const room = Object.assign(new EventEmitter(), {
+    remoteParticipants: new Map(),
+    localParticipant: { identity: 'me', getTrackPublication: vi.fn() },
+  });
+  const leave = startStreamPreviews(room as unknown as Room);
+  expect(createElement).not.toHaveBeenCalled();
+  expect(room.localParticipant.getTrackPublication).not.toHaveBeenCalled();
+  leave();
+});
+
+
+it('releases an unreadable thumbnail track after a bounded wait', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(0);
+  vi.stubGlobal('MediaStream', class {});
+  const room = Object.assign(new EventEmitter(), { localParticipant: {
+    identity: 'me', publishData: vi.fn(),
+    getTrackPublication: () => ({ trackSid: 'local-screen', isMuted: false, track: { mediaStreamTrack: { id: 'track', readyState: 'live' } } }),
+  } });
+  const leave = startStreamPreviews(room as unknown as Room);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(pause).toHaveBeenCalledOnce();
+  expect(room.localParticipant.publishData).not.toHaveBeenCalled();
   leave();
 });

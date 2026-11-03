@@ -36,8 +36,8 @@ export function ChatDropOverlay(): React.ReactElement {
             <path d="M7 9l5-5 5 5" />
             <path d="M5 16v2a2 2 0 002 2h10a2 2 0 002-2v-2" />
           </svg>
-          <span className="text-[16px] font-semibold text-txt-primary">{t('composer.dropTitle')}</span>
-          <span className="text-[13px] text-txt-tertiary">{t('composer.dropHint')}</span>
+          <span className="text-ui-lead font-semibold text-txt-primary">{t('composer.dropTitle')}</span>
+          <span className="text-ui-label text-txt-tertiary">{t('composer.dropHint')}</span>
         </div>
       </div>
     </div>

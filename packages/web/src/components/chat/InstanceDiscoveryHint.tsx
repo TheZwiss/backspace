@@ -320,23 +320,23 @@ export function InstanceDiscoveryHint({
                   not a Tailwind breakpoint: this app decides mobile from the
                   layout width at the current interface scale, not from the
                   raw viewport. */}
-              <p className={`w-full desktop:w-auto desktop:flex-1 desktop:min-w-[14rem] text-[13px] ${isWarningRow(row) ? 'text-accent-amber' : 'text-txt-tertiary'}`}>
+              <p className={`w-full desktop:w-auto desktop:flex-1 desktop:min-w-[14rem] text-ui-label ${isWarningRow(row) ? 'text-accent-amber' : 'text-txt-tertiary'}`}>
                 {textOf(row)}
               </p>
               {action !== null && (
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={action.onClick}
                   // Only the row whose write is in flight: a stacked strip
                   // must not disable the neighbour's unrelated action.
                   disabled={pending === row}
-                  className="shrink-0 text-[13px] text-accent-primary hover:text-accent-primary/80 font-medium transition-colors disabled:text-txt-tertiary disabled:cursor-default"
+                  className="shrink-0 text-ui-label text-accent-primary hover:text-accent-primary/80 font-medium transition-colors disabled:text-txt-tertiary disabled:cursor-default"
                 >
                   {action.label}
                 </button>
               )}
             </div>
-            {message && <p className="mt-1 text-[13px] text-txt-danger">{message}</p>}
+            {message && <p className="mt-1 text-ui-label text-txt-danger">{message}</p>}
           </div>
         );
       })}

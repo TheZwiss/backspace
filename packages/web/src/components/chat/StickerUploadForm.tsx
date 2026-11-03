@@ -207,7 +207,7 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
     >
       <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
         <h3 className="text-sm font-semibold">{t('stickers.upload')}</h3>
-        <button
+        <button data-icon-motion="press"
           type="button"
           disabled={busy}
           onClick={onCancel}
@@ -243,7 +243,7 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
         />
 
         {items.length === 0 && (
-          <p className="text-center text-[11px] text-txt-tertiary">{t('stickers.limits', { max: maxMb })}</p>
+          <p className="text-center text-ui-caption text-txt-tertiary">{t('stickers.limits', { max: maxMb })}</p>
         )}
 
         {error && (
@@ -254,10 +254,10 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-soft px-4 py-3">
-        <button type="button" disabled={busy} onClick={onCancel} className="sticker-secondary-button">
+        <button data-icon-motion="press" type="button" disabled={busy} onClick={onCancel} className="sticker-secondary-button">
           {t('stickers.cancel')}
         </button>
-        <button type="submit" disabled={!isAllReady || busy} className="sticker-primary-button">
+        <button data-icon-motion="press" type="submit" disabled={!isAllReady || busy} className="sticker-primary-button">
           {busy && <span className="sticker-spinner" aria-hidden="true" />}
           <span role={busy ? 'status' : undefined}>
             {progress && progress.total > 1

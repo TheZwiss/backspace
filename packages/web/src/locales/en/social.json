@@ -1,4 +1,9 @@
 {
+  "friendNotification": {
+    "title": "Friend request",
+    "body": "Wants to add you as a friend.",
+    "open": "Open conversation with {{name}}"
+  },
   "tabs": {
     "all": "All",
     "pending": "Pending",
@@ -50,7 +55,7 @@
     "sendRequest": "Send Request",
     "discover": "Discover People",
     "noSearchResults": "No users match your search.",
-    "noDiscoverable": "No discoverable users yet — invite people to join!"
+    "noDiscoverable": "Search by username or add someone from a space."
   },
   "mutuals": {
     "friends_one": "{{count}} mutual friend",
@@ -76,6 +81,11 @@
     "playingNow": "Playing now"
   },
   "activity": {
+    "openSpace": "Go to server",
+    "joinChannel": "Join channel",
+    "channelOptions": "Options for {{channel}}",
+    "friendsInVoice": "Friends in voice channels",
+    "moreFriends": "{{n}} more friends",
     "title": "Active Now",
     "quietTitle": "It's quiet for now...",
     "quietDescription": "When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!",

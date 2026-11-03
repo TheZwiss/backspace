@@ -21,6 +21,7 @@ export const INSTANCE_SETTINGS_REFRESH_MS = 10_000;
 
 /** The fields this panel edits; everything else is read live from the store. */
 interface InstanceDraft {
+  peopleDiscoveryMode: NonNullable<InstanceAdminSettings['peopleDiscoveryMode']>;
   instanceName: string;
   discoveryEnabled: boolean;
   directoryEnabled: boolean;
@@ -31,6 +32,7 @@ interface InstanceDraft {
 function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
   return {
     instanceName: settings.instanceName,
+    peopleDiscoveryMode: settings.peopleDiscoveryMode ?? 'search',
     discoveryEnabled: settings.discoveryEnabled,
     directoryEnabled: settings.directoryEnabled,
     directoryBrowseEnabled: settings.directoryBrowseEnabled,
@@ -39,7 +41,8 @@ function draftFrom(settings: InstanceAdminSettings): InstanceDraft {
 }
 
 function sameDraft(a: InstanceDraft, b: InstanceDraft): boolean {
-  return a.instanceName === b.instanceName
+  return a.peopleDiscoveryMode === b.peopleDiscoveryMode
+    && a.instanceName === b.instanceName
     && a.discoveryEnabled === b.discoveryEnabled
     && a.directoryEnabled === b.directoryEnabled
     && a.directoryBrowseEnabled === b.directoryBrowseEnabled
@@ -195,6 +198,7 @@ export function GeneralPanel() {
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft.instanceName,
+        peopleDiscoveryMode: draft.peopleDiscoveryMode,
         discoveryEnabled: draft.discoveryEnabled,
         directoryEnabled: draft.directoryEnabled,
         directoryBrowseEnabled: draft.directoryBrowseEnabled,
@@ -285,9 +289,19 @@ export function GeneralPanel() {
         {t('admin:general.description')}
       </div>
 
+      <div>
+        <label htmlFor="people-discovery-mode" className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:general.peopleDiscovery.label')}</label>
+        <p className="text-xs text-txt-tertiary mt-1 mb-2">{t('admin:general.peopleDiscovery.description')}</p>
+        <select id="people-discovery-mode" className="ui-select w-full" value={draft.peopleDiscoveryMode} onChange={(e) => setDraft({ ...draft, peopleDiscoveryMode: e.target.value as InstanceDraft['peopleDiscoveryMode'] })}>
+          <option value="search">{t('admin:general.peopleDiscovery.search')}</option>
+          <option value="shared-spaces">{t('admin:general.peopleDiscovery.shared')}</option>
+          <option value="all">{t('admin:general.peopleDiscovery.all')}</option>
+        </select>
+      </div>
+
       {/* Instance Name */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.instanceName.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.instanceName.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.instanceName.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <input
@@ -298,7 +312,7 @@ export function GeneralPanel() {
             aria-label={t('admin:general.instanceName.label')}
             className="input-standard w-full"
           />
-          <div className="text-[11px] text-txt-tertiary text-right mt-1">
+          <div className="text-ui-caption text-txt-tertiary text-right mt-1">
             {t('admin:general.instanceName.counter', { length: draft.instanceName.length, max: INSTANCE_NAME_MAX_LENGTH })}
           </div>
         </div>
@@ -306,7 +320,7 @@ export function GeneralPanel() {
 
       {/* Space discovery: one ladder, three rungs */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.discovery.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           {/*
@@ -395,13 +409,13 @@ export function GeneralPanel() {
                 <DirectoryListingHint saveFirst={hasChanges ? handleSave : null} saving={saving} />
               )}
               {!instanceSettings.federatedRegistrationOpen && !noDirectoryEndpoint && (
-                <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber space-y-2">
+                <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber space-y-2">
                   <p>{t('admin:general.directory.registrationClosed')}</p>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleOpenFederatedRegistration}
                     disabled={openingRegistration}
-                    className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-[13px] font-medium transition-colors disabled:opacity-50"
+                    className="px-2.5 py-1 rounded bg-accent-amber/20 hover:bg-accent-amber/30 text-ui-label font-medium transition-colors disabled:opacity-50"
                   >
                     {t('admin:general.directory.openFederatedRegistration')}
                   </button>
@@ -465,7 +479,7 @@ export function GeneralPanel() {
 
       {/* GIF Search */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.gif.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.gif.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">
           {t('admin:general.gif.description')}
         </p>
@@ -479,15 +493,15 @@ export function GeneralPanel() {
             autoComplete="off"
           />
           <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+            <span className={`inline-flex items-center gap-1 text-ui-caption font-medium px-1.5 py-0.5 rounded ${
               instanceSettings.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
             }`}>
               {instanceSettings.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
             </span>
             {instanceSettings.gifEnabled && !gifKeyDirty && (
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { setGifKeyDraft(''); setGifKeyDirty(true); }}
-                className="text-[11px] text-txt-tertiary hover:text-txt-danger transition-colors"
+                className="text-ui-caption text-txt-tertiary hover:text-txt-danger transition-colors"
               >
                 {t('admin:general.gif.clearKey')}
               </button>
@@ -501,7 +515,7 @@ export function GeneralPanel() {
         page's other links stay.
       */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.supportCard.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.supportCard.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <div className="min-w-0">
@@ -526,16 +540,16 @@ export function GeneralPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>

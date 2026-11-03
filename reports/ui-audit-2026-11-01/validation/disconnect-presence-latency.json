@@ -1,0 +1,262 @@
+{
+  "results": [
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 0,
+      "commandAt": 1793579511516,
+      "clickAt": 1793579511520,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579511521
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579511758,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579511758
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579511758
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579511767
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579511770
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579511532,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 1,
+      "commandAt": 1793579515436,
+      "clickAt": 1793579515438,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579515439
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579517760,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579517761
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579517761
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579517770
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579517772
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579515448,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 2,
+      "commandAt": 1793579521401,
+      "clickAt": 1793579521405,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579521405
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579523761,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579523761
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579523761
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579523771
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579523773
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579521415,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 0,
+      "commandAt": 1793579531186,
+      "clickAt": 1793579531190,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579531191
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579532759,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579532759
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579532759
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579532766
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579532768
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579531199,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 1,
+      "commandAt": 1793579536403,
+      "clickAt": 1793579536405,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579536406
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579538758,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579538759
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579538759
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579538768
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579538770
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579536414,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 2,
+      "commandAt": 1793579545222,
+      "clickAt": 1793579545224,
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579545225
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579547758,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579547758
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579547758
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579547766
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579547771
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579545232,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    }
+  ]
+}

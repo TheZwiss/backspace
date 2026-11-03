@@ -22,6 +22,7 @@ export interface SpaceChannelEntry {
   /** The instance that issued its id ('' is home). */
   readonly origin: string;
   readonly type: Channel['type'];
+  readonly name?: string;
 }
 
 export type SpaceChannelIndex = ReadonlyMap<string, SpaceChannelEntry>;
@@ -61,7 +62,7 @@ export function putSpaceListings(
   const lastMessageIds = new Map(tables.lastMessageIds);
   for (const space of spaces) {
     for (const channel of space.channels) {
-      index.set(channel.id, { spaceId: space.id, origin, type: channel.type });
+      index.set(channel.id, { spaceId: space.id, origin, type: channel.type, name: channel.name });
       if (channel.myPermissions) permissions.set(channel.id, channel.myPermissions);
       // Voice channels have no text to read; unread tracking skips them.
       if (channel.type !== 'voice' && channel.lastMessageId) lastMessageIds.set(channel.id, channel.lastMessageId);

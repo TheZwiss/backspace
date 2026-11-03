@@ -63,7 +63,7 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
     <form onSubmit={event => void submit(event)} aria-labelledby={headingId} className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
         <h3 id={headingId} className="text-sm font-semibold">{t('chat:stickers.renameTitle')}</h3>
-        <button type="button" disabled={saving} onClick={onCancel} className="sticker-icon-button" aria-label={t('chat:stickers.cancel')}>
+        <button data-icon-motion="press" type="button" disabled={saving} onClick={onCancel} className="sticker-icon-button" aria-label={t('chat:stickers.cancel')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
@@ -102,10 +102,10 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-soft px-4 py-3">
-        <button type="button" disabled={saving} onClick={onCancel} className="sticker-secondary-button">
+        <button data-icon-motion="press" type="button" disabled={saving} onClick={onCancel} className="sticker-secondary-button">
           {t('chat:stickers.cancel')}
         </button>
-        <button type="submit" disabled={saving || !name.trim()} className="sticker-primary-button">
+        <button data-icon-motion="press" type="submit" disabled={saving || !name.trim()} className="sticker-primary-button">
           {saving && <span className="sticker-spinner" aria-hidden="true" />}
           {t('chat:stickers.rename')}
         </button>

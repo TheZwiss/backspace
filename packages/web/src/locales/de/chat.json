@@ -276,5 +276,99 @@
     "action": "Anstupsen",
     "received": "{{actor}} hat {{target}} angestupst",
     "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
+  },
+  "nudge": {
+    "notice": "Hat dich angestupst!",
+    "title": "Aufmerksamkeit erregen",
+    "cooldown": "Warte 10 Sekunden zwischen Aufmerksamkeitsrufen",
+    "choose": "Aufmerksamkeitseffekt auswählen",
+    "originals": "MSN Messenger · Original-Winks",
+    "footer": "Ein Aufmerksamkeitsruf alle 10 Sekunden.",
+    "effects": {
+      "shake": {
+        "title": "MSN-Rütteln",
+        "description": "Das klassische schnelle Rütteln"
+      },
+      "wave": {
+        "title": "Kleine Welle",
+        "description": "Eine Welle läuft über den Bildschirm"
+      },
+      "jelly": {
+        "title": "Wackelpudding",
+        "description": "Dehnen, wackeln und zurückfedern"
+      },
+      "knock": {
+        "title": "An den Bildschirm klopfen",
+        "description": "Ein Klopfen für deine Aufmerksamkeit"
+      },
+      "confetti": {
+        "title": "Konfetti",
+        "description": "Eine kleine Feier"
+      },
+      "pulse": {
+        "title": "Impuls",
+        "description": "Ein violetter Rand leuchtet auf"
+      },
+      "msn_bouncy_ball": {
+        "title": "Hüpfender Ball",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_bow": {
+        "title": "Verbeugung",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_dancing_pig": {
+        "title": "Tanzendes Schwein",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_eyeball": {
+        "title": "Neugierige Augen",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_frog": {
+        "title": "Frosch",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_guitar_smash": {
+        "title": "Gitarre zertrümmern",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_heart": {
+        "title": "Herz",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_kiss": {
+        "title": "Kuss",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_lipstick_girl": {
+        "title": "Mädchen mit Lippenstift",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_love_letter": {
+        "title": "Liebesbrief",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_notes": {
+        "title": "Musiknoten",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_silly_face": {
+        "title": "Grimasse",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_stars": {
+        "title": "Sterne",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_water_balloon": {
+        "title": "Wasserballon",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_fart_guy": {
+        "title": "Pupsender Kerl",
+        "description": "Originaler MSN-Wink"
+      }
+    }
   }
 }

@@ -276,5 +276,99 @@
     "action": "Poke",
     "received": "{{actor}} poked {{target}}",
     "disconnected": "Disconnected. Poke was not sent."
+  },
+  "nudge": {
+    "notice": "Nudged you!",
+    "title": "Nudge",
+    "cooldown": "Wait 10 seconds between nudges",
+    "choose": "Choose an attention effect",
+    "originals": "MSN Messenger · Original winks",
+    "footer": "One nudge every 10 seconds.",
+    "effects": {
+      "shake": {
+        "title": "MSN shake",
+        "description": "The classic quick shake"
+      },
+      "wave": {
+        "title": "Little wave",
+        "description": "A wave travels across the screen"
+      },
+      "jelly": {
+        "title": "Jelly",
+        "description": "Stretch, wobble and return"
+      },
+      "knock": {
+        "title": "Knock on screen",
+        "description": "A knock to get your attention"
+      },
+      "confetti": {
+        "title": "Confetti",
+        "description": "A small celebration"
+      },
+      "pulse": {
+        "title": "Pulse",
+        "description": "A purple border lights up"
+      },
+      "msn_bouncy_ball": {
+        "title": "Bouncy ball",
+        "description": "Original MSN wink"
+      },
+      "msn_bow": {
+        "title": "Bow",
+        "description": "Original MSN wink"
+      },
+      "msn_dancing_pig": {
+        "title": "Dancing pig",
+        "description": "Original MSN wink"
+      },
+      "msn_eyeball": {
+        "title": "Curious eyes",
+        "description": "Original MSN wink"
+      },
+      "msn_frog": {
+        "title": "Frog",
+        "description": "Original MSN wink"
+      },
+      "msn_guitar_smash": {
+        "title": "Guitar smash",
+        "description": "Original MSN wink"
+      },
+      "msn_heart": {
+        "title": "Heart",
+        "description": "Original MSN wink"
+      },
+      "msn_kiss": {
+        "title": "Kiss",
+        "description": "Original MSN wink"
+      },
+      "msn_lipstick_girl": {
+        "title": "Lipstick girl",
+        "description": "Original MSN wink"
+      },
+      "msn_love_letter": {
+        "title": "Love letter",
+        "description": "Original MSN wink"
+      },
+      "msn_notes": {
+        "title": "Musical notes",
+        "description": "Original MSN wink"
+      },
+      "msn_silly_face": {
+        "title": "Silly face",
+        "description": "Original MSN wink"
+      },
+      "msn_stars": {
+        "title": "Stars",
+        "description": "Original MSN wink"
+      },
+      "msn_water_balloon": {
+        "title": "Water balloon",
+        "description": "Original MSN wink"
+      },
+      "msn_fart_guy": {
+        "title": "Fart Guy",
+        "description": "Original MSN wink"
+      }
+    }
   }
 }

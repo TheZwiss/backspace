@@ -292,16 +292,16 @@ export function JoinPage() {
             {previewError || t('auth:join.invalid.description')}
           </p>
           {token ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => navigate('/channels/@me')}
-              className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('auth:join.invalid.backToApp')}
             </button>
           ) : (
-            <Link
+            <Link data-icon-motion="press"
               to="/login"
-              className="inline-block px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+              className="inline-block px-6 py-2.5 bg-accent-primary hover:bg-accent-primary-hover text-white font-medium rounded transition-colors"
             >
               {t('common:actions.logIn')}
             </Link>
@@ -381,10 +381,10 @@ export function JoinPage() {
                     className="input-standard w-full py-2 text-sm resize-none"
                   />
                 )}
-                <button
+                <button data-icon-motion="press"
                   onClick={handleJoin}
                   disabled={isJoining}
-                  className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {action === 'request'
                     ? (isJoining ? t('auth:join.request.sending') : t('auth:join.request.askAs', { name: user.displayName || user.username }))
@@ -392,7 +392,7 @@ export function JoinPage() {
                 </button>
                 <p className="text-center text-xs text-txt-tertiary">
                   {t('auth:join.notYou')}{' '}
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={() => { logout(); navigate(`/login${redirectParam}`); }}
                     className="text-accent-primary hover:underline"
@@ -400,7 +400,7 @@ export function JoinPage() {
                     {t('auth:join.switchAccount')}
                   </button>
                   {' · '}
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={() => { setPhase('other-instance'); setError(''); }}
                     className="text-accent-primary hover:underline"
@@ -411,22 +411,22 @@ export function JoinPage() {
               </div>
             ) : token ? (
               /* Token exists but user still loading */
-              <button
+              <button data-icon-motion="press"
                 disabled
-                className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('common:states.loading')}
               </button>
             ) : (
               /* Unauthenticated user */
               <div className="space-y-3">
-                <Link
+                <Link data-icon-motion="press"
                   to={`/login${redirectParam}`}
-                  className="block w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors text-center"
+                  className="block w-full py-2.5 bg-accent-primary hover:bg-accent-primary-hover text-white font-medium rounded transition-colors text-center"
                 >
                   {action === 'request' ? t('auth:join.request.loginToAsk') : t('auth:join.loginToJoin')}
                 </Link>
-                <Link
+                <Link data-icon-motion="press"
                   to={`/register${redirectParam}`}
                   className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
                 >
@@ -440,7 +440,7 @@ export function JoinPage() {
                   <div className="flex-1 h-px bg-border-soft" />
                 </div>
 
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setPhase('other-instance'); setError(''); }}
                   className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
@@ -467,10 +467,10 @@ export function JoinPage() {
                 className="input-standard flex-1 py-2.5"
                 autoFocus
               />
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={!otherDomain.trim()}
-                className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {t('auth:join.domain.go')}
               </button>
@@ -478,7 +478,7 @@ export function JoinPage() {
             <p className="text-xs text-txt-tertiary mb-4">
               {t('auth:join.domain.redirectNote')}
             </p>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => { setPhase('preview'); setOtherDomain(''); setError(''); }}
               className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
@@ -532,17 +532,17 @@ export function JoinPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => { setPhase('preview'); setPassword(''); setError(''); }}
                 className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
               >
                 {t('common:actions.back')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={isJoining || !password}
-                className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isJoining
                   ? t('auth:join.connect.submitting')
@@ -598,17 +598,17 @@ export function JoinPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button
+              <button data-icon-motion="arrow"
                 type="button"
                 onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
                 className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
               >
                 {t('common:actions.back')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={isJoining || !fallbackUsername || !fallbackPassword}
-                className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isJoining
                   ? t('auth:join.fallback.submitting')
@@ -640,9 +640,9 @@ function RequestSentCard({ spaceName, outcome, onDone }: { spaceName: string; ou
           : t('auth:join.requestSent.pendingTitle', { space: spaceName })}
       </p>
       <p className="text-txt-tertiary text-xs mb-4">{t('auth:join.requestSent.body')}</p>
-      <button
+      <button data-icon-motion="press"
         onClick={onDone}
-        className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+        className="ui-button ui-button-primary transition-colors"
       >
         {t('auth:join.invalid.backToApp')}
       </button>
@@ -666,9 +666,9 @@ function AlreadyMemberCard({ spaceName, spaceId, navigate }: { spaceName: string
       </div>
       <p className="text-txt-primary font-medium mb-1">{t('auth:join.alreadyMember.title', { space: spaceName })}</p>
       <p className="text-txt-tertiary text-xs mb-4">{t('auth:join.alreadyMember.redirecting')}</p>
-      <button
+      <button data-icon-motion="press"
         onClick={() => navigate(`/channels/${spaceId}`)}
-        className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+        className="ui-button ui-button-primary transition-colors"
       >
         {t('auth:join.alreadyMember.go', { space: spaceName })}
       </button>

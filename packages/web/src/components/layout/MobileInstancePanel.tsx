@@ -159,7 +159,7 @@ export function MobileInstancePanel() {
           const badge = section.id === 'federation' && approvalCount > 0 ? approvalCount : null;
           const dot = section.id === 'updates' && updateBadge;
           return (
-            <button
+            <button data-icon-motion="press"
               key={section.id}
               onClick={() => pushMobileScreen(`settings-instance-${section.id}`)}
               className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors"
@@ -167,7 +167,7 @@ export function MobileInstancePanel() {
               {section.icon}
               <span className="text-sm text-txt-primary flex-1">{t(`admin:mobile.sections.${section.id}`)}</span>
               {badge !== null && (
-                <span className="min-w-[18px] h-[18px] px-1.5 bg-notification text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="min-w-[18px] h-[18px] px-1.5 bg-notification text-white text-ui-micro font-bold rounded-full flex items-center justify-center">
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}

@@ -39,7 +39,7 @@ function MobileFriendBubble({
   const displayName = userDisplayName(canonical);
 
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => {
         const existingDm = dmChannels.find(dm =>
           !dm.ownerId && dm.members.some(m => m.id === friend.id)
@@ -61,7 +61,7 @@ function MobileFriendBubble({
           <PresenceIndicator status={friend.status} size={9} />
         </span>
       </div>
-      <span className="text-[10px] text-txt-secondary truncate w-full text-center">
+      <span className="text-ui-micro text-txt-secondary truncate w-full text-center">
         {displayName}
       </span>
     </button>
@@ -111,7 +111,7 @@ function MobileDmRow({
   const avatarUrl = mainUser?.avatar ? `/api/uploads/${mainUser.avatar}` : null;
 
   return (
-    <button
+    <button data-icon-motion="press"
       key={dm.id}
       data-context-menu
       onClick={() => onTap(dm.id)}
@@ -161,13 +161,13 @@ function MobileDmRow({
             )}
           </span>
           {previewTime && (
-            <span className="text-[11px] text-txt-tertiary shrink-0">
+            <span className="text-ui-caption text-txt-tertiary shrink-0">
               {formatTimestamp(previewTime)}
             </span>
           )}
         </div>
         {!isGroup && mainUser && isFederationGlobeApplicable(mainUser) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">
             @{parseFederatedUsername(mainUser.username).domain}
           </div>
         )}
@@ -256,7 +256,7 @@ export function MobileDmsScreen() {
       <header className="h-12 flex items-center justify-between px-4 border-b border-border-soft shrink-0">
         <h1 className="text-base font-semibold text-txt-primary">{t('dm:list.title')}</h1>
         <div className="flex items-center gap-1">
-          <button
+          <button data-icon-motion="press"
             onClick={() => pushMobileScreen('friends')}
             className="h-8 px-3 rounded-lg text-xs font-medium text-accent-primary hover:bg-interactive-hover transition-colors"
           >
@@ -303,7 +303,7 @@ export function MobileDmsScreen() {
       </div>
 
       {/* FAB — New DM */}
-      <button
+      <button data-icon-motion="press"
         onClick={() => openModal('newDm')}
         className="fixed bottom-20 right-4 w-14 h-14 rounded-full bg-accent-primary text-white shadow-elevation-high flex items-center justify-center z-20 hover:bg-accent-primary-hover active:bg-accent-primary-active transition-colors"
       >

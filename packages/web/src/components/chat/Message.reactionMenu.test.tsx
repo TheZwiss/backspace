@@ -152,7 +152,7 @@ describe.each([
 
   function openPickerFromMenu(): void {
     openMenu();
-    const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
+    const plus = screen.getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Add reaction');
     fireEvent.click(plus!);
   }
 
@@ -194,7 +194,7 @@ describe('the picker the mobile long-press sheet opens', () => {
 
   function openPickerFromSheet(): void {
     openMenu();
-    const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
+    const plus = screen.getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Add reaction');
     fireEvent.click(plus!);
   }
 
@@ -250,7 +250,7 @@ describe('the picker the desktop context menu opens', () => {
   it('is the popover with the desktop picker, not a sheet', () => {
     renderMessage();
     openMenu();
-    const plus = screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction');
+    const plus = screen.getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Add reaction');
     fireEvent.click(plus!);
     // The desktop popover is now labelled too, but is not a modal sheet.
     expect(screen.getByRole('dialog', { name: 'Add reaction' })).not.toHaveAttribute('aria-modal', 'true');
@@ -287,7 +287,7 @@ describe('the "+" in the desktop hover bar', () => {
   it('opens the picker and closes it again', () => {
     renderMessage();
     fireEvent.mouseEnter(document.getElementById(`msg-${message.id}`)!);
-    const plus = () => screen.getAllByRole('button').find(b => b.getAttribute('title') === 'Add reaction')!;
+    const plus = () => screen.getAllByRole('button').find(b => b.getAttribute('aria-label') === 'Add reaction')!;
     fireEvent.click(plus());
     expect(screen.getByTestId('emoji-picker')).toBeTruthy();
     fireEvent.click(plus());

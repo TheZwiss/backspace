@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { StickerPicker } from './StickerPicker';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useCallback } from 'react';
@@ -43,14 +44,14 @@ function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
       {availableTabs.map((t) => {
         const isSticker = t.key === 'sticker';
         return (
-          <button
+          <Tooltip content={t.label} position="top"><button data-icon-motion="press"
             key={t.key}
             type="button"
             onClick={() => onTabChange(t.key)}
-            title={t.label}
+
             aria-label={t.label}
             className={`flex items-center justify-center rounded-md font-medium transition-colors ${
-              isSticker ? 'px-2.5 py-1' : 'px-3 py-1 text-[13px]'
+              isSticker ? 'px-2.5 py-1' : 'px-3 py-1 text-ui-label'
             } ${
               activeTab === t.key
                 ? 'bg-interactive-selected text-txt-primary'
@@ -58,7 +59,7 @@ function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
             }`}
           >
             {isSticker ? <HeartIcon className="w-4 h-4" /> : t.label}
-          </button>
+          </button></Tooltip>
         );
       })}
     </div>

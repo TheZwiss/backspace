@@ -1,3 +1,4 @@
+import { userSocialMenuItems } from './memberMenu/memberSocialActions';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
@@ -563,7 +564,8 @@ export function MobileSpacesScreen() {
       e.stopPropagation();
 
       const modItems = buildVoiceModMenuItems(userId, channelId);
-      const items: ContextMenuItem[] = [...modItems];
+      const profileUser = members.find(m => m.userId === userId)?.user;
+      const items: ContextMenuItem[] = [...modItems, ...(profileUser ? userSocialMenuItems(profileUser, getChannelOrigin(channelId)) : [])];
 
       if (modItems.length > 0) {
         items.push({ key: 'mod-end-sep', type: 'separator' });
@@ -588,7 +590,7 @@ export function MobileSpacesScreen() {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [user?.id, openContextMenu, t],
+    [members, user?.id, openContextMenu, t],
   );
 
   const renderChannelItem = (channel: Channel) => {
@@ -604,7 +606,7 @@ export function MobileSpacesScreen() {
 
     return (
       <div key={channel.id}>
-        <button
+        <button data-icon-motion="press"
           onClick={() => handleChannelTap(channel)}
           onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
           data-context-menu={`channel-${channel.id}`}
@@ -646,7 +648,7 @@ export function MobileSpacesScreen() {
               const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
 
               return (
-                <div
+                <div data-icon-motion="press"
                   key={userId}
                   data-context-menu={`voice-user-${userId}`}
                   className="px-3 py-1 rounded-lg hover:bg-interactive-hover transition-colors"
@@ -683,7 +685,7 @@ export function MobileSpacesScreen() {
       {/* Space strip */}
       <div className="w-[60px] shrink-0 glass-strip flex flex-col items-center py-2 gap-1.5 overflow-y-auto no-scrollbar">
         {/* Home / DMs button */}
-        <button
+        <button data-icon-motion="press"
           onClick={() => {
             setMobileTab('dms');
             navigate('/channels/@me');
@@ -710,7 +712,7 @@ export function MobileSpacesScreen() {
                     isSelected ? 'h-8' : hasUnread ? 'h-2' : 'h-0'
                   }`} />
                 </div>
-                <button
+                <button data-icon-motion="press"
                   onClick={() => setOpenFolderId(folder.id)}
                   onContextMenu={(e) => e.preventDefault()}
                   className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${
@@ -746,7 +748,7 @@ export function MobileSpacesScreen() {
                   }`}
                 />
               </div>
-              <button
+              <button data-icon-motion="press"
                 data-context-menu
                 onClick={() => handleSpaceSelect(space.id)}
                 onContextMenu={(e) => handleSpaceContextMenu(e, space.id)}
@@ -758,7 +760,7 @@ export function MobileSpacesScreen() {
                 {iconUrl ? (
                   <img src={iconUrl} alt={space.name} className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-[15px] font-bold text-white">
+                  <span className="text-ui-message font-bold text-white">
                     {space.name.charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -788,7 +790,7 @@ export function MobileSpacesScreen() {
         <div className="w-8 h-px bg-border-soft my-0.5" />
 
         {/* Add space button */}
-        <button
+        <button data-icon-motion="press"
           onClick={() => setShowAddSheet(true)}
           className="w-10 h-10 rounded-2xl bg-surface-elevated flex items-center justify-center text-accent-mint hover:bg-accent-mint/10 transition-colors"
         >
@@ -807,7 +809,7 @@ export function MobileSpacesScreen() {
               {selectedSpace.name}
             </h1>
             {canInvite && (
-              <button
+              <button data-icon-motion="press"
                 onClick={() => openModal('invite', { spaceId: selectedSpaceId })}
                 className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
               >
@@ -817,7 +819,7 @@ export function MobileSpacesScreen() {
               </button>
             )}
             {canManageSpace && (
-              <button
+              <button data-icon-motion="gear"
                 onClick={() => openModal('spaceSettings', { spaceId: selectedSpaceId })}
                 className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
               >
@@ -890,7 +892,7 @@ export function MobileSpacesScreen() {
 
                 return (
                   <div key={category.id} className="mt-3">
-                    <button
+                    <button data-icon-motion="press"
                       data-context-menu
                       onClick={() => toggleCategory(category.id)}
                       onContextMenu={(e) => handleCategoryContextMenu(e, category.id)}
@@ -902,7 +904,7 @@ export function MobileSpacesScreen() {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-txt-tertiary truncate">
+                      <span className="text-ui-caption font-semibold uppercase tracking-wide text-txt-tertiary truncate">
                         {category.name}
                       </span>
                     </button>
@@ -927,14 +929,14 @@ export function MobileSpacesScreen() {
       {/* Add Space bottom sheet */}
       {showAddSheet && (
         <>
-          <div className="fixed inset-0 z-[300] bg-black/50" onClick={() => setShowAddSheet(false)} />
+          <div data-icon-motion="press" className="fixed inset-0 z-[300] bg-black/50" onClick={() => setShowAddSheet(false)} />
           <div
             className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
             style={{ paddingBottom: 'var(--safe-bottom)' }}
           >
             <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
             <div className="py-2">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { setShowAddSheet(false); openModal('createSpace'); }}
                 className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-interactive-hover"
               >
@@ -943,7 +945,7 @@ export function MobileSpacesScreen() {
                 </svg>
                 <span className="text-sm text-txt-primary">{t('spaces:mobile.addSheet.createSpace')}</span>
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { setShowAddSheet(false); openModal('joinSpace'); }}
                 className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-interactive-hover"
               >
@@ -952,7 +954,7 @@ export function MobileSpacesScreen() {
                 </svg>
                 <span className="text-sm text-txt-primary">{t('spaces:mobile.addSheet.joinSpace')}</span>
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { setShowAddSheet(false); pushMobileScreen('explore'); }}
                 className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-interactive-hover"
               >

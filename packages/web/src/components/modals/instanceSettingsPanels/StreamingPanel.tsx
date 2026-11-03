@@ -93,7 +93,7 @@ export function StreamingPanel() {
       return (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
           <span>{t('common:states.loadSettingsFailed')}</span>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => { void loadLimits(); }}
             disabled={loading}
@@ -248,7 +248,7 @@ export function StreamingPanel() {
     setDraft({ ...draft, allowedFramerates: Array.from(current).sort((a, b) => a - b) });
   };
 
-  const pillBase = 'px-3 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer select-none';
+  const pillBase = 'px-3 py-1.5 rounded text-ui-label font-medium transition-colors cursor-pointer select-none';
   const pillOn = 'bg-accent-primary text-white';
   const pillOff = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
@@ -261,7 +261,7 @@ export function StreamingPanel() {
 
       {/* Bandwidth */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.bandwidth.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.bandwidth.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.bandwidth.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
           {/* Allow Custom Bitrate */}
@@ -282,7 +282,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex items-start gap-3">
               <div className="flex-1 space-y-1.5">
-                <label className="text-[11px] text-txt-tertiary block">{t('admin:streaming.bandwidth.min')}</label>
+                <label className="text-ui-caption text-txt-tertiary block">{t('admin:streaming.bandwidth.min')}</label>
                 <input
                   type="range"
                   min={100}
@@ -290,10 +290,7 @@ export function StreamingPanel() {
                   step={100}
                   value={Math.min(draft.minBitrateKbps, 100000)}
                   onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
-                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                  className="ui-range"
                 />
                 <div className="flex items-center gap-1.5">
                   <input
@@ -308,11 +305,11 @@ export function StreamingPanel() {
                     }}
                     className="input-standard w-20 px-2 py-0.5 text-xs"
                   />
-                  <span className="text-[11px] text-txt-tertiary">{formatKbps(draft.minBitrateKbps)}</span>
+                  <span className="text-ui-caption text-txt-tertiary">{formatKbps(draft.minBitrateKbps)}</span>
                 </div>
               </div>
               <div className="flex-1 space-y-1.5">
-                <label className="text-[11px] text-txt-tertiary block">{t('admin:streaming.bandwidth.max')}</label>
+                <label className="text-ui-caption text-txt-tertiary block">{t('admin:streaming.bandwidth.max')}</label>
                 <input
                   type="range"
                   min={draft.minBitrateKbps + 500}
@@ -320,10 +317,7 @@ export function StreamingPanel() {
                   step={500}
                   value={Math.min(draft.maxBitrateKbps, 100000)}
                   onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
-                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                  className="ui-range"
                 />
                 <div className="flex items-center gap-1.5">
                   <input
@@ -338,7 +332,7 @@ export function StreamingPanel() {
                     }}
                     className="input-standard w-20 px-2 py-0.5 text-xs"
                   />
-                  <span className="text-[11px] text-txt-tertiary">{formatKbps(draft.maxBitrateKbps)}</span>
+                  <span className="text-ui-caption text-txt-tertiary">{formatKbps(draft.maxBitrateKbps)}</span>
                 </div>
               </div>
             </div>
@@ -347,7 +341,7 @@ export function StreamingPanel() {
           {/* Bitrate Step — presets + custom input */}
           <div className="pt-2 border-t border-white/[0.04]">
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[11px] text-txt-tertiary">{t('admin:streaming.bandwidth.step')}</span>
+              <span className="text-ui-caption text-txt-tertiary">{t('admin:streaming.bandwidth.step')}</span>
               <input
                 type="number"
                 min={50}
@@ -358,16 +352,16 @@ export function StreamingPanel() {
                   const v = Number(e.target.value);
                   if (v >= 50 && v <= 10000) setDraft({ ...draft, bitrateStepKbps: v });
                 }}
-                className="input-standard w-14 px-1.5 py-0 text-[11px] text-center"
+                className="input-standard w-14 px-1.5 py-0 text-ui-caption text-center"
               />
-              <span className="text-[11px] text-txt-tertiary">{t('admin:streaming.units.kbpsLabel')}</span>
+              <span className="text-ui-caption text-txt-tertiary">{t('admin:streaming.units.kbpsLabel')}</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {[100, 250, 500, 1000, 2500, 5000].map((step) => (
-                <button
+                <button data-icon-motion="press"
                   key={step}
                   onClick={() => setDraft({ ...draft, bitrateStepKbps: step })}
-                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer select-none ${
+                  className={`px-2 py-0.5 rounded text-ui-caption font-medium transition-colors cursor-pointer select-none ${
                     draft.bitrateStepKbps === step
                       ? 'bg-accent-primary text-white'
                       : 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover'
@@ -383,7 +377,7 @@ export function StreamingPanel() {
 
       {/* Quality */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.quality.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.quality.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.quality.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
           {/* Allowed Resolutions */}
@@ -393,7 +387,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {ALL_RESOLUTIONS.map((res) => (
-                <button
+                <button data-icon-motion="press"
                   key={String(res)}
                   onClick={() => toggleResolution(res)}
                   className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
@@ -411,7 +405,7 @@ export function StreamingPanel() {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {STANDARD_FRAMERATES.map((fps) => (
-                <button
+                <button data-icon-motion="press"
                   key={fps}
                   onClick={() => toggleFramerate(fps)}
                   className={`${pillBase} ${draft.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
@@ -445,7 +439,7 @@ export function StreamingPanel() {
 
       {/* Bitrate Matrix */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.matrix.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.matrix.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.matrix.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
           {/* Scale slider */}
@@ -464,12 +458,9 @@ export function StreamingPanel() {
               onChange={(e) => handleScaleChange(Number(e.target.value))}
               onPointerUp={handleScaleEnd}
               onPointerCancel={handleScaleEnd}
-              className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+              className="ui-range"
             />
-            <div className="text-[10px] text-txt-tertiary mt-0.5">{t('admin:streaming.matrix.scaleHint')}</div>
+            <div className="text-ui-micro text-txt-tertiary mt-0.5">{t('admin:streaming.matrix.scaleHint')}</div>
           </div>
 
           {/* Matrix grid */}
@@ -516,7 +507,7 @@ export function StreamingPanel() {
                               }}
                             />
                           ) : (
-                            <button
+                            <button data-icon-motion="press"
                               onClick={() => setEditingCell(key)}
                               className={`w-full px-1.5 py-0.5 rounded text-center transition-colors
                                 ${exceedsCap ? 'bg-accent-amber/10 text-accent-amber' : ''}
@@ -527,8 +518,8 @@ export function StreamingPanel() {
                             >
                               {(val / 1000).toFixed(1)}
                               {overridden && (
-                                <span
-                                  className="ml-1 text-[10px] text-txt-tertiary hover:text-txt-danger cursor-pointer"
+                                <span data-icon-motion="press"
+                                  className="ml-1 text-ui-micro text-txt-tertiary hover:text-txt-danger cursor-pointer"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setMatrixDraft({ ...matrixDraft, [key]: getDefaultKbps(key) });
@@ -550,7 +541,7 @@ export function StreamingPanel() {
 
           {/* Reset all button */}
           {Object.entries(matrixDraft).some(([key, val]) => val !== getDefaultKbps(key)) && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => {
                 const reset: Record<string, number> = {};
                 for (const [key] of Object.entries(matrixDraft)) {
@@ -558,7 +549,7 @@ export function StreamingPanel() {
                 }
                 setMatrixDraft(reset);
               }}
-              className="text-[11px] text-accent-primary hover:text-accent-lavender transition-colors"
+              className="text-ui-caption text-accent-primary hover:text-accent-lavender transition-colors"
             >
               {t('admin:streaming.matrix.resetAll')}
             </button>
@@ -568,26 +559,26 @@ export function StreamingPanel() {
 
       {/* Webcam */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.camera.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.camera.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.camera.description')}</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
           <div>
             <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.mode.label')}</div>
             <div className="flex flex-wrap gap-1.5">
-              <button
+              <button data-icon-motion="toggle"
                 onClick={() => setCamera({ mode: 'fixed' })}
                 className={`${pillBase} ${camera.mode === 'fixed' ? pillOn : pillOff}`}
               >
                 {t('admin:streaming.camera.mode.fixed')}
               </button>
-              <button
+              <button data-icon-motion="toggle"
                 onClick={() => setCamera({ mode: 'user-choice' })}
                 className={`${pillBase} ${camera.mode === 'user-choice' ? pillOn : pillOff}`}
               >
                 {t('admin:streaming.camera.mode.userChoice')}
               </button>
             </div>
-            <div className="text-[11px] text-txt-tertiary mt-1">
+            <div className="text-ui-caption text-txt-tertiary mt-1">
               {camera.mode === 'fixed'
                 ? t('admin:streaming.camera.mode.fixedHint')
                 : t('admin:streaming.camera.mode.userChoiceHint')}
@@ -596,11 +587,11 @@ export function StreamingPanel() {
 
           <div className="grid grid-cols-3 gap-2">
             <label className="block">
-              <span className="block text-[11px] text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.resolution')}</span>
+              <span className="block text-ui-caption text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.resolution')}</span>
               <select
                 value={camera.defaultResolution}
                 onChange={(e) => setCamera({ defaultResolution: Number(e.target.value) })}
-                className="input-standard w-full"
+                className="ui-select w-full"
               >
                 {camera.allowedResolutions.map((height) => (
                   <option key={height} value={height}>{RESOLUTION_LABELS[height as Resolution]}</option>
@@ -608,11 +599,11 @@ export function StreamingPanel() {
               </select>
             </label>
             <label className="block">
-              <span className="block text-[11px] text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.framerate')}</span>
+              <span className="block text-ui-caption text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.framerate')}</span>
               <select
                 value={camera.defaultFramerate}
                 onChange={(e) => setCamera({ defaultFramerate: Number(e.target.value) })}
-                className="input-standard w-full"
+                className="ui-select w-full"
               >
                 {camera.allowedFramerates.map((fps) => (
                   <option key={fps} value={fps}>{t('admin:streaming.units.fps', { value: fps })}</option>
@@ -620,7 +611,7 @@ export function StreamingPanel() {
               </select>
             </label>
             <label className="block">
-              <span className="block text-[11px] text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.bitrate')}</span>
+              <span className="block text-ui-caption text-txt-tertiary mb-1">{t('admin:streaming.camera.defaults.bitrate')}</span>
               <input
                 type="number"
                 min={camera.minBitrateKbps}
@@ -644,7 +635,7 @@ export function StreamingPanel() {
                 <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.quality.resolutions')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {STANDARD_RESOLUTIONS.map((height) => (
-                    <button
+                    <button data-icon-motion="toggle"
                       key={height}
                       onClick={() => toggleCameraResolution(height)}
                       className={`${pillBase} ${camera.allowedResolutions.includes(height) ? pillOn : pillOff}`}
@@ -658,7 +649,7 @@ export function StreamingPanel() {
                 <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.quality.framerates')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {STANDARD_FRAMERATES.map((fps) => (
-                    <button
+                    <button data-icon-motion="toggle"
                       key={fps}
                       onClick={() => toggleCameraFramerate(fps)}
                       className={`${pillBase} ${camera.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
@@ -671,7 +662,7 @@ export function StreamingPanel() {
               <div>
                 <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.quality.bitrateRange')}</div>
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] text-txt-tertiary">{t('admin:streaming.camera.quality.min')}</label>
+                  <label className="text-ui-caption text-txt-tertiary">{t('admin:streaming.camera.quality.min')}</label>
                   <input
                     type="number"
                     min={100}
@@ -690,7 +681,7 @@ export function StreamingPanel() {
                     }}
                     className="input-standard w-24 px-2 py-0.5 text-xs"
                   />
-                  <label className="text-[11px] text-txt-tertiary">{t('admin:streaming.camera.quality.max')}</label>
+                  <label className="text-ui-caption text-txt-tertiary">{t('admin:streaming.camera.quality.max')}</label>
                   <input
                     type="number"
                     min={camera.minBitrateKbps + 100}
@@ -709,7 +700,7 @@ export function StreamingPanel() {
                     }}
                     className="input-standard w-24 px-2 py-0.5 text-xs"
                   />
-                  <span className="text-[11px] text-txt-tertiary">{t('admin:streaming.units.kbpsLabel')}</span>
+                  <span className="text-ui-caption text-txt-tertiary">{t('admin:streaming.units.kbpsLabel')}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
@@ -724,7 +715,7 @@ export function StreamingPanel() {
               </div>
               {(camera.allowedResolutions.some((r) => r >= HIGH_END_RESOLUTION_THRESHOLD)
                 || camera.allowedFramerates.some((f) => f >= HIGH_END_FRAMERATE_THRESHOLD)) && (
-                <div className="text-[11px] text-accent-amber/90">{t('admin:streaming.camera.highEndWarning')}</div>
+                <div className="text-ui-caption text-accent-amber/90">{t('admin:streaming.camera.highEndWarning')}</div>
               )}
             </>
           )}
@@ -754,16 +745,16 @@ export function StreamingPanel() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>

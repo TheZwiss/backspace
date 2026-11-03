@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useTranslation } from 'react-i18next';
 import { StickerPicker } from './StickerPicker';
 import React, { useRef, useEffect, useState } from 'react';
@@ -64,11 +65,11 @@ export function EmojiPicker({
     <div ref={containerRef} className={wrapperClass}>
       {stickers && (
         <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-1">
-          <button
+          <button data-icon-motion="press"
             type="button"
             aria-pressed={!showStickers}
             onClick={() => setShowStickers(false)}
-            className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
+            className={`rounded-md px-3 py-1 text-ui-label font-medium transition-colors ${
               !showStickers
                 ? 'bg-interactive-selected text-txt-primary'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
@@ -76,11 +77,11 @@ export function EmojiPicker({
           >
             {t('composer.emoji')}
           </button>
-          <button
+          <Tooltip content={t('stickers.title')} position="top"><button data-icon-motion="press"
             type="button"
             aria-pressed={showStickers}
             aria-label={t('stickers.title')}
-            title={t('stickers.title')}
+
             onClick={() => setShowStickers(true)}
             className={`flex items-center justify-center rounded-md px-2.5 py-1 font-medium transition-colors ${
               showStickers
@@ -89,7 +90,7 @@ export function EmojiPicker({
             }`}
           >
             <HeartIcon className="w-4 h-4" />
-          </button>
+          </button></Tooltip>
         </div>
       )}
       {stickers && showStickers ? <StickerPicker mobile={mobile} manageable={manageable} onSelect={token => onEmojiSelect({ native: token })} /> : <Picker

@@ -1,0 +1,12 @@
+{
+  "press": {"duration":160,"keyframes":[{"scale":"1"},{"scale":"0.93","offset":0.35},{"scale":"1"}]},
+  "gear": {"duration":220,"keyframes":[{"rotate":"0deg"},{"rotate":"36deg","offset":0.45},{"rotate":"0deg"}]},
+  "bell": {"duration":240,"keyframes":[{"rotate":"0deg"},{"rotate":"-9deg"},{"rotate":"7deg"},{"rotate":"-4deg"},{"rotate":"0deg"}]},
+  "toggle": {"duration":180,"keyframes":[{"scale":"1","opacity":1},{"scale":"0.94","opacity":0.82,"offset":0.35},{"scale":"1","opacity":1}]},
+  "expand": {"duration":200,"keyframes":[{"scale":"1"},{"scale":"0.96","offset":0.3},{"scale":"1.04","offset":0.65},{"scale":"1"}]},
+  "send": {"duration":190,"keyframes":[{"translate":"0px 0px"},{"translate":"2px -2px","offset":0.4},{"translate":"0px 0px"}]},
+  "attach": {"duration":180,"keyframes":[{"translate":"0px 0px"},{"translate":"0px -2px","offset":0.4},{"translate":"0px 0px"}]},
+  "download": {"duration":190,"keyframes":[{"translate":"0px 0px"},{"translate":"0px 2px","offset":0.4},{"translate":"0px 0px"}]},
+  "pulse": {"duration":200,"keyframes":[{"scale":"1"},{"scale":"0.94","offset":0.3},{"scale":"1.04","offset":0.65},{"scale":"1"}]},
+  "arrow": {"duration":180,"keyframes":[{"rotate":"0deg"},{"rotate":"10deg","offset":0.4},{"rotate":"0deg"}]}
+}

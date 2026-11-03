@@ -56,7 +56,7 @@ export function ExploreSpacePreviewCard({
         {/* Name + meta */}
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-txt-primary truncate">{space.name}</div>
-          <div className="flex items-center gap-2 text-[12px] text-txt-tertiary">
+          <div className="flex items-center gap-2 text-ui-caption text-txt-tertiary">
             <span>{t('spaces:explore.memberCount', { count: space.memberCount })}</span>
             {originLabel && <span className="truncate text-txt-tertiary/70">· {originLabel}</span>}
           </div>
@@ -65,18 +65,18 @@ export function ExploreSpacePreviewCard({
         {/* Action */}
         <div className="flex-shrink-0">
           {isPublic ? (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleJoin}
               disabled={joining}
-              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-xs font-medium rounded-full transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {joining ? t('spaces:explore.preview.joining') : t('spaces:explore.preview.join')}
             </button>
           ) : isPending ? (
             <span className="px-3 py-1.5 text-xs font-medium text-txt-tertiary">{t('spaces:explore.preview.pending')}</span>
           ) : (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={openRequestForm}
               className="px-3 py-1.5 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs font-medium rounded-full transition-colors"
@@ -98,15 +98,15 @@ export function ExploreSpacePreviewCard({
             className="input-standard w-full resize-none text-sm"
           />
           <div className="flex gap-2">
-            <button
+            <button data-icon-motion="send"
               type="button"
               onClick={sendRequest}
               disabled={joining}
-              className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-xs font-medium rounded transition-colors disabled:opacity-50"
+              className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
             >
               {joining ? t('spaces:explore.preview.sending') : t('spaces:explore.sendRequest')}
             </button>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={cancelRequestForm}
               className="px-3 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -117,7 +117,7 @@ export function ExploreSpacePreviewCard({
         </div>
       )}
 
-      {joinError && <div className="mt-2 text-[12px] text-txt-danger">{joinError}</div>}
+      {joinError && <div className="mt-2 text-ui-caption text-txt-danger">{joinError}</div>}
     </div>
   );
 }

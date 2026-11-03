@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { normalizeUserAssets } from '../../utils/assetUrls';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 
 function TransferMemberRow({
   member,
@@ -22,7 +23,7 @@ function TransferMemberRow({
   const canonical = useCanonicalUserView(member.user, origin);
   const displayName = canonical.displayName || canonical.username;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onSelect(member.userId)}
       className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
     >
@@ -38,7 +39,7 @@ function TransferMemberRow({
           {displayName}
         </span>
         {canonical.displayName && (
-          <span className="text-[11px] text-txt-tertiary truncate max-w-full">
+          <span className="text-ui-caption text-txt-tertiary truncate max-w-full">
             {canonical.username}
           </span>
         )}
@@ -50,6 +51,7 @@ function TransferMemberRow({
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const { t } = useTranslation(['spaces', 'common']);
   const modalRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
   const currentUserId = useAuthStore((s) => s.user?.id);
   const transferOwnership = useSpaceStore((s) => s.transferOwnership);
@@ -60,6 +62,13 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   const [transferring, setTransferring] = useState(false);
   const [members, setMembers] = useState<MemberWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useDialogLayer(overlayRef, {
+    open: !!space,
+    onClose: () => selectedUserId ? setSelectedUserId(null) : onClose(),
+    dismissible: !transferring,
+    label: t('spaces:ownership.title'),
+  });
 
   // Fetch members for the target space on mount (federation-aware)
   useEffect(() => {
@@ -97,30 +106,20 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
 
   const selectedMember = selectedUserId ? members.find(m => m.userId === selectedUserId) : null;
 
-  // Close on click-outside and escape
+  // Close on click outside. Escape is managed by the shared dialog layer.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        if (transferring) return;
         onClose();
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (selectedUserId) {
-          setSelectedUserId(null);
-        } else {
-          onClose();
-        }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose, selectedUserId]);
+  }, [onClose, transferring]);
 
   if (!space) return null;
 
@@ -139,10 +138,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   };
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
+    <div ref={overlayRef} className="fixed inset-0 z-confirm flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
-        className="w-[380px] max-h-[480px] glass-modal rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        className="w-[380px] max-h-[480px] ui-dialog-surface flex flex-col animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
@@ -172,17 +171,17 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               <p className="text-xs text-txt-tertiary mt-1.5">{t('spaces:ownership.regularMember')}</p>
             </div>
             <div className="flex gap-3">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => setSelectedUserId(null)}
                 className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
                 disabled={transferring}
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleTransfer}
                 disabled={transferring}
-                className="flex-1 py-2.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
               >
                 {transferring ? t('spaces:ownership.transferring') : t('spaces:ownership.confirm')}
               </button>

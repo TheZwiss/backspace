@@ -14,6 +14,7 @@ struct AUDIOCLIENT_ACTIVATION_PARAMS { AUDIOCLIENT_ACTIVATION_TYPE ActivationTyp
 static_assert(sizeof(AUDIOCLIENT_ACTIVATION_PARAMS) == 12, "Windows SDK activation ABI");
 #endif
 #include <mmdeviceapi.h>
+#include <dwmapi.h>
 #include <wrl/client.h>
 #include <atomic>
 #include <io.h>
@@ -22,6 +23,7 @@ static_assert(sizeof(AUDIOCLIENT_ACTIVATION_PARAMS) == 12, "Windows SDK activati
 #include <cstdlib>
 #include <vector>
 #include <cstdint>
+#include <string>
 using Microsoft::WRL::ComPtr;
 class Activation final : public IActivateAudioInterfaceCompletionHandler, public IAgileObject {
     std::atomic<ULONG> references{1};
@@ -69,8 +71,186 @@ static int fail(const char* stage, HRESULT hr, int code) {
     std::fflush(stderr);
     return code;
 }
+// Coordinates are compared against what Chromium's display capture reports,
+// and that is physical pixels. Without this the process is DPI-unaware and
+// Windows silently scales every rectangle it hands out — the crop would be
+// wrong on exactly the machines that use display scaling.
+static void enablePerMonitorDpiAwareness() {
+    using SetContextFn = BOOL (WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto setContext = reinterpret_cast<SetContextFn>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetProcessDpiAwarenessContext"));
+    if (setContext) setContext(reinterpret_cast<DPI_AWARENESS_CONTEXT>(static_cast<INT_PTR>(-4)));
+}
+
+// QUNS_RUNNING_D3D_FULL_SCREEN: a D3D app holds the display outside the
+// compositor. Resolved at runtime because MinGW's shlobj.h predates the API and
+// the export is what matters, not the header.
+static bool d3dAppInExclusiveFullscreen() {
+    using QueryFn = HRESULT (WINAPI*)(int*);
+    static QueryFn query = reinterpret_cast<QueryFn>(
+        GetProcAddress(LoadLibraryW(L"shell32.dll"), "SHQueryUserNotificationState"));
+    if (!query) return false;
+    int state = 1; // QUNS_NOT_PRESENT
+    return SUCCEEDED(query(&state)) && state == 3;
+}
+
+static std::string wideToUtf8(const wchar_t* value, int length) {
+    if (!value || length <= 0) return {};
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, value, length, nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) return {};
+    std::string result(static_cast<size_t>(bytes), '\0');
+    if (WideCharToMultiByte(CP_UTF8, 0, value, length, result.data(), bytes, nullptr, nullptr) != bytes) return {};
+    return result;
+}
+
+// Resolve the owning executable only for the one-shot geometry request. The
+// 100 ms geometry watcher reports rectangles repeatedly and should not reopen
+// a process handle on every tick.
+static std::string windowProcessName(HWND hwnd) {
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(hwnd, &pid) || pid == 0) return {};
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return {};
+    wchar_t path[32768]{};
+    DWORD size = static_cast<DWORD>(sizeof(path) / sizeof(path[0]));
+    std::string result;
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        const wchar_t* base = path;
+        for (DWORD i = 0; i < size; ++i) {
+            if (path[i] == L'\\' || path[i] == L'/') base = path + i + 1;
+        }
+        const int baseLength = static_cast<int>(path + size - base);
+        result = wideToUtf8(base, baseLength);
+    }
+    CloseHandle(process);
+    return result;
+}
+
+static std::string jsonEscape(const std::string& value) {
+    static const char hex[] = "0123456789abcdef";
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (unsigned char ch : value) {
+        switch (ch) {
+        case '"': escaped += "\\\""; break;
+        case '\\': escaped += "\\\\"; break;
+        case '\b': escaped += "\\b"; break;
+        case '\f': escaped += "\\f"; break;
+        case '\n': escaped += "\\n"; break;
+        case '\r': escaped += "\\r"; break;
+        case '\t': escaped += "\\t"; break;
+        default:
+            if (ch < 0x20) {
+                escaped += "\\u00";
+                escaped += hex[(ch >> 4) & 0x0f];
+                escaped += hex[ch & 0x0f];
+            } else {
+                escaped += static_cast<char>(ch);
+            }
+        }
+    }
+    return escaped;
+}
+
+static HWND createProcessNameSelfTestWindow() {
+    static const wchar_t className[] = L"BackspaceProcessAudioSelfTestWindow";
+    WNDCLASSW windowClass{};
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = className;
+    if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return nullptr;
+    return CreateWindowExW(0, className, L"", WS_OVERLAPPED, 0, 0, 100, 100,
+        nullptr, nullptr, windowClass.hInstance, nullptr);
+}
+
+// One JSON line: the window's physical rectangle, its monitor's, and the flags
+// the share needs. False when the window or its monitor is gone.
+static bool printGeometry(HWND hwnd, bool includeProcess = false) {
+    if (!IsWindow(hwnd)) return false;
+    RECT frame{};
+    // The extended frame bounds are the visible window without the invisible
+    // resize border, which is what a viewer expects to see.
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))
+        && !GetWindowRect(hwnd, &frame)) {
+        return false;
+    }
+    // A minimized window has no on-screen rectangle: its DWM bounds are empty
+    // or parked far off-screen. Report the rectangle it will be restored to, so
+    // minimizing pauses the share (the renderer's card) instead of ending it —
+    // only a closed window ends it.
+    const bool minimized = IsIconic(hwnd) != FALSE;
+    if (minimized) {
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
+        if (GetWindowPlacement(hwnd, &placement)) frame = placement.rcNormalPosition;
+    }
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) return false;
+    // Whether the window is the one the user is working in. A window that is
+    // not focused is where the share shows a paused card instead of the pixels
+    // on top of it (the capture is of the display, see windowCropCapture.ts).
+    const bool foreground = GetForegroundWindow() == GetAncestor(hwnd, GA_ROOT);
+    // True while a D3D app runs in exclusive fullscreen: that app bypasses the
+    // compositor, and a display capture of its output can stop delivering
+    // frames through no fault of the share. The renderer uses this to explain
+    // the gap instead of showing black, and resumes by itself when frames
+    // return. SHQueryUserNotificationState is the documented signal for exactly
+    // this state.
+    const bool exclusive = d3dAppInExclusiveFullscreen();
+    const std::string processName = includeProcess ? jsonEscape(windowProcessName(hwnd)) : std::string{};
+    std::fprintf(stdout,
+        includeProcess
+            ? "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s,\"process\":\"%s\"}\n"
+            : "{\"window\":[%ld,%ld,%ld,%ld],\"monitor\":[%ld,%ld,%ld,%ld],\"minimized\":%s,\"foreground\":%s,\"exclusive\":%s}\n",
+        static_cast<long>(frame.left), static_cast<long>(frame.top),
+        static_cast<long>(frame.right - frame.left), static_cast<long>(frame.bottom - frame.top),
+        static_cast<long>(info.rcMonitor.left), static_cast<long>(info.rcMonitor.top),
+        static_cast<long>(info.rcMonitor.right - info.rcMonitor.left),
+        static_cast<long>(info.rcMonitor.bottom - info.rcMonitor.top),
+        minimized ? "true" : "false",
+        foreground ? "true" : "false",
+        exclusive ? "true" : "false",
+        processName.c_str());
+    std::fflush(stdout);
+    return true;
+}
+
 int wmain(int argc, wchar_t** argv) {
+    enablePerMonitorDpiAwareness();
     if (argc == 2 && wcscmp(argv[1], L"--self-test") == 0) {
+        const std::wstring unicodeName = L"Jogo-\x6f22\x5b57.exe";
+        const std::string expectedUnicodeName = std::string("Jogo-") + "\xE6\xBC\xA2\xE5\xAD\x97" + ".exe";
+        if (wideToUtf8(unicodeName.data(), static_cast<int>(unicodeName.size())) != expectedUnicodeName) {
+            std::fprintf(stderr, "SELF_TEST_FAIL UTF-8 process name\n");
+            return 10;
+        }
+        if (jsonEscape("\"\\") != "\\\"\\\\") {
+            std::fprintf(stderr, "SELF_TEST_FAIL JSON escaping\n");
+            return 9;
+        }
+        HWND selfTestWindow = createProcessNameSelfTestWindow();
+        if (!selfTestWindow) {
+            std::fprintf(stderr, "SELF_TEST_FAIL process-name window\n");
+            return 11;
+        }
+        wchar_t executablePath[32768]{};
+        const DWORD executableLength = GetModuleFileNameW(nullptr, executablePath,
+            static_cast<DWORD>(sizeof(executablePath) / sizeof(executablePath[0])));
+        const wchar_t* executableBase = executablePath;
+        for (DWORD i = 0; i < executableLength; ++i) {
+            if (executablePath[i] == L'\\' || executablePath[i] == L'/') executableBase = executablePath + i + 1;
+        }
+        const std::string expectedProcessName = executableLength
+            ? wideToUtf8(executableBase, static_cast<int>(executablePath + executableLength - executableBase))
+            : std::string{};
+        const std::string actualProcessName = windowProcessName(selfTestWindow);
+        DestroyWindow(selfTestWindow);
+        if (expectedProcessName.empty() || actualProcessName != expectedProcessName) {
+            std::fprintf(stderr, "SELF_TEST_FAIL process-name lookup\n");
+            return 12;
+        }
         HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         if (FAILED(hr)) return fail("self-test.CoInitializeEx", hr, 4);
         ComPtr<Activation> completion;
@@ -81,7 +261,32 @@ int wmain(int argc, wchar_t** argv) {
         if (FAILED(hr)) return fail("self-test.IAgileObject", hr, 8);
         hr = completion.As(&marshaler);
         if (FAILED(hr)) return fail("self-test.IMarshal", hr, 8);
-        std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal\n");
+        std::fprintf(stderr, "SELF_TEST_OK IAgileObject IMarshal JSON_ESCAPE UTF8_PROCESS_NAME WINDOW_PROCESS_LOOKUP\n");
+        return 0;
+    }
+    // Window geometry for the borderless window-capture path: the renderer
+    // captures the display the window is on and crops to this rectangle, which
+    // is the one way to share a single window on Windows 10 without the yellow
+    // capture border (Windows Graphics Capture draws it; display capture does
+    // not). Physical pixels, JSON on stdout, one line.
+    if (argc == 3 && (wcscmp(argv[1], L"geometry") == 0 || wcscmp(argv[1], L"geometry-watch") == 0)) {
+        auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
+        if (!printGeometry(hwnd, wcscmp(argv[1], L"geometry") == 0)) {
+            std::fprintf(stderr, "ERROR stage=geometry reason=invalid-window\n");
+            return 3;
+        }
+        return 0;
+    }
+    // The same line, repeating while the window exists: one process for the
+    // whole share instead of one spawn per poll, so the crop can follow a
+    // window being dragged without the process cost of doing that at 10 Hz.
+    if (argc == 4 && wcscmp(argv[1], L"geometry-watch") == 0) {
+        auto hwnd = reinterpret_cast<HWND>(static_cast<uintptr_t>(_wcstoui64(argv[2], nullptr, 10)));
+        long interval = wcstol(argv[3], nullptr, 10);
+        if (interval < 16) interval = 16;
+        while (printGeometry(hwnd)) Sleep(static_cast<DWORD>(interval));
+        std::fprintf(stderr, "GONE\n");
+        std::fflush(stderr);
         return 0;
     }
     if (argc != 3) return 2;

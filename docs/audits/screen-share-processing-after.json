@@ -1,0 +1,119 @@
+{
+  "window": {
+    "cpuPercent": 8.63289072455594,
+    "workingSetMB": 1181.3871299342106,
+    "privateMB": 1003.3972039473684,
+    "duration": 42.329832,
+    "gpuEnginePercent": {
+      "security": 0,
+      "ofa_0": 0,
+      "copy": 3.0538578754653085,
+      "3d": 15.532303534057847,
+      "legacyoverlay": 0,
+      "videodecode": 0,
+      "videoencode": 11.347070488247672,
+      "vr": 0
+    },
+    "streams": [
+      [
+        {
+          "direction": "outbound-rtp",
+          "width": 1614,
+          "height": 1080,
+          "fps": 56.90377401912323,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "fps": 0,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "fps": 0,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "media-source",
+          "width": 1614,
+          "height": 1080,
+          "fps": 56.90377401912323
+        }
+      ],
+      [
+        {
+          "direction": "inbound-rtp",
+          "width": 1614,
+          "height": 1080,
+          "fps": 56.85246032245424
+        }
+      ]
+    ],
+    "native": false
+  },
+  "screen": {
+    "cpuPercent": 5.900306452800663,
+    "workingSetMB": 1259.995271381579,
+    "privateMB": 1246.7995476973683,
+    "duration": 36.4299686,
+    "gpuEnginePercent": {
+      "videodecode": 11.472529497438996,
+      "legacyoverlay": 0,
+      "security": 0,
+      "copy": 3.1913651300468406,
+      "vr": 0,
+      "videoencode": 29.709197562997723,
+      "ofa_0": 0,
+      "3d": 8.473434101798444
+    },
+    "streams": [
+      [
+        {
+          "direction": "outbound-rtp",
+          "fps": 0,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "fps": 0,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "fps": 0,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "outbound-rtp",
+          "width": 1920,
+          "height": 1080,
+          "fps": 58.93932012612363,
+          "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)",
+          "quality": "none"
+        },
+        {
+          "direction": "media-source",
+          "width": 1920,
+          "height": 1080,
+          "fps": 58.88932918454083
+        }
+      ],
+      [
+        {
+          "direction": "inbound-rtp",
+          "width": 1920,
+          "height": 1080,
+          "fps": 58.88832225591983
+        }
+      ]
+    ],
+    "native": true,
+    "captureEncoder": "h264_nvenc"
+  }
+}

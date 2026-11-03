@@ -1,0 +1,44 @@
+{
+  "time": 213995.70000000298,
+  "route": "/channels/375400147737526272/375400147737526276",
+  "voice": "connected",
+  "sharing": false,
+  "config": {
+    "previewMode": "normal",
+    "height": 720,
+    "fps": 60,
+    "mode": "gaming",
+    "customBitrateKbps": null,
+    "shareAudio": false,
+    "codec": "vp9"
+  },
+  "participants": [
+    {
+      "userId": "375397996164431872",
+      "identity": "375397996164431872:test_alice",
+      "local": true,
+      "sharing": false,
+      "republishing": false
+    },
+    {
+      "userId": "375397997229785088",
+      "identity": "375397997229785088:test_bob",
+      "local": false,
+      "sharing": false,
+      "republishing": false
+    }
+  ],
+  "videos": [
+    {
+      "time": 2.224578,
+      "frames": 126,
+      "paused": false,
+      "width": 1098,
+      "height": 720,
+      "track": "cf0acdad-76d5-4db2-9907-a05943dff999",
+      "ready": 4
+    }
+  ],
+  "dialog": "Compartilhar sua tela",
+  "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n01:12\nT\nTest Alice\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n3 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n3 min decorridos\nCompartilhar sua tela\n\nEscolha o que compartilhar, ajuste a qualidade e comece.\n\nTelas2\nJanelas6\nNova notificação\n⠇ Abrir Electron com dois usuários | backspace-prort-android\nBackspace\nBackspace\nbackspace-prort-android\nNVIDIA GeForce Overlay\nPRONTO PARA ENTRAR AO VIVO · JANELA\nBackspace\nConfigurações da transmissão\nRESOLUÇÃO\n540p\n720p\n1080p\nTAXA DE QUADROS\n30\n45\n60\nMODO DE CONTEÚDO\nJogos\nTexto\nCODEC\nVP9\nH264\nTAXA DE BITS\nAutomática\nPersonalizada\nPRÉVIA DA TRANSMISSÃO\nNormal\nDesfocada\nSem imagem\n\nDefine a miniatura exibida antes de assistir. Não altera o vídeo da transmissão.\n\nÁUDIO DO SISTEMA\n4 Mbps · equilibrado\nConfigurações da transmissão\nCancelar\nIniciar transmissão"
+}

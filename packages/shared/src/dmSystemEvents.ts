@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, type AvatarColor, type SpaceInviteSystemPayload } from './types.js';
+import { AVATAR_COLORS, MSN_WINK_EFFECTS, type NudgeEffect, type AvatarColor, type SpaceInviteSystemPayload } from './types.js';
 
 /**
  * The content of a DM system message (`dm_messages.type = 'system'`), stored
@@ -16,6 +16,7 @@ export type CallHistoryEvent = { event: 'call_history'; startedAt: number; conne
 
 export type DmSystemEvent =
   | CallHistoryEvent
+  | { event: 'nudge'; effect: NudgeEffect }
   | { event: 'member_added'; targetUserId: string; targetDisplayName: string }
   | { event: 'member_removed'; targetUserId: string; targetDisplayName: string; reason: 'leave' | 'kick' }
   | { event: 'owner_changed'; newOwnerId: string; newOwnerDisplayName: string }
@@ -123,6 +124,9 @@ export function parseDmSystemEvent(content: string | null | undefined): DmSystem
   if (!isFields(data)) return null;
 
   switch (data.event) {
+    case 'nudge':
+      return typeof data.effect === 'string' && ['shake', 'wave', 'jelly', 'knock', 'confetti', 'pulse', ...MSN_WINK_EFFECTS].includes(data.effect)
+        ? { event: 'nudge', effect: data.effect as NudgeEffect } : null;
     case 'call_history': {
       const timestamp = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
       if (!timestamp(data.startedAt) || !(data.connectedAt === null || timestamp(data.connectedAt)) || !(data.endedAt === null || timestamp(data.endedAt))) return null;

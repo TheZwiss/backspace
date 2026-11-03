@@ -1,0 +1,286 @@
+{
+  "results": [
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 0,
+      "commandAt": 1793579807749,
+      "clickAt": 1793579807752,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579807753
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579807761
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579807764
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579807768
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579809763,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579809764
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579807763,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 1,
+      "commandAt": 1793579815284,
+      "clickAt": 1793579815288,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579815289
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579815296
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579815298
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579815303
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579815762,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579815762
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579815298,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "bob",
+      "observer": "alice",
+      "round": 2,
+      "commandAt": 1793579819367,
+      "clickAt": 1793579819370,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579819372
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579819379
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579819381
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579819386
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579821765,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579821765
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579819381,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 0,
+      "commandAt": 1793579826669,
+      "clickAt": 1793579826672,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579826673
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579826684
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579826686
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579826689
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579827762,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579827763
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579826686,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 1,
+      "commandAt": 1793579831415,
+      "clickAt": 1793579831418,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579831419
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579831428
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579831431
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579831433
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579833769,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579833769
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579831430,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    },
+    {
+      "leaver": "alice",
+      "observer": "bob",
+      "round": 2,
+      "commandAt": 1793579837412,
+      "clickAt": 1793579837416,
+      "settled": {
+        "count": 0,
+        "tiles": 0
+      },
+      "trace": [
+        {
+          "event": "voice-user-removed",
+          "at": 1793579837417
+        },
+        {
+          "event": "participant-removed",
+          "at": 1793579837428
+        },
+        {
+          "event": "tile-removed",
+          "at": 1793579837431
+        },
+        {
+          "event": "tile-two-raf",
+          "at": 1793579837435
+        },
+        {
+          "event": "sdk-signal-update",
+          "at": 1793579839762,
+          "states": [
+            3
+          ]
+        },
+        {
+          "event": "sdk-participant-disconnected",
+          "at": 1793579839762
+        }
+      ],
+      "ws": [
+        {
+          "at": 1793579837431,
+          "type": "voice_state_update",
+          "action": "leave"
+        }
+      ]
+    }
+  ]
+}

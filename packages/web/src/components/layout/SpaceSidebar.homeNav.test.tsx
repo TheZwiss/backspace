@@ -27,7 +27,7 @@ function renderAt(pathname: string) {
 }
 
 function railButton(name: string): HTMLElement {
-  return screen.getByTitle(name);
+  return screen.getByRole('button', { name: name });
 }
 
 beforeEach(() => {

@@ -99,7 +99,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
             </span>
           )}
         </div>
-        <p className="text-[13px] text-txt-tertiary">{t('spaces:explore.outer.subtitle')}</p>
+        <p className="text-ui-label text-txt-tertiary">{t('spaces:explore.outer.subtitle')}</p>
       </div>
 
       {isLoading && !hasEntries ? (
@@ -133,7 +133,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
           )}
 
           {notice === 'unreachable' && (
-            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+            <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber">
               {t('errors:directory_unreachable')}
             </div>
           )}
@@ -146,7 +146,7 @@ export function OuterSpaceSection({ query, onConnect }: OuterSpaceSectionProps) 
 
           {status === 'ok' && hasMore && (
             <div className="flex justify-center">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => { void loadMore(); }}
                 className="px-4 py-2 bg-interactive-muted hover:bg-interactive-hover text-txt-secondary text-sm font-medium rounded transition-colors"
               >

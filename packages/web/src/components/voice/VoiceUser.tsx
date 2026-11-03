@@ -1,3 +1,4 @@
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -79,7 +80,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       // Build moderation items
       const modItems = channelId ? buildVoiceModMenuItems(targetUserId, channelId) : [];
 
-      const items: ContextMenuItem[] = [...modItems];
+      const items: ContextMenuItem[] = [...modItems, ...(user ? userSocialMenuItems(user, userOrigin) : [])];
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -140,7 +141,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
+    [user, userOrigin, isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
   );
 
   return (
@@ -161,7 +162,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full ${large ? 'object-contain bg-black' : 'object-cover'}`}
+          className="w-full h-full object-contain bg-black"
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
@@ -180,7 +181,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
             )}
           </div>
           {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
-            <button type="button" className="px-3 py-1.5 rounded bg-accent-primary text-white text-xs font-semibold hover:bg-accent-primary/80 transition-colors"
+            <button data-icon-motion="toggle" type="button" className="ui-button ui-button-primary transition-colors"
               onClick={() => { useVoiceStore.getState().rewatchCamera(participant.userId); setCameraSubscription(getActiveRoom(), participant.identity, true); }}>
               {t('voice:participantMenu.watchCamera')}
             </button>
@@ -192,12 +193,12 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
-              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
+              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-ui-label'}`}
             >
               {displayName}
             </span>
             {isLocal && (
-              <span className="text-[10px] text-white/40 font-medium">
+              <span className="text-ui-micro text-white/40 font-medium">
                 {t('voice:badges.you')}
               </span>
             )}

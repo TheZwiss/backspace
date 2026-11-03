@@ -9,8 +9,8 @@ import type { ReactNode } from 'react';
 export function SectionShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{title}</div>
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">{children}</div>
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{title}</div>
+      <div className="settings-section">{children}</div>
     </div>
   );
 }
@@ -28,10 +28,10 @@ export interface DropdownItemProps {
  */
 export function DropdownItem({ label, active, onClick }: DropdownItemProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
+      className={`w-full px-3 py-2 text-left text-ui-label hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
         active ? 'text-txt-primary' : 'text-txt-secondary'
       }`}
     >

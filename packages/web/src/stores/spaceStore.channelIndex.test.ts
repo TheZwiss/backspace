@@ -70,7 +70,7 @@ describe('the channel index is the one source of the space-channel lookup maps',
     useSpaceStore.getState().addSpaceFromReady(NOVA, space('s1', [channel('v1', 's1', { type: 'voice' })]));
     const s = useSpaceStore.getState();
     expect(s.voiceChannelIds.has('v1')).toBe(true);
-    expect(s.spaceChannelIndex.get('v1')).toEqual({ spaceId: 's1', origin: NOVA, type: 'voice' });
+    expect(s.spaceChannelIndex.get('v1')).toEqual({ spaceId: 's1', origin: NOVA, type: 'voice', name: 'v1' });
   });
 
   it('removeSpace forgets the voice channels of that space', () => {

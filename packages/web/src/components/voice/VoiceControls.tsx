@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -113,47 +114,47 @@ export function VoiceControls() {
     <>
       {/* Row 1: Signal icon + status text + disconnect */}
       <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
-        <button
+        <Tooltip content={t('voice:controls.connectionInfo')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.connectionInfo')}
           ref={connectionBtnRef}
           onClick={() => {
             setShowConnectionInfo(!showConnectionInfo);
             if (!showConnectionInfo) setShowShareMenu(false);
           }}
           className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0 hover:brightness-125 transition-all`}
-          title={t('voice:controls.connectionInfo')}
+
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={qualityColor}>
             <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" />
           </svg>
-        </button>
+        </button></Tooltip>
 
         <div className="min-w-0 flex-1">
-          <div title={statusLabel} className={`truncate text-[13px] font-semibold leading-[18px] ${statusColor}`}>
+          <div title={statusLabel} className={`truncate text-ui-label font-semibold leading-[18px] ${statusColor}`}>
             {statusLabel}
           </div>
-          <div title={detailLabel} className="text-[12px] text-txt-tertiary truncate leading-[16px]">
+          <div title={detailLabel} className="text-ui-caption text-txt-tertiary truncate leading-[16px]">
             {detailLabel}
           </div>
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {voiceConnectionStatus === 'disconnected' && connectionError && (
-            <button
+            <button data-icon-motion="press"
               onClick={handleRetry}
-              className="px-2 h-7 text-[12px] text-accent-primary hover:bg-interactive-hover rounded"
+              className="px-2 h-7 text-ui-caption text-accent-primary hover:bg-interactive-hover rounded"
             >
               {t('voice:status.retry')}
             </button>
           )}
-          <button
+          <Tooltip content={t('voice:controls.disconnect')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.disconnect')}
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
-            title={t('voice:controls.disconnect')}
+
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 9C10.4 9 8.85 9.25 7.4 9.72V12.82C7.4 13.22 7.17 13.56 6.84 13.72C5.86 14.21 4.97 14.84 4.18 15.57C4 15.75 3.75 15.85 3.48 15.85C3.2 15.85 2.95 15.74 2.77 15.56L0.29 13.08C0.11 12.9 0 12.65 0 12.38C0 12.1 0.11 11.85 0.29 11.67C3.34 8.78 7.46 7 12 7S20.66 8.78 23.71 11.67C23.89 11.85 24 12.1 24 12.38C24 12.65 23.89 12.9 23.71 13.08L21.23 15.56C21.05 15.74 20.8 15.85 20.52 15.85C20.25 15.85 20 15.75 19.82 15.57C19.03 14.84 18.14 14.21 17.16 13.72C16.83 13.56 16.6 13.22 16.6 12.82V9.72C15.15 9.25 13.6 9 12 9Z" />
             </svg>
-          </button>
+          </button></Tooltip>
         </div>
 
         {/* Connection Info Popover */}
@@ -167,14 +168,14 @@ export function VoiceControls() {
       {/* Row 2: Camera, Screen Share, Noise Suppression, Text Voice, Soundboard */}
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         {canSpeak && (
-          <button
+          <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button data-icon-motion="toggle" aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
             onClick={handleCameraAction}
             className={`${btnBase} ${
               isCameraOn
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
             }`}
-            title={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
+
           >
             {isCameraOn ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -186,11 +187,11 @@ export function VoiceControls() {
                 <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
             )}
-          </button>
+          </button></Tooltip>
         )}
 
         {canStream && (
-          <button
+          <Tooltip content={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')} position="top"><button data-icon-motion="expand" aria-label={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
             ref={shareBtnRef}
             onClick={handleScreenShare}
             // Idle the button starts a share; live it toggles a menu, so it
@@ -202,24 +203,24 @@ export function VoiceControls() {
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
             }`}
-            title={isScreenSharing ? t('voice:controls.shareOptions') : t('voice:controls.shareScreen')}
+
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
               <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
             </svg>
-          </button>
+          </button></Tooltip>
         )}
 
         {/* AI Noise Suppression (RNNoise) */}
-        <button
+        <Tooltip content={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')} position="top"><button data-icon-motion="toggle" aria-label={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')}
           onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
           className={`${btnBase} ${
             rnnoiseEnabled
               ? 'bg-surface-base text-status-online hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
-          title={rnnoiseEnabled ? t('voice:controls.noiseSuppressionOff') : t('voice:controls.noiseSuppressionOn')}
+
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity={rnnoiseEnabled ? 0.15 : 0.08} />
@@ -237,7 +238,7 @@ export function VoiceControls() {
               <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
             )}
           </svg>
-        </button>
+        </button></Tooltip>
 
         <TextVoiceButton variant="toolbar" className="flex-1 h-[34px] bg-surface-base" />
         <SoundboardButton variant="toolbar" className="flex-1 h-[34px] bg-surface-base" />

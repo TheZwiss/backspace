@@ -1,3 +1,4 @@
+import { Tooltip } from '../../ui/Tooltip';
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Role } from '@backspace/shared';
@@ -194,7 +195,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
     const draggable = movable && !isMobile && index !== null;
 
     return (
-      <div
+      <div data-icon-motion="press"
         key={role.id}
         data-role-row=""
         draggable={draggable || undefined}
@@ -220,7 +221,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
         {reorderable && !isMobile && (
           <div className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
             {movable && index !== null && (
-              <button
+              <Tooltip content={t('roles.reorder.handleHint')} position="top"><button data-icon-motion="press"
                 ref={registerControl(role.id, 'handle')}
                 type="button"
                 // Chrome starts no drag of the row from inside a button, so
@@ -228,7 +229,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                 // themselves; their dragstart reaches the row's handler.
                 draggable
                 aria-label={t('roles.reorder.handle', { name: role.name })}
-                title={t('roles.reorder.handleHint')}
+
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={handleKeyDown(index)}
                 className={`w-6 h-6 flex items-center justify-center rounded text-txt-tertiary hover:text-txt-secondary cursor-grab active:cursor-grabbing transition-colors ${FOCUS_RING}`}
@@ -241,13 +242,13 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                   <circle cx="9" cy="18" r="1.6" />
                   <circle cx="15" cy="18" r="1.6" />
                 </svg>
-              </button>
+              </button></Tooltip>
             )}
             {locked && lockIcon(role)}
           </div>
         )}
 
-        <button
+        <button data-icon-motion="press"
           type="button"
           draggable={draggable || undefined}
           className={`flex-1 min-w-0 flex items-center gap-2.5 py-2 rounded text-left ${FOCUS_RING}`}
@@ -267,7 +268,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
           >
             {movable && index !== null ? (
               <>
-                <button
+                <button data-icon-motion="press"
                   ref={registerControl(role.id, 'up')}
                   type="button"
                   aria-label={t('roles.reorder.up', { name: role.name })}
@@ -279,7 +280,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
                   </svg>
                 </button>
-                <button
+                <button data-icon-motion="press"
                   ref={registerControl(role.id, 'down')}
                   type="button"
                   aria-label={t('roles.reorder.down', { name: role.name })}
@@ -326,7 +327,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
               <div
                 ref={moveErrorRef}
                 role="alert"
-                className="mx-2 mt-1 mb-1.5 px-2.5 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-[13px]"
+                className="mx-2 mt-1 mb-1.5 px-2.5 py-1.5 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-ui-label"
               >
                 {moveError.message}
               </div>

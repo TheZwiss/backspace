@@ -19,7 +19,7 @@ interface SilenceButtonProps {
  */
 export function SilenceButton({ children, disabled = false, onClick }: SilenceButtonProps) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className="silence-button">
+    <button data-icon-motion="press" type="button" disabled={disabled} onClick={onClick} className="silence-button">
       {/* Drift: the slow tumble, and the shadow the torn shape casts. */}
       <span className="silence-button__drift">
         {/* Plate: the hull. Masked to the torn silhouette; clips its own materials. */}

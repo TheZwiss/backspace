@@ -89,7 +89,7 @@ function MediaProgress({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] text-txt-tertiary mt-1 font-mono">
+      <div className="flex justify-between text-ui-micro text-txt-tertiary mt-1 font-mono">
         <span>{formatSeconds(elapsed / 1000)}</span>
         <span>{formatSeconds(total / 1000)}</span>
       </div>
@@ -122,12 +122,12 @@ function MusicCard({ activity }: { activity: Activity }) {
   return (
     <div className="rounded-lg p-3 bg-accent-sky/[0.08] border border-accent-sky/20 mb-2.5 transition-all duration-200 hover:border-accent-sky/35">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-accent-sky">
+        <div className="flex items-center gap-1.5 text-ui-caption font-bold uppercase tracking-wider text-accent-sky">
           <span>🎵</span>
           <span>{t('social:activity.types.listening', { defaultValue: 'Listening to Music' })}</span>
         </div>
         {player && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-sky/20 text-accent-sky font-medium">
+          <span className="text-ui-micro px-1.5 py-0.5 rounded bg-accent-sky/20 text-accent-sky font-medium">
             {player}
           </span>
         )}
@@ -147,16 +147,16 @@ function MusicCard({ activity }: { activity: Activity }) {
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-txt-primary truncate" title={activity.name}>
+          <div className="text-ui-label font-semibold text-txt-primary truncate" title={activity.name}>
             {activity.name}
           </div>
           {activity.details && (
-            <div className="text-[12px] text-txt-secondary truncate" title={activity.details}>
+            <div className="text-ui-caption text-txt-secondary truncate" title={activity.details}>
               {activity.details}
             </div>
           )}
           {activity.state && (
-            <div className="text-[11px] text-txt-tertiary truncate" title={activity.state}>
+            <div className="text-ui-caption text-txt-tertiary truncate" title={activity.state}>
               {activity.state}
             </div>
           )}
@@ -173,17 +173,17 @@ function MusicCard({ activity }: { activity: Activity }) {
       )}
 
       {effectiveStart !== undefined && !activity.timestamps?.end && timeText && (
-        <div className="text-[10px] text-txt-tertiary mt-2 tabular-nums">
+        <div className="text-ui-micro text-txt-tertiary mt-2 tabular-nums">
           {timeText}
         </div>
       )}
 
       {activity.url && (
-        <a
+        <a data-icon-motion="press"
           href={activity.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] text-accent-sky hover:underline mt-2 font-medium"
+          className="inline-flex items-center gap-1 text-ui-caption text-accent-sky hover:underline mt-2 font-medium"
         >
           <span>{t('social:activity.openTrack', { defaultValue: 'Open Track' })}</span>
           <span>↗</span>
@@ -231,7 +231,7 @@ function ProcessCard({
 
   return (
     <div className={`rounded-lg p-3 ${accentClass} mb-2.5 transition-all duration-200 hover:brightness-105`}>
-      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider mb-2">
+      <div className="flex items-center gap-1.5 text-ui-caption font-bold uppercase tracking-wider mb-2">
         <span>{icon}</span>
         <span>{headerText}</span>
       </div>
@@ -263,21 +263,21 @@ function ProcessCard({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-txt-primary truncate" title={activity.name}>
+          <div className="text-ui-label font-semibold text-txt-primary truncate" title={activity.name}>
             {activity.name}
           </div>
           {activity.details && (
-            <div className="text-[12px] opacity-90 truncate mt-0.5" title={activity.details}>
+            <div className="text-ui-caption opacity-90 truncate mt-0.5" title={activity.details}>
               {replaceEmojiShortcodes(activity.details)}
             </div>
           )}
           {activity.state && (
-            <div className="text-[11px] opacity-75 truncate mt-0.5" title={activity.state}>
+            <div className="text-ui-caption opacity-75 truncate mt-0.5" title={activity.state}>
               {replaceEmojiShortcodes(activity.state)}
             </div>
           )}
           {timeText && !activity.timestamps?.end && (
-            <div className="text-[10px] opacity-75 mt-1 tabular-nums">
+            <div className="text-ui-micro opacity-75 mt-1 tabular-nums">
               {timeText}
             </div>
           )}
@@ -289,11 +289,11 @@ function ProcessCard({
       )}
 
       {activity.url && (
-        <a
+        <a data-icon-motion="press"
           href={activity.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] opacity-90 hover:underline mt-2 font-medium"
+          className="inline-flex items-center gap-1 text-ui-caption opacity-90 hover:underline mt-2 font-medium"
         >
           <span>{t('social:activity.openTrack', { defaultValue: 'Open' })}</span>
           <span>↗</span>
@@ -323,7 +323,7 @@ export function ProfileActivities({ activities, skipCustom }: ProfileActivitiesP
   return (
     <div className="mt-3 transition-opacity duration-200">
       {custom && (
-        <div className="text-[13px] text-txt-secondary italic mb-2">
+        <div className="text-ui-label text-txt-secondary italic mb-2">
           {replaceEmojiShortcodes(custom.name)}
         </div>
       )}

@@ -13,6 +13,7 @@ import {
   parsePlatformProcesses,
   matchesProcessName,
   findMatchingGame,
+  isGameProcess,
   detectActivity,
   createSteamSourceDetector,
   parseGameEntry,
@@ -578,6 +579,13 @@ describe('IPC activity overlay', () => {
       ...over,
     });
 
+  it('classifies a window executable using the loaded game dictionary', () => {
+    expect(isGameProcess('osu!.exe')).toBe(true);
+    expect(isGameProcess('vlc.exe')).toBe(false);
+    expect(isGameProcess('unknown-window.exe')).toBe(false);
+    expect(isGameProcess('')).toBe(false);
+  });
+
   it('overlays an IPC push over the scan-detected game immediately', () => {
     __testSetScanActivity({ type: 'playing', name: 'osu!', timestamps: { start: 1 } });
     const before = emitted.length;
@@ -873,6 +881,27 @@ describe('several games at once', () => {
     const games = detectActivitiesWithInfo([proc(1, 'Stardew Valley.exe'), proc(2, 'StarRail.exe')], dict, []);
     expect(games.map((g) => g.matched.name)).toEqual(['Honkai: Star Rail', 'Stardew Valley']);
     expect(games[0]?.info?.pid).toBe(2);
+  });
+
+  it('keeps optimized matching parity for names, Wine executables, cmdline patterns, order, and misses', () => {
+    const entries = [
+      { id: 'pattern-first', name: 'Pattern Game', processes: ['missing.exe'], cmdlinePatterns: ['vendor.client.main'] },
+      { id: 'wine-game', name: 'Wine Game', processes: ['SomeGame.exe'] },
+      { id: 'native-game', name: 'Native Game', processes: ['native.exe'] },
+      { id: 'not-running', name: 'Not Running', processes: ['absent.exe'] },
+    ];
+    const infos: ProcessInfo[] = [
+      { pid: 20, name: 'java.exe', cmdline: 'java vendor.client.main', exe: null },
+      { pid: 30, name: 'wine64-preloader', cmdline: 'wine SomeGame.exe', exe: null, winExes: ['SomeGame.exe'] },
+      { pid: 40, name: 'native.exe', cmdline: 'native.exe', exe: null },
+    ];
+
+    const detected = detectActivitiesWithInfo(infos, entries, []);
+    expect(detected.map(({ matched, info }) => [matched.id, info?.pid])).toEqual([
+      ['pattern-first', 20],
+      ['wine-game', 30],
+      ['native-game', 40],
+    ]);
   });
 
   it('lists a game once however many processes it has', () => {

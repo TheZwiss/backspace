@@ -137,14 +137,14 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
   return (
     <div className="flex flex-col gap-3" aria-busy={saving}>
       <div>
-        <div id={levelHeadingId} className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
+        <div id={levelHeadingId} className="px-1 pb-1.5 text-ui-caption font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
           {t('spaces:notifications.levelHeading')}
         </div>
         <div role="radiogroup" aria-labelledby={levelHeadingId} className="flex flex-col gap-[2px]">
           {choices.map((choice, index) => {
             const checked = choice === selected;
             return (
-              <button
+              <button data-icon-motion="press"
                 key={choice}
                 type="button"
                 role="radio"
@@ -153,7 +153,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
                 disabled={saving}
                 onClick={() => onChoose(choice)}
                 onKeyDown={(e) => onRadioKeyDown(e, index)}
-                className={`w-full flex items-center gap-2.5 px-2.5 h-9 rounded-[6px] text-left text-[14px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60 ${
+                className={`w-full flex items-center gap-2.5 px-2.5 h-9 rounded-[6px] text-left text-ui-body transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60 ${
                   checked ? 'text-txt-primary bg-interactive-selected' : 'text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover'
                 }`}
               >
@@ -168,21 +168,21 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
       <div className="h-px bg-glass-border" />
 
       <div>
-        <div className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
+        <div className="px-1 pb-1.5 text-ui-caption font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
           {t('spaces:notifications.muteHeading')}
         </div>
         {ownMuted && own ? (
           <div className="flex items-center justify-between gap-3 px-2.5 py-1.5">
-            <span className="text-[13px] text-txt-secondary min-w-0">
+            <span className="text-ui-label text-txt-secondary min-w-0">
               {own.mutedUntil === null
                 ? t('spaces:notifications.mutedIndefinitely')
                 : t('spaces:notifications.mutedUntil', { time: formatMuteEnd(own.mutedUntil) })}
             </span>
-            <button
+            <button data-icon-motion="toggle"
               type="button"
               disabled={saving}
               onClick={() => void save({ mute: null })}
-              className="flex-shrink-0 px-3 h-8 rounded-[6px] text-[13px] font-medium text-txt-primary bg-interactive-hover hover:bg-interactive-active transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60"
+              className="flex-shrink-0 px-3 h-8 rounded-[6px] text-ui-label font-medium text-txt-primary bg-interactive-hover hover:bg-interactive-active transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60"
             >
               {t('spaces:notifications.unmute')}
             </button>
@@ -190,12 +190,12 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
         ) : (
           <div className="grid grid-cols-2 gap-1">
             {MUTE_DURATIONS.map((duration) => (
-              <button
+              <button data-icon-motion="toggle"
                 key={duration}
                 type="button"
                 disabled={saving}
                 onClick={() => void save({ mute: duration })}
-                className="px-2.5 h-8 rounded-[6px] text-left text-[13px] text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover transition-colors truncate focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60"
+                className="px-2.5 h-8 rounded-[6px] text-left text-ui-label text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover transition-colors truncate focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary disabled:opacity-60"
               >
                 {durationLabel(duration)}
               </button>
@@ -203,7 +203,7 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
           </div>
         )}
         {spaceMuted && (
-          <p className="px-2.5 pt-1.5 text-[12px] text-accent-amber">{t('spaces:notifications.spaceMuted')}</p>
+          <p className="px-2.5 pt-1.5 text-ui-caption text-accent-amber">{t('spaces:notifications.spaceMuted')}</p>
         )}
       </div>
 
@@ -211,12 +211,12 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
         <>
           <div className="h-px bg-glass-border" />
           <div>
-            <div className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
+            <div className="px-1 pb-1.5 text-ui-caption font-semibold uppercase tracking-[0.06em] text-txt-tertiary">
               {t('spaces:notifications.massHeading')}
             </div>
             {(['suppressEveryone', 'suppressRoles'] as const).map((field) => (
               <div key={field} className="flex items-center justify-between gap-3 px-2.5 h-9">
-                <span className="text-[14px] text-txt-secondary min-w-0 truncate">{t(`spaces:notifications.${field}`)}</span>
+                <span className="text-ui-body text-txt-secondary min-w-0 truncate">{t(`spaces:notifications.${field}`)}</span>
                 <Toggle
                   enabled={own?.[field] === true}
                   disabled={saving}
@@ -225,12 +225,12 @@ export function NotificationSettingsControls({ origin, spaceId, channelId }: Not
                 />
               </div>
             ))}
-            <p className="px-2.5 pt-1 text-[12px] text-txt-tertiary">{t('spaces:notifications.massNote')}</p>
+            <p className="px-2.5 pt-1 text-ui-caption text-txt-tertiary">{t('spaces:notifications.massNote')}</p>
           </div>
         </>
       )}
 
-      <p className="px-1 text-[12px] text-txt-tertiary">{t('spaces:notifications.dmNote')}</p>
+      <p className="px-1 text-ui-caption text-txt-tertiary">{t('spaces:notifications.dmNote')}</p>
     </div>
   );
 }

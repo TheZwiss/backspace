@@ -539,7 +539,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             />
           </div>
         ) : (
-          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 select-none w-full text-right whitespace-nowrap leading-[1.375rem]`}>
+          <span className={`text-ui-caption text-txt-tertiary opacity-0 group-hover:opacity-100 select-none w-full text-right whitespace-nowrap leading-[1.375rem]`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
@@ -559,10 +559,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <PersonName
                 name={replyDisplayName}
                 person={replyIdentity}
-                className="text-[14px] font-bold text-txt-primary"
+                className="text-ui-body font-bold text-txt-primary"
                 style={replyRoleColor(replyTo)}
               />
-              <span className="text-[14px] text-txt-message truncate max-w-[400px] group-hover/reply:text-txt-primary transition-colors">
+              <span className="text-ui-body text-txt-message truncate max-w-[400px] group-hover/reply:text-txt-primary transition-colors">
                 {replyTo.content ? <InlineMessageText content={replyTo.content} channelId={mentionChannelId} /> : ''}
               </span>
             </>
@@ -572,7 +572,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             return <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 min-w-0">{preview}</div>;
           }
           return (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => jumpToMessage(replyTo.id)}
               className="group/reply flex items-center gap-1 max-w-full min-w-0 mb-1 ml-[-8px] pl-1 pr-1.5 rounded-md text-left opacity-80 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent-primary/60 transition-opacity cursor-pointer"
@@ -585,7 +585,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
         {(isFirstInGroup || message.replyTo) && (
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span
+            <span data-icon-motion="press"
               role="button"
               tabIndex={0}
               onClick={handleUsernameClick}
@@ -596,11 +596,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <PersonName
                 name={displayName}
                 person={displayIdentity}
-                className="font-semibold cursor-pointer hover:underline text-[15px] leading-tight"
+                className="font-semibold cursor-pointer hover:underline text-ui-message leading-tight"
                 style={roleColor}
               />
             </span>
-            <span className="text-[11px] text-txt-tertiary leading-tight hover:cursor-default">
+            <span className="text-ui-caption text-txt-tertiary leading-tight hover:cursor-default">
               {formatMessageTimestamp(t, fmt, message.createdAt)}
             </span>
           </div>
@@ -613,18 +613,18 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
-              className="input-standard w-full p-3 rounded-lg resize-none text-[15px] leading-[1.5] shadow-inner"
+              className="input-standard w-full p-3 rounded-lg resize-none text-ui-message leading-[1.5] shadow-inner"
               rows={2}
               autoFocus
             />
-            <p className="text-[12px] text-txt-tertiary mt-1.5 ml-1">
+            <p className="text-ui-caption text-txt-tertiary mt-1.5 ml-1">
               <Trans
                 t={t}
                 i18nKey="chat:message.edit.hint"
                 components={{ // i18n-check: allow-literal (the next line is an object key after a JSX element, not text)
-                  cancel: <button onClick={stopEditing} className="text-txt-link hover:underline" />,
+                  cancel: <button data-icon-motion="press" onClick={stopEditing} className="text-txt-link hover:underline" />,
                   save: (
-                    <button
+                    <button data-icon-motion="press"
                       onClick={() => {
                         if (editContent.trim()) {
                           editMessage(message.id, editContent.trim(), channelKey);
@@ -660,18 +660,18 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                   </div>
                 )}
                 {message.editedAt && (
-                  <span className="text-[10px] text-txt-tertiary select-none font-medium">{t('chat:message.edited')}</span>
+                  <span className="text-ui-micro text-txt-tertiary select-none font-medium">{t('chat:message.edited')}</span>
                 )}
               </>
             ) : (
               <>
                 {message.content && (
-                  <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
+                  <div className="text-txt-message text-ui-message leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
                     {isSticker
                       ? <StickerMessage token={message.content} />
                       : <MarkdownRenderer content={message.content} channelId={mentionChannelId} />}
                     {message.editedAt && (
-                      <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
+                      <span className="text-ui-micro text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
                     )}
                   </div>
                 )}
@@ -703,7 +703,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             {/* Failed-state retry/discard row */}
             {showRetryDiscardRow && pending && (
               <div className="mt-2 inline-flex items-center self-start gap-2 px-2.5 py-1.5 rounded-lg bg-accent-rose/10 border border-accent-rose/25 shadow-sm">
-                <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-accent-rose">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-accent-rose">
                   <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 4a.875.875 0 01.875.875v4a.875.875 0 11-1.75 0v-4A.875.875 0 0110 6zm0 8.25a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                   </svg>
@@ -711,7 +711,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 </span>
                 <span className="w-px h-3.5 bg-accent-rose/25" aria-hidden="true" />
                 {canRetry && (
-                  <button
+                  <button data-icon-motion="press"
                     onClick={async () => {
                       const transfers = useTransferStore.getState().transfers;
                       const retryIds = pending.transferIds.filter((tid) => {
@@ -725,12 +725,12 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                         await useTransferStore.getState().resumeUpload(tid);
                       }
                     }}
-                    className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
+                    className="px-2 py-0.5 rounded-md text-xs font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
                   >
                     {t('common:actions.retry')}
                   </button>
                 )}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => {
                     const transfers = useTransferStore.getState().transfers;
                     for (const tid of pending.transferIds) {
@@ -750,7 +750,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                       usePendingMessageStore.getState().removeByClientId(channelKey, pending.clientId);
                     }
                   }}
-                  className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-txt-secondary bg-surface-channel/50 hover:bg-accent-rose/15 hover:text-accent-rose transition-colors"
+                  className="px-2 py-0.5 rounded-md text-xs font-medium text-txt-secondary bg-surface-channel/50 hover:bg-accent-rose/15 hover:text-accent-rose transition-colors"
                 >
                   {t('chat:message.upload.discard')}
                 </button>
@@ -795,63 +795,63 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
               {['👍', '❤️', '😂', '😮'].map(emoji => (
-                <button
+                <button data-icon-motion="pulse"
                   key={emoji}
                   onClick={() => toggleReaction(emoji)}
-                  className="p-1 hover:bg-interactive-hover rounded transition-colors text-[16px] leading-none"
+                  className="p-1 hover:bg-interactive-hover rounded transition-colors text-ui-lead leading-none"
                 >
                   {emoji}
                 </button>
               ))}
-              <button
+              <Tooltip content={t('common:actions.addReaction')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.addReaction')}
                 ref={reactionPickerBtnRef}
                 onClick={() => setReactionPicker((v) => (v ? null : 'button'))}
-                className={`p-1 hover:bg-interactive-hover rounded transition-colors text-[14px] leading-none ${
+                className={`p-1 hover:bg-interactive-hover rounded transition-colors text-ui-body leading-none ${
                   showReactionPicker ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
                 }`}
-                title={t('common:actions.addReaction')}
+
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v4H7v2h4v4h2v-4h4v-2h-4V7z" />
                 </svg>
-              </button>
+              </button></Tooltip>
             </div>
           )}
-          <button
+          <Tooltip content={t('common:actions.reply')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.reply')}
             onClick={startReply}
             className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
-            title={t('common:actions.reply')}
+
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" />
             </svg>
-          </button>
+          </button></Tooltip>
           {canBookmark && (
-            <button
+            <Tooltip content={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')} position="top"><button data-icon-motion="press" aria-label={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')}
               onClick={() => { void bookmark.toggle(); }}
               disabled={bookmark.busy}
               className={`px-2 h-full transition-all flex items-center justify-center hover:bg-interactive-hover ${
                 bookmark.bookmarked ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-primary'
               }`}
-              title={bookmark.bookmarked ? t('bookmarks:message.remove') : t('bookmarks:message.add')}
+
               aria-pressed={bookmark.bookmarked}
             >
               <BookmarkIcon filled={bookmark.bookmarked} />
-            </button>
+            </button></Tooltip>
           )}
           {canEdit && (
-            <button
+            <Tooltip content={t('common:actions.edit')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.edit')}
               onClick={startEditing}
               className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
-              title={t('common:actions.edit')}
+
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
           {canDelete && (
-            <button
+            <Tooltip content={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')} position="top"><button data-icon-motion="press" aria-label={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')}
               onClick={() => {
                 if (confirmingDelete) {
                   cancelDeleteConfirm();
@@ -865,7 +865,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                   ? 'bg-green-500/20 text-green-400'
                   : 'text-txt-tertiary hover:text-txt-danger hover:bg-interactive-hover'
               }`}
-              title={confirmingDelete ? t('chat:message.actions.confirmDelete') : t('common:actions.delete')}
+
             >
               {/* Trash icon */}
               <svg
@@ -885,7 +885,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               >
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
         </div>
       )}

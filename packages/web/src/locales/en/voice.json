@@ -132,6 +132,8 @@
     "remoteParticipant": "Remote"
   },
   "screenPicker": {
+    "captureReconnecting": "Reconnecting capture…",
+    "streamPaused": "Stream paused",
     "title": "Share Your Screen",
     "tabs": {
       "screens": "Screens",
@@ -179,6 +181,11 @@
     "hostLimits": "Limits set by {{host}}",
     "resolution": "Resolution",
     "frameRate": "Frame Rate",
+    "cursorMode": "Mouse cursor",
+    "cursorAuto": "Automatic",
+    "cursorShow": "Show",
+    "cursorHide": "Hide",
+    "cursorHideUnavailable": "This capture source cannot hide the Windows cursor. Start a supported DXGI capture to apply this setting.",
     "contentMode": "Content Mode",
     "mode": {
       "gaming": "Gaming",
@@ -220,6 +227,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Local preview paused to save resources. Your stream is still live.",
     "quality": "Stream Quality",
     "qualityValue": "{{height}}p {{fps}}fps",
     "volume": "Stream Volume",
@@ -235,6 +243,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "The streamer's network is unstable",
+    "publisherBandwidth": "Available bandwidth is limiting stream quality",
     "publisherCpu": "The streamer's computer cannot encode video fast enough",
     "viewerNetwork": "Your connection is unstable",
     "reconnecting": "Connection lost — reconnecting…",

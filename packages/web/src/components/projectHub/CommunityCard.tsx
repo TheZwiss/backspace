@@ -156,7 +156,7 @@ async function loadListing(target: CommunityTarget): Promise<DirectoryListing> {
 
 // ─── Presentation ───────────────────────────────────────────────────────────
 
-const noteClass = 'w-full text-[12px] text-txt-danger';
+const noteClass = 'w-full text-ui-caption text-txt-danger';
 
 function CommunityIcon() {
   return (
@@ -169,7 +169,7 @@ function CommunityIcon() {
 function PendingButton() {
   const { t } = useTranslation('project');
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       disabled
       className={HUB_ACTION.waiting}
@@ -182,7 +182,7 @@ function PendingButton() {
 function JoiningButton() {
   const { t } = useTranslation('project');
   return (
-    <button type="button" disabled aria-busy="true" className={HUB_ACTION.primary}>
+    <button data-icon-motion="press" type="button" disabled aria-busy="true" className={HUB_ACTION.primary}>
       <LoadingSpinner size={16} />
       {t('community.join')}
     </button>
@@ -239,7 +239,7 @@ function HomeCommunityJoin({
     joinError && !joining ? (
       <>
         <p className={noteClass}>{joinError}</p>
-        <button type="button" onClick={() => void runJoin()} className={HUB_ACTION.primary}>
+        <button data-icon-motion="press" type="button" onClick={() => void runJoin()} className={HUB_ACTION.primary}>
           {t('project:community.retry')}
         </button>
       </>
@@ -260,15 +260,15 @@ function HomeCommunityJoin({
         className="input-standard w-full resize-none"
       />
       <div className="flex gap-2">
-        <button
+        <button data-icon-motion="send"
           type="button"
           onClick={() => void sendRequest()}
           disabled={joining}
-          className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-sm font-medium rounded transition-colors disabled:opacity-50"
+          className="ui-button ui-button-warning flex-1 transition-colors disabled:opacity-50"
         >
           {joining ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
         </button>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={onCancel}
           className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
@@ -384,7 +384,7 @@ export function CommunityCard(props: { target: CommunityTarget }): JSX.Element {
   let action: JSX.Element;
   if (status === 'member') {
     action = (
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => landOnSpace(target.spaceId)}
         className={HUB_ACTION.quiet}
@@ -404,14 +404,14 @@ export function CommunityCard(props: { target: CommunityTarget }): JSX.Element {
         <p className={noteClass}>
           {phase.reason === 'notListed' ? t('community.notListed') : t('community.unreachable')}
         </p>
-        <button type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
+        <button data-icon-motion="press" type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
           {t('community.retry')}
         </button>
       </>
     );
   } else {
     action = (
-      <button type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
+      <button data-icon-motion="press" type="button" onClick={() => void handleJoin()} className={HUB_ACTION.primary}>
         {t('community.join')}
       </button>
     );

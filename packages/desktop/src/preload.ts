@@ -1,7 +1,13 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron';
+import { initializeSharedTextureReceiver } from './sharedTexturePreload';
+
+initializeSharedTextureReceiver();
 
 contextBridge.exposeInMainWorld('backspace', {
+  getNudgeContext: (detectGames = true) => ipcRenderer.invoke('nudge-context', detectGames),
+  getNudgeMedia: (effect: string) => ipcRenderer.invoke('nudge-media', effect),
+  playNudge: (sender?: string, avatar?: string, channelId?: string, options?: { effect?: string; mode?: string; displayIds?: number[]; sound?: boolean; volume?: number; labels?: { notice: string; close: string } }) => ipcRenderer.send('play-nudge', sender, avatar, channelId, options),
   getTextVoiceStatus: () => ipcRenderer.invoke('local-text-voice-status'),
   prepareTextVoice: (device: 'auto' | 'cpu' | 'gpu') => ipcRenderer.invoke('local-text-voice-prepare', device),
   synthesizeTextVoice: (text: string, voice: string, speed: number) => ipcRenderer.invoke('local-text-voice-speech', { text, voice, speed }),
@@ -27,6 +33,13 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.send('close-window');
   },
 
+  showFriendRequest: (notice: import('./friendRequestToast').FriendRequestToastData) => ipcRenderer.send('friend-request-notification', notice),
+  dismissFriendRequest: (notice: { requestId: string; origin: string; userId: string }) => ipcRenderer.send('friend-request-dismiss', notice),
+  onFriendRequestAction: (callback: (action: { requestId: string; origin: string; userId: string; action: 'open' | 'accepted' | 'declined' | 'dismiss' }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, action: Parameters<typeof callback>[0]) => callback(action);
+    ipcRenderer.on('friend-request-action', handler);
+    return () => { ipcRenderer.removeListener('friend-request-action', handler); };
+  },
   // Notifications & badge
   showNotification: (title: string, body: string, options?: { channelId?: string; spaceId?: string; userId?: string }) => {
     ipcRenderer.send('show-notification', { title, body, options });
@@ -110,11 +123,36 @@ contextBridge.exposeInMainWorld('backspace', {
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => {
     ipcRenderer.send('screen-share-selected', sourceId, shareAudio ?? true);
   },
-  getScreenSources: () => ipcRenderer.invoke('get-screen-sources'),
+  // thumbnails: false is the cheap refresh (ids and names only) the setup
+  // screen polls with; omitted means a full enumeration with previews.
+  getScreenSources: (options?: { thumbnails?: boolean }) => ipcRenderer.invoke('get-screen-sources', options),
   // invoke, not send: the renderer must know the preselection has landed in the
   // main process before it calls getDisplayMedia(), or the two race.
-  preselectScreenSource: (sourceId: string, shareAudio?: boolean, targetId?: string) =>
-    ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true),
+  preselectScreenSource: (sourceId: string, shareAudio?: boolean, targetId?: string, audioSourceId?: string) =>
+    ipcRenderer.invoke('screen-share-preselect', sourceId, shareAudio ?? true, targetId, audioSourceId),
+  // Where a window is: the renderer captures that display and crops to it, so
+  // the share has no Windows Graphics Capture border (windowCropCapture.ts).
+  getWindowCaptureTarget: (sourceId: string) => ipcRenderer.invoke('get-window-capture-target', sourceId),
+  // Optional DXGI Desktop Duplication capture for display sources. Window IDs
+  // may return null and should continue through the existing Chromium path.
+  startNativeScreenCapture: (options: unknown) => ipcRenderer.invoke('start-native-screen-capture', options),
+  startSharedTextureCapture: (options: unknown) => ipcRenderer.invoke('start-native-screen-capture', { ...(options as object), transport: 'shared-texture' }),
+  updateSharedTextureCapture: (id: string, options: unknown) => ipcRenderer.invoke('update-shared-texture-capture', id, options),
+  stopNativeScreenCapture: (id: string) => ipcRenderer.invoke('stop-native-screen-capture', id),
+  // A 100 ms stream of the shared window's rectangle (one helper process),
+  // so the crop follows a window being dragged without polling from here.
+  startWindowGeometry: (sourceId: string) => ipcRenderer.invoke('start-window-geometry', sourceId),
+  stopWindowGeometry: (sourceId?: string) => ipcRenderer.invoke('stop-window-geometry', sourceId),
+  onWindowGeometry: (callback: (geometry: unknown | null) => void) => {
+    const snapshot = (_event: Electron.IpcRendererEvent, geometry: unknown): void => callback(geometry);
+    const ended = (): void => callback(null);
+    ipcRenderer.on('window-geometry', snapshot);
+    ipcRenderer.on('window-geometry-ended', ended);
+    return () => {
+      ipcRenderer.removeListener('window-geometry', snapshot);
+      ipcRenderer.removeListener('window-geometry-ended', ended);
+    };
+  },
   getScreenSharePickerMode: () => ipcRenderer.invoke('get-screen-share-picker-mode'),
   // `true` from a web client that opens the system-audio source (startSystemAudio)
   // itself; an older client passes nothing and gets the loopback's answer.

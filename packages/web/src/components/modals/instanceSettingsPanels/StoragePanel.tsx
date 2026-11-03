@@ -211,7 +211,7 @@ export function StoragePanel() {
     return (
       <div className="space-y-3">
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{loadError}</div>
-        <button onClick={fetchStats} className="text-sm text-accent-primary hover:underline">{t('common:actions.retry')}</button>
+        <button data-icon-motion="press" onClick={fetchStats} className="text-sm text-accent-primary hover:underline">{t('common:actions.retry')}</button>
       </div>
     );
   }
@@ -229,7 +229,7 @@ export function StoragePanel() {
 
       {/* Storage Overview */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.overview.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.overview.label')}</div>
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-lg bg-white/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.totalFiles')}</div>
@@ -275,7 +275,7 @@ export function StoragePanel() {
       {/* File Type Breakdown */}
       {stats.breakdown.length > 0 && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.breakdown.label')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.breakdown.label')}</div>
           <div className="rounded-lg bg-white/[0.02] p-3.5">
             <div className="space-y-1.5">
               {stats.breakdown.map((b) => (
@@ -293,7 +293,7 @@ export function StoragePanel() {
 
       {/* Upload Limit */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.uploadLimit.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.uploadLimit.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.uploadLimit.maxFileSize')}</label>
@@ -308,11 +308,11 @@ export function StoragePanel() {
               />
               <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
                 {(['MB', 'GB'] as const).map((u) => (
-                  <button
+                  <button data-icon-motion="attach"
                     key={u}
                     type="button"
                     onClick={() => handleUploadUnitChange(u)}
-                    className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded text-ui-caption font-medium transition-colors ${
                       uploadUnit === u
                         ? 'bg-accent-primary text-white'
                         : 'text-txt-tertiary hover:text-txt-primary'
@@ -323,10 +323,10 @@ export function StoragePanel() {
                 ))}
               </div>
             </div>
-            <button
+            <button data-icon-motion="attach"
               onClick={handleUploadLimitSave}
               disabled={!uploadLimitDirty || uploadLimitSaving || parsedUploadMb === null}
-              className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50 ml-auto"
             >
               {uploadLimitSaving ? t('common:states.saving') : t('common:actions.save')}
             </button>
@@ -345,11 +345,11 @@ export function StoragePanel() {
               />
               <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
                 {(['MB', 'GB'] as const).map((u) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={u}
                     type="button"
                     onClick={() => handleStickerUnitChange(u)}
-                    className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded text-ui-caption font-medium transition-colors ${
                       stickerUnit === u
                         ? 'bg-accent-primary text-white'
                         : 'text-txt-tertiary hover:text-txt-primary'
@@ -360,10 +360,10 @@ export function StoragePanel() {
                 ))}
               </div>
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={handleStickerLimitSave}
               disabled={!stickerLimitDirty || stickerLimitSaving || parsedStickerMb === null}
-              className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50 ml-auto"
             >
               {stickerLimitSaving ? t('common:states.saving') : t('common:actions.save')}
             </button>
@@ -373,7 +373,7 @@ export function StoragePanel() {
 
       {/* Cleanup Actions */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.cleanup.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.cleanup.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           {!hasOrphans && (
             <div className="text-sm text-txt-tertiary">{t('admin:storage.cleanup.nothingFound')}</div>
@@ -381,17 +381,17 @@ export function StoragePanel() {
 
           {hasOrphans && (
             <div className="flex flex-wrap gap-2">
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleCleanup(true)}
                 disabled={cleaning}
                 className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 {cleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleCleanup(false)}
                 disabled={cleaning || !previewDone}
-                className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="ui-button ui-button-danger transition-colors disabled:opacity-50"
               >
                 {cleaning ? t('admin:storage.cleanup.running') : t('admin:storage.cleanup.run')}
               </button>
@@ -425,7 +425,7 @@ export function StoragePanel() {
 
       {/* Stale Uploads */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.stale.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.stale.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           <div className="text-xs text-txt-tertiary">
             <Trans
@@ -452,17 +452,17 @@ export function StoragePanel() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleTusCleanup(true)}
               disabled={tusCleaning || tusMaxAgeHours <= 0}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {tusCleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleTusCleanup(false)}
               disabled={tusCleaning || !tusPreviewDone}
-              className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="ui-button ui-button-danger transition-colors disabled:opacity-50"
             >
               {tusCleaning ? t('admin:storage.cleanup.running') : t('admin:storage.cleanup.run')}
             </button>
@@ -492,7 +492,7 @@ export function StoragePanel() {
 
       {/* Media Retention */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.media.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.media.label')}</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.media.olderThan')}</label>
@@ -509,17 +509,17 @@ export function StoragePanel() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleMediaCleanup(true)}
               disabled={mediaCleaning || mediaAgeDays < 1}
               className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {mediaCleaning ? t('common:states.scanning') : t('common:actions.preview')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleMediaCleanup(false)}
               disabled={mediaCleaning || !mediaPreviewDone}
-              className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="ui-button ui-button-danger transition-colors disabled:opacity-50"
             >
               {mediaCleaning ? t('admin:storage.media.running') : t('admin:storage.media.run')}
             </button>
@@ -547,7 +547,7 @@ export function StoragePanel() {
         </div>
       </div>
 
-      <button
+      <button data-icon-motion="press"
         onClick={() => { setCleanupResult(null); setPreviewDone(false); fetchStats(); }}
         className="text-sm text-accent-primary hover:underline"
       >

@@ -127,7 +127,7 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
         <p id={hintId} className="text-xs text-txt-tertiary">
           {t('spaces:channel.settings.topic.hint')}
         </p>
-        <span className={`flex-shrink-0 text-[11px] tabular-nums ${tooLong ? 'text-txt-danger' : 'text-txt-tertiary'}`}>
+        <span className={`flex-shrink-0 text-ui-caption tabular-nums ${tooLong ? 'text-txt-danger' : 'text-txt-tertiary'}`}>
           {t('spaces:channel.settings.topic.counter', { used: length, max: CHANNEL_TOPIC_MAX_LENGTH })}
         </span>
       </div>
@@ -138,7 +138,7 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
       )}
       {isDirty && (
         <div className="mt-2 flex justify-end gap-2">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={discard}
             disabled={isSaving}
@@ -146,10 +146,10 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
           >
             {t('spaces:channel.settings.topic.reset')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={isSaving || tooLong}
-            className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50"
           >
             {isSaving ? t('common:states.saving') : t('common:actions.save')}
           </button>

@@ -15,7 +15,7 @@ export function ProfileRoles({ roles }: { roles: Role[] }) {
 
   return (
     <div>
-      <span id={headingId} className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+      <span id={headingId} className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
         {t('social:profile.roles')}
       </span>
       <ul aria-labelledby={headingId} className="flex flex-wrap gap-1.5 mt-1.5">
@@ -29,7 +29,7 @@ export function ProfileRoles({ roles }: { roles: Role[] }) {
               style={{ backgroundColor: role.color || '#b9bbbe' }}
               aria-hidden="true"
             />
-            <span className="text-[12px] leading-[1.35] text-txt-secondary truncate">{role.name}</span>
+            <span className="text-ui-caption leading-[1.35] text-txt-secondary truncate">{role.name}</span>
           </li>
         ))}
       </ul>

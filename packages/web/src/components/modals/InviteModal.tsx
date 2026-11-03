@@ -108,17 +108,17 @@ function InviteResultFriendRow({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
-        <div className="text-[11px] text-txt-tertiary truncate">@{canonical.username}</div>
+        <div className="text-ui-label font-medium text-txt-primary truncate">{dn}</div>
+        <div className="text-ui-caption text-txt-tertiary truncate">@{canonical.username}</div>
       </div>
       {status?.kind === 'success' && (
-        <span className="text-[12px] text-accent-mint flex-shrink-0">{t('spaces:invite.status.sent')}</span>
+        <span className="text-ui-caption text-accent-mint flex-shrink-0">{t('spaces:invite.status.sent')}</span>
       )}
       {status?.kind === 'failure' && (
-        <span className="text-[12px] text-txt-danger flex-shrink-0">{t('spaces:invite.status.failed', { reason: status.reason })}</span>
+        <span className="text-ui-caption text-txt-danger flex-shrink-0">{t('spaces:invite.status.failed', { reason: status.reason })}</span>
       )}
       {status?.kind === 'pending' && (
-        <span className="text-[12px] text-txt-tertiary flex-shrink-0">...</span>
+        <span className="text-ui-caption text-txt-tertiary flex-shrink-0">...</span>
       )}
     </div>
   );
@@ -142,7 +142,7 @@ function InviteSelectFriendRow({
   const { baseName } = parseFederatedUsername(canonical.username);
   const dn = canonical.displayName ?? baseName;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onToggle(friendKey(friend), friend)}
       disabled={alreadyMember || sending}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
@@ -162,8 +162,8 @@ function InviteSelectFriendRow({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
-        <div className="text-[11px] text-txt-tertiary truncate">
+        <div className="text-ui-label font-medium text-txt-primary truncate">{dn}</div>
+        <div className="text-ui-caption text-txt-tertiary truncate">
           {alreadyMember ? t('spaces:invite.alreadyMember') : `@${canonical.username}`}
         </div>
       </div>
@@ -392,7 +392,7 @@ export function InviteModal() {
       mobileStyle="sheet"
     >
       <div className="space-y-3">
-        <p className="text-[13px] text-txt-tertiary">
+        <p className="text-ui-label text-txt-tertiary">
           {joinsByRequest ? t('spaces:invite.introRequest') : t('spaces:invite.intro')}
         </p>
 
@@ -402,12 +402,12 @@ export function InviteModal() {
             {selectedFriends.map((f) => (
               <span
                 key={friendKey(f)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] bg-accent-mint/15 text-accent-mint"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-ui-caption bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => removeFriend(friendKey(f))}
-                  className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
+                  className="opacity-60 hover:opacity-100 transition-opacity text-ui-body leading-none"
                   aria-label={t('spaces:invite.removeSelected', { name: f.displayName ?? f.username })}
                 >
                   &times;
@@ -425,7 +425,7 @@ export function InviteModal() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('spaces:invite.searchPlaceholder')}
-            className="input-search w-full py-2 text-[14px]"
+            className="input-search w-full py-2 text-ui-body"
           />
         )}
 
@@ -442,7 +442,7 @@ export function InviteModal() {
           ) : (
             <>
               {filteredFriends.length === 0 && (
-                <div className="py-4 text-center text-txt-tertiary text-[14px]">
+                <div className="py-4 text-center text-txt-tertiary text-ui-body">
                   {query.trim()
                     ? t('spaces:invite.noMatches')
                     : t('spaces:invite.noFriends')}
@@ -466,26 +466,26 @@ export function InviteModal() {
         {inResultsView ? (
           <div className="flex gap-2">
             {hasFailures && (
-              <button
+              <button data-icon-motion="press"
                 onClick={onRetryFailed}
                 disabled={sending}
-                className="flex-1 py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('spaces:invite.retryFailed')}
               </button>
             )}
-            <button
+            <button data-icon-motion="press"
               onClick={closeModal}
-              className="flex-1 py-2 rounded-md text-[13px] font-semibold glass-pill text-txt-primary"
+              className="flex-1 py-2 rounded-md text-ui-label font-semibold glass-pill text-txt-primary"
             >
               {t('common:actions.done')}
             </button>
           </div>
         ) : (
-          <button
+          <button data-icon-motion="send"
             onClick={onSubmit}
             disabled={selectedFriends.length === 0 || sending || codeLoading}
-            className="w-full py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? t('spaces:invite.sending') : submitLabel}
           </button>
@@ -493,11 +493,11 @@ export function InviteModal() {
 
         {/* Share-link footer */}
         <div className="pt-3 border-t border-white/[0.06]">
-          <p className="text-[12px] text-txt-tertiary mb-2">
+          <p className="text-ui-caption text-txt-tertiary mb-2">
             {t('spaces:invite.shareLink')}
           </p>
           {codeError && (
-            <div className="mb-2 text-[12px] text-txt-danger">{codeError}</div>
+            <div className="mb-2 text-ui-caption text-txt-danger">{codeError}</div>
           )}
           <div className="flex items-center gap-2">
             <input
@@ -506,10 +506,10 @@ export function InviteModal() {
               readOnly
               className="input-embedded flex-1 font-mono text-xs px-2 py-1.5"
             />
-            <button
+            <button data-icon-motion="press"
               onClick={handleCopy}
               disabled={codeLoading || !inviteUrl}
-              className={`glass-pill px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`glass-pill px-3 py-1.5 text-ui-caption font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 linkCopied ? 'text-accent-mint' : 'text-txt-primary'
               }`}
             >

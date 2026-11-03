@@ -8,6 +8,7 @@ vi.mock('../../audio/AudioManager', () => ({
     getInstance: () => ({
       clearInputDenial: vi.fn(),
       resumeContext: vi.fn(() => Promise.resolve()),
+      setTextInputOnly: vi.fn(),
       setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),
   },
@@ -39,10 +40,22 @@ beforeEach(async () => {
 });
 
 describe('IncomingCallModal decline', () => {
+  it('does not accept or decline the ring on Escape', () => {
+    const connectFn = vi.fn();
+    useVoiceStore.setState({ connectFn });
+    render(<IncomingCallModal />);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(useVoiceStore.getState().incomingCall).toEqual(RING);
+    expect(connectFn).not.toHaveBeenCalled();
+    expect(wsSend).not.toHaveBeenCalled();
+  });
+
   it('declines through the ring\'s origin with the ring\'s ids', () => {
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.decline')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.decline') }));
 
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_reject', dmChannelId: null, federatedCallId: 'fed-1' }, HOST);
     expect(useVoiceStore.getState().incomingCall).toBeNull();
@@ -53,7 +66,7 @@ describe('IncomingCallModal decline', () => {
     useVoiceStore.setState({ activeDmCall: held });
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.decline')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.decline') }));
 
     expect(useVoiceStore.getState().activeDmCall).toEqual(held);
   });
@@ -65,7 +78,7 @@ describe('IncomingCallModal accept', () => {
     useVoiceStore.setState({ connectFn });
     render(<IncomingCallModal />);
 
-    fireEvent.click(screen.getByTitle(i18n.t('common:actions.accept')));
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('common:actions.accept') }));
 
     const active = useVoiceStore.getState().activeDmCall;
     expect(active?.dmChannelId).toBeNull();

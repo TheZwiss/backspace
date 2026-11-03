@@ -160,7 +160,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
   };
 
   const cancelButton = (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={handleCancel}
       disabled={loading}
@@ -210,10 +210,10 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <button data-icon-motion="press"
               type="submit"
               disabled={loading || !password}
-              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {loading ? t('federation:connections.add.connecting') : t('federation:connections.add.connect')}
             </button>

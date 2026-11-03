@@ -328,3 +328,38 @@ describe('social routes — error codes', () => {
     expect(JSON.parse(res.body).code).toBe('not_friends');
   });
 });
+describe('people discovery visibility', () => {
+  let app: FastifyInstance;
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedUser({ id: CALLER_ID, username: 'caller' });
+    seedUser({ id: 'visible', username: 'alice' });
+    seedUser({ id: 'outside', username: 'bob' });
+    testDb.insert(schema.instanceSettings).values({ id: 1, updatedAt: Date.now() }).onConflictDoNothing().run();
+    app = await buildApp();
+  });
+  it('defaults to an empty list while preserving direct search', async () => {
+    expect((await app.inject('/api/social/discover')).json()).toEqual({ users: [], total: 0 });
+    const res = await app.inject('/api/social/discover?q=alice');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().users.map((u: { id: string }) => u.id)).toEqual(['visible']);
+  });
+  it('lists everyone only when enabled by the administrator', async () => {
+    testDb.update(schema.instanceSettings).set({ peopleDiscoveryMode: 'all' }).run();
+    const res = await app.inject('/api/social/discover');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().total).toBe(2);
+  });
+  it('filters shared-space users before counting and pagination', async () => {
+    testDb.update(schema.instanceSettings).set({ peopleDiscoveryMode: 'shared-spaces' }).run();
+    testDb.insert(schema.spaces).values({ id: 's1', name: 'Private space', ownerId: CALLER_ID, createdAt: Date.now() }).run();
+    testDb.insert(schema.spaceMembers).values([{ spaceId: 's1', userId: CALLER_ID, joinedAt: Date.now() }, { spaceId: 's1', userId: 'visible', joinedAt: Date.now() }]).run();
+    const res = await app.inject('/api/social/discover?limit=1');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().total).toBe(1);
+    expect(res.json().users.map((u: { id: string }) => u.id)).toEqual(['visible']);
+    expect((await app.inject('/api/social/discover?offset=1')).json()).toEqual({ users: [], total: 1 });
+  });
+});

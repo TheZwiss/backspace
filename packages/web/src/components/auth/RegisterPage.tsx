@@ -589,12 +589,12 @@ export function RegisterPage() {
                 />
               </div>
 
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={continueDisabled}
                 // py-3 on mobile yields ≥44 px tap target (Apple HIG); py-2.5 keeps the
                 // tighter desktop look from before.
-                className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-primary w-full md:py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('common:actions.continue')}
               </button>
@@ -611,7 +611,7 @@ export function RegisterPage() {
                   t={t}
                   i18nKey="auth:register.loginPrompt"
                   components={{
-                    actionLink: <Link to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+                    actionLink: <Link data-icon-motion="press" to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
                   }}
                 />
               </p>
@@ -639,7 +639,7 @@ export function RegisterPage() {
 
             {/* Avatar preview */}
             <div className="flex flex-col items-center mb-5">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 className="relative group"
@@ -657,7 +657,7 @@ export function RegisterPage() {
                   </svg>
                 </div>
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 className="text-xs text-accent-primary hover:underline mt-2"
@@ -700,7 +700,7 @@ export function RegisterPage() {
                 {AVATAR_COLORS.map((key) => {
                   const entry = AVATAR_GRADIENT_MAP[key];
                   return (
-                    <button
+                    <button data-icon-motion="press"
                       key={key}
                       type="button"
                       onClick={() => setAvatarColor(key)}
@@ -720,11 +720,11 @@ export function RegisterPage() {
             </div>
 
             {/* Actions */}
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => handleRegister(false)}
               disabled={isDisabled}
-              className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ui-button ui-button-primary w-full md:py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retryAfter > 0
                 ? t('auth:register.rateLimited.retryIn', { seconds: retryAfter })
@@ -734,7 +734,7 @@ export function RegisterPage() {
             </button>
 
             <div className="flex items-center justify-between mt-3">
-              <button
+              <button data-icon-motion="arrow"
                 type="button"
                 onClick={() => { setError(''); setRetryAfter(0); setDirection('back'); setStep(1); }}
                 disabled={isRegistering}
@@ -743,7 +743,7 @@ export function RegisterPage() {
               >
                 {t('common:actions.back')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => handleRegister(true)}
                 disabled={isDisabled}

@@ -277,7 +277,7 @@ export function MobileVoiceFullScreen() {
     <div className="flex flex-col h-full bg-surface-base">
       {/* Header */}
       <header className="h-12 flex items-center gap-2 px-3 border-b border-border-soft shrink-0">
-        <button
+        <button data-icon-motion="arrow"
           onClick={popMobileScreen}
           className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
           aria-label={t('voice:mobileCall.collapse')}
@@ -301,14 +301,14 @@ export function MobileVoiceFullScreen() {
             {channelName}
           </h1>
           {spaceName && (
-            <p className="text-[11px] text-txt-tertiary truncate">{spaceName}</p>
+            <p className="text-ui-caption text-txt-tertiary truncate">{spaceName}</p>
           )}
         </div>
         <span className="text-xs text-txt-tertiary">
           {t('voice:mobileCall.connectedCount', { count: participants.length })}
         </span>
         {!isDmCall && (
-          <button
+          <button data-icon-motion="press"
             onClick={() => pushMobileScreen('members')}
             className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
             aria-label={t('voice:mobileCall.viewMembers')}
@@ -354,19 +354,19 @@ export function MobileVoiceFullScreen() {
             />
           </svg>
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-accent-amber">
+            <p className="text-ui-caption font-medium text-accent-amber">
               {t('voice:mobileCall.micDenied.title')}
             </p>
-            <p className="text-[11px] text-txt-tertiary leading-tight mt-0.5">
+            <p className="text-ui-caption text-txt-tertiary leading-tight mt-0.5">
               {t('voice:mobileCall.micDenied.description')}
             </p>
           </div>
-          <button
+          <button data-icon-motion="toggle"
             type="button"
             onClick={() => {
               void requestMicPermission();
             }}
-            className="text-[11px] font-medium px-3 py-1.5 rounded-md bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30 transition-colors shrink-0"
+            className="text-ui-caption font-medium px-3 py-1.5 rounded-md bg-accent-amber/20 text-accent-amber hover:bg-accent-amber/30 transition-colors shrink-0"
           >
             {t('voice:mobileCall.micDenied.allow')}
           </button>
@@ -377,19 +377,19 @@ export function MobileVoiceFullScreen() {
           screen-share tiles, mute overlays, context menus. Identical
           rendering pipeline to desktop. */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <VoiceGrid participants={participants} />
+        <VoiceGrid participants={participants} cameraAspectRatio={9 / 16} />
       </div>
 
       {/* Control bar */}
       <div
-        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 sm:gap-4 sm:px-4 shrink-0"
+        className="glass-bubble mx-2 mb-2 rounded-2xl flex flex-wrap items-center justify-center gap-1.5 px-1 py-3 desktop:gap-4 desktop:px-4 shrink-0"
         style={{ marginBottom: 'calc(0.5rem + var(--safe-bottom))' }}
       >
-        <div className="flex w-full justify-center gap-2 sm:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
+        <div className="flex w-full justify-center gap-2 desktop:w-auto"><TextVoiceButton className="w-11 h-11" /><SoundboardButton className="w-11 h-11" /></div>
         {/* Mute */}
-        <button
+        <button data-icon-motion="toggle"
           onClick={toggleMuteFromControl}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isMuted
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -419,9 +419,9 @@ export function MobileVoiceFullScreen() {
         </button>
 
         {/* Deafen */}
-        <button
+        <button data-icon-motion="toggle"
           onClick={toggleDeafenFromControl}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isDeafened
               ? 'bg-accent-rose/20 text-accent-rose'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -455,9 +455,9 @@ export function MobileVoiceFullScreen() {
             attached pill above the bottom-right corner of the camera button —
             visible only when relevant so single-camera devices are unaffected. */}
         <div className="relative" ref={cameraPickerAnchorRef}>
-          <button
+          <button data-icon-motion="toggle"
             onClick={handleCameraAction}
-            className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+            className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
               isCameraOn
                 ? 'bg-accent-mint/20 text-accent-mint'
                 : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -478,7 +478,7 @@ export function MobileVoiceFullScreen() {
             </svg>
           </button>
           {showCameraSwitcher && (
-            <button
+            <button data-icon-motion="toggle"
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
@@ -487,7 +487,7 @@ export function MobileVoiceFullScreen() {
               aria-label={t('voice:camera.switch')}
               aria-haspopup="menu"
               aria-expanded={cameraPickerOpen}
-              className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-surface-elevated text-txt-primary flex items-center justify-center shadow-md border border-border-soft active:scale-95 transition-transform"
+              className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-surface-elevated text-txt-primary flex items-center justify-center shadow-md border border-border-soft"
             >
               <svg
                 width="14"
@@ -517,9 +517,9 @@ export function MobileVoiceFullScreen() {
             getDisplayMedia call actually fires (and propagates errors via
             voiceActions). The previous voiceStore.toggleScreenShare flipped
             only the boolean and never started capture. */}
-        <button
+        <button data-icon-motion="expand"
           onClick={handleScreenShareAction}
-          className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
+          className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
             isScreenSharing
               ? 'bg-accent-mint/20 text-accent-mint'
               : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
@@ -544,9 +544,9 @@ export function MobileVoiceFullScreen() {
         </button>
 
         {/* Disconnect */}
-        <button
+        <button data-icon-motion="press"
           onClick={handleDisconnect}
-          className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
+          className="w-11 h-11 desktop:w-12 desktop:h-12 rounded-full bg-accent-rose flex items-center justify-center text-white hover:bg-accent-rose/80 transition-colors"
           aria-label={t('voice:mobileCall.disconnect')}
         >
           <svg
@@ -588,25 +588,25 @@ export function MobileVoiceFullScreen() {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            <button
+            <button data-icon-motion="toggle"
               type="button"
               role="menuitemradio"
               aria-checked={cameraDeviceId === null}
               onClick={() => handlePickCamera(null)}
-              className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+              className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                 cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >
               {t('voice:camera.autoSystemDefault')}
             </button>
             {cameraDevices.map((d, i) => (
-              <button
+              <button data-icon-motion="toggle"
                 key={d.deviceId}
                 type="button"
                 role="menuitemradio"
                 aria-checked={cameraDeviceId === d.deviceId}
                 onClick={() => handlePickCamera(d.deviceId)}
-                className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+                className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                   cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
                 } active:bg-interactive-hover`}
               >

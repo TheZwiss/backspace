@@ -8,7 +8,6 @@ import { Message } from './Message';
 import { useChatStore, type LoadAroundResult, type LoadNewerResult } from '../../stores/chatStore';
 import { useSpaceStore, useIsDmChannel, getChannelOrigin } from '../../stores/spaceStore';
 import { isMe, useMyRowForOrigin } from '../../stores/authStore';
-import { useSocialStore } from '../../stores/socialStore';
 import {
   usePendingMessageStore,
   isPendingMessage,
@@ -21,7 +20,7 @@ import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
+import { isMine, parseFederatedUsername } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
 import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -1083,7 +1082,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
   if (!canReadHistory) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <span className="text-txt-tertiary text-[14px]">{t('chat:list.noHistoryPermission')}</span>
+        <span className="text-txt-tertiary text-ui-body">{t('chat:list.noHistoryPermission')}</span>
       </div>
     );
   }
@@ -1160,7 +1159,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                 {dateLabel && !isUnreadStart && (
                   <div className="flex items-center px-5 my-2 select-none pointer-events-none">
                     <div className="flex-1 h-[1px] bg-border-hard" />
-                    <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
+                    <span className="px-[14px] text-ui-caption font-bold text-txt-tertiary leading-tight">
                       {dateLabel}
                     </span>
                     <div className="flex-1 h-[1px] bg-border-hard" />
@@ -1226,14 +1225,14 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       )}
 
       {(!isNearBottom || isDetached) && messages.length > 0 && (
-        <button
+        <button data-icon-motion="press"
           onClick={() => { void jumpToPresent(); }}
           className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-all animate-fade-in cursor-pointer"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
           </svg>
-          <span className="text-[13px] font-medium">{t('chat:list.jumpToPresent')}</span>
+          <span className="text-ui-label font-medium">{t('chat:list.jumpToPresent')}</span>
         </button>
       )}
     </div>
@@ -1255,12 +1254,12 @@ function LoadFailedNotice({ title, detail, retryLabel, onRetry }: {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-chat px-6">
       <div role="alert" className="flex max-w-sm flex-col items-center gap-1 text-center">
-        <p className="text-[15px] font-semibold text-txt-primary">{title}</p>
-        <p className="text-[13px] text-txt-tertiary break-words">{detail}</p>
-        <button
+        <p className="text-ui-message font-semibold text-txt-primary">{title}</p>
+        <p className="text-ui-label text-txt-tertiary break-words">{detail}</p>
+        <button data-icon-motion="press"
           type="button"
           onClick={onRetry}
-          className="mt-3 rounded-full bg-accent-primary px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-accent-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
+          className="ui-button ui-button-primary mt-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-chat"
         >
           {retryLabel}
         </button>
@@ -1285,11 +1284,11 @@ function UnreadDivider({ label, name, dateLabel }: { label: string; name: string
       <div className="flex-1 h-px bg-accent-rose/50" />
       {dateLabel && (
         <>
-          <span className="px-[14px] text-[11px] font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
+          <span className="px-[14px] text-ui-caption font-bold leading-tight text-txt-tertiary">{dateLabel}</span>
           <div className="flex-1 h-px bg-accent-rose/50" />
         </>
       )}
-      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-[11px] font-bold leading-4 text-accent-rose">
+      <span className="ml-2 rounded-full bg-accent-rose/15 px-2 py-[1px] text-ui-caption font-bold leading-4 text-accent-rose">
         {label}
       </span>
     </div>
@@ -1299,8 +1298,6 @@ function UnreadDivider({ label, name, dateLabel }: { label: string; name: string
 function WelcomeHeader({ channelId }: { channelId: string }) {
   const { t } = useTranslation(['chat', 'common']);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const removeFriend = useSocialStore((s) => s.removeFriend);
-  const friends = useSocialStore((s) => s.friends);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const openModal = useUIStore((s) => s.openModal);
   const isDm = useIsDmChannel(channelId);
@@ -1343,7 +1340,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
             <AvatarStack members={otherMembers} origin={viewer.origin} size={80} border="chat" iconUrl={dm.icon} />
           </div>
           <h3 className="text-[32px] leading-10 font-bold text-txt-primary mt-2">{groupName}</h3>
-          <p className="text-txt-secondary text-[14px] mt-1">
+          <p className="text-txt-secondary text-ui-body mt-1">
             {t('chat:list.welcome.group.intro')}
           </p>
           <p className="text-xs text-txt-tertiary mt-1">
@@ -1353,7 +1350,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
               values={{ name: ownerName }}
               components={{
                 owner: ownerMember ? (
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={handleOwnerClick}
                     className="font-bold text-txt-secondary hover:text-txt-primary hover:underline transition-colors"
@@ -1370,15 +1367,15 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
             </p>
           )}
           <div className="mt-4 flex items-center gap-2">
-            <button
+            <button data-icon-motion="gear"
               onClick={handleOpenSettings}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-[14px] font-medium rounded-[3px] transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('chat:list.welcome.group.openSettings')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={handleLeaveGroup}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
+              className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-ui-body font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               {t('chat:list.welcome.group.leave')}
             </button>
@@ -1393,11 +1390,6 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const { baseName } = parseFederatedUsername(otherUser?.username ?? '');
     const displayName = otherUser?.displayName ?? (baseName || t('chat:list.welcome.dm.fallbackName'));
     const mentionName = otherUser?.displayName ?? baseName;
-    // The same person (`userKey`), whichever instance's row each list holds.
-    const friend = otherUser
-      ? friends.find(f => userKey(f, f._instanceOrigin) === userKey(otherUser, viewer.origin))
-      : undefined;
-    const isFriend = !!friend;
 
     return (
       <div className="px-4 pt-8 pb-4">
@@ -1405,7 +1397,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <ProfileAvatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} origin={viewer.origin} />
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
-        <p className="text-txt-secondary text-[14px] mt-1">
+        <p className="text-txt-secondary text-ui-body mt-1">
           <Trans
             t={t}
             i18nKey="chat:list.welcome.dm.intro"
@@ -1417,16 +1409,6 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
           <p className="text-xs text-txt-tertiary mt-1">
             {t('chat:list.welcome.dm.federatedNotice')}
           </p>
-        )}
-        {isFriend && otherUser && (
-          <div className="mt-4">
-            <button
-              onClick={() => friend && removeFriend(friend, friend._instanceOrigin)}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
-            >
-              {t('chat:list.welcome.dm.removeFriend')}
-            </button>
-          </div>
         )}
         <div className="mt-6 border-b border-interactive-muted" />
       </div>
@@ -1441,7 +1423,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         </svg>
       </div>
       <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{t('chat:list.welcome.channel.title')}</h3>
-      <p className="text-txt-secondary text-[16px] mt-2">{t('chat:list.welcome.channel.description')}</p>
+      <p className="text-txt-secondary text-ui-lead mt-2">{t('chat:list.welcome.channel.description')}</p>
       <div className="mt-6 border-b border-interactive-muted" />
     </div>
   );

@@ -39,7 +39,7 @@ export function StickerUploadPreview({
   const singleItem = items.length === 1 ? items[0] : null;
   return <>
         {items.length === 0 && (
-          <button
+          <button data-icon-motion="press"
             ref={chooseRef}
             type="button"
             disabled={busy}
@@ -74,7 +74,7 @@ export function StickerUploadPreview({
 
         {singleItem && (
           <>
-            <button
+            <button data-icon-motion="press"
               type="button"
               disabled={busy}
               onClick={() => openPicker('replace')}
@@ -109,7 +109,7 @@ export function StickerUploadPreview({
             <div className="flex items-center justify-between gap-3 text-xs text-txt-tertiary">
               <span className="truncate" title={singleItem.file.name}>{singleItem.file.name}</span>
               <div className="flex shrink-0 items-center gap-2">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={busy}
                   className="text-txt-link hover:underline"
@@ -117,7 +117,7 @@ export function StickerUploadPreview({
                 >
                   + {t('stickers.addMore')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={busy}
                   className="text-txt-link hover:underline"
@@ -150,7 +150,7 @@ export function StickerUploadPreview({
               <span className="font-medium text-txt-secondary">
                 {t('stickers.selectedCount', { count: items.length })}
               </span>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 disabled={busy}
                 className="text-xs text-accent-primary hover:underline font-medium"
@@ -176,7 +176,7 @@ export function StickerUploadPreview({
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center justify-between gap-1 text-[11px] text-txt-tertiary">
+                    <div className="mb-1 flex items-center justify-between gap-1 text-ui-caption text-txt-tertiary">
                       <span className="truncate" title={item.file.name}>{item.file.name}</span>
                       <span className="shrink-0">{formatBytes(item.file.size)}</span>
                     </div>
@@ -189,9 +189,9 @@ export function StickerUploadPreview({
                       onChange={event => updateName(item.id, event.target.value)}
                       className="input-search h-7 w-full text-xs px-2 py-1"
                     />
-                    {item.error && <p className="mt-1 text-[11px] leading-4 text-txt-danger">{item.error}</p>}
+                    {item.error && <p className="mt-1 text-ui-caption leading-4 text-txt-danger">{item.error}</p>}
                   </div>
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     disabled={busy}
                     onClick={() => removeItem(item.id)}
@@ -206,7 +206,7 @@ export function StickerUploadPreview({
               ))}
             </div>
 
-            <div
+            <div data-icon-motion="press"
               role="button"
               tabIndex={0}
               onClick={() => openPicker('append')}

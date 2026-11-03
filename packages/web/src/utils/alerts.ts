@@ -1,3 +1,4 @@
+import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents';
 import type { ChosenUserStatus } from '@backspace/shared';
 import { getMyUserIdForOrigin, isMe, selectMyChosenStatus, useAuthStore } from '../stores/authStore';
 import type { RealtimeMessageEvent } from '../stores/chatStore';
@@ -18,6 +19,7 @@ import { getChannelNotificationPolicy } from '../hooks/useNotificationSettings';
 
 const ALERT_SOUNDS: Record<AlertKind, string> = {
   message: 'message',
+  friend_request: 'message',
   incoming_call: 'call_ringing',
 };
 
@@ -66,6 +68,8 @@ export function messageAlertsUser(
   options: { everyMessage?: boolean } = {},
 ): boolean {
   if (!event.channelId) return false;
+  // Attention effects have their own notification and per-person mute policy.
+  if (event.message.type === 'system' && parseDmSystemEvent(event.message.content)?.event === 'nudge') return false;
   const origin = getChannelOrigin(event.channelId);
   const isDm = isDmChannel(event.channelId);
   return isMessageAlert({

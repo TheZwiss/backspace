@@ -36,10 +36,10 @@ export function PrivacyPanel() {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('settings:privacy.title')}</h2>
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:privacy.discovery.sectionTitle')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="settings-section">
           <div className="flex items-center justify-between py-1">
             <div className="flex-1 mr-4">
               <div className="text-sm text-txt-primary">{t('settings:privacy.discovery.label')}</div>
@@ -57,10 +57,10 @@ export function PrivacyPanel() {
 
       {/* Activity Status */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:privacy.activity.sectionTitle')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="settings-section">
           <div className="flex items-center justify-between py-1">
             <div className="flex-1 mr-4">
               <div className="text-sm text-txt-primary">{t('settings:privacy.activity.label')}</div>

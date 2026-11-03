@@ -162,7 +162,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
     <div
       ref={cardRef}
       data-user-profile-popout
-      className="fixed z-[200] w-[340px] max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin rounded-[12px] animate-fade-in select-none glass-modal"
+      className="fixed z-modal w-[340px] max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin rounded-[12px] animate-fade-in select-none glass-modal"
       style={cardStyle}
     >
       {/* Banner */}
@@ -196,12 +196,12 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
         {/* Name & info */}
         <div>
           <ProfileSpaceNickname member={member} />
-          <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
-          <div className="text-[13px] text-txt-tertiary">
-            <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />
+          <span className="text-ui-lead font-semibold leading-tight">{displayName}</span>
+          <div className="text-ui-label text-txt-tertiary">
+            <Username username={user.username} showAt className="text-ui-label text-txt-tertiary" />
           </div>
           {user.customStatus && (
-            <div className="text-[13px] text-txt-secondary italic mt-1">
+            <div className="text-ui-label text-txt-secondary italic mt-1">
               {replaceEmojiShortcodes(user.customStatus)}
             </div>
           )}
@@ -215,7 +215,7 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
           <>
             <div className="border-t border-white/[0.06] my-3" />
             <div>
-              <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+              <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
                 {t('social:profile.aboutMe')}
               </span>
               <ProfileBio bio={user.bio} />
@@ -235,15 +235,15 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
         {/* Member since + Mutuals */}
         <div className="space-y-1.5">
           <div>
-            <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+            <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
               {t('social:profile.memberSince')}
             </span>
-            <span className="text-[12px] text-txt-secondary ml-2">
+            <span className="text-ui-caption text-txt-secondary ml-2">
               {f.formatMediumDate(user.createdAt)}
             </span>
           </div>
           {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (
-            <div className="text-[12px] text-txt-tertiary">
+            <div className="text-ui-caption text-txt-tertiary">
               {mutualCounts.friends > 0 && (
                 <span>{t('social:mutuals.friends', { count: mutualCounts.friends })}</span>
               )}
@@ -259,24 +259,24 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
         {/* Actions. Nobody sends themselves a message. */}
         {!isYou && (
-          <button
+          <button data-icon-motion="send"
             onClick={handleSendMessage}
-            className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
+            className="w-full mt-3 py-2 rounded-lg text-ui-label font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
           >
             {t('social:profile.sendMessage')}
           </button>
         )}
         {canEditRoles && (
-          <button
+          <button data-icon-motion="press"
             onClick={handleEditRoles}
-            className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-secondary hover:text-txt-primary bg-transparent hover:bg-white/[0.04] transition-colors"
+            className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-secondary hover:text-txt-primary bg-transparent hover:bg-white/[0.04] transition-colors"
           >
             {t('social:profile.editRoles')}
           </button>
         )}
-        <button
+        <button data-icon-motion="press"
           onClick={handleViewFullProfile}
-          className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
+          className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
         >
           {t('social:profile.viewFull')}
         </button>

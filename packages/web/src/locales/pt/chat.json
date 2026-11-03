@@ -285,5 +285,99 @@
     "action": "Cutucar",
     "received": "{{actor}} cutucou {{target}}",
     "disconnected": "Não foi possível cutucar: sem conexão com o servidor"
+  },
+  "nudge": {
+    "notice": "Chamou sua atenção!",
+    "title": "Chamar atenção",
+    "cooldown": "Aguarde 10 segundos entre envios",
+    "choose": "Escolher efeito de atenção",
+    "originals": "MSN Messenger · Winks originais",
+    "footer": "Um envio a cada 10 segundos.",
+    "effects": {
+      "shake": {
+        "title": "Sacudida MSN",
+        "description": "A clássica sacudida rápida"
+      },
+      "wave": {
+        "title": "Ondinha",
+        "description": "Uma onda atravessa a tela"
+      },
+      "jelly": {
+        "title": "Gelatina",
+        "description": "Estica, balança e volta ao lugar"
+      },
+      "knock": {
+        "title": "Batida na tela",
+        "description": "Duas pancadinhas para chamar"
+      },
+      "confetti": {
+        "title": "Confete",
+        "description": "Uma pequena comemoração"
+      },
+      "pulse": {
+        "title": "Pulso",
+        "description": "Uma borda roxa acende na tela"
+      },
+      "msn_bouncy_ball": {
+        "title": "Bola quicando",
+        "description": "Wink original do MSN"
+      },
+      "msn_bow": {
+        "title": "Reverência",
+        "description": "Wink original do MSN"
+      },
+      "msn_dancing_pig": {
+        "title": "Porquinho dançando",
+        "description": "Wink original do MSN"
+      },
+      "msn_eyeball": {
+        "title": "Olhos curiosos",
+        "description": "Wink original do MSN"
+      },
+      "msn_frog": {
+        "title": "Sapo",
+        "description": "Wink original do MSN"
+      },
+      "msn_guitar_smash": {
+        "title": "Guitarra",
+        "description": "Wink original do MSN"
+      },
+      "msn_heart": {
+        "title": "Coração",
+        "description": "Wink original do MSN"
+      },
+      "msn_kiss": {
+        "title": "Beijo",
+        "description": "Wink original do MSN"
+      },
+      "msn_lipstick_girl": {
+        "title": "Garota do batom",
+        "description": "Wink original do MSN"
+      },
+      "msn_love_letter": {
+        "title": "Carta de amor",
+        "description": "Wink original do MSN"
+      },
+      "msn_notes": {
+        "title": "Notas musicais",
+        "description": "Wink original do MSN"
+      },
+      "msn_silly_face": {
+        "title": "Careta",
+        "description": "Wink original do MSN"
+      },
+      "msn_stars": {
+        "title": "Estrelas",
+        "description": "Wink original do MSN"
+      },
+      "msn_water_balloon": {
+        "title": "Balão de água",
+        "description": "Wink original do MSN"
+      },
+      "msn_fart_guy": {
+        "title": "Gordinho peidão",
+        "description": "Fart Guy · Wink original do MSN"
+      }
+    }
   }
 }

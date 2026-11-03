@@ -457,10 +457,10 @@ export function VideoSection() {
   if (permState === 'unknown') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 text-sm text-txt-tertiary">
+        <div className="settings-section text-sm text-txt-tertiary">
           {t('voice.video.checkingAccess')}
         </div>
       </div>
@@ -470,17 +470,17 @@ export function VideoSection() {
   if (permState === 'denied' || permState === 'hard-blocked') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-2">
+        <div className="settings-section space-y-2">
           <div className="text-sm text-txt-primary">⚠ {t('voice.video.accessDenied.title')}</div>
           <div className="text-xs text-txt-tertiary">
             {permState === 'hard-blocked'
               ? t(`voice.video.blocked.${getHardBlockedPlatform()}`)
               : t('voice.video.accessDenied.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
@@ -495,10 +495,10 @@ export function VideoSection() {
   if (permState === 'prompt') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+        <div className="settings-section space-y-3">
           <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative flex flex-col items-center justify-center text-center px-6">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-2">
               <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z" />
@@ -507,9 +507,9 @@ export function VideoSection() {
               {t('voice.video.permissionPrompt.description')}
             </div>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
-            className="w-full text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover active:bg-accent-primary-active text-white font-medium transition-colors"
+            className="ui-button ui-button-primary w-full transition-colors"
           >
             {t('voice.video.permissionPrompt.enable')}
           </button>
@@ -539,10 +539,10 @@ export function VideoSection() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('voice.video.title')}
       </div>
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+      <div className="settings-section">
         <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative mb-3 group">
           <video
             ref={previewVideoRef}
@@ -553,7 +553,7 @@ export function VideoSection() {
             style={{ transform: 'scaleX(-1)' }}
           />
           {isDormant && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={startPreviewFromUser}
               aria-label={t('voice.video.preview.testAria')}
@@ -566,14 +566,14 @@ export function VideoSection() {
             </button>
           )}
           {previewActive && !previewError && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={stopPreviewFromUser}
               // Mobile: always visible (no hover state) and 44 px tap target
               // per iOS HIG. Desktop: original hover-reveal compact pill.
               className="absolute top-2 right-2 rounded-md bg-black/60 hover:bg-black/75 text-white/90 transition-colors focus-visible:opacity-100
                          min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
-                         desktop:min-h-0 desktop:min-w-0 desktop:text-[11px] desktop:px-2 desktop:py-1 desktop:opacity-0 desktop:group-hover:opacity-100"
+                         desktop:min-h-0 desktop:min-w-0 desktop:text-ui-caption desktop:px-2 desktop:py-1 desktop:opacity-0 desktop:group-hover:opacity-100"
             >
               {t('voice.video.preview.stop')}
             </button>
@@ -581,24 +581,24 @@ export function VideoSection() {
           {previewError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-base/90 text-xs text-txt-tertiary text-center px-4 gap-2">
               <div>{t(`voice.video.previewError.${previewError}`)}</div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
-                className="text-[11px] px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
+                className="text-ui-caption px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
               >
                 {t('voice.video.preview.retry')}
               </button>
             </div>
           )}
         </div>
-        <div className="text-[13px] font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
+        <div className="text-ui-label font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
         <div ref={dropdownRef}>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setListOpen((v) => !v)}
             className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
           >
-            <span className="text-[13px] text-txt-primary truncate text-left">{selectedLabel}</span>
+            <span className="text-ui-label text-txt-primary truncate text-left">{selectedLabel}</span>
             <svg
               width="16"
               height="16"
@@ -655,7 +655,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
   const { t } = useTranslation(['settings', 'common']);
   return (
     <div className="mt-4 pt-3 border-t border-white/[0.06]">
-      <div className="text-[13px] font-medium text-txt-primary mb-1.5">
+      <div className="text-ui-label font-medium text-txt-primary mb-1.5">
         {t('voice.video.camera.quality.label')}
       </div>
       {cameraLimits.mode === 'fixed' ? (
@@ -674,7 +674,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cameraLimits.allowedResolutions.map((height) => (
-                <button
+                <button data-icon-motion="toggle"
                   key={height}
                   type="button"
                   onClick={() => setCameraConfig({ height })}
@@ -695,7 +695,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cameraLimits.allowedFramerates.map((fps) => (
-                <button
+                <button data-icon-motion="toggle"
                   key={fps}
                   type="button"
                   onClick={() => setCameraConfig({ fps })}
@@ -729,13 +729,13 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
                 step={100}
                 value={effectiveCamera.customBitrateKbps ?? cameraLimits.defaultBitrateKbps}
                 onChange={(e) => setCameraConfig({ customBitrateKbps: Number(e.target.value) })}
-                className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full"
+                className="ui-range"
               />
               {effectiveCamera.customBitrateKbps != null && (
-                <button
+                <button data-icon-motion="toggle"
                   type="button"
                   onClick={() => setCameraConfig({ customBitrateKbps: null })}
-                  className="mt-1 text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+                  className="mt-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('voice.video.camera.quality.useDefault')}
                 </button>
@@ -760,10 +760,10 @@ interface DropdownItemProps {
 
 function DropdownItem({ label, active, onClick }: DropdownItemProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
+      className={`w-full px-3 py-2 text-left text-ui-label hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
         active ? 'text-txt-primary' : 'text-txt-secondary'
       }`}
     >

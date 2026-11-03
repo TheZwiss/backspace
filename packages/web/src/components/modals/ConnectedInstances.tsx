@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -168,15 +169,15 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               className="input-standard flex-1"
               disabled={isLoading}
             />
-            <button
+            <button data-icon-motion="press"
               onClick={handleProbe}
               disabled={isLoading || !url.trim()}
-              className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-50"
             >
               {isLoading ? t('federation:connections.add.probing') : t('federation:connections.add.connect')}
             </button>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={onDone}
             className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
           >
@@ -200,7 +201,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             onLogin={handleFallbackLogin}
           />
           <div className="flex gap-2">
-            <button
+            <button data-icon-motion="arrow"
               onClick={() => {
                 if (authPhase === 'fallback') {
                   setAuthPhase('password');
@@ -214,7 +215,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             >
               {t('common:actions.back')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={onDone}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
@@ -274,7 +275,7 @@ function RegistryFilterBar({
     <div className="flex items-center justify-between mb-3">
       <div className="flex bg-white/[0.04] rounded-md p-0.5">
         {tabs.map((tab) => (
-          <button
+          <button data-icon-motion="press"
             key={tab.key}
             type="button"
             onClick={() => setFilter(tab.key)}
@@ -282,31 +283,31 @@ function RegistryFilterBar({
               filter === tab.key ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
-            {tab.label} <span className="text-[10px] text-txt-tertiary ml-0.5">{tab.count}</span>
+            {tab.label} <span className="text-ui-micro text-txt-tertiary ml-0.5">{tab.count}</span>
           </button>
         ))}
       </div>
 
       <div className="relative">
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           {t('common:actions.sort')}
-          <span className="text-[10px]">&#9662;</span>
+          <span className="text-ui-micro">&#9662;</span>
         </button>
 
         {sortOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
+            <div data-icon-motion="press" className="fixed inset-0 z-40" onClick={() => setSortOpen(false)} />
             <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-44">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">{t('common:actions.sortBy')}</div>
               {sortOptions.map((opt) => (
-                <button
+                <button data-icon-motion="press"
                   key={opt.key}
                   type="button"
                   onClick={() => { setSortBy(opt.key); setSortOpen(false); }}
@@ -418,12 +419,12 @@ function DeleteIdentityDialog({
   ];
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
-      <div
+    <div className="fixed inset-0 z-confirm flex items-center justify-center animate-fade-in">
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={loading ? undefined : onClose}
       />
-      <div className="relative max-w-md w-full mx-4 glass-modal rounded-xl p-6 animate-slide-up">
+      <div className="relative max-w-md w-full mx-4 ui-dialog-surface p-6 animate-slide-up">
         <h3 className="text-base font-semibold text-txt-primary mb-1">{t('federation:connections.deleteIdentity.title')}</h3>
         <p className="text-xs text-txt-tertiary mb-4">
           <Trans
@@ -437,7 +438,7 @@ function DeleteIdentityDialog({
         {/* Deletion mode selection */}
         <div className="space-y-2 mb-4">
           {/* Leave quietly */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('leave')}
             disabled={loading}
@@ -448,13 +449,13 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.leave.title')}</div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.leave.description')}
             </div>
           </button>
 
           {/* Delete User (soft) */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('soft')}
             disabled={loading}
@@ -465,13 +466,13 @@ function DeleteIdentityDialog({
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.soft.title')}</div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.soft.description')}
             </div>
           </button>
 
           {/* Nuke everything (full) */}
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setMode('full')}
             disabled={loading}
@@ -484,7 +485,7 @@ function DeleteIdentityDialog({
             <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
               {t('federation:connections.deleteIdentity.full.title')}
             </div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
+            <div className="text-ui-caption text-txt-tertiary mt-0.5">
               {t('federation:connections.deleteIdentity.full.description')}
             </div>
           </button>
@@ -492,15 +493,15 @@ function DeleteIdentityDialog({
 
         {/* Scope selector */}
         <div className="mb-4">
-          <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
+          <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-2">{t('federation:connections.deleteIdentity.scope.heading')}</div>
           <div className="flex gap-1.5">
             {scopeOptions.map((opt) => (
-              <button
+              <button data-icon-motion="press"
                 key={opt.key}
                 type="button"
                 onClick={() => setScope(opt.key)}
                 disabled={loading}
-                className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
+                className={`flex-1 px-2 py-1.5 text-ui-caption font-medium rounded transition-colors ${
                   scope === opt.key
                     ? 'bg-accent-lavender/15 text-accent-lavender'
                     : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
@@ -545,17 +546,17 @@ function DeleteIdentityDialog({
 
         {/* Actions */}
         <div className="flex gap-3">
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             disabled={loading}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="pulse"
             onClick={handleConfirm}
             disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
-            className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-danger flex-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading
               ? t('federation:connections.deleteIdentity.deleting')
@@ -636,7 +637,7 @@ function RegistryRow({
     <>
       <div className={`bg-white/[0.02] rounded-md transition-colors ${isDisconnected ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
         {/* Compact row */}
-        <div
+        <div data-icon-motion="expand"
           className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
           onClick={onToggleExpand}
         >
@@ -645,17 +646,17 @@ function RegistryRow({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-txt-primary truncate">{name}</span>
-                <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${registryStatusColor(entry.status)}`}>
+                <span className={`inline-flex items-center text-ui-micro font-medium px-1.5 py-0.5 rounded ${registryStatusColor(entry.status)}`}>
                   {registryStatusLabel(t, entry.status)}
                 </span>
               </div>
-              <div className="text-[11px] text-txt-tertiary truncate">
+              <div className="text-ui-caption text-txt-tertiary truncate">
                 {safeHost(entry.origin)}
                 {entry.username && (
                   <span className="ml-1">{t('federation:connections.row.asUser', { username: entry.username })}</span>
                 )}
               </div>
-              <div className="text-[10px] text-txt-tertiary">{metadataText}</div>
+              <div className="text-ui-micro text-txt-tertiary">{metadataText}</div>
             </div>
           </div>
           <span className="text-txt-tertiary text-xs shrink-0 ml-2">{expanded ? '▾' : '▸'}</span>
@@ -668,24 +669,24 @@ function RegistryRow({
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.remoteUserId')}</div>
+                  <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.remoteUserId')}</div>
                   <div className="text-xs text-txt-secondary truncate" title={entry.remoteUserId || t('common:states.unknown')}>
                     {entry.remoteUserId ? entry.remoteUserId.slice(0, 12) + '...' : t('common:states.unknown')}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.addedLabel')}</div>
+                  <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.addedLabel')}</div>
                   <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.addedAt)}</div>
                 </div>
                 <div>
                   {isDisconnected && entry.disconnectedAt ? (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.disconnectedLabel')}</div>
+                      <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.disconnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">{formatters.formatMediumDate(entry.disconnectedAt)}</div>
                     </>
                   ) : (
                     <>
-                      <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
+                      <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider mb-0.5">{t('federation:connections.row.lastConnectedLabel')}</div>
                       <div className="text-xs text-txt-secondary">
                         {entry.lastConnectedAt ? formatters.formatMediumDate(entry.lastConnectedAt) : t('common:time.never')}
                       </div>
@@ -716,28 +717,28 @@ function RegistryRow({
               <div className="flex items-center gap-2 flex-wrap">
                 {isConnected && (
                   <>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.disconnect')}
                     </button>
-                    <button
+                    <Tooltip content={t('federation:connections.row.deleteIdentityDisabled')} position="top"><button data-icon-motion="press"
                       type="button"
                       disabled
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger rounded opacity-50 cursor-not-allowed"
-                      title={t('federation:connections.row.deleteIdentityDisabled')}
+
                     >
                       {t('federation:connections.row.deleteIdentity')}
-                    </button>
+                    </button></Tooltip>
                   </>
                 )}
 
                 {isDisconnected && (
                   <>
                     {liveInstance && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
@@ -745,14 +746,14 @@ function RegistryRow({
                         {t('federation:connections.row.reconnect')}
                       </button>
                     )}
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
                     >
                       {t('federation:connections.row.reauthenticate')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -765,7 +766,7 @@ function RegistryRow({
                 {hasIssue && (
                   <>
                     {entry.status === 'unreachable' && liveInstance && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); handleReconnect(); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
@@ -774,7 +775,7 @@ function RegistryRow({
                       </button>
                     )}
                     {entry.status === 'auth_expired' && (
-                      <button
+                      <button data-icon-motion="press"
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
                         className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
@@ -782,14 +783,14 @@ function RegistryRow({
                         {t('federation:connections.row.reauthenticate')}
                       </button>
                     )}
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowForceRemoveConfirm(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.forceRemove')}
                     </button>
-                    <button
+                    <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
@@ -900,7 +901,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
         <div className="text-sm text-txt-primary truncate">
           {actionVerbPhrase(t, subscription.triggerReason, subscription.triggerTarget)}
         </div>
-        <div className="text-[11px] text-txt-tertiary truncate">
+        <div className="text-ui-caption text-txt-tertiary truncate">
           <Trans
             t={t}
             i18nKey="federation:connections.pending.onPeer"
@@ -912,7 +913,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
           )}
         </div>
       </div>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={handleCancel}
         disabled={busy}
@@ -932,7 +933,7 @@ function PendingPeeringSubscriptionsSection() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('federation:connections.pending.title')}
       </div>
       <p className="text-xs text-txt-tertiary mb-2">
@@ -1056,10 +1057,10 @@ function PeeringNotificationCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-txt-primary">{primaryText}</div>
-          <div className="text-[11px] text-txt-tertiary mt-0.5">{contextText}</div>
+          <div className="text-ui-caption text-txt-tertiary mt-0.5">{contextText}</div>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {showRetry && (
-              <button
+              <button data-icon-motion="bell"
                 type="button"
                 onClick={() => onRetry(notification)}
                 className="px-3 py-1.5 text-xs font-medium bg-status-online/15 text-status-online hover:bg-status-online/25 rounded transition-colors"
@@ -1067,7 +1068,7 @@ function PeeringNotificationCard({
                 {t('federation:connections.outcomes.retry', { action: actionLabel(t, notification.triggerReason) })}
               </button>
             )}
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleDismiss}
               disabled={busy}
@@ -1140,15 +1141,15 @@ function RecentPeeringOutcomesSection() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">
           {t('federation:connections.outcomes.title')}
         </div>
         {notifications.length > 1 && (
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleDismissAll}
             disabled={bulkBusy}
-            className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+            className="text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
           >
             {bulkBusy ? t('federation:connections.outcomes.dismissing') : t('common:actions.dismissAll')}
           </button>
@@ -1242,7 +1243,7 @@ export function ConnectedInstances() {
       <PendingPeeringSubscriptionsSection />
 
       <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('federation:connections.title')}
       </div>
       <p className="text-xs text-txt-tertiary mb-2">{t('federation:connections.description')}</p>
@@ -1267,7 +1268,7 @@ export function ConnectedInstances() {
           <div className="flex items-center gap-2 shrink-0 ml-2">
             <span className="text-xs text-txt-tertiary">{t('federation:connections.home.local')}</span>
             {isElectron() && (
-              <button
+              <button data-icon-motion="arrow"
                 onClick={() => window.backspace?.clearInstanceUrl()}
                 className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
               >
@@ -1317,7 +1318,7 @@ export function ConnectedInstances() {
         {showAddForm ? (
           <AddInstanceFlow onDone={() => setShowAddForm(false)} />
         ) : (
-          <button
+          <button data-icon-motion="press"
             onClick={() => setShowAddForm(true)}
             className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] transition-colors"
           >

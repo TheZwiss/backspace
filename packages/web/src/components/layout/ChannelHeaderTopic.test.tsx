@@ -6,10 +6,12 @@ import { ChannelHeaderTopic } from './ChannelHeaderTopic';
 const LONG_TOPIC = `Welcome to the channel.\nRules: ${'be kind and stay on topic, '.repeat(30)}the end.`;
 
 describe('ChannelHeaderTopic', () => {
-  it('shows the full topic on hover through the title', () => {
+  it('shows the full topic in the shared tooltip on hover', async () => {
+    const user = userEvent.setup();
     render(<ChannelHeaderTopic channelName="general" topic={LONG_TOPIC} />);
     const trigger = screen.getByRole('button', { name: /Show full topic/ });
-    expect(trigger).toHaveAttribute('title', LONG_TOPIC);
+    await user.hover(trigger);
+    expect((await screen.findByRole('tooltip')).textContent).toBe(LONG_TOPIC);
   });
 
   it('opens the whole topic, line breaks kept, in a dialog and closes it with Escape', async () => {

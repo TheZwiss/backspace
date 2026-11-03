@@ -8,7 +8,7 @@ import { useUIStore } from '../../../stores/uiStore';
 import { PermissionBits, hasPermissionBit } from '../../../utils/permissions';
 import { viewerCanActOn, viewerCanEditMemberRoles, viewerCanManageRoleAt } from '../../../utils/roleHierarchy';
 import { changeMemberRole, getCurrentMember, isRoleWritePending, subscribeMemberRoles, type MemberTarget } from './memberRoleActions';
-import { friendshipMenuItems, runMemberAction, sendMemberMessage } from './memberSocialActions';
+import { userSocialMenuItems, runMemberAction, sendMemberMessage } from './memberSocialActions';
 import { MemberNicknameDialog } from './MemberNicknameDialog';
 import { MemberRemovalDialog } from './MemberRemovalDialog';
 import { spaceMemberName, userDisplayName } from '../../../utils/identity';
@@ -92,7 +92,7 @@ export function useMemberContextMenu(space: TaggedSpace | undefined) {
         type: 'action', key: 'message', label: t('social:profile.sendMessage'), hidden: allowed.self,
         onClick: () => { void runMemberAction(() => sendMemberMessage(user, target.origin, navigate)); }
       },
-      ...(allowed.self ? [] : friendshipMenuItems(user, target.origin, t)),
+      ...(allowed.self ? [] : userSocialMenuItems(user, target.origin)),
       { type: 'separator', key: 'member-separator' },
       {
         type: 'action', key: 'nickname', label: t('spaces:members.menu.nickname'), hidden: !allowed.nickname,

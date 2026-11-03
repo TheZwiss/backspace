@@ -1,3 +1,4 @@
+import { Tooltip } from './Tooltip';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -35,17 +36,17 @@ export function TriStateToggle({
   };
 
   const button = (v: TriState, glyph: string, next: TriState) => (
-    <button
+    <Tooltip content={names[v]} position="top"><button data-icon-motion="arrow"
       type="button"
       className={btnClass(v, value === v)}
       onClick={() => !disabled && onChange(next)}
       disabled={disabled}
       aria-pressed={value === v}
       aria-label={names[v]}
-      title={names[v]}
+
     >
       {glyph}
-    </button>
+    </button></Tooltip>
   );
 
   return (

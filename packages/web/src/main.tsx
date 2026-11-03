@@ -1,3 +1,4 @@
+import { installIconClickMotion } from './platform/iconMotion';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -9,7 +10,8 @@ import { initializeInterfaceScale } from './platform/interfaceScale';
 import { waitForEmojiShortcodeNames } from './utils/emojiShortcodes';
 
 const stopInterfaceScale = initializeInterfaceScale();
-if (import.meta.hot) import.meta.hot.dispose(stopInterfaceScale);
+const stopIconMotion = installIconClickMotion();
+if (import.meta.hot) import.meta.hot.dispose(() => { stopIconMotion(); stopInterfaceScale(); });
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },

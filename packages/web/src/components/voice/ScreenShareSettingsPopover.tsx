@@ -42,8 +42,18 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
         onClose();
       }
     };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onClose();
+    };
     anchorDocument.addEventListener('mousedown', handleClick);
-    return () => anchorDocument.removeEventListener('mousedown', handleClick);
+    anchorDocument.addEventListener('keydown', handleKey, true);
+    return () => {
+      anchorDocument.removeEventListener('mousedown', handleClick);
+      anchorDocument.removeEventListener('keydown', handleKey, true);
+    };
   }, [open, onClose, anchorRef, anchorDocument]);
 
   if (!open) return null;
@@ -51,29 +61,30 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef, onStopSha
   return createPortal(
     <div
       ref={popoverRef}
-      style={style}
-      className="w-[260px] glass rounded-lg overflow-hidden"
+      data-dialog-portal
+      style={{ ...style, maxHeight: 'calc(100 * var(--app-vh) - var(--titlebar-inset, 0px) - 16px)' }}
+      className="w-[260px] max-w-[calc(100*var(--app-vw)-16px)] glass rounded-lg overflow-hidden flex flex-col"
     >
-      <div className="px-3 py-2 border-b border-border-hard">
-        <div className="text-[14px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
+      <div className="px-3 py-2 border-b border-border-hard shrink-0">
+        <div className="text-ui-body font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
         <StreamHostSubtitle className="mt-0.5" />
       </div>
 
-      <div className="px-3 py-3">
+      <div className="px-3 py-3 min-h-0 overflow-y-auto scrollbar-thin">
         <StreamQualityControls />
       </div>
 
       {/* Footer — computed stats */}
-      <div className="px-3 py-2 border-t border-border-hard">
+      <div className="px-3 py-2 border-t border-border-hard shrink-0">
         <StreamSummary />
       </div>
 
       {/* Stop sharing — only when the host surface has no other stop control */}
       {onStopSharing && (
-        <div className="px-3 pb-3 pt-1">
-          <button
+        <div className="px-3 pb-3 pt-1 shrink-0">
+          <button data-icon-motion="press"
             onClick={onStopSharing}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-accent-rose hover:bg-accent-rose/80 text-white text-[13px] font-semibold transition-colors"
+            className="ui-button ui-button-danger w-full flex items-center justify-center gap-2 transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" />

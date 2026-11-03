@@ -13,7 +13,7 @@ export function MobileScreenHeader({ title, rightActions }: MobileScreenHeaderPr
 
   return (
     <header className="h-12 flex items-center gap-2 px-3 border-b border-border-soft bg-surface-base shrink-0">
-      <button
+      <button data-icon-motion="arrow"
         onClick={popMobileScreen}
         aria-label={t('actions.back')}
         className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"

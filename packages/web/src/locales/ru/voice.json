@@ -134,6 +134,8 @@
     "remoteParticipant": "Удалённый"
   },
   "screenPicker": {
+    "captureReconnecting": "Переподключение захвата…",
+    "streamPaused": "Трансляция приостановлена",
     "title": "Демонстрация экрана",
     "tabs": {
       "screens": "Экраны",
@@ -181,6 +183,11 @@
     "hostLimits": "Ограничения задаёт {{host}}",
     "resolution": "Разрешение",
     "frameRate": "Частота кадров",
+    "cursorMode": "Курсор мыши",
+    "cursorAuto": "Авто",
+    "cursorShow": "Показывать",
+    "cursorHide": "Скрывать",
+    "cursorHideUnavailable": "Этот источник захвата не может скрыть курсор Windows. Запустите совместимый захват DXGI, чтобы применить настройку.",
     "contentMode": "Тип контента",
     "mode": {
       "gaming": "Игры",
@@ -222,6 +229,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Локальный предпросмотр приостановлен для экономии ресурсов. Трансляция продолжается.",
     "quality": "Качество трансляции",
     "qualityValue": "{{height}}p {{fps}} к/с",
     "volume": "Громкость трансляции",
@@ -237,6 +245,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "Нестабильная сеть у транслирующего",
+    "publisherBandwidth": "Доступная пропускная способность ограничивает качество трансляции",
     "publisherCpu": "Компьютер транслирующего не успевает кодировать видео",
     "viewerNetwork": "Нестабильное соединение у вас",
     "reconnecting": "Соединение потеряно — переподключение…",

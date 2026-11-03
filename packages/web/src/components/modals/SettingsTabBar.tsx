@@ -20,7 +20,7 @@ export function SettingsTabBar() {
             <HiButton onClick={() => ctx.scrollToSection(s.id)}>{s.label}</HiButton>
           </div>
         ) : (
-        <button
+        <button data-icon-motion="press"
           key={s.id}
           onClick={() => ctx.scrollToSection(s.id)}
           className={`pb-2.5 text-sm transition-colors relative ${
@@ -31,7 +31,7 @@ export function SettingsTabBar() {
         >
           {s.label}
           {s.badgeCount !== undefined && s.badgeCount > 0 && (
-            <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+            <span className="ml-1.5 text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
               {s.badgeCount}
             </span>
           )}

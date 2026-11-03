@@ -88,10 +88,10 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border-soft">
         <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={savedStatus} user={user} />
         <div className="min-w-0">
-          <div className="text-[13.5px] font-semibold text-txt-primary truncate leading-tight">
+          <div className="text-ui-label font-semibold text-txt-primary truncate leading-tight">
             {user.displayName ?? user.username}
           </div>
-          <div className="text-[11px] text-txt-tertiary truncate leading-tight">@{user.username}</div>
+          <div className="text-ui-caption text-txt-tertiary truncate leading-tight">@{user.username}</div>
         </div>
       </div>
 
@@ -99,13 +99,13 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
         {CHOSEN_STATUS_OPTIONS.map((option) => {
           const active = option.value === savedStatus;
           return (
-            <button
+            <button data-icon-motion="press"
               key={option.value}
               role="menuitemradio"
               aria-checked={active}
               disabled={pending}
               onClick={() => void applyStatus(option.value)}
-              className="w-full px-3 py-1.5 flex items-center gap-2.5 text-left text-[13.5px] text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors disabled:opacity-50"
+              className="w-full px-3 py-1.5 flex items-center gap-2.5 text-left text-ui-label text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors disabled:opacity-50"
             >
               <PresenceIndicator status={option.value} size={15} />
               <span className="flex-1 truncate">{t(option.labelKey)}</span>
@@ -120,7 +120,7 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="px-3 py-2 border-t border-border-soft">
-        <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1">
+        <label className="block text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1">
           {t('spaces:sidebar.userArea.customStatus')}
         </label>
         <input
@@ -135,33 +135,33 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
               void saveCustomStatus(customStatus);
             }
           }}
-          className="input-standard w-full text-[13px]"
+          className="input-standard w-full text-ui-label"
         />
         <div className="flex items-center justify-end gap-2 mt-2">
-          <button
+          <button data-icon-motion="press"
             onClick={() => {
               setCustomStatus('');
               void saveCustomStatus('');
             }}
             disabled={pending || (user.customStatus ?? '') === ''}
-            className="px-2.5 py-1 text-[12px] text-txt-tertiary hover:text-txt-primary transition-colors disabled:opacity-40"
+            className="px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-primary transition-colors disabled:opacity-40"
           >
             {t('common:actions.clear')}
           </button>
-          <button
+          <button data-icon-motion="press"
             onClick={() => void saveCustomStatus(customStatus)}
             disabled={pending}
-            className="px-2.5 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-[12px] font-medium rounded-full transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50"
           >
             {t('common:actions.save')}
           </button>
         </div>
-        {error && <div className="mt-1.5 text-[11.5px] text-accent-rose">{error}</div>}
+        {error && <div className="mt-1.5 text-xs text-accent-rose">{error}</div>}
       </div>
 
-      <button
+      <button data-icon-motion="gear"
         onClick={openProfileSettings}
-        className="w-full px-3 py-2 border-t border-border-soft flex items-center justify-between text-left text-[13px] text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors rounded-b-none"
+        className="w-full px-3 py-2 border-t border-border-soft flex items-center justify-between text-left text-ui-label text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary transition-colors rounded-b-none"
       >
         <span>{t('spaces:sidebar.userArea.editProfile')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">

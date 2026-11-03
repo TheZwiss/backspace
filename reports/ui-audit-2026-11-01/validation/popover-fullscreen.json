@@ -1,0 +1,10 @@
+{
+  "fullscreen": true,
+  "portalInFullscreen": true,
+  "height": 1080,
+  "stop": {
+    "top": 913.5,
+    "bottom": 949,
+    "hit": true
+  }
+}

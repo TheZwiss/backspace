@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VoiceUser } from './VoiceUser';
@@ -11,11 +12,12 @@ import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 interface VoiceGridProps {
   participants: ParticipantInfo[];
+  cameraAspectRatio?: number;
   fullscreen?: boolean;
   chromeRevealed?: boolean;
 }
 
-export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = false }: VoiceGridProps) {
+export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = false, cameraAspectRatio = 16 / 9 }: VoiceGridProps) {
   const { t } = useTranslation(['voice', 'common']);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
@@ -31,7 +33,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
   // each tile multiplied full PeerConnection scans by the number of streams.
   const streamStats = useTrackStats(shouldCollectStreamStats);
 
-  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length);
+  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length, { aspectRatio: tiles.some(tile => tile.kind === 'stream') ? 16 / 9 : cameraAspectRatio });
 
   // Reset strip visibility when focus target changes
   useEffect(() => {
@@ -98,20 +100,20 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
-        <div
+        <div data-icon-motion="press"
           className={`flex-1 min-h-0 cursor-pointer relative ${immersive ? '' : 'p-2'}`}
           onClick={() => setFocusedParticipant(null)}
           title={t('voice:grid.returnToGridHint')}
         >
           {renderTile(focusedTile, true)}
           {/* Grid button — top-right */}
-          <button
+          <Tooltip content={t('voice:grid.backToGrid')} position="top"><button data-icon-motion="press"
             onClick={(e) => {
               e.stopPropagation();
               setFocusedParticipant(null);
             }}
             className={`absolute top-4 right-4 z-10 h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-opacity ${immersive && !chromeRevealed ? 'opacity-0 pointer-events-none' : ''}`}
-            title={t('voice:grid.backToGrid')}
+
           >
             <svg
               width="16"
@@ -122,19 +124,19 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
               <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z" />
             </svg>
             <span className="text-xs font-medium">{t('voice:grid.gridButton')}</span>
-          </button>
+          </button></Tooltip>
         </div>
 
         {/* Centered Hide/Show Members button — divider between focused tile and strip */}
         {otherTiles.length > 0 && (
           <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={immersive ? `absolute inset-x-0 bottom-24 z-10 flex justify-center transition-opacity ${chromeRevealed ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : 'flex justify-center flex-shrink-0 py-1'}>
-            <button
+            <Tooltip content={stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')} position="top"><button data-icon-motion="press"
               onClick={(e) => {
                 e.stopPropagation();
                 setStripHidden(!stripHidden);
               }}
               className="px-4 py-1 bg-black/50 hover:bg-black/70 rounded-full flex items-center gap-2 text-white/60 hover:text-white transition-colors text-xs"
-              title={stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')}
+
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 {stripHidden
@@ -146,7 +148,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>
               <span>{stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')}</span>
-            </button>
+            </button></Tooltip>
           </div>
         )}
 
@@ -154,7 +156,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
         {!stripHidden && otherTiles.length > 0 && (!immersive || chromeRevealed) && (
           <div {...(immersive ? { [VOICE_CHROME_ATTR]: '' } : {})} className={`${immersive ? 'absolute inset-x-0 bottom-32 z-10' : 'flex-shrink-0'} h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar`}>
             {otherTiles.map((t) => (
-              <div
+              <div data-icon-motion="press"
                 key={t.key}
                 onClick={() => setFocusedParticipant(t.key)}
                 className="h-full aspect-video flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -182,7 +184,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = f
         }}
       >
         {tiles.map((t) => (
-          <div
+          <div data-icon-motion="press"
             key={t.key}
             onClick={() => setFocusedParticipant(t.key)}
             className="cursor-pointer hover:opacity-90 transition-opacity"

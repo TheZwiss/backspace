@@ -20,7 +20,7 @@ export function UserProfilePopoutLayer() {
 
   return createPortal(
     <>
-      <div
+      <div data-icon-motion="press"
         className="fixed inset-0 z-[145]"
         onClick={closeUserProfile}
       />

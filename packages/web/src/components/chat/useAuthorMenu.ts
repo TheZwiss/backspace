@@ -1,3 +1,4 @@
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChannelPokeStore } from '../../stores/channelPokeStore';
@@ -51,6 +52,7 @@ export function useAuthorMenu({ channelId, authorId, origin, isDm, canSend, isAu
     if (!canSend || !channelId || isAuthor) return;
     const items: ContextMenuItem[] = [];
     const author = resolveChannelUser(channelId, authorId);
+    if (author) items.push(...userSocialMenuItems(author.user, origin));
     if (author) {
       items.push({
         type: 'action', key: 'mention-author', label: '@' + spaceMemberName(author.member, author.user),

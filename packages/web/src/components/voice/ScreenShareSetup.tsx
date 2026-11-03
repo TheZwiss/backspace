@@ -1,9 +1,14 @@
+import { useDocumentActive } from '../../hooks/useDocumentActive';
+import { Tooltip } from '../ui/Tooltip';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { getElectronAPI, isElectron, isElectronMac } from '../../platform/platform';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useScreenShareSetupStore } from '../../stores/screenShareSetupStore';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
+import { CaptureQueue } from '../../utils/captureQueue';
+import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { broadcastVoiceStatus } from '../../utils/voice';
@@ -12,12 +17,21 @@ import {
   applyStagedCaptureConfig,
   stopStagedCapture,
   publishScreenShare,
+  replaceScreenShare,
   isScreenCaptureSupported,
   isCaptureCancellation,
   canAddScreenShareAudioLater,
 } from '../../utils/screenShare';
 import { StreamQualityControls, StreamSummary, StreamHostSubtitle } from './StreamQualityControls';
-import { pickAutoStageSource, type ScreenSourceTab } from '../../utils/screenShareSources';
+import { mergeScreenSources, pickAutoStageSource, sameScreenSources, type ScreenSourceTab } from '../../utils/screenShareSources';
+
+/**
+ * How often the open setup screen re-lists sources. Windows open and close
+ * while the user is choosing — the whole point of the refresh — so this is
+ * short enough to feel live and long enough that the enumeration is not a
+ * continuous scan of every window.
+ */
+const SOURCE_POLL_MS = 2_000;
 
 /**
  * ScreenShareSetup — the one screen every screen share starts from.
@@ -77,7 +91,16 @@ export function ScreenShareSetup() {
   const close = useScreenShareSetupStore((s) => s.close);
   const targetDocument = useScreenShareSetupStore((s) => s.targetDocument) ?? document;
   const portalContainer = usePortalContainer(targetDocument);
-  const config = useVoiceStore((s) => s.screenShareConfig);
+  const savedConfig = useVoiceStore((s) => s.screenShareConfig);
+  const replacing = useScreenShareSetupStore((s) => s.mode === 'replace');
+  const openingId = useScreenShareSetupStore((s) => s.openingId);
+  const [draft, setDraft] = useState<{ openingId: number; config: ScreenShareConfig } | null>(null);
+  const config = replacing && draft?.openingId === openingId ? draft.config : savedConfig;
+  const configRef = useRef(config);
+  configRef.current = config;
+  const changeDraft = useCallback((changes: Partial<ScreenShareConfig>) => {
+    setDraft(previous => ({ openingId, config: { ...(previous?.openingId === openingId ? previous.config : useVoiceStore.getState().screenShareConfig), ...changes } }));
+  }, [openingId]);
   const lastSourceId = useVoiceStore((s) => s.lastScreenShareSourceId);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
 
@@ -118,7 +141,14 @@ export function ScreenShareSetup() {
   const [error, setError] = useState<SetupError>(null);
   const stagedRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
+  const documentActive = useDocumentActive();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const stagingRef = useRef(false);
+  const startingRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const stagedSourceIdRef = useRef<string | null>(null);
+  const captureQueue = useRef(new CaptureQueue());
 
   // Older-desktop prompted flow bookkeeping. The ref is the source of truth for
   // synchronous decisions inside callbacks; the state mirror is what render reads.
@@ -161,9 +191,13 @@ export function ScreenShareSetup() {
   }, []);
 
   const replaceStaged = useCallback((next: MediaStream | null) => {
-    if (stagedRef.current && stagedRef.current !== next) stopStagedCapture(stagedRef.current);
+    const previous = stagedRef.current;
     stagedRef.current = next;
+    if (!next) stagedSourceIdRef.current = null;
     setStaged(next);
+    // Publish the new ref before stopping the previous track. Its `ended`
+    // event can fire synchronously and must not clear the newly staged source.
+    if (previous && previous !== next) stopStagedCapture(previous);
   }, []);
 
   /**
@@ -171,15 +205,22 @@ export function ScreenShareSetup() {
    * `claimed` reuses a generation already taken by stageSource; a direct call
    * (the "Choose screen" button) takes a fresh one.
    */
-  const stage = useCallback(async (claimed?: number) => {
+  const stage = useCallback(async (claimed?: number, sourceId?: string | null) => {
+    if (startingRef.current) return;
     const generation = claimed ?? ++stageGenerationRef.current;
     setError(null);
     setStaging(true);
-    const shareAudioAtStage = useVoiceStore.getState().screenShareConfig.shareAudio;
+    stagingRef.current = true;
+    const captureConfig = configRef.current;
+    const shareAudioAtStage = captureConfig.shareAudio;
     // System picker: no tile carries the audio preference, so send it ahead of the request
     api?.setScreenShareAudioPreference?.(shareAudioAtStage);
     try {
-      const stream = await stageScreenCapture();
+      const capture = () => stageScreenCapture(sourceId, audioTargetId, captureConfig);
+      const stream = api && pickerMode === 'app'
+        ? await captureQueue.current.run(() => generation === stageGenerationRef.current, capture, stopStagedCapture)
+        : await capture();
+      if (!stream) return;
       if (generation !== stageGenerationRef.current) {
         // Superseded while the picker was open: never adopt it, and never
         // leave the OS capturing for a stream nothing will publish.
@@ -187,11 +228,15 @@ export function ScreenShareSetup() {
         return;
       }
       replaceStaged(stream);
-      setStagedShareAudio(shareAudioAtStage);
+      stagedSourceIdRef.current = sourceId ?? selectedIdRef.current;
+      // What the capture actually carries, not what was asked for: a share whose
+      // system audio could not be captured is staged silent (with a warning),
+      // and the ready bar must not claim otherwise.
+      setStagedShareAudio(shareAudioAtStage && stream.getAudioTracks().some((track) => track.readyState === 'live'));
     } catch (err) {
       if (generation !== stageGenerationRef.current) return;
       replaceStaged(null);
-      setSelectedId(null);
+      selectedIdRef.current = null; setSelectedId(null);
       setError(errorKey(err));
     } finally {
       // Only the newest attempt owns these flags; an older one finishing later
@@ -199,18 +244,20 @@ export function ScreenShareSetup() {
       if (generation === stageGenerationRef.current) {
         markPromptInFlight(false);
         setStaging(false);
+        stagingRef.current = false;
       }
     }
-  }, [api, replaceStaged, markPromptInFlight]);
+  }, [api, audioTargetId, replaceStaged, markPromptInFlight, pickerMode]);
 
   /** Electron: a tile was clicked. Resolve an in-flight prompt, or preselect and stage. */
   const stageSource = useCallback(async (sourceId: string) => {
-    if (!api) return;
-    const shareAudio = useVoiceStore.getState().screenShareConfig.shareAudio;
+    if (!api || startingRef.current) return;
+    const shareAudio = configRef.current.shareAudio;
     if (promptInFlightRef.current) {
       // Only the first click answers the request; see promptAnsweredRef.
       if (promptAnsweredRef.current) return;
       promptAnsweredRef.current = true;
+      selectedIdRef.current = sourceId;
       setSelectedId(sourceId);
       // The in-flight stage() call owns the current generation and is waiting
       // on the very capture this click answers, so it must keep it. Taking a
@@ -221,27 +268,18 @@ export function ScreenShareSetup() {
       api.selectScreenSource(sourceId, shareAudio);
       return;
     }
+    selectedIdRef.current = sourceId;
     setSelectedId(sourceId);
     const generation = ++stageGenerationRef.current;
-    if (api.preselectScreenSource) {
-      // Awaited: the preselection and getDisplayMedia() travel different IPC
-      // pipes with no ordering guarantee between them. If the display-media
-      // handler wins the race it finds no preselection, degrades to the
-      // prompted flow, and the preselection then sits armed for its whole TTL
-      // ready to hijack the next share. The round trip is free next to a dialog.
-      try {
-        await api.preselectScreenSource(sourceId, shareAudio, audioTargetId);
-      } catch (err) {
-        console.error('[ScreenShareSetup] preselectScreenSource failed:', err);
-      }
-      // A newer tile was clicked while the preselection was in flight
-      if (generation !== stageGenerationRef.current) return;
-    } else {
+    if (!api.preselectScreenSource) {
       // Older desktop: the main process will push sources; answer with this id when it does.
       pendingPromptIdRef.current = sourceId;
     }
-    void stage(generation);
-  }, [api, stage, audioTargetId]);
+    // The preselection itself is awaited inside stageScreenCapture, right
+    // before getDisplayMedia(), so the display-media handler always finds it
+    // armed; a cropped window preselects its display instead of itself.
+    void stage(generation, sourceId);
+  }, [api, stage]);
 
   // Ask the desktop who picks, once per open
   useEffect(() => {
@@ -255,19 +293,70 @@ export function ScreenShareSetup() {
     return () => { cancelled = true; };
   }, [isOpen, electron, api]);
 
-  // Electron: list sources up front when we can. `sourcesNonce` is what the
-  // empty state's "Try again" bumps — an enumeration that came back empty
-  // (macOS without the Screen Recording grant) is worth retrying by hand once
-  // the user has granted it, and nothing else would re-run this.
+  // Electron: list sources up front when we can, and keep the list live while
+  // the screen is open. `sourcesNonce` is what the empty state's "Try again"
+  // bumps — an enumeration that came back empty (macOS without the Screen
+  // Recording grant) is worth retrying by hand once the user has granted it,
+  // and nothing else would re-run this.
+  //
+  // The first pass and every fifth poll carry thumbnails; the polls between
+  // them ask for ids and names only. A thumbnail is a capture of that window,
+  // and the setup screen stays open for as long as the user takes to choose,
+  // so paying for every preview on every tick would keep the whole desktop
+  // being photographed under an open dialog. The periodic full pass is what
+  // keeps the previews of animated windows moving.
   useEffect(() => {
     if (!isOpen || !canListSources || !api?.getScreenSources) return;
     let cancelled = false;
+    let inFlight = false;
+    let nextWantsThumbnails = true;
+    let ticks = 0;
     setLoadingSources(true);
-    api.getScreenSources()
-      .then((list) => { if (!cancelled) setSources(list); })
-      .catch((err) => { console.error('[ScreenShareSetup] getScreenSources failed:', err); if (!cancelled) setSources([]); })
-      .finally(() => { if (!cancelled) setLoadingSources(false); });
-    return () => { cancelled = true; };
+
+    const load = async (): Promise<void> => {
+      if (inFlight) return;
+      inFlight = true;
+      const withThumbnails = nextWantsThumbnails;
+      nextWantsThumbnails = false;
+      try {
+        const list = await api!.getScreenSources!({ thumbnails: withThumbnails });
+        if (cancelled) return;
+        if (withThumbnails && list.length > 0 && list.every(source => !source.thumbnailDataUrl)) nextWantsThumbnails = true;
+        setSources((previous) => {
+          const merged = mergeScreenSources(previous, list);
+          return sameScreenSources(previous, merged) ? previous : merged;
+        });
+      } catch (err) {
+        if (cancelled) return;
+        // A failed refresh leaves the grid the user is already looking at; only
+        // the first load has nothing to fall back to.
+        if (withThumbnails) {
+          console.error('[ScreenShareSetup] getScreenSources failed:', err);
+          setSources([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingSources(false);
+        inFlight = false;
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(() => {
+      // A hidden window cannot use the grid, and the main process serves a
+      // cache instead of enumerating for an unfocused one anyway.
+      if (document.hidden || !document.hasFocus()) return;
+      if (++ticks % 5 === 0) nextWantsThumbnails = true;
+      void load();
+    }, SOURCE_POLL_MS);
+    // Coming back to the app is when a window opened meanwhile first becomes
+    // visible: refresh at once instead of waiting out the interval.
+    const onFocus = (): void => { void load(); };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [isOpen, canListSources, api, sourcesNonce]);
 
   // Older desktop: main pushes sources for an in-flight getDisplayMedia
@@ -277,7 +366,7 @@ export function ScreenShareSetup() {
       const pendingId = pendingPromptIdRef.current;
       if (pendingId) {
         pendingPromptIdRef.current = null;
-        api.selectScreenSource(pendingId, useVoiceStore.getState().screenShareConfig.shareAudio);
+        api.selectScreenSource(pendingId, configRef.current.shareAudio);
         return;
       }
       markPromptInFlight(true);
@@ -293,7 +382,7 @@ export function ScreenShareSetup() {
     if (api?.platform === 'linux' && systemPicker) void api.setSystemAudioTarget?.('');
     setActiveTab('screens');
     setSearch('');
-    setSelectedId(null);
+    selectedIdRef.current = null; setSelectedId(null);
     setError(null);
     setStarting(false);
     setSettingsOpen(false);
@@ -306,9 +395,10 @@ export function ScreenShareSetup() {
     replaceStaged(null);
     setStagedShareAudio(useVoiceStore.getState().screenShareConfig.shareAudio);
     setStaging(false);
+    stagingRef.current = false;
     markPromptInFlight(false);
     pendingPromptIdRef.current = null;
-  }, [isOpen, replaceStaged, markPromptInFlight, api, systemPicker]);
+  }, [isOpen, openingId, replaceStaged, markPromptInFlight, api, systemPicker]);
 
   // Stage the remembered source (or a lone screen) so the common case needs a
   // single click on Start
@@ -327,16 +417,22 @@ export function ScreenShareSetup() {
   useEffect(() => {
     const el = previewRef.current;
     if (!el) return;
-    el.srcObject = staged;
-    if (staged) el.play().catch(() => {});
-    return () => { el.srcObject = null; };
-  }, [staged]);
+    el.srcObject = documentActive ? staged : null;
+    if (documentActive && staged) el.play().catch(() => {});
+    return () => { el.pause(); el.srcObject = null; };
+  }, [staged, documentActive]);
 
   // Browser "Stop sharing" bar during staging ends the track: drop the preview
   useEffect(() => {
     const track = staged?.getVideoTracks()[0];
     if (!track) return;
-    const onEnded = () => { replaceStaged(null); setSelectedId(null); };
+    const onEnded = () => {
+      // A replaced capture may end after the next one is already staged.
+      if (stagedRef.current?.getVideoTracks()[0] !== track) return;
+      replaceStaged(null);
+      selectedIdRef.current = null;
+      setSelectedId(null);
+    };
     track.addEventListener('ended', onEnded);
     return () => track.removeEventListener('ended', onEnded);
   }, [staged, replaceStaged]);
@@ -344,8 +440,8 @@ export function ScreenShareSetup() {
   // Quality changes reach the staged track immediately (local only, no renegotiation)
   useEffect(() => {
     if (!staged) return;
-    void applyStagedCaptureConfig(staged);
-  }, [staged, config.height, config.fps, config.mode]);
+    void applyStagedCaptureConfig(staged, config);
+  }, [staged, config]);
 
   // The closed drawer is off-canvas but still in the DOM, so its buttons,
   // sliders and toggle would stay in the tab order: tabbing through the setup
@@ -364,10 +460,12 @@ export function ScreenShareSetup() {
   }, [settingsOpen, isOpen]);
 
   const handleClose = useCallback(() => {
+    if (startingRef.current) return;
     // Abandon any capture still being picked. Without this the promise resolves
     // onto a closed screen and the OS keeps capturing forever.
     stageGenerationRef.current++;
     setStaging(false);
+    stagingRef.current = false;
     if (promptInFlightRef.current && api) {
       api.selectScreenSource(null);
     }
@@ -379,8 +477,11 @@ export function ScreenShareSetup() {
 
   // Already live (started elsewhere while open): the setup no longer applies
   useEffect(() => {
-    if (isOpen && isScreenSharing && !starting) handleClose();
-  }, [isOpen, isScreenSharing, starting, handleClose]);
+    if (isOpen && (replacing ? !isScreenSharing : isScreenSharing) && !starting) handleClose();
+  }, [isOpen, isScreenSharing, starting, replacing, handleClose]);
+
+  useDialogLayer(dialogRef, { open: isOpen, document: targetDocument, label: t('voice:screenPicker.title'), dismissible: !starting,
+    onClose: () => { if (settingsOpen) setSettingsOpen(false); else handleClose(); } });
 
   // Escape closes the drawer first, then the screen; also release the capture on unmount
   useEffect(() => {
@@ -396,17 +497,25 @@ export function ScreenShareSetup() {
   useEffect(() => () => stopStagedCapture(stagedRef.current), []);
 
   const handleStart = useCallback(async () => {
+    if (startingRef.current || stagingRef.current || stagedSourceIdRef.current !== selectedIdRef.current) return;
     const stream = stagedRef.current;
     const room = getActiveRoom();
     if (!stream || !room) { setError('startFailed'); return; }
     setStarting(true);
+    startingRef.current = true;
     setError(null);
-    const ok = await publishScreenShare(room, stream, { sourceId: selectedId, pickerMode });
+    let ok = false;
+    try {
+      ok = replacing
+        ? await replaceScreenShare(room, stream, { sourceId: selectedIdRef.current, pickerMode, config: configRef.current })
+        : await publishScreenShare(room, stream, { sourceId: selectedIdRef.current, pickerMode });
+    } catch (error) { console.error('[ScreenShareSetup] Could not commit capture:', error); stopStagedCapture(stream); }
+    finally { startingRef.current = false; }
     if (!ok) {
       // publishScreenShare stopped the tracks on failure
       stagedRef.current = null;
       setStaged(null);
-      setSelectedId(null);
+      selectedIdRef.current = null; setSelectedId(null);
       setStarting(false);
       setError('startFailed');
       return;
@@ -416,13 +525,13 @@ export function ScreenShareSetup() {
     // backed out of should not be the thing that comes up next time. Only a
     // tile we enumerated has an id worth keeping — a browser or portal capture
     // has none, and stores null so a stale one cannot outlive it.
-    useVoiceStore.getState().setLastScreenShareSourceId(selectedId);
+    useVoiceStore.getState().setLastScreenShareSourceId(selectedIdRef.current);
     // Ownership moved to LiveKit: do not stop the tracks on close
     stagedRef.current = null;
     setStaged(null);
     setStarting(false);
     close();
-  }, [close, selectedId, pickerMode]);
+  }, [close, pickerMode, replacing]);
 
   const screens = useMemo(() => sources.filter((s) => s.isScreen), [sources]);
   const windows = useMemo(() => {
@@ -449,7 +558,7 @@ export function ScreenShareSetup() {
       ? t('voice:screenPicker.chooseHintSystem')
       : null;
   const stageNow = () => void stage();
-  const stagedSource = sources.find((s) => s.id === selectedId) ?? null;
+  const stagedSource = sources.find((s) => s.id === stagedSourceIdRef.current) ?? null;
   // Only a source we picked ourselves has a name and a kind we can trust.
   const stagedName = stagedSource?.name ?? null;
   // Derived from our own enumeration, never from the track: displaySurface
@@ -461,23 +570,24 @@ export function ScreenShareSetup() {
     : t('voice:screenPicker.stageReady');
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
+    <div ref={dialogRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
       {/* Card — fixed to the viewport so the layout never jumps with its content */}
       <div
         data-testid="screen-share-setup"
-        className="relative w-[calc(calc(100*var(--app-vw))-6rem)] max-w-6xl h-[calc(88*var(--app-vh))] glass-modal rounded-xl animate-slide-up flex flex-col"
+        className="relative w-[calc(calc(100*var(--app-vw))-6rem)] max-w-6xl h-[calc(88*var(--app-vh))] ui-dialog-surface animate-slide-up flex flex-col"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3 flex-shrink-0">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-txt-primary leading-tight">{t('voice:screenPicker.title')}</h2>
-            <p className="text-[13px] text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
+            <h2 className="ui-dialog-title leading-tight">{t('voice:screenPicker.title')}</h2>
+            <p className="text-ui-label text-txt-tertiary mt-0.5">{t('voice:screenPicker.subtitle')}</p>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={handleClose}
+            disabled={starting}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1 flex-shrink-0"
             aria-label={t('common:actions.close')}
           >
@@ -490,11 +600,11 @@ export function ScreenShareSetup() {
         {api?.platform === 'linux' && api.getSystemAudioTargets && (activeTab === 'windows' || systemPicker) && config.shareAudio && (
           <label className="block px-6 pb-3 text-xs text-txt-secondary">
             {t('voice:screenPicker.audioApplication')}
-            <select className="block w-full mt-1 rounded-lg bg-surface-input p-2" value={audioTargetId} onChange={(event) => {
+            <select className="ui-select block w-full mt-1 p-2" value={audioTargetId} onChange={(event) => {
               setAudioTargetId(event.target.value);
               if (systemPicker) void api.setSystemAudioTarget?.(event.target.value);
               replaceStaged(null);
-              setSelectedId(null);
+              selectedIdRef.current = null; setSelectedId(null);
               stageGenerationRef.current++;
             }}>
               <option value="">{t('voice:screenPicker.chooseAudioApplication')}</option>
@@ -563,14 +673,14 @@ export function ScreenShareSetup() {
                       {sources.length === 0 && (
                         <>
                           {isElectronMac() && (
-                            <p className="text-[13px] text-txt-tertiary max-w-sm">
+                            <p className="text-ui-label text-txt-tertiary max-w-sm">
                               {t('voice:screenPicker.permissionHintMac')}
                             </p>
                           )}
-                          <button
+                          <button data-icon-motion="press"
                             onClick={() => setSourcesNonce((n) => n + 1)}
                             disabled={loadingSources}
-                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                           >
                             {t('voice:screenPicker.retrySources')}
                           </button>
@@ -584,6 +694,7 @@ export function ScreenShareSetup() {
                           key={source.id}
                           source={source}
                           selected={selectedId === source.id}
+                          disabled={starting}
                           onClick={() => void stageSource(source.id)}
                           onDoubleClick={() => { if (stagedRef.current && selectedId === source.id) void handleStart(); }}
                         />
@@ -601,12 +712,12 @@ export function ScreenShareSetup() {
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
-                      <div className="text-[14px] font-semibold text-txt-primary truncate mt-0.5">
+                      <div className="text-ui-caption font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
+                      <div className="text-ui-body font-semibold text-txt-primary truncate mt-0.5">
                         {stagedName ?? t('voice:screenPicker.preview')}
                       </div>
                       {audioNeedsRepick && (
-                        <div className="text-[11px] text-accent-amber/80 mt-1">{t('voice:screenPicker.audioNeedsRepick')}</div>
+                        <div className="text-ui-caption text-accent-amber/80 mt-1">{t('voice:screenPicker.audioNeedsRepick')}</div>
                       )}
                     </div>
                   </div>
@@ -622,23 +733,23 @@ export function ScreenShareSetup() {
                 {staged ? (
                   <>
                     <video ref={previewRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black/70" />
-                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-[10px] font-bold uppercase tracking-wide text-white/80">
+                    <div className="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/60 text-ui-micro font-bold uppercase tracking-wide text-white/80">
                       {t('voice:screenPicker.preview')}
                     </div>
                     <div className="absolute inset-x-0 bottom-0 px-4 py-3 flex flex-col items-start gap-2 desktop:flex-row desktop:items-center desktop:justify-between desktop:gap-3 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
+                        <div className="text-ui-caption font-semibold uppercase tracking-wider text-accent-mint truncate">{readyLabel}</div>
                         {stagedName && (
-                          <div className="text-[13px] font-semibold text-white truncate mt-0.5">{stagedName}</div>
+                          <div className="text-ui-label font-semibold text-white truncate mt-0.5">{stagedName}</div>
                         )}
                         {audioNeedsRepick && (
-                          <div className="text-[11px] text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
+                          <div className="text-ui-caption text-accent-amber/90 mt-0.5">{t('voice:screenPicker.audioNeedsRepick')}</div>
                         )}
                       </div>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={stageNow}
                         disabled={staging}
-                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-[13px] font-medium transition-colors disabled:opacity-40"
+                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                       >
                         {t('voice:screenPicker.chooseAgain')}
                       </button>
@@ -661,21 +772,21 @@ export function ScreenShareSetup() {
                       </defs>
                     </svg>
                     <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">{t('voice:screenPicker.stageIdle')}</div>
+                      <div className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">{t('voice:screenPicker.stageIdle')}</div>
                       <div className="text-[17px] font-bold text-txt-primary mt-1">{t('voice:screenPicker.chooseTitle')}</div>
                       {chooseHint && (
-                        <div className="text-[13px] text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
+                        <div className="text-ui-label text-txt-tertiary max-w-md mt-1">{chooseHint}</div>
                       )}
                     </div>
-                    <button
+                    <button data-icon-motion="press"
                       onClick={stageNow}
                       disabled={staging || !supported || (electron && pickerMode === null)}
-                      className="px-5 py-2.5 rounded-full bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                      className="ui-button ui-button-primary transition-colors shadow-lg shadow-accent-primary/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                     >
                       {t('voice:screenPicker.choose')}
                     </button>
                     {!supported && (
-                      <div className="text-[12px] text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
+                      <div className="text-ui-caption text-txt-danger">{t('voice:screenPicker.unsupported')}</div>
                     )}
                   </div>
                 )}
@@ -684,7 +795,7 @@ export function ScreenShareSetup() {
           </div>
 
           {/* Drawer scrim — click outside the drawer closes it */}
-          <div
+          <div data-icon-motion="gear"
             className={`absolute inset-0 z-10 bg-black/40 transition-opacity duration-300 ${settingsOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setSettingsOpen(false)}
           />
@@ -701,10 +812,10 @@ export function ScreenShareSetup() {
           >
             <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-border-hard flex-shrink-0">
               <div className="min-w-0">
-                <div className="text-[15px] font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
+                <div className="text-ui-message font-bold text-txt-primary">{t('voice:streamSettings.title')}</div>
                 <StreamHostSubtitle className="mt-0.5" />
               </div>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => setSettingsOpen(false)}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1 -mr-1"
                 aria-label={t('common:actions.close')}
@@ -715,7 +826,9 @@ export function ScreenShareSetup() {
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-5 py-4">
-              <StreamQualityControls />
+              <fieldset disabled={starting} className="min-w-0 border-0 p-0">
+                <StreamQualityControls config={replacing ? config : undefined} onChange={replacing ? changeDraft : undefined} />
+              </fieldset>
             </div>
           </div>
         </div>
@@ -723,26 +836,26 @@ export function ScreenShareSetup() {
         {/* Footer */}
         <div className="flex-shrink-0 flex items-center justify-between gap-3 px-6 pt-3 pb-4 border-t border-border-hard">
           <div className="min-w-0 flex flex-col">
-            <button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button data-icon-motion="gear"
               onClick={() => setSettingsOpen(true)}
               className="text-left hover:text-txt-secondary transition-colors truncate"
-              title={t('voice:streamSettings.title')}
+
             >
-              <StreamSummary />
-            </button>
+              <StreamSummary config={config} />
+            </button></Tooltip>
             {error && (
-              <span className="text-[12px] text-txt-danger truncate" role="alert">
+              <span className="text-ui-caption text-txt-danger truncate" role="alert">
                 {t(`voice:screenPicker.${error}`)}
               </span>
             )}
           </div>
           <div className="glass-bubble rounded-full px-2 py-2 flex items-center gap-1 flex-shrink-0">
-            <button
+            <Tooltip content={t('voice:streamSettings.title')} position="top"><button data-icon-motion="gear"
               onClick={() => setSettingsOpen((open) => !open)}
               aria-expanded={settingsOpen}
               aria-controls="stream-settings-drawer-panel"
-              aria-label={t('voice:streamSettings.title')}
-              title={t('voice:streamSettings.title')}
+
+
               className={`flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 settingsOpen
                   ? 'bg-white/[0.1] text-txt-primary'
@@ -753,18 +866,19 @@ export function ScreenShareSetup() {
                 <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z" />
               </svg>
               <span className="hidden desktop:inline">{t('voice:streamSettings.title')}</span>
-            </button>
+            </button></Tooltip>
             <div className="w-px h-5 bg-white/10 mx-1" />
-            <button
+            <button data-icon-motion="press"
               onClick={handleClose}
+              disabled={starting}
               className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               {t('common:actions.cancel')}
             </button>
-            <button
+            <button data-icon-motion="press"
               onClick={() => void handleStart()}
               disabled={!canStart}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-semibold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="ui-button ui-button-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t('voice:screenPicker.start')}
             </button>
@@ -788,7 +902,7 @@ function TabButton({ active, onClick, label, count }: {
   count: number | null;
 }) {
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={onClick}
       className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
         active
@@ -806,14 +920,16 @@ function TabButton({ active, onClick, label, count }: {
   );
 }
 
-function SourceCard({ source, selected, onClick, onDoubleClick }: {
+function SourceCard({ source, selected, onClick, onDoubleClick, disabled }: {
   source: ElectronScreenSource;
   selected: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <button
+    <button data-icon-motion="press"
+      disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       className={`group flex flex-col rounded-lg overflow-hidden transition-all text-left ring-2 ${

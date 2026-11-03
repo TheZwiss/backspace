@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useMentionComposer } from './useMentionComposer';
 import { useComposerMention } from './useComposerMention';
 import { MentionTextarea } from './MentionTextarea';
@@ -27,6 +28,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
 import { describeError } from '../../i18n/errors';
+import { NudgeButton } from './NudgeButton';
 
 interface MessageInputProps {
   channelId: string;
@@ -745,7 +747,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         <div className="flex items-center justify-center py-[14px] px-4">
           {/* While the channel is unknown (before its ready) nothing is refused yet:
               the shell alone, a non-breaking space keeping its height. */}
-          <span className="text-txt-tertiary text-[14px]">
+          <span className="text-txt-tertiary text-ui-body">
             {isDm === undefined ? '\u00a0' : t('chat:composer.noPermission')}
           </span>
         </div>
@@ -780,13 +782,13 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
       {chatReplyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
-          <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
+          <div className="flex items-center gap-1 text-ui-body text-txt-message truncate">
             <span className="opacity-60">{t('chat:composer.replyingTo')}</span>
             <span className="font-bold">
               {chatReplyTo.user.displayName ?? chatReplyTo.user.username}
             </span>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => chatSetReplyTo(channelId, null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={t('chat:composer.cancelReply')}
@@ -819,16 +821,16 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
           {/* File attach button */}
           {canAttachFiles && (
-            <button
+            <Tooltip content={t('chat:composer.attachFile')} position="top"><button data-icon-motion="attach"
               onClick={() => fileInputRef.current?.click()}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
-              title={t('chat:composer.attachFile')}
+
               aria-label={t('chat:composer.attachFile')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
           <input
             ref={fileInputRef}
@@ -859,7 +861,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
                 ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
                 : t('chat:composer.placeholder.channel', { name: channelName }))
             }
-            className="input-embedded relative block w-full py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
+            className="input-embedded relative block w-full py-[10px] px-1 resize-none text-ui-message leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
             rows={1}
           />
 
@@ -876,7 +878,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* Failed-upload hint (gates send button) */}
           {failedCount > 0 && (
             <span
-              className="text-[12px] font-medium text-accent-rose px-1 flex-shrink-0"
+              className="text-ui-caption font-medium text-accent-rose px-1 flex-shrink-0"
               title={t('chat:composer.failedHint')}
             >
               {t('chat:composer.failedCount', { count: failedCount })}
@@ -886,7 +888,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* Character counter (shows when near or over limit) */}
           {draftText.length > MAX_MESSAGE_LENGTH - 200 && (
             <span
-              className={`text-[12px] font-medium tabular-nums flex-shrink-0 px-1 ${isOverLimit ? 'text-accent-rose' : 'text-txt-tertiary'}`}
+              className={`text-ui-caption font-medium tabular-nums flex-shrink-0 px-1 ${isOverLimit ? 'text-accent-rose' : 'text-txt-tertiary'}`}
             >
               {remaining}
             </span>
@@ -894,61 +896,62 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
           {/* GIF button */}
           {gifEnabled && (
-            <button
+            <Tooltip content={t('chat:composer.gif')} position="top"><button data-icon-motion="press"
               onClick={() => togglePopover('gif')}
               className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
                 activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
-              title={t('chat:composer.gif')}
+
               aria-label={t('chat:composer.gifPicker')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
 
+          {isDm && <NudgeButton channelId={channelId} />}
           {/* Emoji button */}
-          <button
+          <Tooltip content={t('chat:composer.emoji')} position="top"><button data-icon-motion="press"
             onClick={() => togglePopover('emoji')}
             className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
-            title={t('chat:composer.emoji')}
+
             aria-label={t('chat:composer.emojiPicker')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
             </svg>
-          </button>
+          </button></Tooltip>
 
           {/* Sticker button */}
-          <button
+          <Tooltip content={t('chat:stickers.title')} position="top"><button data-icon-motion="press"
             onClick={() => togglePopover('sticker')}
             className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'sticker' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
-            title={t('chat:stickers.title')}
+
             aria-label={t('chat:stickers.title')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
             </svg>
-          </button>
+          </button></Tooltip>
 
           {/* Send button — appears when there's content/attachments to send */}
           {canSend && (
-            <button
+            <Tooltip content={t('chat:composer.send')} position="top"><button data-icon-motion="send"
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
               aria-label={t('chat:composer.sendMessage')}
-              title={t('chat:composer.send')}
+
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
         </div>
       </div>

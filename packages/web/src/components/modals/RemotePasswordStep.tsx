@@ -47,7 +47,7 @@ export function safeHost(origin: string): string {
 }
 
 const submitBase =
-  'px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
+  'px-4 py-2 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50';
 const submitClass = `w-full ${submitBase}`;
 
 function PasswordForm({
@@ -97,7 +97,7 @@ function PasswordForm({
         </div>
       </div>
       {extraFields}
-      <button type="submit" disabled={isLoading || !password} className={submitClass}>
+      <button data-icon-motion="press" type="submit" disabled={isLoading || !password} className={submitClass}>
         {isLoading ? connectingLabel : connectLabel}
       </button>
     </form>
@@ -218,7 +218,7 @@ export function FallbackForm({
       </div>
       {extraFields}
       <div className="flex items-center gap-2">
-        <button
+        <button data-icon-motion="press"
           type="submit"
           disabled={isLoading || !username || !remotePassword}
           className={secondaryAction ? submitBase : submitClass}

@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Bookmark } from '@backspace/shared/src/bookmarks';
@@ -40,7 +41,7 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
 
   return (
     <div className="group/bookmark relative flex items-start gap-3 px-3 py-3 hover:bg-interactive-hover transition-colors">
-      <button
+      <button data-icon-motion="pulse"
         type="button"
         onClick={() => onOpen(bookmark)}
         className="flex-1 min-w-0 flex items-start gap-3 text-left"
@@ -58,13 +59,13 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2">
-            <span className="text-[14px] font-semibold text-txt-primary truncate">{name}</span>
-            <span className="text-[11px] text-txt-tertiary flex-shrink-0">{f.formatDateTime(bookmark.messageCreatedAt)}</span>
+            <span className="text-ui-body font-semibold text-txt-primary truncate">{name}</span>
+            <span className="text-ui-caption text-txt-tertiary flex-shrink-0">{f.formatDateTime(bookmark.messageCreatedAt)}</span>
           </div>
-          <div className="text-[11px] text-txt-tertiary truncate">{place}</div>
+          <div className="text-ui-caption text-txt-tertiary truncate">{place}</div>
           {bookmark.status !== 'ok' && (
             <div
-              className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] ${
+              className={`inline-block mt-1 px-1.5 py-0.5 rounded text-ui-caption ${
                 deleted ? 'bg-accent-rose/10 text-accent-rose' : 'bg-accent-amber/10 text-accent-amber'
               }`}
             >
@@ -72,14 +73,14 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
             </div>
           )}
           {text && (
-            <div className="mt-1 text-[13px] text-txt-secondary leading-[1.4] line-clamp-4 whitespace-pre-wrap break-words">
+            <div className="mt-1 text-ui-label text-txt-secondary leading-[1.4] line-clamp-4 whitespace-pre-wrap break-words">
               {text}
             </div>
           )}
           {bookmark.attachments.length > 0 && (
             <ul className="mt-1 space-y-0.5">
               {bookmark.attachments.map((attachment) => (
-                <li key={attachment.id} className="flex items-center gap-1.5 text-[11px] text-txt-tertiary min-w-0">
+                <li key={attachment.id} className="flex items-center gap-1.5 text-ui-caption text-txt-tertiary min-w-0">
                   <span className="truncate">{attachment.originalName}</span>
                   <span className="flex-shrink-0">{f.formatBytes(attachment.size)}</span>
                   {attachment.state === 'gone' && (
@@ -91,16 +92,16 @@ export const BookmarkRow = memo(function BookmarkRow({ bookmark, author, removin
           )}
         </div>
       </button>
-      <button
+      <Tooltip content={t('list.remove')} position="top"><button data-icon-motion="press"
         type="button"
         onClick={() => onRemove(bookmark)}
         disabled={removing}
-        title={t('list.remove')}
+
         aria-label={t('list.remove')}
         className="flex-shrink-0 p-1.5 rounded text-accent-primary hover:bg-interactive-hover disabled:opacity-50 transition-colors"
       >
         <BookmarkIcon filled size={18} />
-      </button>
+      </button></Tooltip>
     </div>
   );
 });

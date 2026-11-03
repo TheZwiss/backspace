@@ -1,0 +1,31 @@
+{
+  "setupSourcesMedianMs": 511.44999999925494,
+  "setupSourcesMaxMs": 3448.10000000149,
+  "previewMedianMs": 761.0,
+  "previewMaxMs": 3726.7000000029802,
+  "cancelMedianMs": 12.199999999254942,
+  "finalLive": 0,
+  "previewRates": [
+    {
+      "target": 30,
+      "presentedFps": 28.8,
+      "maxFrameGapMs": 66.69999999995343,
+      "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+      "captureCount": 29
+    },
+    {
+      "target": 45,
+      "presentedFps": 42.99,
+      "maxFrameGapMs": 38.90000000002328,
+      "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+      "captureCount": 29
+    },
+    {
+      "target": 60,
+      "presentedFps": 54.18,
+      "maxFrameGapMs": 33.40000000002328,
+      "trackId": "cd8b7b5a-ab64-4a33-ae84-59cc5e55bb9b",
+      "captureCount": 29
+    }
+  ]
+}

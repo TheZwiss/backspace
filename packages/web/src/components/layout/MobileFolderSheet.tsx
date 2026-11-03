@@ -57,14 +57,14 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
         type: 'custom',
         render: () => (
           <div className="px-5 py-3">
-            <p className="text-[11px] text-txt-tertiary mb-2">{t('spaces:sidebar.folder.color')}</p>
+            <p className="text-ui-caption text-txt-tertiary mb-2">{t('spaces:sidebar.folder.color')}</p>
             <div className="flex gap-2">
-              <button
+              <button data-icon-motion="press"
                 className={`w-6 h-6 rounded-full border-2 ${!folder.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
                 onClick={() => { onUpdateFolder(folder.id, { color: null }); useContextMenuStore.getState().close(); }}
               />
               {FOLDER_COLORS.map(c => (
-                <button
+                <button data-icon-motion="press"
                   key={c.name}
                   className={`w-6 h-6 rounded-full border-2 ${folder.color === c.value ? 'border-white/40' : 'border-transparent'}`}
                   style={{ background: c.value }}
@@ -96,7 +96,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
 
   return (
     <>
-      <div className="fixed inset-0 z-[300] bg-black/50" onClick={onClose} />
+      <div data-icon-motion="press" className="fixed inset-0 z-[300] bg-black/50" onClick={onClose} />
       <div
         className={`fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal max-h-[calc(60*var(--app-vh))] flex flex-col ${
           hasInteracted ? '' : 'animate-slide-up-sheet'
@@ -142,7 +142,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
               : null;
             const grad = getSpaceGradient(space.id, space.name, space.avatarColor);
             return (
-              <button
+              <button data-icon-motion="press"
                 key={space.id}
                 onClick={() => { onSelectSpace(space.id); onClose(); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-interactive-hover text-left transition-colors"

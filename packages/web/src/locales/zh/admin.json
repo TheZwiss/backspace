@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "发现用户",
+      "description": "选择搜索前显示哪些用户。仍可直接搜索或从空间添加好友。",
+      "search": "仅直接搜索（默认）",
+      "shared": "共同空间中的用户",
+      "all": "此实例中的所有用户"
+    },
     "title": "常规",
     "description": "配置您的 Backspace 实例。这些设置将影响所有用户。",
     "instanceName": {

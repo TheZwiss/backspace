@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
-import React, { useState, useCallback, useEffect, type ReactNode } from 'react';
+import React, { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import { useTranslation } from 'react-i18next';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -45,6 +46,8 @@ export function ImageCropModal({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(dialogRef, { open: isOpen, onClose, dismissible: !isProcessing, label: heading });
 
   const handleCropComplete = useCallback((percentage: Area, croppedPixels: Area) => {
     setCroppedArea(percentage);
@@ -84,25 +87,16 @@ export function ImageCropModal({
     }
   }, [isOpen, imageSrc]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
+    <div ref={dialogRef} className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in">
+      <div data-icon-motion="press" className="absolute inset-0 bg-surface-overlay" onClick={onClose} />
       <div className="relative max-w-md w-full mx-4 bg-surface-elevated rounded-lg shadow-xl animate-slide-up">
         {/* Title bar */}
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-xl font-bold text-txt-primary">{heading}</h2>
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
             aria-label={t('common:actions.close')}
@@ -146,7 +140,7 @@ export function ImageCropModal({
             step={0.05}
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="flex-1 min-w-0 h-1.5 rounded-full appearance-none bg-surface-input accent-accent-primary cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-primary"
+            className="ui-range"
           />
         </div>
 
@@ -155,18 +149,18 @@ export function ImageCropModal({
 
         {/* Actions */}
         <div className="flex gap-3 p-4">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={onClose}
             className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors"
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleApply}
             disabled={isProcessing || !croppedAreaPixels || applyDisabled}
-            className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50"
           >
             {isProcessing ? t('uploads:crop.applying') : t('common:actions.apply')}
           </button>

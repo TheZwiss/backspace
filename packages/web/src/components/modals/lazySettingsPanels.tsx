@@ -43,6 +43,7 @@ export function lazyPanel<M, P extends object>(
 
 export const AccountPanel = lazyPanel(() => import('./settingsPanels/AccountPanel'), (m) => m.AccountPanel);
 export const AppearancePanel = lazyPanel(() => import('./settingsPanels/AppearancePanel'), (m) => m.AppearancePanel);
+export const NotificationsPanel = lazyPanel(() => import('./settingsPanels/NotificationsPanel'), (m) => m.NotificationsPanel);
 export const VoicePanel = lazyPanel(() => import('./settingsPanels/VoicePanel'), (m) => m.VoicePanel);
 export const PrivacyPanel = lazyPanel(() => import('./settingsPanels/PrivacyPanel'), (m) => m.PrivacyPanel);
 export const StickerLibraryPanel = lazyPanel(() => import('./settingsPanels/StickerLibraryPanel'), (m) => m.StickerLibraryPanel);
@@ -94,7 +95,7 @@ function SettingsPanelLoadFailed() {
   return (
     <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
       <span>{t('states.loadSettingsFailed')}</span>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => window.location.reload()}
         className="font-medium underline underline-offset-2 hover:no-underline transition-all"
