@@ -1,0 +1,20 @@
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useTrackStats } from './useTrackStats';
+const mocks = vi.hoisted(() => ({ room: vi.fn(() => null) }));
+vi.mock('./useLiveKit', () => ({ getActiveRoom: mocks.room }));
+beforeEach(() => { vi.useFakeTimers(); mocks.room.mockClear(); });
+afterEach(() => vi.useRealTimers());
+it('shares one collector and releases it after the last consumer leaves', async () => {
+  const first = renderHook(() => useTrackStats(true));
+  const second = renderHook(() => useTrackStats(true));
+  expect(mocks.room).toHaveBeenCalledTimes(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(mocks.room).toHaveBeenCalledTimes(2);
+  first.unmount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(mocks.room).toHaveBeenCalledTimes(3);
+  second.unmount();
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  expect(mocks.room).toHaveBeenCalledTimes(3);
+});

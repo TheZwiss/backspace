@@ -197,6 +197,8 @@ interface BackspaceElectronAPI {
     crop?: { x: number; y: number; width: number; height: number };
   }) => Promise<{ id: string; url: string } | null>;
   stopNativeScreenCapture?: (id: string) => Promise<void>;
+  startSharedTextureCapture?: (options: Parameters<NonNullable<BackspaceElectronAPI['startNativeScreenCapture']>>[0]) => Promise<{ id: string; transport: 'shared-texture' } | null>;
+  updateSharedTextureCapture?: (id: string, options: { width?: number | null; height?: number | null; frameRate?: number; cursorMode?: 'auto' | 'show' | 'hide' }) => Promise<void>;
   holdScreenCaptureActivity?: () => Promise<void>;
   releaseScreenCaptureActivity?: () => Promise<void>;
   /** Follow a shared window's rectangle while it is captured (one helper process). */

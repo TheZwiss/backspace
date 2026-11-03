@@ -26,7 +26,7 @@ export interface DmMemberRowProps {
   isSelf: boolean;
   /** True when the viewer is the channel owner (controls transfer/kick visibility). */
   callerIsOwner: boolean;
-  /** True when the viewer and this member are friends (controls Remove Friend visibility). */
+  /** True when the viewer and this member are friends. */
   isFriend: boolean;
   /** Whether to render the kebab "⋮" trigger button (right side of the row). */
   showKebab?: boolean;
@@ -127,7 +127,6 @@ export function DmMemberRow({
 
     const showTransfer = callerIsOwner && !isSelf;
     const showKick = callerIsOwner && !isSelf;
-    const showRemoveFriend = isFriend && !isSelf;
 
     if (showTransfer) {
       items.push({
@@ -145,20 +144,6 @@ export function DmMemberRow({
         label: t('dm:memberRow.removeFromGroup'),
         danger: true,
         onClick: () => onMenuAction('kick', canonical),
-      });
-    }
-
-    if ((showTransfer || showKick) && showRemoveFriend) {
-      items.push({ key: 'sep', type: 'separator' });
-    }
-
-    if (showRemoveFriend) {
-      items.push({
-        key: 'remove-friend',
-        type: 'action',
-        label: t('dm:memberRow.removeFriend'),
-        danger: true,
-        onClick: () => onMenuAction('remove-friend', canonical),
       });
     }
 

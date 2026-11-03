@@ -1,3 +1,4 @@
+import { installNativeCaptureBudget } from './nativeCaptureBudget';
 import { Room, Track, BackupCodecPolicy, AudioPresets, ConnectionState } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig, ScreenShareAudioState } from '../stores/voiceStore';
@@ -51,6 +52,7 @@ export interface ScreenShareBuildResult {
   capture: { width: number; height: number; frameRate: number };
   publish: {
     videoCodec: 'vp9' | 'h264';
+    degradationPreference: RTCDegradationPreference;
     videoEncoding: { maxBitrate: number; maxFramerate: number };
     simulcast: false;
     backupCodec?: { codec: 'vp8' | 'h264'; encoding: { maxBitrate: number; maxFramerate: number } };
@@ -211,6 +213,7 @@ export function buildScreenShareOptions(savedConfig: ScreenShareConfig): ScreenS
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
       videoCodec: config.codec,
+      degradationPreference: mode === 'text' ? 'maintain-resolution' : 'maintain-framerate',
       videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
       backupCodec: {
@@ -226,7 +229,7 @@ export function buildScreenShareOptions(savedConfig: ScreenShareConfig): ScreenS
     overdrive: {
       maxBitrate: bps,
       maxFramerate: fps,
-      degradationPreference: mode === 'text' ? 'maintain-resolution' : 'balanced',
+      degradationPreference: mode === 'text' ? 'maintain-resolution' : 'maintain-framerate',
     },
     contentHint: mode === 'text' ? 'detail' : 'motion',
   };
@@ -432,7 +435,7 @@ export async function stageScreenCapture(
       || (cursorMode !== 'show' && cropTarget.isGame === true)
     );
     let nativeWindowSource: MediaStreamTrack | null = null;
-    if (cropTarget && hideWindowCursor) {
+    if (cropTarget && (hideWindowCursor || canUseNativeScreenCapture())) {
       if (!isElectron() || !canUseNativeScreenCapture()) {
         notifyCursorHideUnavailable();
         ownFree?.stop();
@@ -445,12 +448,12 @@ export async function stageScreenCapture(
         width: opts.capture.width || undefined,
         height: opts.capture.height || undefined,
         bitrateKbps: Math.round(opts.publish.videoEncoding.maxBitrate / 1_000),
-        cursorMode: 'hide',
+        cursorMode: hideWindowCursor ? 'hide' : cursorMode,
       }).catch((error) => {
         console.warn('[ScreenShare] Cursor-free window source unavailable:', error);
         return null;
       });
-      if (!nativeWindowSource) {
+      if (!nativeWindowSource && hideWindowCursor) {
         notifyCursorHideUnavailable();
         ownFree?.stop();
         throw new Error('cursor-free-window-capture-unavailable');
@@ -685,6 +688,7 @@ export async function publishScreenShare(
     await room.localParticipant.publishTrack(videoTrack, {
       source: Track.Source.ScreenShare,
       videoCodec: opts.publish.videoCodec,
+      degradationPreference: opts.publish.degradationPreference,
       videoEncoding: opts.publish.videoEncoding,
       // LiveKit uses screenShareEncoding (not videoEncoding) for screen share tracks.
       // Without this, the default ScreenSharePresets.h1080fps15 caps at 15fps.
@@ -711,6 +715,7 @@ export async function publishScreenShare(
       isScreenSharing: true,
       screenShareAudio: audioToPublish ? 'published' : idleScreenShareAudioState(),
     });
+    installNativeCaptureBudget(room, videoTrack, opts.capture.frameRate);
     scheduleScreenShareOverdrive(room);
     scheduleEncoderDetection(room, config.codec, videoTrack.id);
     return true;
@@ -851,6 +856,7 @@ export function replaceScreenShare(room: Room, stream: MediaStream, options: Pub
       }));
       if (previousVideo !== nextVideo) previousVideo.stop();
       if (previousAudio && previousAudio !== nextAudio) previousAudio.stop();
+      installNativeCaptureBudget(room, nextVideo, config.fps);
       scheduleScreenShareOverdrive(room);
       scheduleEncoderDetection(room, _requestedPublishedScreenShareCodec ?? config.codec, nextVideo.id);
       return true;

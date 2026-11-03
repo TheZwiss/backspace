@@ -62,6 +62,10 @@ mac:
     - dmg
 win:
   extraResources:
+    - from: native/shared-texture/bin/${arch}/
+      to: shared-texture/${arch}/
+      filter:
+        - "*.exe"
     - from: native/process-audio/bin/${arch}/
       to: process-audio/${arch}/
       filter:

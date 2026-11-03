@@ -226,6 +226,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "本地预览已暂停以节省资源，直播仍在继续。",
     "quality": "推流画质",
     "qualityValue": "{{height}}p {{fps}} 帧",
     "volume": "直播音量",

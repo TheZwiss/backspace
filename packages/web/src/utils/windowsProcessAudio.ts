@@ -22,7 +22,10 @@ export async function openWindowsProcessAudio(onStop: () => void): Promise<Media
     };
     track.stop = stop;
     track.addEventListener('ended', stop, { once: true });
-    remove = api.onProcessAudio((bytes) => node.port.postMessage(bytes), () => { stop(); track.dispatchEvent(new Event('ended')); });
+    remove = api.onProcessAudio((bytes) => {
+      try { node.port.postMessage(bytes, [bytes.buffer as ArrayBuffer]); }
+      catch { node.port.postMessage(bytes); }
+    }, () => { stop(); track.dispatchEvent(new Event('ended')); });
     await context.resume();
     return track;
   } catch (error) { remove?.(); await context.close(); throw error; }

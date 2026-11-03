@@ -40,11 +40,11 @@ describe('member social actions', () => {
     expect(send).toHaveBeenCalledWith({ username: 'target@home.test', homeUserId: 'home-id', homeInstance: 'home.test' });
   });
 
-  it('offers only removal for existing friends', () => {
+  it('does not expose friendship removal in contextual menus', () => {
     const remove = vi.spyOn(useSocialStore.getState(), 'removeFriend').mockResolvedValue(undefined);
     useSocialStore.setState({ friends: [{ ...target, addedAt: 1, _instanceOrigin: '' }] });
-    expect(items().map(item => item.key)).toEqual(['remove-friend']);
-    items()[0]!.onClick(); expect(remove).toHaveBeenCalledWith(expect.objectContaining({ id: 'target' }), '');
+    expect(items()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it('cancels outbound requests', () => {

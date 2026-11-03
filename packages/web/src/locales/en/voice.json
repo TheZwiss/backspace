@@ -227,6 +227,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Local preview paused to save resources. Your stream is still live.",
     "quality": "Stream Quality",
     "qualityValue": "{{height}}p {{fps}}fps",
     "volume": "Stream Volume",

@@ -228,6 +228,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Preview local pausado para economizar recursos. Sua transmissão continua ao vivo.",
     "quality": "Qualidade da transmissão",
     "qualityValue": "{{height}}p {{fps}}fps",
     "volume": "Volume da transmissão",

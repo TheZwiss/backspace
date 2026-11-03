@@ -1,3 +1,5 @@
+import { useDocumentActive } from '../../hooks/useDocumentActive';
+import { shouldRenderLocalScreenPreview } from '../../utils/localScreenPreview';
 import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import { useStreamFullscreen } from '../../hooks/useStreamFullscreen';
 import { useStreamPreviews } from '../../utils/streamPreviews';
@@ -239,6 +241,8 @@ function PreviewBackdrop({ src }: { src: string }) {
 
 export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const documentActive = useDocumentActive(containerRef);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamFullscreen = useStreamFullscreen(videoRef);
   const frozenCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -262,7 +266,8 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   const publisherConnectionQuality = useVoiceStore((s) => s.connectionQualities.get(participant.identity) ?? 'unknown');
 
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
-  const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
+  const localPreviewSuspended = isLocal && !shouldRenderLocalScreenPreview(liveScreenTrack, documentActive);
+  const liveLkScreenTrack = liveScreenTrack && !localPreviewSuspended ? tile.lkScreenTrack : null;
   const isWatchingRef = useRef(isWatching);
   const isShareActiveRef = useRef(isShareActive);
   const hasLiveTrackRef = useRef(!!liveLkScreenTrack);
@@ -360,7 +365,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       if (videoFrameCallback !== null && 'cancelVideoFrameCallback' in videoEl) {
         videoEl.cancelVideoFrameCallback(videoFrameCallback);
       }
-      if (!hasFrozenFrameRef.current && isWatchingRef.current && isShareActiveRef.current && !hasLiveTrackRef.current
+      if (!isLocal && !hasFrozenFrameRef.current && isWatchingRef.current && isShareActiveRef.current && !hasLiveTrackRef.current
         && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
         const snapshot = document.createElement('canvas');
         snapshot.width = videoEl.videoWidth;
@@ -375,7 +380,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       if (liveLkScreenTrack) liveLkScreenTrack.detach(videoEl);
       else videoEl.srcObject = null;
     };
-  }, [liveLkScreenTrack, isWatching, snapshotVideoFrame]);
+  }, [liveLkScreenTrack, isWatching, isLocal, snapshotVideoFrame]);
 
   useLayoutEffect(() => {
     const isNewRevision = republishRevision > seenRepublishRevisionRef.current;
@@ -402,7 +407,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   }, [frozenFrame]);
 
   useLayoutEffect(() => {
-    if (!isWatching || !isShareActive) {
+    if (!isWatching || !isShareActive || localPreviewSuspended) {
       hasFrozenFrameRef.current = false;
       sawTrackGapRef.current = false;
       pendingRepublishRevisionRef.current = 0;
@@ -416,7 +421,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       republishSourceTrackRef.current = null;
       setFrozenFrame(null);
     }
-  }, [isWatching, isShareActive, isRepublishing]);
+  }, [isWatching, isShareActive, isRepublishing, localPreviewSuspended]);
 
   // Quality badge (poll every 3s)
   useEffect(() => {
@@ -574,11 +579,12 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
   }, [userId, participant.identity]);
 
   const hasVideo = liveScreenTrack !== null;
-  const keepVideoElement = isWatching && isShareActive;
-  const showPlaceholder = !isWatching || (!hasVideo && !frozenFrame);
+  const keepVideoElement = isWatching && isShareActive && !localPreviewSuspended;
+  const showPlaceholder = localPreviewSuspended || !isWatching || (!hasVideo && !frozenFrame);
 
   return (
     <div
+      ref={containerRef}
       data-context-menu
       style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: 'calc(100 * var(--app-vw))', height: 'calc(100 * var(--app-dvh))', zIndex: 'var(--layer-fullscreen)' } : undefined}
       className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
@@ -595,7 +601,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
           className={`w-full h-full object-contain bg-black ${hasVideo ? '' : 'invisible'}`}
         />
       ) : null}
-      {frozenFrame && isWatching && isShareActive && (
+      {frozenFrame && isWatching && isShareActive && !localPreviewSuspended && (
         <canvas
           ref={frozenCanvasRef}
           data-testid="stream-tile-frozen-frame"
@@ -605,7 +611,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       )}
       {showPlaceholder && (
         <div data-testid="stream-tile-placeholder" className={`relative w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
-          {preview && <><PreviewBackdrop src={preview} /><div className="absolute inset-0 bg-black/65" /></>}
+          {preview && !localPreviewSuspended && <><PreviewBackdrop src={preview} /><div className="absolute inset-0 bg-black/65" /></>}
           <div className={large ? 'relative flex flex-col items-center gap-3 min-w-0' : 'relative flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
             <div className="relative flex-shrink-0">
               <Avatar src={avatar} name={displayName} size={large ? 80 : 44} userId={avatarUserId} user={user ?? undefined} />
@@ -614,6 +620,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
               <p className={`text-txt-primary font-semibold ${large ? 'text-sm' : 'text-xs leading-tight line-clamp-2'}`}>
                 {t('voice:stream.isStreaming', { name: displayName })}
               </p>
+              {localPreviewSuspended && <p className="mt-1 text-xs text-txt-tertiary">{t('voice:stream.localPreviewPaused')}</p>}
               {!isLocal && (
                 <button data-icon-motion="press"
                   onClick={handleWatch}

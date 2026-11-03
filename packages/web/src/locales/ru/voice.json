@@ -229,6 +229,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Локальный предпросмотр приостановлен для экономии ресурсов. Трансляция продолжается.",
     "quality": "Качество трансляции",
     "qualityValue": "{{height}}p {{fps}} к/с",
     "volume": "Громкость трансляции",

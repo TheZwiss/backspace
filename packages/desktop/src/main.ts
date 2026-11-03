@@ -93,6 +93,7 @@ import {
 } from './screenSharePolicy';
 import { getDesktopLanguage, isDesktopLanguage, saveStoredLanguage, translateDesktop } from './l10n';
 import { isValidDisplayCaptureRequest, startGameCapture, stopAllGameCaptures, stopGameCapture } from './gameCapture';
+import { startSharedTextureCapture, stopSharedTextureCapture, stopAllSharedTextureCaptures, updateSharedTextureCapture } from './sharedTextureCapture';
 
 // Override Electron's package.json-derived app name so userData lives at
 // "<appData>/Backspace" instead of leaking the monorepo's "@backspace/desktop"
@@ -498,14 +499,14 @@ function createWindow(): void {
   // download, and the page that keeps running may be sharing. `did-navigate` fires for a
   // committed cross-document main-frame load; `did-fail-load` for the main frame is the error
   // page that replaced it (-3, ERR_ABORTED, is a cancelled navigation that replaced nothing).
-  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); });
-  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); });
+  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); });
+  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); }
+    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); }
   });
 
   mainWindow.on('closed', () => {
-    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures();
     setMainWindow(null);
     mainWindow = null;
     // Clear recovery state so macOS dock-activate (which calls createWindow again)
@@ -1199,7 +1200,7 @@ function registerIpcHandlers(): void {
           width: numeric(rawCrop.width, 16, 32768)!, height: numeric(rawCrop.height, 16, 32768)!,
         }
       : undefined;
-    return startGameCapture({
+    const captureRequest = {
       sourceId,
       displaySourceId,
       monitorIndex,
@@ -1209,14 +1210,31 @@ function registerIpcHandlers(): void {
       sourceWidth: display ? displayPhysicalBounds(display).width : undefined,
       sourceHeight: display ? displayPhysicalBounds(display).height : undefined,
       bitrateKbps: numeric(request.bitrateKbps, 1_000, 50_000),
-      cursorMode: request.cursorMode === 'hide' ? 'hide' : request.cursorMode === 'show' ? 'show' : 'auto',
-      encodingDevice: request.encodingDevice === 'cpu' ? 'cpu' : 'gpu',
+      cursorMode: request.cursorMode === 'hide' ? 'hide' as const : request.cursorMode === 'show' ? 'show' as const : 'auto' as const,
+      encodingDevice: request.encodingDevice === 'cpu' ? 'cpu' as const : 'gpu' as const,
       crop,
-    });
+    };
+    if (request.transport === 'shared-texture') {
+      if (event.senderFrame !== event.sender.mainFrame) return null;
+      stopAllGameCaptures();
+      return startSharedTextureCapture(event.sender, captureRequest);
+    }
+    await stopAllSharedTextureCaptures();
+    return startGameCapture(captureRequest);
   });
   ipcMain.handle('stop-native-screen-capture', (event, id: unknown) => {
     if (event.sender !== mainWindow?.webContents || typeof id !== 'string') return;
     stopGameCapture(id);
+    return stopSharedTextureCapture(id, event.sender);
+  });
+  ipcMain.handle('update-shared-texture-capture', (event, id: unknown, options: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || typeof id !== 'string') return;
+    updateSharedTextureCapture(id, event.sender, options);
+  });
+  ipcMain.on('shared-texture-consumer-stalled', (event, id: unknown) => {
+    if (event.sender !== mainWindow?.webContents || typeof id !== 'string') return;
+    event.sender.send('shared-texture-error', id);
+    void stopSharedTextureCapture(id, event.sender);
   });
   // Where a window is, and which display to capture for it. The renderer turns
   // this into a cropped display capture: sharing the window as Chromium would
@@ -2119,6 +2137,8 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     localTextVoice.release();
+    stopAllGameCaptures();
+    void stopAllSharedTextureCaptures();
     systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
     isQuitting = true;
     stopActivityDetection();

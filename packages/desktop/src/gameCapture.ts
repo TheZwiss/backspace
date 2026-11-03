@@ -74,7 +74,9 @@ export function buildGameCaptureArgs(request: GameCaptureRequest, encoder: Encod
     ? Math.min(7680, Math.floor(request.width! / 2) * 2) : 0;
   const height = Number.isFinite(request.height) && (request.height ?? 0) >= 16
     ? Math.min(4320, Math.floor(request.height! / 2) * 2) : 0;
-  const resize = !!width && !!height && (width !== request.sourceWidth || height !== request.sourceHeight);
+  const sourceWidth = request.crop?.width ?? request.sourceWidth;
+  const sourceHeight = request.crop?.height ?? request.sourceHeight;
+  const resize = !!width && !!height && (width !== sourceWidth || height !== sourceHeight);
   const encoderArgs = encoder === 'h264_nvenc'
     ? ['-c:v', encoder, '-preset', 'p1', '-tune', 'ull', '-zerolatency', '1', '-bf', '0', '-rc-lookahead', '0', '-rc', 'cbr']
     : encoder === 'h264_qsv' ? ['-c:v', encoder, '-preset', 'veryfast']
@@ -236,6 +238,8 @@ function ensureCaptureServer(): Promise<number> {
           return;
         }
         const encoder = active.encodingDevice === 'cpu' ? 'libx264' : backend.encoder;
+        response.setHeader('X-Backspace-Capture-Encoder', encoder);
+        response.setHeader('Access-Control-Expose-Headers', 'X-Backspace-Codec, X-Backspace-Capture-Encoder');
         const child = spawn(backend.executable, buildGameCaptureArgs(active, encoder), {
           windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
         });

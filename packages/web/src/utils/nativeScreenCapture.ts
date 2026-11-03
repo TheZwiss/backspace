@@ -1,6 +1,8 @@
+import { createEncoderFrameNormalizer } from './encoderFrame';
 import { getElectronAPI } from '../platform/platform';
+import { openSharedTextureCaptureTrack } from './sharedTextureCapture';
 
-interface NativeCaptureOptions {
+export interface NativeCaptureOptions {
   encodingDevice?: 'gpu' | 'cpu';
   sourceId: string;
   displaySourceId?: string;
@@ -76,7 +78,7 @@ export function takeAnnexBNals(data: Uint8Array<ArrayBufferLike>): AnnexBNals {
       const tail = Math.min(3, data.length);
       return {
         nals,
-        remainder: Uint8Array.from(data.slice(data.length - tail)),
+        remainder: data.subarray(data.length - tail) as Uint8Array<ArrayBuffer>,
       };
     }
     let next = -1;
@@ -87,9 +89,9 @@ export function takeAnnexBNals(data: Uint8Array<ArrayBufferLike>): AnnexBNals {
       }
     }
     if (next < 0) {
-      return { nals, remainder: Uint8Array.from(data.slice(start)) };
+      return { nals, remainder: data.subarray(start) as Uint8Array<ArrayBuffer> };
     }
-    nals.push(Uint8Array.from(data.slice(start, next)));
+    nals.push(data.subarray(start, next) as Uint8Array<ArrayBuffer>);
     cursor = next;
   }
 }
@@ -148,11 +150,17 @@ export function canUseNativeScreenCapture(): boolean {
 }
 
 /**
- * DXGI Desktop Duplication with `draw_mouse=0`, encoded as low-latency H.264.
- * The hardware decoder writes VideoFrames into a MediaStreamTrack directly;
- * there is no JPEG decode or per-frame canvas work.
+ * Prefer GPU shared textures with an owned encoder surface. Older desktops and
+ * unsupported outputs retain the DXGI/H.264 bridge as a fallback.
  */
 export async function openNativeScreenCaptureTrack(
+  options: NativeCaptureOptions,
+): Promise<NativeScreenCaptureTrack | null> {
+  return await openSharedTextureCaptureTrack(options, openEncodedNativeScreenCaptureTrack)
+    ?? openEncodedNativeScreenCaptureTrack(options);
+}
+
+async function openEncodedNativeScreenCaptureTrack(
   options: NativeCaptureOptions,
 ): Promise<NativeScreenCaptureTrack | null> {
   const api = getElectronAPI();
@@ -168,6 +176,7 @@ export async function openNativeScreenCaptureTrack(
   const writer = generator.writable.getWriter();
   const metrics = {
     startedAt: performance.now(), reads: 0, bytes: 0, accessUnits: 0,
+    captureEncoder: 'unknown', normalizedFrames: 0, normalizationTimeMs: 0,
     submitted: 0, decoded: 0, delivered: 0, writerDrops: 0,
     recoveryDrops: 0, bufferedDrops: 0, maxDecodeQueue: 0,
     writeTimeMs: 0, stoppedAt: 0,
@@ -180,6 +189,8 @@ export async function openNativeScreenCaptureTrack(
   let activeSession = session;
   let activeController = controller;
   let runGeneration = 0;
+  let desiredRevision = 0;
+  let appliedRevision = 0;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
   let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
   let recoveryAttempt = 0;
@@ -262,13 +273,15 @@ export async function openNativeScreenCaptureTrack(
   });
 
   function scheduleRestart(): void {
+    desiredRevision++;
     if (stopped) return;
     if (restartTimer) clearTimeout(restartTimer);
     restartTimer = setTimeout(() => {
       restartTimer = null;
       restartQueue = restartQueue.then(async () => {
-        if (stopped) return;
+        if (stopped || appliedRevision === desiredRevision) return;
         const nextOptions = { ...desired };
+        const revision = desiredRevision;
         await stopCurrentSession();
         if (stopped) return;
         const nextSession = await api!.startNativeScreenCapture!(nextOptions).catch(() => null);
@@ -280,9 +293,10 @@ export async function openNativeScreenCaptureTrack(
           await api!.stopNativeScreenCapture!(nextSession.id).catch(() => undefined);
           return;
         }
+        appliedRevision = revision;
         activeSession = nextSession;
         activeController = new AbortController();
-        startDecodeSession(nextSession.url, activeController, ++runGeneration, desired, false);
+        startDecodeSession(nextSession.url, activeController, ++runGeneration, nextOptions, false);
       }).catch((error) => {
         if (!stopped) console.warn('[ScreenShare] Could not restart native capture:', error);
         finish();
@@ -355,8 +369,10 @@ export async function openNativeScreenCaptureTrack(
         signal: runController.signal,
       });
       if (!response.ok || !response.body) throw new Error(`native capture HTTP ${response.status}`);
+      metrics.captureEncoder = response.headers.get('x-backspace-capture-encoder') ?? 'unknown';
       const codec = response.headers.get('x-backspace-codec') ?? 'avc1.42E01E';
 
+      const normalizeFrame = createEncoderFrameNormalizer();
       const sessionDecoder = new VideoDecoder({
         output: (frame) => {
           if (generation !== runGeneration || stopped) { frame.close(); return; }
@@ -367,16 +383,27 @@ export async function openNativeScreenCaptureTrack(
             frame.close();
             return;
           }
+          let encoderFrame: VideoFrame;
+          const normalizationStarted = performance.now();
+          try { encoderFrame = normalizeFrame(frame); }
+          catch (error) {
+            frame.close();
+            console.warn('[ScreenShare] Could not normalize encoder surface:', error);
+            finish();
+            return;
+          }
+          if (encoderFrame !== frame) { frame.close(); metrics.normalizedFrames += 1; }
+          metrics.normalizationTimeMs += performance.now() - normalizationStarted;
           if (initial) resolveFirstFrame(true);
           const writeStarted = performance.now();
-          void writer.write(frame).then(
+          void writer.write(encoderFrame).then(
             () => {
               metrics.delivered += 1;
               metrics.writeTimeMs += performance.now() - writeStarted;
-              frame.close();
+              encoderFrame.close();
             },
             () => {
-              frame.close();
+              encoderFrame.close();
               finish();
             },
           );

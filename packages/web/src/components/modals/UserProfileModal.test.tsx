@@ -113,6 +113,25 @@ describe('UserProfileModal', () => {
     });
   });
 
+  it('requires confirmation to remove a friend and supports cancellation', async () => {
+    const viewer = makeUser({ id: 'viewer', username: 'viewer' });
+    const user = makeUser({ id: 'friend' });
+    const removeFriend = vi.fn().mockResolvedValue(undefined);
+    useAuthStore.setState({ user: viewer, myRowIds: new Map() });
+    useSocialStore.setState({ friends: [{ ...user, addedAt: 1, _instanceOrigin: '' }], requests: [], removeFriend });
+    useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
+    render(<MemoryRouter><UserProfileModal /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Friend' }));
+    expect(removeFriend).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(removeFriend).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Friend' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove', exact: true }));
+    await waitFor(() => expect(removeFriend).toHaveBeenCalledOnce());
+    expect(removeFriend).toHaveBeenCalledWith(expect.objectContaining({ id: user.id }), '');
+    useAuthStore.setState({ user: null, myRowIds: new Map() });
+  });
+
   it('tells the user why Send Message failed', async () => {
     const create = vi.spyOn(api.dm, 'create').mockRejectedValueOnce(new HttpError(404, 'User not found', null, 'user_not_found'));
     const addToast = vi.fn();

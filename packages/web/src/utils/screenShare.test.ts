@@ -301,6 +301,7 @@ describe('screen-share media options', () => {
   });
 
   it('keeps a native reopen callback available when a window starts in auto mode', async () => {
+    vi.stubGlobal('MediaStream', vi.fn(function (tracks: FakeTrack[]) { return makeStream(...tracks); }));
     nativeCapture.canUse.mockReturnValue(true);
     const cursorFreeTrack = makeTrack('video');
     nativeCapture.open.mockResolvedValue(cursorFreeTrack);
@@ -339,7 +340,7 @@ describe('screen-share media options', () => {
     expect(options.reopenDisplay).toEqual(expect.any(Function));
     await expect(options.reopenDisplay?.('screen:1:0', 'hide')).resolves.toBe(cursorFreeTrack);
     await expect(options.reopenDisplay?.('screen:1:0', 'show')).resolves.toBeUndefined();
-    expect(nativeCapture.open).toHaveBeenCalledOnce();
+    expect(nativeCapture.open).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to Chromium when native DXGI does not produce a track', async () => {
@@ -769,7 +770,7 @@ describe('screen-share media options', () => {
     const text = buildScreenShareOptions({ ...base, mode: 'text' });
 
     expect(gaming.contentHint).toBe('motion');
-    expect(gaming.overdrive.degradationPreference).toBe('balanced');
+    expect(gaming.overdrive.degradationPreference).toBe('maintain-framerate');
     expect(text.contentHint).toBe('detail');
     expect(text.overdrive.degradationPreference).toBe('maintain-resolution');
     expect(gaming.publish.backupCodecPolicy).toBe(BackupCodecPolicy.SIMULCAST);
@@ -802,7 +803,7 @@ describe('screen-share media options', () => {
     expect(video.applyConstraints).toHaveBeenCalledOnce();
     expect(sender.setParameters).toHaveBeenLastCalledWith(expect.objectContaining({
       encodings: [expect.objectContaining({ maxBitrate: 18_000_000, maxFramerate: 60 })],
-      degradationPreference: 'balanced',
+      degradationPreference: 'maintain-framerate',
     }));
 
     await vi.advanceTimersByTimeAsync(4750);
@@ -920,4 +921,20 @@ describe('screen-share media options', () => {
     await useVoiceStore.persist.rehydrate();
     expect(useVoiceStore.getState().screenShareConfig.codec).toBe('h264');
   });
+});
+
+
+it.each([
+  ['gaming', 'maintain-framerate'],
+  ['text', 'maintain-resolution'],
+] as const)('publishes %s with the intended adaptation before sender retries', async (mode, preference) => {
+  useVoiceStore.setState({ screenShareConfig: { ...useVoiceStore.getState().screenShareConfig, mode } });
+  const room = fakeRoom();
+  const video = makeVideoTrack();
+  expect(await publishScreenShare(room, makeStream(video))).toBe(true);
+  expect(room.localParticipant.publishTrack).toHaveBeenCalledWith(video, expect.objectContaining({
+    source: Track.Source.ScreenShare,
+    degradationPreference: preference,
+  }));
+  expect(buildScreenShareOptions(useVoiceStore.getState().screenShareConfig).overdrive.degradationPreference).toBe(preference);
 });

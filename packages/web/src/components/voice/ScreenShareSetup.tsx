@@ -1,3 +1,4 @@
+import { useDocumentActive } from '../../hooks/useDocumentActive';
 import { Tooltip } from '../ui/Tooltip';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -140,6 +141,7 @@ export function ScreenShareSetup() {
   const [error, setError] = useState<SetupError>(null);
   const stagedRef = useRef<MediaStream | null>(null);
   const previewRef = useRef<HTMLVideoElement>(null);
+  const documentActive = useDocumentActive();
   const drawerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const stagingRef = useRef(false);
@@ -342,7 +344,7 @@ export function ScreenShareSetup() {
     const timer = window.setInterval(() => {
       // A hidden window cannot use the grid, and the main process serves a
       // cache instead of enumerating for an unfocused one anyway.
-      if (document.hidden) return;
+      if (document.hidden || !document.hasFocus()) return;
       if (++ticks % 5 === 0) nextWantsThumbnails = true;
       void load();
     }, SOURCE_POLL_MS);
@@ -415,10 +417,10 @@ export function ScreenShareSetup() {
   useEffect(() => {
     const el = previewRef.current;
     if (!el) return;
-    el.srcObject = staged;
-    if (staged) el.play().catch(() => {});
-    return () => { el.srcObject = null; };
-  }, [staged]);
+    el.srcObject = documentActive ? staged : null;
+    if (documentActive && staged) el.play().catch(() => {});
+    return () => { el.pause(); el.srcObject = null; };
+  }, [staged, documentActive]);
 
   // Browser "Stop sharing" bar during staging ends the track: drop the preview
   useEffect(() => {

@@ -67,3 +67,9 @@ describe('DXGI game capture command', () => {
     expect(nonFinite).toContain('ddagrab=output_idx=0:draw_mouse=0:framerate=30');
   });
 });
+
+
+it('keeps same-size native crops on the GPU instead of downloading them for a redundant scale', () => {
+  const args = buildGameCaptureArgs({ ...request, width: 800, height: 600, crop: { x: 0, y: 0, width: 800, height: 600 } }, 'h264_nvenc');
+  expect(args[args.indexOf('-vf') + 1]).toBe('format=d3d11');
+});
