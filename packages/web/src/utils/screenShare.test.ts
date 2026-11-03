@@ -301,6 +301,7 @@ describe('screen-share media options', () => {
   });
 
   it('keeps a native reopen callback available when a window starts in auto mode', async () => {
+    vi.stubGlobal('MediaStream', vi.fn(function (tracks: FakeTrack[]) { return makeStream(...tracks); }));
     nativeCapture.canUse.mockReturnValue(true);
     const cursorFreeTrack = makeTrack('video');
     nativeCapture.open.mockResolvedValue(cursorFreeTrack);
@@ -339,7 +340,7 @@ describe('screen-share media options', () => {
     expect(options.reopenDisplay).toEqual(expect.any(Function));
     await expect(options.reopenDisplay?.('screen:1:0', 'hide')).resolves.toBe(cursorFreeTrack);
     await expect(options.reopenDisplay?.('screen:1:0', 'show')).resolves.toBeUndefined();
-    expect(nativeCapture.open).toHaveBeenCalledOnce();
+    expect(nativeCapture.open).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to Chromium when native DXGI does not produce a track', async () => {

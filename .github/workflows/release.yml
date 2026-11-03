@@ -230,6 +230,14 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             New-Item -ItemType Directory -Force "packages/desktop/native/dxgi-output-probe/bin/$($target.Name)"
             Copy-Item "$probeDir/Release/backspace-dxgi-output-probe.exe" "packages/desktop/native/dxgi-output-probe/bin/$($target.Name)/"
+
+            $textureDir = "packages/desktop/native/shared-texture/build-$($target.Name)"
+            cmake -S packages/desktop/native/shared-texture -B $textureDir -A $target.Platform
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build $textureDir --config Release
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            New-Item -ItemType Directory -Force "packages/desktop/native/shared-texture/bin/$($target.Name)"
+            Copy-Item "$textureDir/Release/backspace-shared-texture.exe" "packages/desktop/native/shared-texture/bin/$($target.Name)/"
           }
 
       - name: Compile desktop TypeScript

@@ -1,5 +1,8 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron';
+import { initializeSharedTextureReceiver } from './sharedTexturePreload';
+
+initializeSharedTextureReceiver();
 
 contextBridge.exposeInMainWorld('backspace', {
   getNudgeContext: (detectGames = true) => ipcRenderer.invoke('nudge-context', detectGames),
@@ -133,6 +136,8 @@ contextBridge.exposeInMainWorld('backspace', {
   // Optional DXGI Desktop Duplication capture for display sources. Window IDs
   // may return null and should continue through the existing Chromium path.
   startNativeScreenCapture: (options: unknown) => ipcRenderer.invoke('start-native-screen-capture', options),
+  startSharedTextureCapture: (options: unknown) => ipcRenderer.invoke('start-native-screen-capture', { ...(options as object), transport: 'shared-texture' }),
+  updateSharedTextureCapture: (id: string, options: unknown) => ipcRenderer.invoke('update-shared-texture-capture', id, options),
   stopNativeScreenCapture: (id: string) => ipcRenderer.invoke('stop-native-screen-capture', id),
   // A 100 ms stream of the shared window's rectangle (one helper process),
   // so the crop follows a window being dragged without polling from here.

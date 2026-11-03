@@ -435,7 +435,7 @@ export async function stageScreenCapture(
       || (cursorMode !== 'show' && cropTarget.isGame === true)
     );
     let nativeWindowSource: MediaStreamTrack | null = null;
-    if (cropTarget && hideWindowCursor) {
+    if (cropTarget && (hideWindowCursor || canUseNativeScreenCapture())) {
       if (!isElectron() || !canUseNativeScreenCapture()) {
         notifyCursorHideUnavailable();
         ownFree?.stop();
@@ -448,12 +448,12 @@ export async function stageScreenCapture(
         width: opts.capture.width || undefined,
         height: opts.capture.height || undefined,
         bitrateKbps: Math.round(opts.publish.videoEncoding.maxBitrate / 1_000),
-        cursorMode: 'hide',
+        cursorMode: hideWindowCursor ? 'hide' : cursorMode,
       }).catch((error) => {
         console.warn('[ScreenShare] Cursor-free window source unavailable:', error);
         return null;
       });
-      if (!nativeWindowSource) {
+      if (!nativeWindowSource && hideWindowCursor) {
         notifyCursorHideUnavailable();
         ownFree?.stop();
         throw new Error('cursor-free-window-capture-unavailable');

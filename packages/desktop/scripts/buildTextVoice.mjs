@@ -4,6 +4,9 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '..');
+// Sandboxed preloads may require Electron, but cannot require our local modules.
+await build({ entryPoints: [path.join(root, 'src/preload.ts')], outfile: path.join(root, 'dist/preload.js'),
+  bundle: true, external: ['electron'], format: 'cjs', platform: 'browser', target: 'chrome150' });
 const out = path.join(root, 'dist', 'text-voice');
 await mkdir(out, { recursive: true });
 await build({ entryPoints: [path.join(root, 'engine/textVoiceEngine.ts')], outfile: path.join(out, 'engine.mjs'), bundle: true,

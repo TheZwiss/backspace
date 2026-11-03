@@ -120,6 +120,25 @@ Conclusão limitada aos testes: há ganho forte de trabalho de vídeo na GPU e r
 
 Artefatos ignorados em tests/.tmp/shared-texture-lab: baseline-a-resources.json, canvas-b-resources.json, baseline-a2-resources.json, respectivos arquivos receiver.json, comparison-summary.json, compare-canvas.log, compare-resources.ps1, compare-stats.mjs e summarize-compare.mjs. Encerrado o laboratório, fechada a animação e restaurada a transmissão normal de Alice para Bob; nenhuma alteração no fluxo de captura do aplicativo.
 
+## Integração no aplicativo
+
+Implementado helper versionado em `packages/desktop/native/shared-texture`, controlador no main, receiver sandbox no preload e generator no cliente web. O caminho preferencial para captura nativa Windows agora é DXGI → textura compartilhada BGRA → superfície própria no preload → VideoFrame transferível → generator → encoder WebRTC → LiveKit. Nenhuma mudança no servidor LiveKit. A seleção de encoder final continua sendo do Chromium/WebRTC.
+
+O pool nativo tem três slots reciclados por allReferencesReleased. O preload permite apenas um frame pendente de confirmação do writer, com timeout de dois segundos; o cursor é composto separadamente, usando apenas bitmaps pequenos em CPU. Auto/Show/Hide utiliza a política de jogos existente. Mudanças de resolução/FPS são aplicadas sem reiniciar o helper. O caminho de áudio separado e a exclusão do Backspace permanecem no fluxo existente. A captura de janela utiliza o mesmo backend nativo com o recorte e a política de pausa já existentes.
+
+Fallback inicial: binário/API indisponível, formato/rotação incompatível ou ausência do primeiro quadro usam a ponte DXGI/H.264 existente. Falha após início: o helper é encerrado e a faixa publicada conserva sua identidade, passando a receber quadros do fallback. Timestamps são rebaseados para não regredir. Configuração/encerramento exige o WebContents proprietário; o início e as atualizações são limitados à janela principal. Navegação, crash de renderer, fechamento e saída encerram os helpers. Build de preload foi empacotado para funcionar no sandbox; CI/empacotamento Windows incluem o helper x64/ARM64. Linux/macOS mantêm seus caminhos.
+
+Validação local integrada (Electron 43.7.5, Windows/NVIDIA, LiveKit local):
+
+- Alice usou o helper real `backspace-shared-texture.exe`, sem FFmpeg intermediário. Métricas confirmaram transport=shared-texture/captureEncoder=none e Bob chegou a 1920×1080 a aproximadamente 60 FPS.
+- Mais de 6000 quadros entregues antes do teste de falha, sem crash. Três leituras completas de clones de 1080p, separadas por quatro segundos, passaram; cada uma leu 8294400 bytes.
+- Helper encerrado deliberadamente: transport mudou para dxgi-h264-fallback, recoveries=1, a mesma MediaStreamTrack permaneceu live e continuou entregando quadros. Apenas o FFmpeg do fallback ficou ativo.
+- Mudança ao vivo 720p30 → 1080p60: Bob observou 1280×720/30 FPS e depois 1920×1080/59 FPS, na mesma faixa. Cursor Hide/Show/Auto foi aplicado pelos setters; a composição visual em jogos ainda depende de teste manual específico.
+- Janela de animação em modo janela: helper nativo ativo e Bob recebeu o recorte 1614×1080. A amostra inicial foi de 55 FPS; não afirmar ganho de FPS para janela a partir do benchmark de tela inteira.
+- 70 testes web e 32 desktop passaram; typecheck web e build desktop passaram. Helper x64 compilado localmente por MinGW. ARM64 e builds Linux/macOS não foram executados nesta máquina. Não houve teste auditivo novo, teste HDR ou alternância real entre GPUs nesta integração.
+
+Evidências ignoradas: integrated-inspections.json, integrated-controls.json, integrated-window-receiver.json e logs integrated-alice*. Os dados de consumo `integrated-resources.json` foram coletados com um cliente recém-reiniciado e execução concorrente de testes; não substituem A/B/A comparável para afirmar economia de memória/CPU após integração.
+
 Fontes adicionais:
 - https://raw.githubusercontent.com/electron/electron/v43.7.5/shell/common/gin_helper/callback.h
 - https://symbols.electronjs.org/electron.exe.pdb/FA93794E22E98CCB4C4C44205044422E1/electron.exe.sym

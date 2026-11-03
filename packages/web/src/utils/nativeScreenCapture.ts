@@ -1,7 +1,8 @@
 import { createEncoderFrameNormalizer } from './encoderFrame';
 import { getElectronAPI } from '../platform/platform';
+import { openSharedTextureCaptureTrack } from './sharedTextureCapture';
 
-interface NativeCaptureOptions {
+export interface NativeCaptureOptions {
   encodingDevice?: 'gpu' | 'cpu';
   sourceId: string;
   displaySourceId?: string;
@@ -149,11 +150,17 @@ export function canUseNativeScreenCapture(): boolean {
 }
 
 /**
- * DXGI Desktop Duplication with `draw_mouse=0`, encoded as low-latency H.264.
- * The hardware decoder writes VideoFrames into a MediaStreamTrack directly;
- * there is no JPEG decode or per-frame canvas work.
+ * Prefer GPU shared textures with an owned encoder surface. Older desktops and
+ * unsupported outputs retain the DXGI/H.264 bridge as a fallback.
  */
 export async function openNativeScreenCaptureTrack(
+  options: NativeCaptureOptions,
+): Promise<NativeScreenCaptureTrack | null> {
+  return await openSharedTextureCaptureTrack(options, openEncodedNativeScreenCaptureTrack)
+    ?? openEncodedNativeScreenCaptureTrack(options);
+}
+
+async function openEncodedNativeScreenCaptureTrack(
   options: NativeCaptureOptions,
 ): Promise<NativeScreenCaptureTrack | null> {
   const api = getElectronAPI();
