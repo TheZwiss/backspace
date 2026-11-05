@@ -266,3 +266,7 @@
 {"snapshot_date":"2026-11-03","dimension":"other","title":"","count":10,"uniques":10}
 {"snapshot_date":"2026-11-03","dimension":"1.7.0","title":"","count":5,"uniques":5}
 {"snapshot_date":"2026-11-03","dimension":"1.8.0","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-11-04","dimension":"1.11.0","title":"","count":48,"uniques":48}
+{"snapshot_date":"2026-11-04","dimension":"other","title":"","count":10,"uniques":10}
+{"snapshot_date":"2026-11-04","dimension":"1.7.0","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-11-04","dimension":"1.8.0","title":"","count":4,"uniques":4}
