@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { CopiedCheck } from '../ui/CopiedCheck';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Modal } from '../ui/Modal';
@@ -509,10 +510,11 @@ export function InviteModal() {
             <button data-icon-motion="press"
               onClick={handleCopy}
               disabled={codeLoading || !inviteUrl}
-              className={`glass-pill px-3 py-1.5 text-ui-caption font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`glass-pill inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-caption font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 linkCopied ? 'text-accent-mint' : 'text-txt-primary'
               }`}
             >
+              {linkCopied && <CopiedCheck />}
               {linkCopied ? t('common:actions.copied') : t('common:actions.copy')}
             </button>
           </div>

@@ -1,4 +1,5 @@
 import { Tooltip } from '../ui/Tooltip';
+import { StrikeLine } from '../ui/StrikeLine';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -35,6 +36,7 @@ import { HubUpdateDot } from '../projectHub/HubUpdateDot';
 import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
 import type { UserSettingsTab } from '../modals/UserSettings';
 import { ChannelMutedIndicator } from '../notifications/ChannelMutedIndicator';
+import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 
 export function ChannelSidebar() {
   const { t } = useTranslation(['spaces', 'common', 'project']);
@@ -47,6 +49,7 @@ export function ChannelSidebar() {
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const openModal = useUIStore((s) => s.openModal);
+  useEmojiShortcodeNames();
   const user = useAuthStore((s) => s.user);
   const members = useSpaceStore((s) => s.members);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
@@ -945,7 +948,10 @@ function UserAreaPanel({
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      const target = e.target as Element;
+      // A floating emoji picker opened from inside the panel lives in a portal.
+      if (target.closest?.('[data-floating-picker]')) return;
+      if (panelRef.current && !panelRef.current.contains(target)) {
         setOpenPanel(null);
         setShowInputDeviceList(false);
         setShowOutputDeviceList(false);
@@ -1197,7 +1203,10 @@ function UserAreaPanel({
           <Avatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={shownStatus} user={user} />
           <div className="flex-1 min-w-0">
             <div className="text-ui-label font-semibold text-txt-primary truncate leading-tight">{user.displayName ?? user.username}</div>
-            <div className="text-ui-caption text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary">@{user.username}</div>
+            {/* The custom status takes the place of the @username line while one is set. */}
+            <div className="text-ui-caption text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary" title={user.customStatus ?? undefined}>
+              {user.customStatus ? replaceEmojiShortcodes(user.customStatus) : `@${user.username}`}
+            </div>
           </div>
         </div>
 
@@ -1215,7 +1224,7 @@ function UserAreaPanel({
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              {(isMuted || isDeafened || isSpaceMuted || isSpaceDeafened || isPermissionMuted) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+              <StrikeLine active={isMuted || isDeafened || isSpaceMuted || isSpaceDeafened || isPermissionMuted} />
             </svg>
           </button></Tooltip>
           {/* Input chevron */}
@@ -1242,7 +1251,7 @@ function UserAreaPanel({
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-              {(isDeafened || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+              <StrikeLine active={isDeafened || isSpaceDeafened} />
             </svg>
           </button></Tooltip>
           {/* Output chevron */}
