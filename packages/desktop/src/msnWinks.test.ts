@@ -17,7 +17,9 @@ vi.mock('electron', () => ({
     setIgnoreMouseEvents = vi.fn();
     setAlwaysOnTop = vi.fn();
     setFullScreen = vi.fn();
-    setBounds = vi.fn();
+    bounds: unknown = {};
+    setBounds = vi.fn((b: unknown) => { this.bounds = b; });
+    getBounds() { return this.bounds; }
     setOpacity = vi.fn();
     moveTop = vi.fn();
     showInactive = vi.fn();
@@ -43,7 +45,7 @@ describe('additional original MSN winks', () => {
     mocks.windows.forEach((w, i) => {
       expect(w.options).toMatchObject({ ...mocks.displays[i]!.bounds, transparent: true, focusable: false, opacity: 0 });
       expect(w.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
-      expect(w.setFullScreen).toHaveBeenCalledWith(true);
+      if (process.platform === 'linux') expect(w.setFullScreen).not.toHaveBeenCalled(); else expect(w.setFullScreen).toHaveBeenCalledWith(true);
       expect(w.destroyed).toBe(true);
       const html = decodeURIComponent(w.loadURL.mock.calls[0][0]);
       expect(html.includes('<video preload="auto" muted')).toBe(i === 0);

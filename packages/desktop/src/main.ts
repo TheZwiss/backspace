@@ -1,3 +1,26 @@
+import { shouldForceX11Ozone } from './ozonePlatform';
+import { linuxVideoAccelerationFeatures } from './videoAcceleration';
+import { app } from 'electron';
+import path from 'path';
+import process from 'process';
+import { spawnSync } from 'child_process';
+
+// Force X11 ozone (XWayland) BEFORE any other electron modules are loaded.
+// On Wayland (KDE Plasma, GNOME, etc.) the compositor ignores setPosition()
+// and setBounds() from Electron - toasts/overlays appear centered - and
+// desktopCapturer opens the screencast portal. Under XWayland the X server
+// honours the coordinates and capture is immediate.
+// The ozone platform is chosen before any JS runs, and neither appendSwitch nor
+// ELECTRON_OZONE_PLATFORM_HINT is honoured by then on Wayland sessions, so the
+// process re-executes itself once with --ozone-platform=x11 as a real argument.
+// XDG_SESSION_TYPE is set to x11 as well: WebRTC's screen capturer picks the
+// PipeWire/portal backend from that variable, not from the ozone platform.
+const X11_OZONE_ARG = '--ozone-platform=x11';
+if (process.platform === 'linux' && !process.argv.includes(X11_OZONE_ARG) && shouldForceX11Ozone()) {
+  const result = spawnSync(process.execPath, [X11_OZONE_ARG, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, XDG_SESSION_TYPE: 'x11' } });
+  process.exit(result.status ?? 1);
+}
+
 import { showFriendRequestToast, dismissFriendRequestToast } from './friendRequestToast';
 import { WindowsProcessAudio } from './windowsProcessAudio';
 import { playNudge } from './nudge';
@@ -6,7 +29,6 @@ import { getMsnKnockVideo } from './msnKnockAsset';
 import { detectNudgeGames, hasNudgeGameActivity } from './nudgeGameContext';
 import { LocalTextVoice, type TextVoiceDevice } from './textVoice';
 import {
-  app,
   BrowserWindow,
   Tray,
   Menu,
@@ -18,7 +40,6 @@ import {
   session,
   desktopCapturer,
 } from 'electron';
-import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { execFile, spawn } from 'child_process';
@@ -1720,7 +1741,10 @@ if (process.platform === 'linux') {
   // Without it, returning `audio: 'loopback'` from setDisplayMediaRequestHandler
   // fails the whole getDisplayMedia request — screen share never starts when the
   // user has "Share system audio" enabled.
-  app.commandLine.appendSwitch('enable-features', 'PulseaudioLoopbackForScreenShare');
+  // A repeated enable-features switch replaces the previous one, so every
+  // feature goes through this single call. VA-API features are added only on
+  // Intel/AMD GPUs (see videoAcceleration.ts).
+  app.commandLine.appendSwitch('enable-features', ['PulseaudioLoopbackForScreenShare', ...linuxVideoAccelerationFeatures()].join(','));
 }
 
 // Windows: AppUserModelId so toast notifications attribute correctly to Backspace

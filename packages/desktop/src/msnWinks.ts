@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron';
 import { getMsnWinkAsset, type MsnWinkEffect } from './msnWinkCatalog';
 import { showNudgeToast } from './nudgeToast';
 import type { NudgePresentation } from './nudgePresentation';
+import { coverDisplay, settleOverlayBounds } from './overlayPlacement';
 
 export async function playMsnWink(effect: MsnWinkEffect, sender: string, avatar?: string, onOpen?: () => void, presentation: NudgePresentation = {}): Promise<void> {
   const asset = getMsnWinkAsset(effect);
@@ -25,12 +26,12 @@ export async function playMsnWink(effect: MsnWinkEffect, sender: string, avatar?
       windows.push(window);
       window.setIgnoreMouseEvents(true);
       window.setAlwaysOnTop(true, 'screen-saver');
-      window.setBounds(display.bounds);
-      window.setFullScreen(true);
+      coverDisplay(window, display.bounds);
       await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
         `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; media-src data:; style-src 'unsafe-inline'"><style>html,body{margin:0;background:transparent;width:100%;height:100%;overflow:hidden}video{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${asset.width}px;height:${asset.height}px;max-width:80vw;max-height:80vh;object-fit:contain;visibility:hidden}</style><video preload="auto" ${display.id !== primary || presentation.sound === false ? 'muted' : ''} src="${asset.video}"></video>`));
       if (cancelled || window.isDestroyed()) return;
       window.showInactive();
+      await settleOverlayBounds(window, display.bounds);
       await window.webContents.executeJavaScript(`(async()=>{const v=document.querySelector('video');if(v.readyState<2)await new Promise((r,j)=>{v.addEventListener('loadeddata',r,{once:true});v.addEventListener('error',j,{once:true})});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))})()`);
     }));
     if (cancelled) return;
