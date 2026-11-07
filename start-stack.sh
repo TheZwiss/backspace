@@ -63,10 +63,18 @@ start_server() {
   echo "backspace: starting"
 }
 
+# Auto-updater loop (deploy/prort/updater). Runs from /opt/backspace-update so a
+# git merge never rewrites the script it is executing.
+start_updater() {
+  [ -x /opt/backspace-update/auto-update.sh ] || return 0
+  /opt/backspace-update/auto-update.sh --ensure
+}
+
 start_livekit
 start_caddy
 start_server
 start_tailscale
+start_updater
 
 for _ in $(seq 1 40); do
   curl -fsS --max-time 2 http://127.0.0.1:3000/api/health >/dev/null 2>&1 && break

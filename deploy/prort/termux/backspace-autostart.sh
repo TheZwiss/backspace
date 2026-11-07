@@ -41,7 +41,7 @@ echo "[$(date)] starting Backspace stack (tun1=$(have_tun1 && echo yes || echo n
 # Keep one proot login alive forever: PRoot uses --kill-on-exit, so if the
 # login process exits, every service inside the container is killed.
 nohup proot-distro login debian -- bash -lc \
-  '/opt/backspace/start-stack.sh; exec sleep infinity' \
+  '/opt/backspace/start-stack.sh; [ -x /opt/backspace-update/auto-update.sh ] && /opt/backspace-update/auto-update.sh --ensure; exec sleep infinity' \
   >>"$LOG" 2>&1 </dev/null &
 
 exit 0

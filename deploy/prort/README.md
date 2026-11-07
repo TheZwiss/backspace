@@ -47,3 +47,43 @@ also starts the stack through the `.profile` hook. Android boot needs the
 Termux:Boot.
 
 Full operational notes: `../../INSTALACAO-ANDROID-PROOT.md`.
+
+## Auto-update (`updater/auto-update.sh`)
+
+The phone follows `private/main` on its own. Work lands on `Dev`; merging into
+`main` (and pushing) is the release gesture.
+
+Every 15 minutes (`INTERVAL`) the loop runs one cycle:
+
+1. `git fetch private main`; nothing to do when `HEAD` already equals it.
+2. Skips (and logs) when the checkout is on another branch, has local edits to
+   tracked files, or is not an ancestor of `private/main`. Only `--ff-only`
+   merges are ever made.
+3. Takes a database snapshot (`src/scripts/snapshot.ts`) before touching code.
+4. Runs `pnpm install --frozen-lockfile` only when a `package.json`, the lockfile
+   or `patches/` changed, and builds the web bundle into `dist.new` only when
+   `packages/web` or `packages/shared` changed, then swaps it in atomically.
+5. Restarts only the Backspace server (never LiveKit/Caddy/Tailscale), and only
+   when `packages/server` or `packages/shared` changed.
+6. Waits up to 120 s for `/api/health`. On failure it resets to the previous
+   commit, restores the previous `dist`, restarts, and records the bad commit in
+   `/var/lib/backspace-update/bad-sha` so it is not retried until `main` moves.
+
+Install on a phone (outside the repo, so merges never rewrite the running file):
+
+```bash
+mkdir -p /opt/backspace-update
+cp /opt/backspace/deploy/prort/updater/auto-update.sh /opt/backspace-update/
+chmod 755 /opt/backspace-update/auto-update.sh
+/opt/backspace-update/auto-update.sh --ensure     # start the loop now
+```
+
+`start-stack.sh` and `termux/backspace-autostart.sh` call `--ensure`, so the loop
+comes back after a reboot. After each successful update the installed copy is
+refreshed from the repo. Other modes: `--check` (report only), no argument (one
+cycle). Log: `/var/log/backspace/update.log`.
+
+Limits: a failed rollback of a *database migration* is not automatic. The server
+snapshots before migrating and the updater snapshots before every update; both
+land in `data/backups/`. Restore with the repo's restore procedure if a release
+migrated the schema and then had to be rolled back.
