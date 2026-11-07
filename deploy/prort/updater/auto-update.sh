@@ -76,14 +76,17 @@ restart_server() {
     pkill -9 -f '^node --import tsx/esm src/index.ts$' 2>/dev/null || true
   fi
   cd "$REPO/packages/server" || return 1
-  setsid nohup node --import tsx/esm src/index.ts >>"$SERVER_LOG" 2>&1 </dev/null &
+  # 9>&- keeps the update lock out of the server: a long-lived child that
+  # inherits the flock fd would hold the lock and stall every later cycle.
+  setsid nohup node --import tsx/esm src/index.ts >>"$SERVER_LOG" 2>&1 </dev/null 9>&- &
 }
 
 changed() { git -C "$REPO" diff --name-only "$1" "$2" | grep -Eq "$3"; }
 
 run_step() {
   # Runs a command string in $REPO; output goes to the log, status is returned.
-  ( cd "$REPO" && eval "$1" ) >>"$LOG_FILE" 2>&1
+  # Same reason as restart_server: build tools leave daemons (esbuild) behind.
+  ( exec 9>&-; cd "$REPO" && eval "$1" ) >>"$LOG_FILE" 2>&1
 }
 
 cycle() {
