@@ -1,4 +1,5 @@
-import { Fragment, useState, useEffect, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
+import { SettingsSectionIcon } from './SettingsSectionIcon';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
@@ -87,10 +88,25 @@ function tabVisible(tab: UserSettingsTab, isAdmin: boolean): boolean {
 
 export function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
+  const listRef = useRef<HTMLDivElement>(null);
+  const sectionCount = ctx?.sections.length ?? 0;
+  const activeSection = ctx?.activeSection;
+
+  // The links are the last thing in a scrolling sidebar: when they appear or
+  // grow, bring them into view, and keep the section being read in view as the
+  // content scrolls. `nearest` moves the sidebar only as far as needed.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || sectionCount === 0) return;
+    const reduced = list.ownerDocument.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const target = list.querySelector<HTMLElement>('[aria-current="true"]') ?? list;
+    target.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+  }, [sectionCount, activeSection]);
+
   if (!ctx || ctx.sections.length === 0) return null;
 
   return (
-    <div className="overflow-hidden">
+    <div ref={listRef} className="overflow-hidden">
       {ctx.sections.map((section) => (
         section.invite === true ? (
           // Same invitation as the tab strip, sized for the narrow column.
@@ -101,13 +117,14 @@ export function SidebarSubLinks() {
         <button data-icon-motion="press"
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
-          className={`w-full flex items-center gap-1.5 text-left pl-6 pr-2 py-1 text-xs rounded-md transition-colors ${
+          className={`group w-full flex items-center gap-2 text-left pl-4 pr-2 py-1 text-xs rounded-md transition-colors ${
             ctx.activeSection === section.id
               ? 'text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
           aria-current={ctx.activeSection === section.id ? 'true' : undefined}
         >
+          {section.icon && <SettingsSectionIcon name={section.icon} />}
           <span className="flex-1 min-w-0 truncate">{section.label}</span>
           {section.badgeCount !== undefined && section.badgeCount > 0 && (
             <span className="shrink-0 text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
@@ -259,22 +276,23 @@ export function UserSettingsModal() {
           </div>
 
           {/* Nav list */}
-          <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            {renderNav('desktop')}
+          {/* The tabs scroll when the window is short; log out and the source link stay pinned below. */}
+          <div className="glass-bubble rounded-lg p-2 flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+              {renderNav('desktop')}
+            </div>
 
-            <div className="flex-1" />
-
-            <div className="border-t border-white/[0.04] my-2 mx-2" />
+            <div className="border-t border-white/[0.04] my-2 mx-2 shrink-0" />
             <button data-icon-motion="press"
               onClick={handleLogout}
-              className="group w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
+              className="group w-full shrink-0 text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
             >
               <SettingsNavIcon name="logout" />
               {t('settings:nav.logOut')}
             </button>
 
             {instanceInfo && (
-              <div className="px-3 pt-2">
+              <div className="px-3 pt-2 shrink-0">
                 <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
               </div>
             )}
