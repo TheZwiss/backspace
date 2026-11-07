@@ -40,25 +40,26 @@ export function ProfileThoughtBubble({ text, avatarLeft, avatarTop, avatarSize, 
   const bubbleLeft = avatarLeft + avatarSize + gap;
   const endY = top + FIRST_LINE_CENTER;
   return (
-    <div
-      data-profile-thought-bubble
-      className="absolute inset-0 z-10 pointer-events-none motion-pop-in"
-      style={{ transformOrigin: `${startX}px ${startY}px` }}
-    >
-      {TAIL_DOTS.map(({ at, size }) => (
-        <span
-          key={size}
-          aria-hidden="true"
-          className="absolute rounded-full bg-surface-elevated border border-white/[0.12] shadow-elevation-low"
-          style={{ width: size, height: size, left: startX + (bubbleLeft - startX) * at - size / 2, top: startY + (endY - startY) * at - size / 2 }}
-        />
-      ))}
-      <div
-        className="absolute rounded-2xl bg-surface-elevated border border-white/[0.08] shadow-elevation-high px-3 py-2 text-ui-label text-txt-primary leading-snug break-words line-clamp-2 pointer-events-auto"
-        style={{ left: bubbleLeft, top, maxWidth: `calc(100% - ${bubbleLeft + rightGap}px)` }}
-        title={text}
-      >
-        {replaceEmojiShortcodes(text)}
+    // The outer layer is a clipped, static box; only the inner one scales. A
+    // scaled box that overshoots its parent would add scrollable area to the
+    // profile card for the length of the pop.
+    <div data-profile-thought-bubble className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0 motion-pop-in" style={{ transformOrigin: `${startX}px ${startY}px` }}>
+        {TAIL_DOTS.map(({ at, size }) => (
+          <span
+            key={size}
+            aria-hidden="true"
+            className="absolute rounded-full bg-surface-elevated border border-white/[0.12] shadow-elevation-low"
+            style={{ width: size, height: size, left: startX + (bubbleLeft - startX) * at - size / 2, top: startY + (endY - startY) * at - size / 2 }}
+          />
+        ))}
+        <div
+          className="absolute rounded-2xl bg-surface-elevated border border-white/[0.08] shadow-elevation-high px-3 py-2 text-ui-label text-txt-primary leading-snug break-words line-clamp-2 pointer-events-auto"
+          style={{ left: bubbleLeft, top, maxWidth: `calc(100% - ${bubbleLeft + rightGap}px)` }}
+          title={text}
+        >
+          {replaceEmojiShortcodes(text)}
+        </div>
       </div>
     </div>
   );

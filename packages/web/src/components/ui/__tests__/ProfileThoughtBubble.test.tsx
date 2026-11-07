@@ -33,9 +33,17 @@ describe('ProfileThoughtBubble', () => {
     expect(big!.centerX + big!.size / 2).toBeLessThan(166);
   });
 
+  it('scales an inner layer inside a clipped static box, so the pop never adds scrollable area to the card', () => {
+    const { container } = render(<ProfileThoughtBubble text="oi" {...avatar} />);
+    const outer = container.querySelector<HTMLElement>('[data-profile-thought-bubble]')!;
+    expect(outer.className).toContain('overflow-hidden');
+    expect(outer.className).not.toContain('motion-pop-in');
+    expect(outer.querySelector('.motion-pop-in')).not.toBeNull();
+  });
+
   it('grows out of the avatar edge', () => {
     const { container } = render(<ProfileThoughtBubble text="oi" {...avatar} />);
-    const root = container.querySelector<HTMLElement>('[data-profile-thought-bubble]')!;
+    const root = container.querySelector<HTMLElement>('.motion-pop-in')!;
     const [x, y] = root.style.transformOrigin.split(' ').map(parseFloat);
     expect(x).toBeCloseTo(20 + 48 + 48 * Math.cos(Math.PI / 12), 0);
     expect(y).toBeGreaterThan(0 - 52 + 48);
