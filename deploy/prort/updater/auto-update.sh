@@ -179,7 +179,14 @@ cycle() {
     run_step "$RESTART_CMD"
     wait_healthy || { rollback "server unhealthy after restart"; return 1; }
   else
-    health || { rollback "server unhealthy after web update"; return 1; }
+    # The Vite build can get the server killed by Android's low-memory killer.
+    # That says nothing about the new commit, so bring the server back once
+    # before blaming the release.
+    if ! health; then
+      log "server down after the web build; restarting it once"
+      run_step "$RESTART_CMD"
+      wait_healthy || { rollback "server unhealthy after web update"; return 1; }
+    fi
   fi
 
   rm -rf "$REPO/packages/web/dist.prev"
