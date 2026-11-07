@@ -4,11 +4,13 @@ import { userKey } from './identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { notifyNudge } from './nudgeNotification';
 import { useNudgePreferences } from '../stores/nudgePreferences';
-import { playInAppNudge } from './inAppNudge';
+import { playInAppNudge, playNudgeTone } from './inAppNudge';
+import { sendNotification } from '../platform/notifications';
 import type { NudgeContext } from './nudgePolicy';
 
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: vi.fn().mockReturnValue({ setOutputDevice: vi.fn(), setVolume: vi.fn() }) } }));
-vi.mock('./inAppNudge', () => ({ playInAppNudge: vi.fn() }));
+vi.mock('../platform/notifications', () => ({ sendNotification: vi.fn() }));
+vi.mock('./inAppNudge', () => ({ playInAppNudge: vi.fn(), playNudgeTone: vi.fn() }));
 const original = useNudgePreferences.getState();
 const descriptor = Object.getOwnPropertyDescriptor(window, 'backspace');
 const native = vi.fn();
@@ -57,5 +59,29 @@ describe('nudge delivery obeys recipient preferences', () => {
     await notifyNudge('Sender', '/avatar.png', '', '123', 'shake', 'sender');
     expect(getContext).not.toHaveBeenCalled(); expect(native).not.toHaveBeenCalled(); expect(playInAppNudge).not.toHaveBeenCalled();
     useAttentionMutes.setState({ entries: [] }); useAuthStore.setState({ user: null });
+  });
+});
+
+describe('nudge delivery in a plain browser', () => {
+  beforeEach(() => { Reflect.deleteProperty(window, 'backspace'); });
+  afterEach(() => { vi.restoreAllMocks(); });
+  it('plays a tone and a system notification when the tab is in the background', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    await notifyNudge('Alice', null, '', '123');
+    expect(playNudgeTone).toHaveBeenCalledWith(.6);
+    expect(sendNotification).toHaveBeenCalledWith('Alice', expect.any(String), expect.objectContaining({ channelId: '123', silent: true }));
+    expect(playInAppNudge).not.toHaveBeenCalled();
+  });
+  it('shows the in-app notice when the tab is focused', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    await notifyNudge('Alice', null, '', '123');
+    expect(playInAppNudge).toHaveBeenCalledWith('Alice', undefined, '123', 'shake', expect.objectContaining({ destination: 'app' }));
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+  it('stays silent in the background when the user disabled sound', async () => {
+    useNudgePreferences.setState({ sound: false });
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    await notifyNudge('Alice', null, '', '123');
+    expect(playNudgeTone).not.toHaveBeenCalled(); expect(sendNotification).toHaveBeenCalled();
   });
 });

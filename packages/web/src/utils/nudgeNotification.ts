@@ -5,8 +5,11 @@ import { userKey } from './identity';
 import i18n from '../i18n';
 import type { NudgeEffect } from '@backspace/shared';
 import { useNudgePreferences } from '../stores/nudgePreferences';
-import { resolveNudgePlan, type NudgeContext } from './nudgePolicy';
-import { playInAppNudge } from './inAppNudge';
+import { resolveNudgePlan, resolveWebNudgePlan, type NudgeContext } from './nudgePolicy';
+import { playInAppNudge, playNudgeTone } from './inAppNudge';
+import { isElectron } from '../platform/platform';
+import { sendNotification } from '../platform/notifications';
+import { alertsAllowed } from './alerts';
 
 export async function notifyNudge(sender: string, avatar: string | null | undefined, origin: string, channelId: string, effect: NudgeEffect = 'shake', senderId?: string): Promise<void> {
   const rules = useNudgePreferences.getState();
@@ -14,6 +17,7 @@ export async function notifyNudge(sender: string, avatar: string | null | undefi
   const self = useAuthStore.getState().user;
   const senderUser = senderId ? useSpaceStore.getState().dmChannels.find(dm => dm.id === channelId)?.members.find(member => member.id === senderId) ?? { id: senderId } : null;
   if (self && senderUser && attentionMuted(userKey(self, ''), senderUser, origin)) return;
+  const isWeb = !isElectron();
   const fallback: NudgeContext = { focused: document.hasFocus(), minimized: document.visibilityState === 'hidden',
     displays: [{ id: 0, label: 'Monitor', primary: true, app: true }], gameRunning: false, foregroundGame: false,
     gameDisplayIds: [], gameDetectionUncertain: true };
@@ -21,8 +25,16 @@ export async function notifyNudge(sender: string, avatar: string | null | undefi
     || (rules.gameDetection === 'on' && rules.gameAction === 'other-displays' && rules.gameMonitor === 'auto'))
     && !(rules.gameDetection === 'auto' && rules.gameTrigger === 'foreground' && document.hasFocus());
   const context = await window.backspace?.getNudgeContext?.(needsGameScan).catch(() => null) ?? fallback;
-  const plan = resolveNudgePlan(rules, context);
+  const webPlan = isWeb ? resolveWebNudgePlan(rules, { focused: document.hasFocus(), hidden: document.visibilityState === 'hidden' }) : null;
+  const plan = webPlan ?? resolveNudgePlan(rules, context);
   if (plan.destination === 'off') return;
+  if (webPlan?.background) {
+    // Background tab: no overlay is possible, so a tone plus a system notification carries the call.
+    if (!alertsAllowed('message')) return;
+    if (plan.sound) playNudgeTone(plan.volume);
+    sendNotification(sender, i18n.t('chat:nudge.notice'), { silent: true, origin, channelId });
+    return;
+  }
   let image: string | undefined;
   if (avatar) {
     try {

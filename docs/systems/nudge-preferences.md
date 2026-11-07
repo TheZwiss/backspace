@@ -48,6 +48,10 @@ fallback or manual override. Exclusive fullscreen applications can prevent
 desktop notifications from appearing. Browser-only sessions cannot render
 desktop overlays or load the Electron-packaged original wink movies.
 
+## Navegador (sem Electron)
+
+`resolveWebNudgePlan` substitui o roteamento desktop. Aba visível e em foco: aviso in-app (com o modo de movimento escolhido). Aba em segundo plano ou oculta: tom sintetizado (se o som estiver ligado) e notificação do sistema via `sendNotification`, sem animação; o clique leva à DM. O escopo "Somente fora" não dispara com a aba em foco, "Somente dentro" não dispara em segundo plano, e Não Perturbe bloqueia a notificação e o tom. A notificação depende da permissão do navegador já concedida; sem ela, só o tom toca.
+
 Native display changes abort active desktop overlays; future receipts use the
 new display list. Preferences are evaluated when a call arrives. They do not
 install a continuous game watcher for an already playing animation.

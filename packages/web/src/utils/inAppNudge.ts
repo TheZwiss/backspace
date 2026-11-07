@@ -5,7 +5,7 @@ import type { NudgePlan } from './nudgePolicy';
 
 let activeUntil = 0;
 
-function playTone(volume: number): void {
+export function playNudgeTone(volume: number): void {
   try {
     const context = new AudioContext();
     [660, 880, 660, 990].forEach((frequency, i) => {
@@ -50,7 +50,7 @@ export async function playInAppNudge(sender: string, avatar: string | undefined,
   notice.append(face, text, close); document.body.append(notice);
   setTimeout(() => notice.remove(), 6000);
   if (plan.sound && media && (plan.mode !== 'full')) { const audio = new Audio(media.video); audio.volume = plan.volume; void audio.play().catch(() => {}); setTimeout(() => { audio.pause(); audio.removeAttribute('src'); }, media.durationMs + 500); }
-  else if (plan.sound && !media) playTone(plan.volume);
+  else if (plan.sound && !media) playNudgeTone(plan.volume);
   if (plan.mode === 'notification') return;
   const root = document.getElementById('root') ?? document.body;
   const layer = () => {
