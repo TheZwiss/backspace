@@ -9,6 +9,8 @@ export interface ReactionPickerPopoverProps {
   anchorEl: HTMLElement | null;
   onEmojiSelect: (emoji: { native: string }) => void;
   onClose: () => void;
+  /** Accessible name of the dialog; defaults to the reaction wording. */
+  label?: string;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -22,6 +24,7 @@ export function ReactionPickerPopover({
   anchorEl,
   onEmojiSelect,
   onClose,
+  label,
 }: ReactionPickerPopoverProps) {
   const { t } = useTranslation('common');
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -108,7 +111,8 @@ export function ReactionPickerPopover({
     <div
       ref={popoverRef}
       role="dialog"
-      aria-label={t('actions.addReaction')}
+      aria-label={label ?? t('actions.addReaction')}
+      data-floating-picker
       className={`fixed z-[300] ${coords.flipAbove ? 'animate-slide-down' : 'animate-slide-up'}`}
       style={{
         top: coords.top,

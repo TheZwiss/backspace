@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ProfileThoughtBubble } from './ProfileThoughtBubble';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +17,7 @@ import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradi
 import { isMine, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
-import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
 import { useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
@@ -176,6 +177,8 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
       {/* Body */}
       <div className="px-4 pb-4 relative">
+        {/* The 80px avatar starts at x=16 and rises 44px over the banner. */}
+        <ProfileThoughtBubble text={user.customStatus} avatarLeft={16} avatarTop={-44} avatarSize={80} />
         {/* Avatar */}
         {/* The picture escalates to the full profile — the card is a preview, and
             clicking the face is the obvious way to ask for the whole thing. It
@@ -200,11 +203,6 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
           <div className="text-ui-label text-txt-tertiary">
             <Username username={user.username} showAt className="text-ui-label text-txt-tertiary" />
           </div>
-          {user.customStatus && (
-            <div className="text-ui-label text-txt-secondary italic mt-1">
-              {replaceEmojiShortcodes(user.customStatus)}
-            </div>
-          )}
         </div>
 
         {/* Dynamic Activities (Gaming, Music with progress, Streaming, etc.) */}

@@ -24,7 +24,7 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
   const floatingRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
 
-  const { style } = useFloatingPosition(anchorRef, floatingRef, {
+  const { style, actualPlacement } = useFloatingPosition(anchorRef, floatingRef, {
     placement: position,
     offset: 8,
     enabled: isVisible,
@@ -78,7 +78,8 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
           role="tooltip"
           id={tooltipId}
           style={{ ...style, zIndex: 'var(--layer-tooltip)' }}
-          className="px-3 py-1.5 text-sm font-medium text-txt-primary glass rounded-lg max-w-[min(320px,calc(100*var(--app-vw)-24px))] max-h-[calc(50*var(--app-vh))] overflow-hidden whitespace-normal break-words text-left leading-relaxed pointer-events-none"
+          data-side={actualPlacement}
+          className="motion-floating-enter px-3 py-1.5 text-sm font-medium text-txt-primary glass rounded-lg max-w-[min(320px,calc(100*var(--app-vw)-24px))] max-h-[calc(50*var(--app-vh))] overflow-hidden whitespace-normal break-words text-left leading-relaxed pointer-events-none"
         >
           {content}
         </div>,

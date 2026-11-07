@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
+import { isVoiceMessageName } from '../../utils/voiceMessage';
 import { useTranslation } from 'react-i18next';
 import type { Attachment } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
@@ -264,6 +266,10 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
         federationInlineBadge={federationInlineBadge}
       />
     );
+  }
+
+  if (mimetype.startsWith('audio/') && isVoiceMessageName(originalName)) {
+    return <VoiceMessagePlayer url={attUrl} mimetype={mimetype} durationHint={attachment.duration} federationBadge={federationInlineBadge} />;
   }
 
   if (mimetype.startsWith('audio/')) {

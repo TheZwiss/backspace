@@ -100,9 +100,9 @@ export function TypingIndicator({ channelId }: TypingIndicatorProps) {
     <div className="absolute bottom-full left-1 right-1 desktop:left-4 desktop:right-4 mb-1 px-3 flex items-center text-ui-caption text-txt-secondary font-medium select-none pointer-events-none animate-typing-in motion-reduce:animate-none">
       <div className="flex items-center gap-2 min-w-0">
         <div className="flex shrink-0 gap-[2px] bg-surface-elevated/20 rounded-full px-2 py-1">
-          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.8s' }} />
-          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.8s' }} />
-          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.8s' }} />
+          <div className="typing-dot w-[5px] h-[5px] bg-txt-message rounded-full" style={{ animationDelay: '0ms' }} />
+          <div className="typing-dot w-[5px] h-[5px] bg-txt-message rounded-full" style={{ animationDelay: '160ms' }} />
+          <div className="typing-dot w-[5px] h-[5px] bg-txt-message rounded-full" style={{ animationDelay: '320ms' }} />
         </div>
         <span data-typing-line className="flex min-w-0 max-w-[400px] font-bold whitespace-nowrap">
           {line}

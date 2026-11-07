@@ -121,6 +121,24 @@ Data: `data/` at the repository root (backspace.db + uploads/ + backups/), mount
 
 ---
 
+## Test Environment (ready-made, do not rebuild it)
+
+A persistent local stack (server :3005 + Vite :5173) with a seeded user and space. Never recreate it by hand; use the script:
+
+```bash
+scripts/testenv.sh up       # start (idempotent); seeds on first run
+scripts/testenv.sh status   # running | stopped
+scripts/testenv.sh down     # stop, data kept
+scripts/testenv.sh reset    # stop and delete .testenv/ (next up re-seeds)
+```
+
+- Open `http://localhost:5173`, login `ana` / `MotionTest#2026`. Space "Teste" has `#general` and a voice channel.
+- State lives in `.testenv/` (gitignored: DB, uploads, `dev.log`, `dev.pid`). Leave the stack running when you finish so the next session can reuse it.
+- Playwright MCP has no microphone permission: stub `navigator.mediaDevices.getUserMedia` with an oscillator `MediaStreamDestination` via `page.evaluate` (a page reload drops the stub). A telemetry prompt may cover the UI on first load: click "Decidir depois".
+- Do not use `pkill -f` to stop it; the pattern matches your own shell. `down` uses the pid file.
+
+---
+
 ## Desktop Development & Debugging
 
 **Verify (from `packages/desktop`):**

@@ -139,3 +139,7 @@ docs/superpowers/plans/2026-09-02-plan-e-remediation.md
 graphify-out/
 Backspace-rich-presence-test.AppImage
 Backspace-rich-presence-test.sh
+
+# Local test environment (scripts/testenv.sh) and Playwright MCP output
+.testenv/
+.playwright-mcp/

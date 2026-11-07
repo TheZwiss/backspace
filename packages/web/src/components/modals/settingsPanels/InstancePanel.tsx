@@ -30,15 +30,16 @@ export function InstancePanel() {
   const updateBadge = useInstanceUpdateBadge();
 
   const sections = useMemo<SettingsSection[]>(() => [
-    { id: 'general', label: t('settings:instance.tabs.general') },
-    { id: 'registration', label: t('settings:instance.tabs.registration') },
-    { id: 'federation', label: t('settings:instance.tabs.federation'), badgeCount: approvalCount },
-    { id: 'streaming', label: t('settings:instance.tabs.streaming') },
-    { id: 'storage', label: t('settings:instance.tabs.storage') },
-    { id: 'users', label: t('settings:instance.tabs.users') },
-    { id: 'updates', label: t('settings:instance.tabs.updates'), badgeDot: updateBadge },
+    { id: 'general', icon: 'general', label: t('settings:instance.tabs.general') },
+    { id: 'registration', icon: 'registration', label: t('settings:instance.tabs.registration') },
+    { id: 'federation', icon: 'federation', label: t('settings:instance.tabs.federation'), badgeCount: approvalCount },
+    { id: 'streaming', icon: 'streaming', label: t('settings:instance.tabs.streaming') },
+    { id: 'storage', icon: 'storage', label: t('settings:instance.tabs.storage') },
+    { id: 'users', icon: 'users', label: t('settings:instance.tabs.users') },
+    { id: 'updates', icon: 'updates', label: t('settings:instance.tabs.updates'), badgeDot: updateBadge },
     {
       id: 'telemetry',
+      icon: 'telemetry',
       label: t('settings:instance.tabs.telemetry'),
       // Whenever the hello is not being sent, whether that is because nobody
       // has answered yet or because someone said no. `telemetry` is null while

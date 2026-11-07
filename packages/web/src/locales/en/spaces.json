@@ -567,6 +567,7 @@
       "statusMenu": "Status",
       "customStatus": "Custom status",
       "customStatusPlaceholder": "What are you up to?",
+      "customStatusEmoji": "Add an emoji",
       "editProfile": "Edit profile",
       "statusUpdateFailed": "Could not update status"
     },

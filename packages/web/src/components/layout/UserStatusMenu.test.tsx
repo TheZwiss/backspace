@@ -15,6 +15,15 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { UserStatusMenu } from './UserStatusMenu';
 
+// The real picker loads emoji-mart's data; the menu only needs to hear a pick.
+vi.mock('../chat/ReactionPickerPopover', () => ({
+  ReactionPickerPopover: ({ onEmojiSelect, label }: { onEmojiSelect: (e: { native: string }) => void; label?: string }) => (
+    <div role="dialog" aria-label={label} data-floating-picker>
+      <button onClick={() => onEmojiSelect({ native: '🎉' })}>pick</button>
+    </div>
+  ),
+}));
+
 function makeUser(fields: Partial<User> = {}): User {
   return {
     id: 'me',
@@ -93,5 +102,30 @@ describe('UserStatusMenu', () => {
 
     expect(useUIStore.getState().activeModal).toBe('userSettings');
     expect(useUIStore.getState().modalData).toMatchObject({ tab: 'account' });
+  });
+
+  it('inserts a picked emoji at the caret of the custom status and saves it', async () => {
+    const updateProfile = vi.fn().mockResolvedValue(undefined);
+    useAuthStore.setState({ user: makeUser({ customStatus: 'ab' }), updateProfile });
+
+    render(<UserStatusMenu onClose={vi.fn()} />);
+    const input = screen.getByPlaceholderText('What are you up to?') as HTMLInputElement;
+    input.setSelectionRange(1, 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Add an emoji' }));
+    fireEvent.click(screen.getByText('pick'));
+
+    expect(input.value).toBe('a🎉b');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledWith({ customStatus: 'a🎉b' }));
+  });
+
+  it('never grows the custom status past its length cap', () => {
+    useAuthStore.setState({ user: makeUser({ customStatus: 'x'.repeat(128) }) });
+    render(<UserStatusMenu onClose={vi.fn()} />);
+    const input = screen.getByPlaceholderText('What are you up to?') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Add an emoji' }));
+    fireEvent.click(screen.getByText('pick'));
+    expect(input.value).toHaveLength(128);
   });
 });

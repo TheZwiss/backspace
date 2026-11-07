@@ -176,9 +176,11 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               origin={userOrigin}
               animate={isSpeaking}
             />
-            {(isSoundboardPlaying || isSpeaking) && (
-              <div className={`pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ${isSoundboardPlaying ? 'ring-blue-500' : 'ring-status-online animate-pulse'}`} />
-            )}
+            <div
+              aria-hidden="true"
+              data-active={isSoundboardPlaying || isSpeaking}
+              className={`speaking-halo pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ${isSoundboardPlaying ? 'ring-blue-500' : 'ring-status-online'}`}
+            />
           </div>
           {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
             <button data-icon-motion="toggle" type="button" className="ui-button ui-button-primary transition-colors"

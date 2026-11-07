@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CopiedCheck } from '../../ui/CopiedCheck';
 import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters, type Formatters } from '../../../i18n/formatters';
 import { useUIStore } from '../../../stores/uiStore';
@@ -42,8 +43,9 @@ function CommandBlock({ command }: { command: string }) {
       <button data-icon-motion="press"
         type="button"
         onClick={copy}
-        className="shrink-0 px-3 py-2 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
+        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition-colors ${copied ? 'text-accent-mint' : 'text-txt-secondary hover:text-txt-primary'}`}
       >
+        {copied && <CopiedCheck />}
         {copied ? t('common:actions.copied') : t('common:actions.copy')}
       </button>
     </div>

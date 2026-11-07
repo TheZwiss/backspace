@@ -98,6 +98,16 @@
       "named_many": "{{names}} estão digitando",
       "named_other": "{{names}} estão digitando",
       "several": "Várias pessoas estão digitando"
+    },
+    "voice": {
+      "record": "Gravar mensagem de voz",
+      "recording": "Gravando mensagem de voz",
+      "cancel": "Cancelar gravação",
+      "send": "Enviar mensagem de voz",
+      "tooShort": "Grave por um pouco mais de tempo para enviar.",
+      "denied": "O acesso ao microfone está bloqueado. Permita para o Backspace gravar.",
+      "unavailable": "Nenhum microfone pôde ser usado para gravar.",
+      "limit": "Limite de gravação atingido. Sua mensagem de voz foi enviada."
     }
   },
   "menu": {
@@ -135,6 +145,13 @@
       "partialInstance": "instância de {{username}} (limite: {{limit}})",
       "partialList": "Não foi possível guardar o arquivo em cache em {{instances}}. Essas pessoas ainda podem vê-lo pela sua instância.",
       "listPair": "{{first}} e {{second}}"
+    },
+    "voice": {
+      "label": "Mensagem de voz, {{duration}}",
+      "play": "Reproduzir mensagem de voz",
+      "pause": "Pausar mensagem de voz",
+      "speed": "Velocidade de reprodução {{speed}}",
+      "seek": "Posição na mensagem de voz"
     }
   },
   "gif": {

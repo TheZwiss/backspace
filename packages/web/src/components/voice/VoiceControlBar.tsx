@@ -1,4 +1,5 @@
 import { Tooltip } from '../ui/Tooltip';
+import { StrikeLine } from '../ui/StrikeLine';
 import { TextVoiceButton } from './TextVoice';
 import { SoundboardButton } from './Soundboard';
 import React, { useEffect, useState, useRef } from 'react';
@@ -145,7 +146,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-            {(isMuted || isDeafened || isSpaceMuted || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+            <StrikeLine active={isMuted || isDeafened || isSpaceMuted || isSpaceDeafened} />
           </svg>
         </button></Tooltip>
 
@@ -162,7 +163,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-            {(isDeafened || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+            <StrikeLine active={isDeafened || isSpaceDeafened} />
           </svg>
         </button></Tooltip>
 
@@ -173,16 +174,10 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
             className={isCameraOn ? btnGreen : btnDefault}
 
           >
-            {isCameraOn ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            )}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+              <StrikeLine active={!isCameraOn} inset={2} />
+            </svg>
           </button></Tooltip>
         )}
 

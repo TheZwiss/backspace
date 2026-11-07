@@ -13,6 +13,8 @@ import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
+import { VoiceRecorderBar } from './VoiceRecorderBar';
+import { useVoiceRecorder, type VoiceRecording } from '../../hooks/useVoiceRecorder';
 import { ChatDropOverlay } from './ChatDropOverlay';
 import { useFileDropZone } from '../../hooks/useFileDropZone';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
@@ -224,7 +226,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   const enqueueFile = useCallback(
     async (
       input: { file: File; handle?: FileSystemFileHandle | undefined },
-    ): Promise<void> => {
+    ): Promise<string | null> => {
       const { file, handle } = input;
       let fileHandleId: string | undefined;
       if (handle && supportsFsHandles()) {
@@ -257,9 +259,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             // ignore — preview is optional
           }
         }
+        return id;
       } catch (err) {
         const reason = err instanceof Error ? err.message : t('chat:composer.uploadFailedReason');
         addToast(t('chat:composer.uploadFailed', { file: file.name, reason }), 'warning');
+        return null;
       }
     },
     [channelId, startUpload, attachToComposer, addToast, t],
@@ -347,15 +351,24 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       return;
     }
 
-    // Attachment path — stage a pending bubble. The orchestrator dispatches the
-    // actual API call when every transfer reaches state='completed'.
+    submitAttachments(trimmed, stagedTransfers);
+  };
+
+  /**
+   * Attachment path of a send: stage a pending bubble for `staged`. The
+   * orchestrator dispatches the actual API call when every transfer reaches
+   * state='completed'. Takes the transfers as an argument because a caller
+   * that has just staged one (the voice recorder) holds a render that does not
+   * list it yet.
+   */
+  const submitAttachments = (trimmed: string, staged: Transfer[]): void => {
     const clientId = crypto.randomUUID();
     const replyToId = chatReplyTo?.id ?? null;
 
     // tusExpiresAt: min across staged transfers, default to 24h from now if absent.
     const now = Date.now();
     const fallbackExpires = now + DEFAULT_TUS_TTL_MS;
-    const expirations = stagedTransfers
+    const expirations = staged
       .map((t) => t.tusExpiresAt)
       .filter((x): x is number => typeof x === 'number' && x > 0);
     const tusExpiresAt = expirations.length > 0 ? Math.min(...expirations) : fallbackExpires;
@@ -368,7 +381,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       channelId,
       content: trimmed,
       replyToId,
-      transferIds: stagedTransfers.map((t) => t.id),
+      transferIds: staged.map((t) => t.id),
       createdAtLocal: now,
       state: 'sending',
       tusExpiresAt,
@@ -386,6 +399,50 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       textareaRef.current.focus();
     }
   };
+
+  // ── Voice messages ──
+  // Hands a finished recording to the composer as an attachment and sends it,
+  // alone: the microphone button only shows while the draft and the staged
+  // files are empty, and the reply target, if any, goes with it.
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const sendVoiceRecording = useCallback(async (recording: VoiceRecording | null): Promise<void> => {
+    if (!recording) return;
+    setSendingVoice(true);
+    try {
+      const transferId = await enqueueFile({ file: recording.file });
+      const transfer = transferId ? useTransferStore.getState().transfers.get(transferId) : undefined;
+      if (transfer) submitAttachments('', [transfer]);
+    } finally {
+      setSendingVoice(false);
+    }
+  }, [enqueueFile, submitAttachments]);
+
+  const voice = useVoiceRecorder((recording) => {
+    addToast(t('chat:composer.voice.limit'), 'info');
+    void sendVoiceRecording(recording);
+  });
+  const recordingVoice = voice.state !== 'idle';
+
+  const handleVoiceSend = useCallback(async () => {
+    const recording = await voice.stop();
+    if (!recording) {
+      addToast(t('chat:composer.voice.tooShort'), 'info');
+      return;
+    }
+    await sendVoiceRecording(recording);
+  }, [voice, sendVoiceRecording, addToast, t]);
+
+  // A refused microphone says why instead of doing nothing.
+  useEffect(() => {
+    if (voice.error) addToast(t(voice.error === 'denied' ? 'chat:composer.voice.denied' : 'chat:composer.voice.unavailable'), 'warning');
+  }, [voice.error, addToast, t]);
+
+  // Back to typing: the textarea was unmounted while recording.
+  const wasRecordingVoice = useRef(false);
+  useEffect(() => {
+    if (wasRecordingVoice.current && !recordingVoice) textareaRef.current?.focus();
+    wasRecordingVoice.current = recordingVoice;
+  }, [recordingVoice]);
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
     // IME confirmation must not select a candidate or send the message.
@@ -818,6 +875,15 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           onRemove={removeStagedTransfer}
         />
 
+        {recordingVoice ? (
+          <VoiceRecorderBar
+            elapsedMs={voice.elapsedMs}
+            analyser={voice.analyser}
+            onCancel={voice.cancel}
+            onSend={() => void handleVoiceSend()}
+            busy={sendingVoice}
+          />
+        ) : (
         <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
           {/* File attach button */}
           {canAttachFiles && (
@@ -953,7 +1019,23 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
               </svg>
             </button></Tooltip>
           )}
+
+          {/* Microphone button — where the send button goes while there is nothing to send */}
+          {!canSend && canAttachFiles && voice.supported && (
+            <Tooltip content={t('chat:composer.voice.record')} position="top"><button data-icon-motion="press"
+              type="button"
+              onClick={() => void voice.start()}
+              className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-primary transition-colors flex-shrink-0"
+              aria-label={t('chat:composer.voice.record')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+              </svg>
+            </button></Tooltip>
+          )}
         </div>
+        )}
       </div>
     </div>
     </>

@@ -8,6 +8,7 @@ import { CHOSEN_STATUS_OPTIONS } from '../../utils/statusOptions';
 import { describeError } from '../../i18n/errors';
 import { Avatar } from '../ui/Avatar';
 import { PresenceIndicator } from '../ui/PresenceIndicator';
+import { ReactionPickerPopover } from '../chat/ReactionPickerPopover';
 
 /**
  * Status switcher opened from the user block at the bottom of the channel
@@ -15,6 +16,8 @@ import { PresenceIndicator } from '../ui/PresenceIndicator';
  * replicated row, so writes go through `authStore.updateProfile` — the same
  * path the account settings use — rather than writing the page user directly.
  */
+const CUSTOM_STATUS_MAX = 128;
+
 export function UserStatusMenu({ onClose }: { onClose: () => void }) {
   const exitRef = useRef<HTMLDivElement>(null);
   useExitMotion(exitRef);
@@ -27,6 +30,9 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
   const [customStatus, setCustomStatus] = useState(user?.customStatus ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setCustomStatus(user?.customStatus ?? '');
@@ -72,6 +78,22 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
     } finally {
       setPending(false);
     }
+  };
+
+  // Insert at the caret (or replace the selection), within the field's length cap,
+  // and put the caret right after the emoji.
+  const insertEmoji = (native: string) => {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? customStatus.length;
+    const end = input?.selectionEnd ?? customStatus.length;
+    const next = (customStatus.slice(0, start) + native + customStatus.slice(end)).slice(0, CUSTOM_STATUS_MAX);
+    setCustomStatus(next);
+    setEmojiOpen(false);
+    const caret = Math.min(start + native.length, next.length);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(caret, caret);
+    });
   };
 
   const openProfileSettings = () => {
@@ -123,20 +145,47 @@ export function UserStatusMenu({ onClose }: { onClose: () => void }) {
         <label className="block text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1">
           {t('spaces:sidebar.userArea.customStatus')}
         </label>
-        <input
-          type="text"
-          value={customStatus}
-          maxLength={128}
-          placeholder={t('spaces:sidebar.userArea.customStatusPlaceholder')}
-          onChange={(e) => setCustomStatus(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void saveCustomStatus(customStatus);
-            }
-          }}
-          className="input-standard w-full text-ui-label"
-        />
+        <div className="flex items-center gap-1.5">
+          <input
+            ref={inputRef}
+            type="text"
+            value={customStatus}
+            maxLength={CUSTOM_STATUS_MAX}
+            placeholder={t('spaces:sidebar.userArea.customStatusPlaceholder')}
+            onChange={(e) => setCustomStatus(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void saveCustomStatus(customStatus);
+              }
+            }}
+            className="input-standard flex-1 min-w-0 text-ui-label"
+          />
+          <button data-icon-motion="press"
+            ref={emojiButtonRef}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={emojiOpen}
+            aria-label={t('spaces:sidebar.userArea.customStatusEmoji')}
+            title={t('spaces:sidebar.userArea.customStatusEmoji')}
+            onClick={() => setEmojiOpen((open) => !open)}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8.5 14.5c.9 1.2 2 1.8 3.5 1.8s2.6-.6 3.5-1.8" />
+              <path d="M9 9.5h.01M15 9.5h.01" strokeWidth="2.4" />
+            </svg>
+          </button>
+        </div>
+        {emojiOpen && (
+          <ReactionPickerPopover
+            anchorEl={emojiButtonRef.current}
+            label={t('spaces:sidebar.userArea.customStatusEmoji')}
+            onEmojiSelect={(emoji) => insertEmoji(emoji.native)}
+            onClose={() => setEmojiOpen(false)}
+          />
+        )}
         <div className="flex items-center justify-end gap-2 mt-2">
           <button data-icon-motion="press"
             onClick={() => {

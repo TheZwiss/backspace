@@ -1,4 +1,5 @@
 import { Tooltip } from '../ui/Tooltip';
+import { StrikeLine } from '../ui/StrikeLine';
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -177,16 +178,10 @@ export function VoiceControls() {
             }`}
 
           >
-            {isCameraOn ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            )}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+              <StrikeLine active={!isCameraOn} inset={2} />
+            </svg>
           </button></Tooltip>
         )}
 
