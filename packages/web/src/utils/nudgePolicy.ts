@@ -52,3 +52,19 @@ export function resolveNudgePlan(rules: NudgeRules, context: NudgeContext): Nudg
   if (rules.gameFallback === 'app') return { ...plan, destination: context.minimized ? 'off' : 'app', mode: 'notification' };
   return { ...plan, mode: 'notification', displayIds: selected.length ? plan.displayIds : context.displays.filter(d => d.primary).map(d => d.id) };
 }
+
+/**
+ * Browsers have no desktop overlay, so the Electron routing cannot apply.
+ * A visible, focused tab shows the in-app notice (with the user's motion mode);
+ * any other tab gets a tone and a system notification. Scope 'desktop' still
+ * means "only outside the app", and 'app' still means "never outside it".
+ */
+export function resolveWebNudgePlan(rules: NudgeRules, tab: { focused: boolean; hidden: boolean }): NudgePlan & { background: boolean } {
+  const volume = Math.max(0, Math.min(100, rules.volume)) / 100;
+  const base = { mode: rules.mode, sound: rules.sound && volume > 0, volume, displayIds: [] as number[] };
+  const inForeground = tab.focused && !tab.hidden;
+  if (rules.scope === 'off' || (rules.scope === 'desktop' && inForeground) || (rules.scope === 'app' && !inForeground)) {
+    return { ...base, destination: 'off', background: false };
+  }
+  return { ...base, destination: inForeground ? 'app' : 'desktop', background: !inForeground };
+}
