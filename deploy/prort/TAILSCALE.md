@@ -3,7 +3,7 @@
 Runbook da exposição HTTPS usada para acessar o Backspace pelo endereço:
 
 ```text
-https://backspace.tail4e495d.ts.net/
+https://backspace.<sua-tailnet>.ts.net/
 ```
 
 Última recuperação validada em 2026-10-29, com o Backspace, o LiveKit e o
@@ -26,9 +26,9 @@ O endereço canônico é publicado pelo nó `backspace`. O nó Android
 O roteamento HTTPS atual é:
 
 ```text
-https://backspace.tail4e495d.ts.net/         -> http://127.0.0.1:3000
-https://backspace.tail4e495d.ts.net/livekit  -> http://127.0.0.1:7880
-backspace.tail4e495d.ts.net:3479             -> tcp://127.0.0.1:3479
+https://backspace.<sua-tailnet>.ts.net/         -> http://127.0.0.1:3000
+https://backspace.<sua-tailnet>.ts.net/livekit  -> http://127.0.0.1:7880
+backspace.<sua-tailnet>.ts.net:3479             -> tcp://127.0.0.1:3479
 ```
 
 O encaminhamento TURN/TCP precisa usar PROXY protocol v2; caso contrário, o
@@ -104,7 +104,7 @@ Falhas recorrentes observadas:
    remova somente esse socket e reinicie o comando completo da seção anterior.
 2. **Nome do nó alterado:** o nó apareceu temporariamente como
    `backspace-old`, então não havia destino para
-   `backspace.tail4e495d.ts.net`. O nome deve voltar a ser `backspace`.
+   `backspace.<sua-tailnet>.ts.net`. O nome deve voltar a ser `backspace`.
 3. **`--statedir` ausente:** o certificado falhava e `tailscale cert` retornava
    HTTP 500 com `no TailscaleVarRoot`. Mantenha o `--statedir` e o `--state`
    apontando para `/var/lib/tailscale-userspace`.
@@ -112,12 +112,12 @@ Falhas recorrentes observadas:
 Valide o certificado pela própria URL:
 
 ```bash
-curl -fsSI https://backspace.tail4e495d.ts.net/
-curl -fsSI https://backspace.tail4e495d.ts.net/livekit
+curl -fsSI https://backspace.<sua-tailnet>.ts.net/
+curl -fsSI https://backspace.<sua-tailnet>.ts.net/livekit
 ```
 
 No diagnóstico realizado, o certificado Let's Encrypt apresentava
-CN/SAN `backspace.tail4e495d.ts.net` e validade até 2027-01-25.
+CN/SAN `backspace.<sua-tailnet>.ts.net` e validade até 2027-01-25.
 
 ## Serve, Funnel e compartilhamento
 
@@ -127,7 +127,7 @@ por convite. Para amigos entrarem na instância atual:
 1. Mantenha o MagicDNS habilitado na tailnet que possui o nó `backspace`.
 2. Compartilhe o nó `backspace` em **Machines → backspace → Share**.
 3. Garanta que as ACLs permitam acesso de entrada à porta `443`.
-4. Envie o FQDN exato `https://backspace.tail4e495d.ts.net/`.
+4. Envie o FQDN exato `https://backspace.<sua-tailnet>.ts.net/`.
 
 Compartilhar o IP `100.91.47.106` isoladamente não substitui o convite de
 máquina. Também não é necessário compartilhar o nó Android `mi-9t-pro`.

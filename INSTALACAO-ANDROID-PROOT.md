@@ -13,10 +13,10 @@ outros dispositivos. Nenhuma credencial é reproduzida aqui.
 
 URLs (preferencial, sem instalar CA):
 
-- Tailscale HTTPS: `https://backspace.tail4e495d.ts.net` (certificado Let's Encrypt)
+- Tailscale HTTPS: `https://backspace.<sua-tailnet>.ts.net` (certificado Let's Encrypt)
 - LAN: `https://10.0.1.5:8443`
 - Tailscale IP: `https://100.113.4.54:8443`
-- Tailscale MagicDNS: `https://mi-9t-pro.tail4e495d.ts.net:8443` (se o DNS do
+- Tailscale MagicDNS: `https://mi-9t-pro.<sua-tailnet>.ts.net:8443` (se o DNS do
   Tailscale estiver ativo no cliente)
 - CA local: `https://10.0.1.5:8443/ca.crt`
 - LiveKit interno: `ws://127.0.0.1:7880`; pelo Caddy: `wss://<host>:8443/livekit/`
@@ -166,7 +166,7 @@ keys:
 
 turn:
   enabled: true
-  domain: backspace.tail4e495d.ts.net
+  domain: backspace.<sua-tailnet>.ts.net
   cert_file: /opt/caddy/certs/backspace.crt
   key_file: /opt/caddy/certs/backspace.key
   udp_port: 3478        # TURN/UDP (também serve de STUN)
@@ -186,7 +186,7 @@ publicado pelo `tailscale serve` com PROXY protocol v2, então o cliente recebe:
 
 ```
 turn:100.113.4.54:3478?transport=udp
-turn:backspace.tail4e495d.ts.net:3479?transport=tcp
+turn:backspace.<sua-tailnet>.ts.net:3479?transport=tcp
 ```
 
 Se o firewall do cliente bloquear UDP, o TURN/TLS em 5349 é o fallback.
@@ -206,7 +206,7 @@ certificado e `LIVEKIT_URL`/`LIVEKIT_URL_AUTO`.
 	auto_https disable_redirects
 }
 
-https://localhost:8443, https://10.0.1.5:8443, https://100.113.4.54:8443, https://mi-9t-pro.tail4e495d.ts.net:8443 {
+https://localhost:8443, https://10.0.1.5:8443, https://100.113.4.54:8443, https://mi-9t-pro.<sua-tailnet>.ts.net:8443 {
 	tls /opt/caddy/certs/backspace.crt /opt/caddy/certs/backspace.key
 
 	handle /ca.crt {
@@ -227,7 +227,7 @@ https://localhost:8443, https://10.0.1.5:8443, https://100.113.4.54:8443, https:
 O certificado é emitido pela CA local do Caddy e inclui:
 
 ```
-DNS:localhost, DNS:mi-9t-pro.tail4e495d.ts.net,
+DNS:localhost, DNS:mi-9t-pro.<sua-tailnet>.ts.net,
 IP:127.0.0.1, IP:10.0.1.5, IP:100.113.4.54
 ```
 
@@ -240,7 +240,7 @@ Regenerar (validade de 365 dias):
 ```bash
 cd /opt/caddy/certs
 cat > ext.cnf <<'EOF'
-subjectAltName=DNS:localhost,DNS:mi-9t-pro.tail4e495d.ts.net,IP:127.0.0.1,IP:10.0.1.5,IP:100.113.4.54
+subjectAltName=DNS:localhost,DNS:mi-9t-pro.<sua-tailnet>.ts.net,IP:127.0.0.1,IP:10.0.1.5,IP:100.113.4.54
 extendedKeyUsage=serverAuth
 keyUsage=critical,digitalSignature,keyEncipherment
 basicConstraints=critical,CA:FALSE
@@ -319,8 +319,8 @@ Foi criado um nó Tailscale userspace separado, chamado `backspace`
 (`100.91.47.106`), dentro do Debian, e o `tailscale serve` publica:
 
 ```text
-https://backspace.tail4e495d.ts.net/          -> http://127.0.0.1:3000
-https://backspace.tail4e495d.ts.net/livekit   -> http://127.0.0.1:7880
+https://backspace.<sua-tailnet>.ts.net/          -> http://127.0.0.1:3000
+https://backspace.<sua-tailnet>.ts.net/livekit   -> http://127.0.0.1:7880
 ```
 
 O certificado é Let's Encrypt, então Chrome/Electron confiam sem instalar CA.
@@ -344,8 +344,8 @@ exige CA.
 curl http://127.0.0.1:3000/api/health
 curl -k https://10.0.1.5:8443/api/health
 curl -k https://100.113.4.54:8443/api/health
-curl -k --resolve mi-9t-pro.tail4e495d.ts.net:8443:10.0.1.5 \
-  https://mi-9t-pro.tail4e495d.ts.net:8443/api/health
+curl -k --resolve mi-9t-pro.<sua-tailnet>.ts.net:8443:10.0.1.5 \
+  https://mi-9t-pro.<sua-tailnet>.ts.net:8443/api/health
 
 # LiveKit REST + credenciais
 cd /opt/backspace/packages/server

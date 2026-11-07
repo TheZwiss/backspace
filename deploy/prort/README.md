@@ -7,7 +7,7 @@ video, screen share and the Electron client.
 The primary, zero-CA URL is the Tailscale Serve endpoint:
 
 ```
-https://backspace.tail4e495d.ts.net
+https://backspace.<sua-tailnet>.ts.net
 ```
 
 `/livekit` is proxied to LiveKit and `/` to the Backspace server. The Tailscale

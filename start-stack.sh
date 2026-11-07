@@ -78,10 +78,10 @@ for _ in $(seq 1 20); do
 done
 
 echo
-echo "Backspace:  https://backspace.tail4e495d.ts.net  (Tailscale, certificado válido)"
+echo "Backspace:  https://backspace.<sua-tailnet>.ts.net  (Tailscale, certificado válido)"
 echo "            https://10.0.1.5:8443  (LAN)"
 echo "            https://100.113.4.54:8443  (Tailscale IP)"
-echo "            https://mi-9t-pro.tail4e495d.ts.net:8443  (Tailscale MagicDNS)"
+echo "            https://mi-9t-pro.<sua-tailnet>.ts.net:8443  (Tailscale MagicDNS)"
 echo "LiveKit:    ws://127.0.0.1:7880  (UDP 7882 / TCP 7881)"
 echo "CA cert:    https://10.0.1.5:8443/ca.crt"
 echo
