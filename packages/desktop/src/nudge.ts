@@ -10,8 +10,24 @@ import type { NudgePresentation } from './nudgePresentation';
 let active = false;
 let lastPlayed = 0;
 
+/**
+ * True inside a Wayland desktop session, even when the app itself runs through
+ * XWayland: the X server only draws X11 clients, so a screen capture taken from
+ * inside the app comes back (mostly) black there. XDG_SESSION_TYPE is rewritten
+ * to x11 for the capture backend, hence WAYLAND_DISPLAY is the reliable signal.
+ */
+function isWaylandSession(): boolean {
+  return process.platform === 'linux' && (process.env.XDG_SESSION_TYPE === 'wayland' || !!process.env.WAYLAND_DISPLAY);
+}
+
 /** Capture before creating overlays, so the overlays never capture themselves. */
 export async function playNudge(sender = 'Alguém', avatar?: string, onOpen?: () => void, effect: NudgeEffect = 'shake', mode = 'full', presentation: NudgePresentation = {}): Promise<void> {
+  // The shake/pulse effect animates a screenshot of the desktop. Wayland offers no
+  // silent screenshot (the portal opens a picker, XWayland captures black), so the
+  // notification alone is shown there. Winks do not capture the screen.
+  if (mode !== 'notification' && !(mode === 'full' && isMsnWinkEffect(effect)) && isWaylandSession()) {
+    mode = 'notification';
+  }
   if (active || Date.now() - lastPlayed < 10_000) return;
   active = true;
   lastPlayed = Date.now();
@@ -36,10 +52,18 @@ export async function playNudge(sender = 'Alguém', avatar?: string, onOpen?: ()
     if (!displays.length) return;
     const primaryId = displays.some(d => d.id === screen.getPrimaryDisplay().id) ? screen.getPrimaryDisplay().id : displays[0]!.id;
     const knockVideo = effect === 'knock' && mode === 'full' ? getMsnKnockVideo() : null;
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: {
-      width: Math.max(...displays.map(d => Math.ceil(d.size.width * d.scaleFactor))),
-      height: Math.max(...displays.map(d => Math.ceil(d.size.height * d.scaleFactor))),
-    } });
+    let sources: Electron.DesktopCapturerSource[];
+    try {
+      sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: {
+        width: Math.max(...displays.map(d => Math.ceil(d.size.width * d.scaleFactor))),
+        height: Math.max(...displays.map(d => Math.ceil(d.size.height * d.scaleFactor))),
+      } });
+    } catch (error) {
+      // No screen capture (portal refused, no X server...): the notice still has to arrive.
+      console.warn('[Nudge] Screen capture unavailable, showing the notification only.', error);
+      if (!cancelled) await showNudgeToast(sender, avatar, onOpen, effect, true, presentation);
+      return;
+    }
     if (cancelled) return;
     await Promise.all(displays.map(async display => {
       const source = sources.find(s => s.display_id === String(display.id));
