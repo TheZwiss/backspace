@@ -11,6 +11,7 @@ import {
   isBootArmed,
   handleRendererReady,
   resetBootTimerStateForTest,
+  isServerErrorNavigation,
 } from './recovery';
 
 // Mock electron with isPackaged=true so the real arm path executes in all tests below.
@@ -414,5 +415,17 @@ describe('manual-download update state in the menus', () => {
     const ids = items.map((i) => i.id);
     expect(ids).toContain('restart-to-install');
     expect(ids).not.toContain('download-update');
+  });
+});
+
+describe('isServerErrorNavigation', () => {
+  it('flags proxy 5xx answers on web URLs', () => {
+    for (const code of [500, 502, 503, 504]) expect(isServerErrorNavigation('https://x.ts.net/', code)).toBe(true);
+  });
+  it('ignores healthy, client-error and file pages', () => {
+    expect(isServerErrorNavigation('https://x.ts.net/', 200)).toBe(false);
+    expect(isServerErrorNavigation('https://x.ts.net/', 404)).toBe(false);
+    expect(isServerErrorNavigation('file:///app/recovery.html', 0)).toBe(false);
+    expect(isServerErrorNavigation('file:///app/recovery.html', 502)).toBe(false);
   });
 });
