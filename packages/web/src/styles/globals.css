@@ -628,6 +628,39 @@
   box-shadow: inset 0 0 8px rgb(var(--accent-primary) / 0.6); animation: nudgeMiniPulse 1s ease-in-out infinite; animation-delay: -0.5s;
 }
 
+/* ── Voice messages ── */
+/* The recording bar replaces the composer row: it slides in from the mic's side. */
+@keyframes voiceBarIn {
+  from { opacity: 0; translate: 16px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+.voice-rec-enter { animation: voiceBarIn var(--motion-enter) var(--motion-ease); }
+
+/* The red "recording" dot breathes, with a ring that widens and fades. */
+@keyframes voiceRecRing {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+@keyframes voiceRecDot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+}
+.voice-rec-dot { animation: voiceRecDot 1.4s ease-in-out infinite; }
+.voice-rec-ring { animation: voiceRecRing 1.4s ease-out infinite; }
+
+/* One bar of the live spectrum or of a player's waveform. The recorder sets
+   `transform: scaleY()` from the microphone every frame; the transition only
+   smooths the fall. */
+.voice-bar { transform-origin: center; transition: transform 90ms linear; will-change: transform; }
+
+/* The send button arrives with a pop while recording. */
+@keyframes voiceSendPop {
+  0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); }
+}
+.voice-send-pop { animation: voiceSendPop 240ms var(--motion-ease) both; }
+
+/* Waveform bars of a played voice message fill from the left as it plays. */
+.voice-wave-bar { transition: background-color 120ms linear, transform 160ms var(--motion-ease); }
+
 /* A presence symbol changing shape (online, idle, dnd, offline). */
 @keyframes presenceSwap {
   from { opacity: 0; transform: scale(0.55); }
