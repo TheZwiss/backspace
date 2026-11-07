@@ -95,6 +95,16 @@
       "named_one": "{{names}} is typing",
       "named_other": "{{names}} are typing",
       "several": "Several people are typing"
+    },
+    "voice": {
+      "record": "Record a voice message",
+      "recording": "Recording voice message",
+      "cancel": "Cancel recording",
+      "send": "Send voice message",
+      "tooShort": "Hold the recording a little longer to send it.",
+      "denied": "Microphone access is blocked. Allow it for Backspace to record.",
+      "unavailable": "No microphone could be used to record.",
+      "limit": "Recording limit reached. Your voice message was sent."
     }
   },
   "menu": {
@@ -132,6 +142,13 @@
       "partialInstance": "{{username}}'s instance (limit: {{limit}})",
       "partialList": "File couldn't be cached on {{instances}}. They can still view it from yours.",
       "listPair": "{{first}} and {{second}}"
+    },
+    "voice": {
+      "label": "Voice message, {{duration}}",
+      "play": "Play voice message",
+      "pause": "Pause voice message",
+      "speed": "Playback speed {{speed}}",
+      "seek": "Position in the voice message"
     }
   },
   "gif": {

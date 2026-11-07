@@ -293,6 +293,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     if (group) group.push(r);
     else reactionGroups.set(r.emoji, [r]);
   }
+  // Emojis already on the message when it was first shown. A pill for any
+  // other emoji is a reaction that arrived while the message was on screen.
+  const [initialReactionEmojis] = useState(() => new Set(reactionGroups.keys()));
 
   // Auto-cancel delete confirmation after timeout
   const startDeleteConfirm = useCallback(() => {
@@ -767,6 +770,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     reactions={reactions}
                     origin={messageOrigin}
                     onToggle={() => toggleReaction(emoji)}
+                    entering={!initialReactionEmojis.has(emoji)}
                   />
                 ))}
               </div>
@@ -791,7 +795,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
       {/* Action buttons on hover */}
       {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
-        <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
+        <div data-side="top" className="motion-floating-enter absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
               {['👍', '❤️', '😂', '😮'].map(emoji => (

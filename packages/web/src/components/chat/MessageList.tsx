@@ -1227,9 +1227,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
       {(!isNearBottom || isDetached) && messages.length > 0 && (
         <button data-icon-motion="press"
           onClick={() => { void jumpToPresent(); }}
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-all animate-fade-in cursor-pointer"
+          className="group absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-colors motion-rise-in cursor-pointer"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="transition-transform duration-200 group-hover:translate-y-0.5">
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
           </svg>
           <span className="text-ui-label font-medium">{t('chat:list.jumpToPresent')}</span>

@@ -95,6 +95,16 @@
       "named_one": "{{names}} schreibt",
       "named_other": "{{names}} schreiben",
       "several": "Mehrere Personen schreiben"
+    },
+    "voice": {
+      "record": "Sprachnachricht aufnehmen",
+      "recording": "Sprachnachricht wird aufgenommen",
+      "cancel": "Aufnahme abbrechen",
+      "send": "Sprachnachricht senden",
+      "tooShort": "Nimm etwas länger auf, um sie zu senden.",
+      "denied": "Der Mikrofonzugriff ist blockiert. Erlaube ihn für Backspace, um aufzunehmen.",
+      "unavailable": "Es konnte kein Mikrofon zum Aufnehmen verwendet werden.",
+      "limit": "Aufnahmelimit erreicht. Deine Sprachnachricht wurde gesendet."
     }
   },
   "menu": {
@@ -132,6 +142,13 @@
       "partialInstance": "der Instanz von {{username}} (Limit: {{limit}})",
       "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Die Empfänger können sie weiterhin über deine Instanz ansehen.",
       "listPair": "{{first}} und {{second}}"
+    },
+    "voice": {
+      "label": "Sprachnachricht, {{duration}}",
+      "play": "Sprachnachricht abspielen",
+      "pause": "Sprachnachricht pausieren",
+      "speed": "Wiedergabegeschwindigkeit {{speed}}",
+      "seek": "Position in der Sprachnachricht"
     }
   },
   "gif": {

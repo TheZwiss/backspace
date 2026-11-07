@@ -498,6 +498,208 @@
   animation: fadeIn var(--motion-enter) var(--motion-ease);
 }
 
+/* ── State motion ──
+   Something changed and the interface acknowledges it once. Transform and
+   opacity only, one shot, never on what was already there at mount
+   (`useChangeSignal` decides when a change is live). */
+:root {
+  --motion-spring: cubic-bezier(0.3, 1.35, 0.5, 1);
+}
+
+/* An element that just arrived: an unread badge, a reaction someone added. */
+@keyframes motionPopIn {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.motion-pop-in { animation: motionPopIn 240ms var(--motion-ease) both; }
+
+/* An element that is already visible and grew: a count went up, a toggle turned on. */
+@keyframes motionBump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.motion-bump { animation: motionBump 260ms var(--motion-ease); }
+
+/* A number rolling to its new value, in the direction it moved. Transforms
+   need a box: give the element `inline-block` (or flex) yourself. */
+@keyframes motionCountUp {
+  from { opacity: 0; transform: translateY(55%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes motionCountDown {
+  from { opacity: 0; transform: translateY(-55%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.motion-count-up { animation: motionCountUp var(--motion-enter) var(--motion-ease); }
+.motion-count-down { animation: motionCountDown var(--motion-enter) var(--motion-ease); }
+
+/* The diagonal "off" stroke of a mute, deafen or camera icon (`StrikeLine`).
+   It draws from the top-left corner when the state turns off and retracts when
+   it turns back on. Hidden once retracted: a round cap would leave a dot. */
+.strike-line {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition: stroke-dashoffset var(--motion-enter) var(--motion-ease), opacity 0s linear var(--motion-enter);
+}
+.strike-line[data-active="true"] {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset var(--motion-enter) var(--motion-ease), opacity 0s;
+}
+
+/* A floating surface (tooltip) arrives from its anchor's side. `translate`
+   rather than `transform`, so it never fights a positioning transform. */
+@keyframes floatingEnter {
+  from { opacity: 0; translate: var(--floating-from-x, 0) var(--floating-from-y, 0); }
+  to { opacity: 1; translate: 0 0; }
+}
+.motion-floating-enter { animation: floatingEnter var(--motion-fast) var(--motion-ease); }
+.motion-floating-enter[data-side="top"] { --floating-from-y: 3px; }
+.motion-floating-enter[data-side="bottom"] { --floating-from-y: -3px; }
+.motion-floating-enter[data-side="left"] { --floating-from-x: 3px; }
+.motion-floating-enter[data-side="right"] { --floating-from-x: -3px; }
+
+/* A control that rises into view from below, like "Jump to present". Uses
+   `translate`, so it composes with a centring `transform`. */
+@keyframes riseIn {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.motion-rise-in { animation: riseIn var(--motion-enter) var(--motion-ease); }
+
+/* ── Attention-effect previews (NudgeEffectPreview) ──
+   A miniature screen with the real effect running on it. At rest every
+   animation is paused on a telling frame; the menu entry being hovered or
+   focused sets `data-active` and they run. */
+.nudge-preview { display: block; flex: none; width: 56px; height: 42px; }
+.nudge-mini {
+  position: relative; display: block; width: 100%; height: 100%; overflow: hidden;
+  border-radius: 6px; background: rgb(var(--bg-elevated)); border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.nudge-mini-content { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; }
+.nudge-mini-bar { height: 6px; width: 100%; border-radius: 2px; background: rgb(var(--accent-primary)); }
+.nudge-mini-line { display: block; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.42); }
+.nudge-mini *, .nudge-mini { animation-play-state: paused; }
+.nudge-preview[data-active="true"] .nudge-mini,
+.nudge-preview[data-active="true"] .nudge-mini * { animation-play-state: running; }
+
+/* Shake: the whole picture jitters, like the real effect's position table. */
+@keyframes nudgeMiniShake {
+  0%, 100% { transform: translate(0, 0); }
+  12% { transform: translate(-4px, 1px); } 25% { transform: translate(4px, -2px); }
+  37% { transform: translate(-3px, -2px); } 50% { transform: translate(4px, 2px); }
+  62% { transform: translate(-4px, 1px); } 75% { transform: translate(3px, -1px); }
+  87% { transform: translate(-2px, 1px); }
+}
+.nudge-mini[data-effect="shake"] .nudge-mini-content { animation: nudgeMiniShake 0.45s linear infinite; animation-delay: -0.055s; }
+
+/* Wave: columns of the picture ride a sine wave, so the lines ripple. */
+@keyframes nudgeMiniWave {
+  0%, 100% { transform: translateY(0); } 25% { transform: translateY(-3px); } 75% { transform: translateY(3px); }
+}
+.nudge-mini-wave-column { position: absolute; top: 0; bottom: 0; overflow: hidden; animation: nudgeMiniWave 0.9s ease-in-out infinite; }
+.nudge-mini-wave-content { position: absolute; top: 0; bottom: 0; }
+
+/* Jelly: the picture stretches, wobbles and settles. */
+@keyframes nudgeMiniJelly {
+  0%, 100% { transform: scale(1) skewX(0deg); }
+  20% { transform: scale(1.1, 0.9) skewX(4deg); } 40% { transform: scale(0.93, 1.07) skewX(-3deg); }
+  60% { transform: scale(1.05, 0.95) skewX(2deg); } 80% { transform: scale(0.98, 1.02) skewX(-1deg); }
+}
+.nudge-mini[data-effect="jelly"] .nudge-mini-content { animation: nudgeMiniJelly 0.8s ease-in-out infinite; animation-delay: -0.17s; transform-origin: 50% 100%; }
+
+/* Confetti: pieces burst from the top right corner and fall. */
+@keyframes nudgeMiniConfetti {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translate(var(--confetti-x), calc(var(--confetti-y) + 26px)) rotate(300deg); opacity: 0; }
+}
+.nudge-mini-confetti { position: absolute; right: 6px; top: 4px; width: 4px; height: 8px; border-radius: 1px; animation: nudgeMiniConfetti 1.2s ease-out infinite; }
+
+/* Pulse: a coloured border breathes around the screen. */
+@keyframes nudgeMiniPulse {
+  0%, 100% { opacity: 0.15; } 50% { opacity: 1; }
+}
+.nudge-mini[data-effect="pulse"]::after {
+  content: ''; position: absolute; inset: 0; border-radius: 5px; border: 2px solid rgb(var(--accent-primary));
+  box-shadow: inset 0 0 8px rgb(var(--accent-primary) / 0.6); animation: nudgeMiniPulse 1s ease-in-out infinite; animation-delay: -0.5s;
+}
+
+/* ── Voice messages ── */
+/* The recording bar replaces the composer row: it slides in from the mic's side. */
+@keyframes voiceBarIn {
+  from { opacity: 0; translate: 16px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+.voice-rec-enter { animation: voiceBarIn var(--motion-enter) var(--motion-ease); }
+
+/* The red "recording" dot breathes, with a ring that widens and fades. */
+@keyframes voiceRecRing {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+@keyframes voiceRecDot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+}
+.voice-rec-dot { animation: voiceRecDot 1.4s ease-in-out infinite; }
+.voice-rec-ring { animation: voiceRecRing 1.4s ease-out infinite; }
+
+/* One bar of the live spectrum or of a player's waveform. The recorder sets
+   `transform: scaleY()` from the microphone every frame; the transition only
+   smooths the fall. */
+.voice-bar { transform-origin: center; transition: transform 90ms linear; will-change: transform; }
+
+/* The send button arrives with a pop while recording. */
+@keyframes voiceSendPop {
+  0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); }
+}
+.voice-send-pop { animation: voiceSendPop 240ms var(--motion-ease) both; }
+
+/* Waveform bars of a played voice message fill from the left as it plays. */
+.voice-wave-bar { transition: background-color 120ms linear, transform 160ms var(--motion-ease); }
+
+/* A presence symbol changing shape (online, idle, dnd, offline). */
+@keyframes presenceSwap {
+  from { opacity: 0; transform: scale(0.55); }
+  to { opacity: 1; transform: scale(1); }
+}
+.motion-presence-swap { transform-box: fill-box; transform-origin: center; animation: presenceSwap var(--motion-enter) var(--motion-spring); }
+
+/* The check mark of a confirmed copy, drawn stroke-first (`CopiedCheck`). */
+@keyframes checkDraw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.check-draw { stroke-dasharray: 1 2; animation: checkDraw 260ms var(--motion-ease) both; }
+
+/* The bookmark mark fills in rather than switching. */
+.bookmark-fill { transition: fill-opacity var(--motion-enter) var(--motion-ease); }
+
+/* Typing dots: a slow wave, not a bounce. */
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.4; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+.typing-dot { animation: typingDot 1.2s ease-in-out infinite; }
+
+/* The ring around a participant's avatar while they speak. Always mounted so
+   it fades with the voice instead of blinking on every syllable. */
+@keyframes speakingBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.speaking-halo {
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease-out;
+}
+.speaking-halo[data-active="true"] {
+  opacity: 1;
+  animation: speakingBreathe 1.6s ease-in-out infinite;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }

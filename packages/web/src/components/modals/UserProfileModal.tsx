@@ -1,4 +1,5 @@
 import { openUserFriendshipMenu } from '../layout/memberMenu/memberSocialActions';
+import { ProfileThoughtBubble } from '../ui/ProfileThoughtBubble';
 import { getFriendshipStatus, type FriendshipStatus } from '../../utils/friendshipStatus';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,7 +22,7 @@ import { normalizeUserAssets } from '../../utils/assetUrls';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { presenceLabel } from '../../i18n/presence';
-import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from '../ui/ProfileRoles';
@@ -276,6 +277,8 @@ export function UserProfileModal() {
 
         {/* Header (avatar + name) */}
         <div className="px-5 flex-shrink-0 relative">
+          {/* The 96px avatar starts at x=20 and rises 52px over the banner. */}
+          <ProfileThoughtBubble text={user.customStatus} avatarLeft={20} avatarTop={-52} avatarSize={96} />
           <Avatar
             src={user.avatar}
             animate
@@ -294,11 +297,6 @@ export function UserProfileModal() {
             <div className="text-ui-body text-txt-tertiary mt-0.5">
               <Username username={user.username} showAt className="text-ui-body text-txt-tertiary" />
             </div>
-            {user.customStatus && (
-              <div className="text-ui-label text-txt-secondary italic mt-1">
-                {replaceEmojiShortcodes(user.customStatus)}
-              </div>
-            )}
           </div>
         </div>
 

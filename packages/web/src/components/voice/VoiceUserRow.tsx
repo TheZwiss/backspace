@@ -62,7 +62,7 @@ export function VoiceUserRow({
         size={avatarSize}
         userId={userId}
         avatarColor={avatarColor}
-        className={isSoundboardPlaying ? 'rounded-full ring-2 ring-blue-500' : isSpeaking ? 'rounded-full ring-2 ring-status-online' : ''}
+        className={`rounded-full ring-2 transition-shadow duration-150 ${isSoundboardPlaying ? 'ring-blue-500' : isSpeaking ? 'ring-status-online' : 'ring-transparent'}`}
       />
       <span className="text-ui-label text-txt-secondary truncate flex-1 min-w-0">
         {displayName}

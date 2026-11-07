@@ -92,6 +92,16 @@
     "typing": {
       "named_other": "{{names}} 正在输入",
       "several": "多人正在输入"
+    },
+    "voice": {
+      "record": "录制语音消息",
+      "recording": "正在录制语音消息",
+      "cancel": "取消录制",
+      "send": "发送语音消息",
+      "tooShort": "再录久一点才能发送。",
+      "denied": "麦克风权限被阻止。请允许 Backspace 使用麦克风以录音。",
+      "unavailable": "没有可用于录音的麦克风。",
+      "limit": "已达到录制上限，你的语音消息已发送。"
     }
   },
   "menu": {
@@ -129,6 +139,13 @@
       "partialInstance": "{{username}} 的实例（限制：{{limit}}）",
       "partialList": "文件无法在 {{instances}} 上缓存。他们仍可从您的实例查看。",
       "listPair": "{{first}} 和 {{second}}"
+    },
+    "voice": {
+      "label": "语音消息，{{duration}}",
+      "play": "播放语音消息",
+      "pause": "暂停语音消息",
+      "speed": "播放速度 {{speed}}",
+      "seek": "语音消息中的位置"
     }
   },
   "gif": {

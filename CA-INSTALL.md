@@ -82,9 +82,9 @@ sudo security add-trusted-cert -d -r trustRoot \
 ## Teste de portas no Windows (PowerShell)
 
 ```powershell
-Test-NetConnection mi-9t-pro.tail4e495d.ts.net -Port 5349
-Test-NetConnection mi-9t-pro.tail4e495d.ts.net -Port 3479
-Test-NetConnection mi-9t-pro.tail4e495d.ts.net -Port 8443
+Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 5349
+Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 3479
+Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 8443
 ```
 
 Os três devem mostrar `TcpTestSucceeded : True`.

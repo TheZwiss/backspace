@@ -583,6 +583,7 @@
       "statusMenu": "Статус",
       "customStatus": "Свой статус",
       "customStatusPlaceholder": "Чем вы занимаетесь?",
+      "customStatusEmoji": "Добавить эмодзи",
       "editProfile": "Редактировать профиль",
       "statusUpdateFailed": "Не удалось обновить статус"
     },

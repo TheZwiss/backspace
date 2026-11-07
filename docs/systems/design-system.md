@@ -318,6 +318,40 @@ Any new card list uses this class rather than its own template.
 ### Skeleton Loading
 `.skeleton`, `.skeleton-circle`, `.skeleton-bar`, `.skeleton-block`
 
+### State motion
+
+Click feedback on icons is `data-icon-motion` (`packages/desktop/resources/icon-motion.json`, installed by `platform/iconMotion.ts`). State motion is the other half: a value changed and the interface acknowledges it once. Rules:
+
+- **Live changes only.** Nothing moves for the state a component mounted with, so opening a channel, a member list or the app does not set the screen moving. `useChangeSignal(value)` (`hooks/useChangeSignal.ts`) counts changes after mount and reports their direction; key an element on its `generation` to replay a one-shot animation.
+- **Transform, opacity and SVG stroke only.** No layout animation (the message list's scroll model depends on it, see message-list.md).
+- **Short and small.** `--motion-fast` 120ms, `--motion-enter` 180ms, `--motion-spring` for things that travel (switch thumb, presence symbol). Scale changes stay under ±20%.
+- **Reduced motion** is covered by the global `prefers-reduced-motion` rule in `globals.css`; loops end on their resting frame.
+
+| Class / component | What it means | Used by |
+|---|---|---|
+| `.motion-pop-in` | An element arrived | `UnreadCountBadge` on mount, `ReactionPill` with `entering` (an emoji that was not on the message when it was first shown, tracked in `Message.tsx`) |
+| `.motion-bump` | A visible element grew | `UnreadCountBadge` when the count rises, the reaction emoji when the viewer's own reaction lands |
+| `.motion-count-up` / `.motion-count-down` (`countChangeClass`) | A number rolled to a new value | Reaction counts |
+| `.motion-floating-enter` + `data-side` | A floating surface arrives from its anchor's side (uses `translate`, so it never fights a positioning transform) | `Tooltip`, the reaction tooltip, the message hover toolbar |
+| `.motion-rise-in` | A control rises into view from below | "Jump to present" |
+| `.motion-presence-swap` | A presence symbol changed shape | `PresenceIndicator` |
+| `StrikeLine` (`.strike-line`) | The "off" diagonal of mute, deafen and camera icons, always mounted: it draws in when the state turns off and retracts when it turns on | Voice control bar, user panel, desktop voice controls, mobile join sheet |
+| `CopiedCheck` (`.check-draw`) | The check of a confirmed copy, drawn stroke first | Invite link, update commands |
+| `.bookmark-fill` | The bookmark fill fades (`fill-opacity`) instead of switching | `BookmarkIcon` |
+| `.speaking-halo` | The speaking ring around a call tile's avatar, always mounted so it fades with the voice instead of blinking per syllable | `VoiceUser`; `VoiceUserRow` uses a `ring-transparent` ring with `transition-shadow` for the same reason |
+| `.typing-dot` | The typing indicator's slow wave | `TypingIndicator` |
+
+### Attention-effect previews
+
+The DM "Chamar atenção" menu (`NudgeButton`) shows what each effect does on the friend's screen instead of an emoji (`chat/NudgeEffectPreview.tsx`, styles in `globals.css`, "Attention-effect previews"):
+
+- **shake, wave, jelly, confetti, pulse** are a 56×42 miniature screen with the real effect running on it (the same jitter table, column-wise sine wave, squash and skew, falling pieces and glowing border as `desktop/src/nudgeEffects.ts`). Every animation is paused on a telling frame and runs while the entry is hovered or focused (`data-active`).
+- **knock and the 15 MSN winks** show frames of the actual clip: `public/nudge-previews/<name>.png` at rest, `<name>.webp` (about 2 s, 10 fps, alpha kept) while active. They are cut from `packages/desktop/resources/nudge-msn/*.webm` with ffmpeg: cropped to the union of the clip's opaque pixels, fitted into 104×78, still taken at the frame with the most opaque pixels. Re-cut them whenever a clip changes; `NudgeEffectPreview.test.tsx` fails if an effect has no still or animation. Images are not precached by the service worker, so the animations load on first hover.
+
+A new effect needs a preview in both places: a miniature in `NudgeEffectPreview`, or a still and an animation in `public/nudge-previews`.
+
+The `Toggle` thumb springs across and stretches toward its travel while pressed (`group-active`), so the switch answers the press before the click lands.
+
 ---
 
 ## Utility Classes

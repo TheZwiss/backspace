@@ -575,6 +575,7 @@
       "statusMenu": "Status",
       "customStatus": "Status personalizado",
       "customStatusPlaceholder": "O que você está fazendo?",
+      "customStatusEmoji": "Adicionar emoji",
       "editProfile": "Editar perfil",
       "statusUpdateFailed": "Não foi possível atualizar o status"
     },

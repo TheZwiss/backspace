@@ -1,4 +1,5 @@
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
+import { StrikeLine } from '../ui/StrikeLine';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
@@ -593,20 +594,11 @@ export function MobileVoiceJoinSheet({
             className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary"
             aria-label={preMuted ? t('voice:joinSheet.unmuteMicrophone') : t('voice:joinSheet.muteMicrophone')}
           >
-            {preMuted ? (
-              /* Mic off icon */
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            ) : (
-              /* Mic on icon */
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-txt-primary">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              </svg>
-            )}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className={`transition-colors ${preMuted ? 'text-txt-danger' : 'text-txt-primary'}`}>
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+              <StrikeLine active={preMuted} />
+            </svg>
           </button>
 
           {/* Join Voice button */}

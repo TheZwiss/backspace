@@ -49,3 +49,41 @@ What each patch fixes:
   PROXY protocol support for `tailscale serve`.
 - `roommanager.go`: advertises TURN/TCP at the configured port instead of the
   upstream hard-coded 443.
+
+## Rebuilding automatically: `update-livekit.sh`
+
+Instead of applying the patches by hand, run (as root inside the Debian
+container; copy this directory to e.g. `/opt/livekit/patch-kit/` first):
+
+```bash
+./update-livekit.sh --check              # is a newer upstream release out?
+./update-livekit.sh --build [VERSION]    # download, patch, compile, smoke-test. Installs nothing.
+./update-livekit.sh --apply [VERSION]    # --build, then swap the binary and restart LiveKit
+./update-livekit.sh --rollback           # restore the previous binary
+```
+
+What it does and guarantees:
+
+- Reads the pinned `anet` and `livekit/protocol` versions from the new release's
+  `go.mod`, so this file's version numbers no longer need editing per release.
+- Dry-runs every patch before changing anything. A patch that no longer applies
+  stops the run with its name; nothing live is touched. That is the signal to
+  rebase that one patch.
+- Uses a private Go module cache (`<LK_DIR>/build/gomodcache`). Patching modules
+  inside the shared cache corrupts it (`go mod verify` then reports "dir has been
+  modified") and later builds would start from an already-patched file.
+- Downloads the exact Go version the release needs into `<LK_DIR>/toolchain`,
+  with a completion marker so an interrupted download is redone, not reused.
+- Starts the candidate on side ports (17880-17882) and requires it to answer
+  before it can be installed. The live server is untouched until `--apply`.
+- `--apply` keeps the old binary as `<LK_DIR>/livekit-server.bin.prev`, restarts
+  only LiveKit, waits for it to answer on :7880, and restores the old binary by
+  itself if it does not. Calls in progress drop for a few seconds.
+
+Run it from an interactive session (or `tmux`). PRoot runs with `--kill-on-exit`,
+so a build started with `nohup` over a closing SSH session is killed with it.
+A build takes about 5 minutes on a Redmi 9T-class phone.
+
+Validated by rebuilding 1.13.11 (the version in production): the result is
+75,072,936 bytes against 75,072,880 for the hand-built binary, and it passes the
+smoke test.

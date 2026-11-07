@@ -63,10 +63,18 @@ start_server() {
   echo "backspace: starting"
 }
 
+# Auto-updater loop (deploy/prort/updater). Runs from /opt/backspace-update so a
+# git merge never rewrites the script it is executing.
+start_updater() {
+  [ -x /opt/backspace-update/auto-update.sh ] || return 0
+  /opt/backspace-update/auto-update.sh --ensure
+}
+
 start_livekit
 start_caddy
 start_server
 start_tailscale
+start_updater
 
 for _ in $(seq 1 40); do
   curl -fsS --max-time 2 http://127.0.0.1:3000/api/health >/dev/null 2>&1 && break
@@ -78,10 +86,10 @@ for _ in $(seq 1 20); do
 done
 
 echo
-echo "Backspace:  https://backspace.tail4e495d.ts.net  (Tailscale, certificado válido)"
+echo "Backspace:  https://backspace.<sua-tailnet>.ts.net  (Tailscale, certificado válido)"
 echo "            https://10.0.1.5:8443  (LAN)"
 echo "            https://100.113.4.54:8443  (Tailscale IP)"
-echo "            https://mi-9t-pro.tail4e495d.ts.net:8443  (Tailscale MagicDNS)"
+echo "            https://mi-9t-pro.<sua-tailnet>.ts.net:8443  (Tailscale MagicDNS)"
 echo "LiveKit:    ws://127.0.0.1:7880  (UDP 7882 / TCP 7881)"
 echo "CA cert:    https://10.0.1.5:8443/ca.crt"
 echo

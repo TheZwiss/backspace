@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
+import type { SettingsSectionIconName } from './SettingsSectionIcon';
 
 export interface SettingsSection {
   id: string;
   label: string;
+  /** The icon in front of the section's link in the settings sidebar. */
+  icon?: SettingsSectionIconName;
   /** A count worth showing, e.g. pending federation approvals. */
   badgeCount?: number;
   /** A boolean "something is waiting here", e.g. an available instance update. */
