@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./nudgeToast', () => ({ showNudgeToast: vi.fn() }));
+vi.mock('./desktopScreenshot', () => ({ captureDisplayFrames: vi.fn() }));
 
 // Ensure Wayland is not detected in tests
 vi.stubGlobal('process', { ...process, platform: 'linux', env: { ...process.env, XDG_SESSION_TYPE: '', WAYLAND_DISPLAY: '' } });
@@ -19,7 +20,9 @@ vi.mock('electron', () => ({
     setAlwaysOnTop = vi.fn();
     setFullScreen = vi.fn();
     setOpacity = vi.fn();
-    setBounds = vi.fn();
+    bounds: unknown = {};
+    setBounds = vi.fn((b: unknown) => { this.bounds = b; });
+    getBounds() { return this.bounds; }
     moveTop = vi.fn();
     showInactive = vi.fn();
     loadURL = vi.fn().mockResolvedValue(undefined);
@@ -46,11 +49,12 @@ describe('desktop nudge overlays', () => {
     expect(mocks.getSources).toHaveBeenCalledWith(expect.objectContaining({ thumbnailSize: { width: 3840, height: 2160 } }));
     expect(mocks.windows).toHaveLength(2);
     mocks.windows.forEach((w, i) => {
-      expect(w.options).toMatchObject({ ...mocks.displays[i]!.bounds, focusable: false, show: false, opacity: 0, backgroundColor: '#000000' });
+      expect(w.options).toMatchObject({ ...mocks.displays[i]!.bounds, focusable: false, show: false, opacity: 0, transparent: true, backgroundColor: '#00000000' });
       expect(w.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
       expect(w.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver');
       expect(w.setBounds).toHaveBeenCalledWith(mocks.displays[i]!.bounds);
-      expect(w.setFullScreen).toHaveBeenCalledWith(true);
+      expect(w.setFullScreen).not.toHaveBeenCalled();
+      expect(w.setBounds).toHaveBeenLastCalledWith(mocks.displays[i]!.bounds);
       expect(w.showInactive).toHaveBeenCalledOnce();
       expect(w.webContents.executeJavaScript.mock.calls[0][0]).toContain('.decode()');
       expect(w.setOpacity).toHaveBeenCalledWith(1);
@@ -64,10 +68,12 @@ describe('desktop nudge overlays', () => {
     await playNudge();
     expect(mocks.windows).toHaveLength(2);
   });
-  it('does not display a partial effect if a monitor cannot be captured', async () => {
+  it('does not display a partial effect if a monitor cannot be captured, and shows the notification instead', async () => {
     mocks.getSources.mockResolvedValue([]);
+    const { showNudgeToast } = await import('./nudgeToast');
     const { playNudge } = await import('./nudge');
-    await expect(playNudge()).rejects.toThrow('Display capture unavailable');
+    await playNudge('Ana');
+    expect(showNudgeToast).toHaveBeenCalledWith('Ana', undefined, undefined, 'shake', true, {});
     expect(mocks.windows).toHaveLength(0);
   });
   it('falls back to the notification when screen capture itself fails', async () => {
@@ -78,16 +84,34 @@ describe('desktop nudge overlays', () => {
     expect(showNudgeToast).toHaveBeenCalledWith('Ana', undefined, undefined, 'shake', true, {});
     expect(mocks.windows).toHaveLength(0);
   });
-  it('shows only the notification inside a Wayland session, without capturing the screen', async () => {
+  it('animates a silent screenshot instead of desktopCapturer inside a Wayland session', async () => {
     const env = process.env as Record<string, string | undefined>;
+    env.WAYLAND_DISPLAY = 'wayland-1';
     mocks.getSources.mockClear();
+    try {
+      const { captureDisplayFrames } = await import('./desktopScreenshot');
+      vi.mocked(captureDisplayFrames).mockResolvedValue(new Map(mocks.displays.map(d => [d.id, 'data:image/png;base64,BB=='])));
+      const { playNudge } = await import('./nudge');
+      await playNudge('Ana');
+      expect(captureDisplayFrames).toHaveBeenCalledOnce();
+      expect(mocks.getSources).not.toHaveBeenCalled();
+      expect(mocks.windows).toHaveLength(2);
+    } finally {
+      env.WAYLAND_DISPLAY = '';
+    }
+  });
+
+  it('shows the notification when the Wayland screenshot is unavailable', async () => {
+    const env = process.env as Record<string, string | undefined>;
     env.WAYLAND_DISPLAY = 'wayland-1';
     try {
+      const { captureDisplayFrames } = await import('./desktopScreenshot');
+      vi.mocked(captureDisplayFrames).mockRejectedValue(new Error('spawn spectacle ENOENT'));
       const { showNudgeToast } = await import('./nudgeToast');
       const { playNudge } = await import('./nudge');
       await playNudge('Ana');
       expect(showNudgeToast).toHaveBeenCalledWith('Ana', undefined, undefined, 'shake', true, {});
-      expect(mocks.getSources).not.toHaveBeenCalled();
+      expect(mocks.windows).toHaveLength(0);
     } finally {
       env.WAYLAND_DISPLAY = '';
     }
