@@ -21,6 +21,9 @@ files:
   - "!dist/text-voice/ort-wasm-simd-threaded.mjs"
   - "!dist/text-voice/ort-wasm-simd-threaded.wasm"
   - resources/**/*
+  # main.ts loads the window and dock icon from build/icon.png; without this the
+  # packaged app has no icon of its own and Linux shells show a blank one.
+  - build/icon.png
   # Exclude host-compiled native module artifacts from the asar.
   # electron-rebuild (postinstall) compiles uiohook-napi for the build machine,
   # creating build/Release/*.node. node-gyp-build checks build/ BEFORE prebuilds/,
