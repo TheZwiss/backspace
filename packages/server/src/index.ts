@@ -218,7 +218,12 @@ async function main(): Promise<void> {
     await app.register(fastifyStatic, {
       root: webDistPath,
       prefix: '/',
-      wildcard: false,
+      // Resolve files per request, not from a list taken at boot. With
+      // wildcard:false a route exists only for files present at startup, so a
+      // web bundle swapped in by the auto-updater without a restart had its new
+      // hashed chunks answered with index.html: the main module failed to load,
+      // React never mounted and the desktop app reported render-stalled.
+      wildcard: true,
     });
   }
 
@@ -293,6 +298,11 @@ async function main(): Promise<void> {
   if (fs.existsSync(webDistPath)) {
     app.setNotFoundHandler((request, reply) => {
       if (request.url.startsWith('/api/') || request.url.startsWith('/ws')) {
+        return reply.code(404).send({ error: 'Not found', statusCode: 404 });
+      }
+      // A missing built asset must be a real 404. Answering it with index.html
+      // turns a stale chunk reference into a module that fails to parse.
+      if (/^\/assets\//.test(request.url)) {
         return reply.code(404).send({ error: 'Not found', statusCode: 404 });
       }
       return reply.sendFile('index.html');
