@@ -208,7 +208,7 @@ export function UserSettingsModal() {
   const renderNav = (layout: 'desktop' | 'mobile'): ReactNode =>
     GROUP_ORDER.filter((group) => group !== 'admin' || isAdmin).map((group, index) => (
       <Fragment key={group}>
-        {index > 0 && <div className="border-t border-white/[0.04] my-2 mx-2" />}
+        {index > 0 && <div className="border-t border-wash/[0.04] my-2 mx-2" />}
         <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
         {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
           entry.id === 'instance' && layout === 'desktop' ? (
@@ -282,7 +282,7 @@ export function UserSettingsModal() {
               {renderNav('desktop')}
             </div>
 
-            <div className="border-t border-white/[0.04] my-2 mx-2 shrink-0" />
+            <div className="border-t border-wash/[0.04] my-2 mx-2 shrink-0" />
             <button data-icon-motion="press"
               onClick={handleLogout}
               className="group w-full shrink-0 text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
@@ -320,7 +320,7 @@ export function UserSettingsModal() {
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               {renderNav('mobile')}
 
-              <div className="border-t border-white/[0.04] my-2 mx-2" />
+              <div className="border-t border-wash/[0.04] my-2 mx-2" />
               <button data-icon-motion="press"
                 onClick={handleLogout}
                 className="group w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"

@@ -22,7 +22,7 @@ function NudgeMenuItem({ effect, onPick }: { effect: NudgeEffect; onPick: () => 
   const [active, setActive] = useState(false);
   return (
     <button data-icon-motion="none" role="menuitem" type="button"
-      className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-white/[0.06] focus:bg-white/[0.06] focus:outline-none"
+      className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-wash/[0.06] focus:bg-wash/[0.06] focus:outline-none"
       onMouseEnter={() => setActive(true)} onMouseLeave={() => setActive(false)}
       onFocus={() => setActive(true)} onBlur={() => setActive(false)}
       onClick={onPick}>

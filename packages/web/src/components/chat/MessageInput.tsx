@@ -838,7 +838,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       )}
 
       {chatReplyTo && (
-        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
+        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-wash/[0.06]">
           <div className="flex items-center gap-1 text-ui-body text-txt-message truncate">
             <span className="opacity-60">{t('chat:composer.replyingTo')}</span>
             <span className="font-bold">

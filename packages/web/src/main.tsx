@@ -7,11 +7,13 @@ import { startPendingMessageOrchestrator } from './stores/pendingMessageRehydrat
 import i18n, { initI18n } from './i18n';
 import './styles/globals.css';
 import { initializeInterfaceScale } from './platform/interfaceScale';
+import { initializeTheme } from './platform/theme';
 import { waitForEmojiShortcodeNames } from './utils/emojiShortcodes';
 
 const stopInterfaceScale = initializeInterfaceScale();
+const stopTheme = initializeTheme();
 const stopIconMotion = installIconClickMotion();
-if (import.meta.hot) import.meta.hot.dispose(() => { stopIconMotion(); stopInterfaceScale(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { stopIconMotion(); stopInterfaceScale(); stopTheme(); });
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },

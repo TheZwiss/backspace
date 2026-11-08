@@ -92,6 +92,40 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 ---
 
+## Themes
+
+Appearance settings include a device-local theme: `aether-drift` (default), `light`, `oled`
+or `anime` ("Sakura Night": indigo-violet surfaces, sakura-pink primary `219 61 135`, rosy glass edge). `themeStore` persists the id under `backspace-theme` (unknown values fall
+back to the default); `platform/theme.ts` mirrors it to `<html data-theme>` and
+the `theme-color` meta before React mounts, so login and portals are covered.
+`:root[data-theme="oled"]` in `globals.css` overrides only surface, border,
+text-neutral, interactive and glass tokens: every structural surface is true
+black (`0 0 0`), `--bg-elevated` is `20 20 20`, `--bg-input` is `12 12 12`, and
+separation comes from hairline borders. Accents and status colours are shared.
+`anime` also changes elements, not just colours, all gated on `theme === 'anime'`
+(or `:root[data-theme="anime"]`): the `Mascot` gets cat ears, an ahoge, star
+catchlights, cheek marks, twinkling sparkles and the sakura palette
+(`ANIME_MASCOT_PALETTES`, drawn by `MascotAnimeLayer.tsx`; the animation hook is
+untouched because the layer only adds elements); the sidebar home tile shows
+`SakuraMark` instead of the Backspace glyph (the brand-flat rule covers the app
+mark, not this per-theme tile); `SakuraPetals` (mounted in `App`) drops 11 CSS
+petals on a `pointer-events: none` layer at z-index 50; controls use a 12px
+radius, primary buttons glow, scrollbars and modal edges turn pink. Animated
+parts (`.sakura-petals`, `.anime-twinkle`) are disabled under
+`prefers-reduced-motion`. `light` is warm paper (`--bg-chat 252 251 254`, ink text `24 22 36`) with the pastel
+accents re-pitched to mid-tones so they read as text and fills; the primary keeps
+its value. Neutral translucent tints must use the `wash` colour token
+(`bg-wash/5`, `border-wash/[0.06]`, `--wash`): it is white on the dark themes
+and ink on `light`, so **never write `bg-white/N` / `border-white/N` for a
+hover, inset or divider tint** (white stays correct only over photos and video,
+as in `VoiceUser`). Likewise never hardcode a dark hex as a surface or text colour: use
+`surface-*` / `txt-*` tokens (`text-white` is fine only on a coloured fill).
+Per-theme tweaks to component-layer classes (`.glass*`, the pill) live in the
+unlayered block at the end of `globals.css`, because `@layer components` beats
+`@layer base`. The emoji picker and the markdown code theme (One Light) follow
+the theme through `useThemeStore`. New themes are one id in `THEMES`, one CSS block, one swatch and the
+`settings:theme.options.<id>` strings.
+
 ## Color Palette
 
 ### Matte Surfaces (CSS vars, RGB channels)

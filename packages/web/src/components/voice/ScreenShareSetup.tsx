@@ -617,7 +617,7 @@ export function ScreenShareSetup() {
         {/* Toolbar — Screens / Windows plus window search; only where the app lists sources */}
         {showGrid && (
           <div className="flex items-center justify-between gap-3 px-6 pb-3 flex-shrink-0">
-            <div className="flex items-center gap-1 p-1 rounded-full bg-white/[0.04] ring-1 ring-white/[0.06]">
+            <div className="flex items-center gap-1 p-1 rounded-full bg-wash/[0.04] ring-1 ring-wash/[0.06]">
               <TabButton
                 active={activeTab === 'screens'}
                 onClick={() => setActiveTab('screens')}
@@ -651,7 +651,7 @@ export function ScreenShareSetup() {
             {showGrid ? (
               <>
                 {/* Source grid */}
-                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin rounded-xl bg-black/20 ring-1 ring-white/[0.06] p-3">
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin rounded-xl bg-black/20 ring-1 ring-wash/[0.06] p-3">
                   {loadingSources && sources.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-txt-tertiary text-sm">
                       {t('voice:screenPicker.loadingSources')}
@@ -680,7 +680,7 @@ export function ScreenShareSetup() {
                           <button data-icon-motion="press"
                             onClick={() => setSourcesNonce((n) => n + 1)}
                             disabled={loadingSources}
-                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
+                            className="px-4 py-2 rounded-full glass text-txt-primary hover:bg-wash/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                           >
                             {t('voice:screenPicker.retrySources')}
                           </button>
@@ -707,7 +707,7 @@ export function ScreenShareSetup() {
                 <div className={`flex-shrink-0 overflow-hidden transition-all duration-300 ${staged ? 'max-h-40 mt-3 opacity-100' : 'max-h-0 mt-0 opacity-0'}`}>
                   <div className="flex items-center gap-4 rounded-xl glass px-3 py-3">
                     <div className="w-44 flex-shrink-0">
-                      <div className="relative rounded-lg overflow-hidden bg-black/60 aspect-video ring-1 ring-white/[0.08]">
+                      <div className="relative rounded-lg overflow-hidden bg-black/60 aspect-video ring-1 ring-wash/[0.08]">
                         <video ref={previewRef} autoPlay muted playsInline className="w-full h-full object-contain" />
                       </div>
                     </div>
@@ -725,7 +725,7 @@ export function ScreenShareSetup() {
               </>
             ) : (
               /* Browser, system picker, or older desktop before its prompt: the stage */
-              <div className="relative flex-1 min-h-0 rounded-xl overflow-hidden bg-surface-base ring-1 ring-white/[0.06]">
+              <div className="relative flex-1 min-h-0 rounded-xl overflow-hidden bg-surface-base ring-1 ring-wash/[0.06]">
                 {/* Ambient glow so the empty stage reads as a screen, not a form field */}
                 <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_50%_40%,rgba(255,255,255,0.05),transparent_60%)]" />
                 <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_50%_110%,rgba(140,130,255,0.12),transparent_55%)]" />
@@ -749,7 +749,7 @@ export function ScreenShareSetup() {
                       <button data-icon-motion="press"
                         onClick={stageNow}
                         disabled={staging}
-                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-white/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
+                        className="flex-shrink-0 px-3 py-1.5 rounded-full glass text-txt-primary hover:bg-wash/[0.08] text-ui-label font-medium transition-colors disabled:opacity-40"
                       >
                         {t('voice:screenPicker.chooseAgain')}
                       </button>
@@ -858,8 +858,8 @@ export function ScreenShareSetup() {
 
               className={`flex items-center gap-2 pl-3 pr-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 settingsOpen
-                  ? 'bg-white/[0.1] text-txt-primary'
-                  : 'text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06]'
+                  ? 'bg-wash/[0.1] text-txt-primary'
+                  : 'text-txt-secondary hover:text-txt-primary hover:bg-wash/[0.06]'
               }`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
@@ -867,7 +867,7 @@ export function ScreenShareSetup() {
               </svg>
               <span className="hidden desktop:inline">{t('voice:streamSettings.title')}</span>
             </button></Tooltip>
-            <div className="w-px h-5 bg-white/10 mx-1" />
+            <div className="w-px h-5 bg-wash/10 mx-1" />
             <button data-icon-motion="press"
               onClick={handleClose}
               disabled={starting}
@@ -907,7 +907,7 @@ function TabButton({ active, onClick, label, count }: {
       className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
         active
           ? 'bg-accent-primary text-white shadow-sm'
-          : 'text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06]'
+          : 'text-txt-secondary hover:text-txt-primary hover:bg-wash/[0.06]'
       }`}
     >
       {label}
@@ -935,7 +935,7 @@ function SourceCard({ source, selected, onClick, onDoubleClick, disabled }: {
       className={`group flex flex-col rounded-lg overflow-hidden transition-all text-left ring-2 ${
         selected
           ? 'ring-accent-primary bg-accent-primary/10'
-          : 'ring-transparent hover:ring-white/20 bg-surface-elevated/60 hover:bg-surface-elevated'
+          : 'ring-transparent hover:ring-wash/20 bg-surface-elevated/60 hover:bg-surface-elevated'
       }`}
     >
       {/* Thumbnail */}

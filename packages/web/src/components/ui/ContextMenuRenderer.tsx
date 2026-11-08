@@ -206,7 +206,7 @@ interface DesktopLeafItemProps {
 function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div role="separator" className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="separator" className="h-px bg-wash/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
       return <div role="group">{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
@@ -465,7 +465,7 @@ interface MobileLeafItemProps {
 function MobileLeafItem({ item, close }: MobileLeafItemProps) {
   switch (item.type) {
     case 'separator':
-      return <div role="separator" className="h-px bg-white/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
+      return <div role="separator" className="h-px bg-wash/[0.06] my-1 mx-1.5" />; // i18n-check: allow-literal (the check reads the following `case` as JSX text)
 
     case 'custom':
       return <div role="group">{item.render(close)}</div>; // i18n-check: allow-literal (the check reads the following `case` as JSX text)

@@ -21,7 +21,7 @@ export function AttachmentProgress({ loaded, total, state, filename, error, onPa
   const { t } = useTranslation(['chat', 'common']);
   const { formatBytes, formatPercent } = useFormatters();
   const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
-  const bg = state === 'failed' ? 'bg-accent-rose/30' : state === 'paused' ? 'bg-white/5' : 'bg-accent-mint/30';
+  const bg = state === 'failed' ? 'bg-accent-rose/30' : state === 'paused' ? 'bg-wash/5' : 'bg-accent-mint/30';
   const isFinal = state === 'completed' || state === 'aborted';
   // Desaturate the conic-gradient ring when paused so it can't be mistaken for
   // active progress. Active uses mint; paused uses a muted grey.

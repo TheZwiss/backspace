@@ -64,6 +64,9 @@ export default {
           border:    'var(--glass-border)',
           highlight: 'var(--glass-highlight)',
         },
+        // Neutral translucent wash for hover/inset/divider tints: white on dark
+        // themes, ink on light ones (never use white/NN for these).
+        wash: 'rgb(var(--wash) / <alpha-value>)',
         notification: 'rgb(var(--notification) / <alpha-value>)',
       },
       boxShadow: {

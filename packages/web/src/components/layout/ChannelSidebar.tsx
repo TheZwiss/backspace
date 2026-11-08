@@ -444,7 +444,7 @@ export function ChannelSidebar() {
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
         {/* Separator between voice and user area */}
-        {(currentVoiceChannelId || activeDmCall) && <div className="mx-3 border-t border-white/[0.06]" />}
+        {(currentVoiceChannelId || activeDmCall) && <div className="mx-3 border-t border-wash/[0.06]" />}
         {/* User area (always visible) */}
         <UserAreaPanel
           user={user}
@@ -473,11 +473,11 @@ export function ChannelSidebar() {
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'friends'
-                ? 'bg-interactive-selected text-white'
+                ? 'bg-interactive-selected text-txt-primary'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'friends' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'friends' ? 'text-txt-primary' : 'opacity-70 group-hover:opacity-100'}`}>
               <path d="M13 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-2-4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
               <path d="M3 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1c0-2.76-5.37-4-8-4s-8 1.24-8 4v1Z" />
               <path d="M3.5 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" opacity=".5" />
@@ -489,11 +489,11 @@ export function ChannelSidebar() {
             onClick={() => navigate('/explore')}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'explore'
-                ? 'bg-interactive-selected text-white'
+                ? 'bg-interactive-selected text-txt-primary'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'explore' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${activeHomeItem === 'explore' ? 'text-txt-primary' : 'opacity-70 group-hover:opacity-100'}`}>
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
             </svg>
             <span className="font-medium text-ui-lead">{t('spaces:sidebar.dmList.explore')}</span>
@@ -503,11 +503,11 @@ export function ChannelSidebar() {
             onClick={() => navigate('/backspace')}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               activeHomeItem === 'backspace'
-                ? 'bg-interactive-selected text-white'
+                ? 'bg-interactive-selected text-txt-primary'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
-            <BackspaceMark className={`flex-shrink-0 ${activeHomeItem === 'backspace' ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`} />
+            <BackspaceMark className={`flex-shrink-0 ${activeHomeItem === 'backspace' ? 'text-txt-primary' : 'opacity-70 group-hover:opacity-100'}`} />
             <span className="font-medium text-ui-lead">{t('project:nav.label')}</span>
             {hubUpdate.state === 'updated' && <HubUpdateDot className="ml-auto" />}
           </div>
@@ -705,7 +705,7 @@ export function ChannelSidebar() {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`opacity-70 transition-transform flex-shrink-0 ${isCollapsed ? '-rotate-90' : ''}`}>
                       <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
                     </svg>
-                    <span className="text-ui-caption font-medium uppercase tracking-[0.06em] truncate" style={{ color: '#484854' }}>{category.name}</span>
+                    <span className="text-ui-caption font-medium uppercase tracking-[0.06em] truncate" style={{ color: 'rgb(var(--text-tertiary) / 0.75)' }}>{category.name}</span>
                     {category.isPrivate && (
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
                         <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
@@ -804,7 +804,7 @@ export function ChannelSidebar() {
 
         {/* Create channel / category buttons */}
         {canManageChannels && (
-          <div className="px-1 mt-4 pt-3 border-t border-white/[0.06]">
+          <div className="px-1 mt-4 pt-3 border-t border-wash/[0.06]">
             {sortedCategories.length > 0 && (
               <button data-icon-motion="press"
                 onClick={() => openModal('createChannel')}
@@ -1372,7 +1372,7 @@ function ChannelItem({
           isActive
             ? 'bg-surface-elevated text-txt-primary'
             : isUnread
-              ? 'text-white hover:text-white hover:bg-interactive-hover'
+              ? 'text-txt-primary hover:text-txt-primary hover:bg-interactive-hover'
               : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
         }`}
       >
@@ -1385,7 +1385,7 @@ function ChannelItem({
         {isUnread && (
           <div className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent-rose" />
         )}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-txt-tertiary">
           <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
         </svg>
         <span className={`truncate text-ui-message leading-5 tracking-[0.01em] flex-1 text-left ${isUnread ? 'font-semibold' : 'font-medium'}`}>{channel.name}</span>

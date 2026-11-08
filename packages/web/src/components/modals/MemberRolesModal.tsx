@@ -310,7 +310,7 @@ function MemberRolesBody({
   return (
     <div className="flex flex-col h-full">
       {/* Header: who is being edited, plus the way back to the profile card */}
-      <div className="flex items-center gap-3 px-6 py-4 pr-16 border-b border-white/[0.06] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 pr-16 border-b border-wash/[0.06] flex-shrink-0">
         <Avatar
           src={canonical.avatar}
           name={displayName}
@@ -331,11 +331,11 @@ function MemberRolesBody({
 
       <div className="flex-1 min-h-0 flex">
         {/* Left pane: membership checkboxes; clicking a row edits that role */}
-        <div className="w-72 flex-shrink-0 border-r border-white/[0.06] overflow-y-auto scrollbar-thin p-4">
+        <div className="w-72 flex-shrink-0 border-r border-wash/[0.06] overflow-y-auto scrollbar-thin p-4">
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('spaces:roles.listHeading')}
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-2">
+          <div className="rounded-lg bg-wash/[0.02] p-2">
             <div className="space-y-0.5">
               {sortedRoles.map((role) => {
                 const isEveryone = role.id === spaceId;
@@ -413,7 +413,7 @@ function MemberRolesBody({
                   <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
                     {groupTitle(group.id)}
                   </div>
-                  <div className="rounded-lg bg-white/[0.02] p-3.5">
+                  <div className="rounded-lg bg-wash/[0.02] p-3.5">
                     <div className="space-y-1">
                       {group.perms.map((perm) => {
                         const isAdminBit = perm.bit === PermissionBits.ADMINISTRATOR;

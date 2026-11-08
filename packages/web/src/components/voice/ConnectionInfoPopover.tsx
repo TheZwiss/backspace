@@ -161,7 +161,7 @@ function MiniGraph({ values, floor, colorClass }: { values: Array<number | null>
 
 function NetworkGraph({ label, value, values, floor, colorClass }: { label: string; value: string; values: Array<number | null>; floor: number; colorClass?: string }) {
   return (
-    <div className="min-w-0 rounded-lg bg-black/20 border border-white/5 px-2 py-2">
+    <div className="min-w-0 rounded-lg bg-black/20 border border-wash/5 px-2 py-2">
       <div className="text-ui-micro text-txt-tertiary truncate" title={label}>{label}</div>
       <div className={`text-ui-label font-semibold tabular-nums mt-0.5 ${colorClass ?? 'text-txt-secondary'}`}>{value}</div>
       <MiniGraph values={values} floor={floor} colorClass={colorClass ?? 'text-txt-tertiary'} />

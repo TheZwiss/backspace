@@ -330,7 +330,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Space Identity */}
         <div>
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.overview.identity')}</div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
         {/* Space Icon */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
@@ -508,7 +508,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {isOwner && (
           <div>
             <div className="text-ui-caption font-semibold text-txt-danger uppercase tracking-wider mb-1.5">{t('common:labels.dangerZone')}</div>
-            <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+            <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
               {/* Transfer Ownership */}
               <div>
                 <p className="text-xs text-txt-tertiary mb-3">{t('spaces:settings.overview.transfer.description')}</p>
@@ -566,7 +566,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                               <button data-icon-motion="press"
                                 key={member.userId}
                                 onClick={() => setTransferTargetId(member.userId)}
-                                className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
+                                className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-wash/[0.06] transition-colors"
                               >
                                 <div className="w-7 h-7 rounded-full bg-surface-input flex-shrink-0 overflow-hidden flex items-center justify-center">
                                   {avatarUrl ? (
@@ -611,7 +611,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               </div>
 
               {/* Divider */}
-              <div className="border-t border-white/[0.05]" />
+              <div className="border-t border-wash/[0.05]" />
 
               {/* Delete Space */}
               <div>

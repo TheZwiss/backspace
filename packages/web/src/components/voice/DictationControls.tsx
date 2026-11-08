@@ -28,7 +28,7 @@ export function DictationControls() {
   const release = () => { if (held.current) { held.current = false; releaseDictation(); } };
   const cancel = () => { if (held.current) { held.current = false; cancelDictation(); } };
   const errorKey = ({ 'model-not-installed': 'missing', 'download-failed': 'downloadError', 'microphone-failed': 'micError', 'no-speech': 'noSpeech', 'recording-limit': 'limit', 'storage-unavailable': 'storageError', 'gpu-unavailable': 'gpuError' } as Record<string, 'missing' | 'downloadError' | 'micError' | 'noSpeech' | 'limit' | 'storageError' | 'gpuError'>)[state.error] ?? 'failed';
-  return <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.025] p-3" aria-label={t('dictation.title')}>
+  return <section className="space-y-3 rounded-xl border border-wash/10 bg-wash/[0.025] p-3" aria-label={t('dictation.title')}>
     <div className="flex items-center gap-2 text-sm font-semibold text-txt-primary">{mic}{t('dictation.title')}</div>
     <div className="flex items-end gap-2">
       <label className="min-w-0 flex-1 text-xs text-txt-secondary">{t('dictation.model')}<select className="ui-select mt-1 w-full" disabled={locked} value={state.model} onChange={(event) => state.setModel(event.target.value as typeof state.model)}>{SPEECH_MODELS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
@@ -43,7 +43,7 @@ export function DictationControls() {
       <button data-icon-motion="press" type="button" disabled={!available && !(state.recording && dictating.current)} onClick={() => {
         if (state.recording && dictating.current) { dictating.current = false; releaseDictation(); }
         else { dictating.current = true; void pressDictation(false); }
-      }} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-txt-primary disabled:opacity-40">{mic}{state.recording && dictating.current ? t('dictation.finish') : t('dictation.dictate')}</button>
+      }} className="flex items-center gap-2 rounded-lg bg-wash/5 px-3 py-2 text-xs text-txt-primary disabled:opacity-40">{mic}{state.recording && dictating.current ? t('dictation.finish') : t('dictation.dictate')}</button>
       <button data-icon-motion="press" type="button" disabled={(!available || !canUseTextVoice()) && !held.current} onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); start(); }} onPointerUp={release} onPointerCancel={cancel} onLostPointerCapture={cancel} onKeyDown={(event) => { if ([' ', 'Enter'].includes(event.key) && !event.repeat) { event.preventDefault(); start(); } }} onKeyUp={(event) => { if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); release(); } }} onBlur={cancel} aria-pressed={state.recording && held.current} className={`touch-none select-none rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-40 ${state.recording && held.current ? 'bg-accent-rose/20 text-accent-rose' : 'bg-accent-primary/15 text-accent-primary'}`}>{state.recording && held.current ? t('dictation.release') : t('dictation.hold')}</button>
       {(state.recording || working || voice.textVoiceBusy) && <button data-icon-motion="press" type="button" onClick={() => { held.current = false; dictating.current = false; stopDictationAndVoice(); }} className="rounded-lg px-2 py-1 text-xs text-accent-rose">{t('dictation.cancel')}</button>}
     </div>

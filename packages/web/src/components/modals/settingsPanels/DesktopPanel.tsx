@@ -191,7 +191,7 @@ function UpdateSettings() {
             <button data-icon-motion="press"
               onClick={checkNow}
               disabled={busy}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors disabled:opacity-50"
             >
               {status.phase === 'checking' ? t('desktop.updates.checkingShort') : t('desktop.updates.checkNow')}
             </button>
@@ -200,7 +200,7 @@ function UpdateSettings() {
       </div>
 
       {status.phase === 'downloading' && (
-        <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden" role="progressbar" aria-valuenow={status.percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-1 rounded-full bg-wash/[0.06] overflow-hidden" role="progressbar" aria-valuenow={status.percent} aria-valuemin={0} aria-valuemax={100}>
           <div
             className="h-full bg-accent-primary transition-[width] duration-300"
             style={{ width: `${status.percent}%` }}
@@ -247,7 +247,7 @@ export function DesktopPanel() {
         {sandboxed === false && <AutoLaunchSettings />}
         <UpdateSettings />
 
-        <div className="border-t border-white/[0.04]" />
+        <div className="border-t border-wash/[0.04]" />
 
         <div className="flex items-center justify-between">
           <div>
@@ -256,7 +256,7 @@ export function DesktopPanel() {
           </div>
           <button data-icon-motion="arrow"
             onClick={() => window.backspace?.clearInstanceUrl()}
-            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
+            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors"
           >
             {t('desktop.instance.change')}
           </button>

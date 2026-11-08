@@ -231,38 +231,38 @@ export function StoragePanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.overview.label')}</div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.totalFiles')}</div>
             <div className="text-lg font-semibold text-txt-primary">{f.formatNumber(stats.totalFiles)}</div>
             <div className="text-xs text-txt-tertiary">{f.formatBytes(stats.totalSize)}</div>
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.referenced')}</div>
             <div className="text-lg font-semibold text-txt-primary">{f.formatNumber(stats.referencedFiles)}</div>
             <div className="text-xs text-txt-tertiary">{f.formatBytes(stats.referencedSize)}</div>
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.orphanedFiles')}</div>
             <div className={`text-lg font-semibold ${stats.orphanedFiles > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
               {f.formatNumber(stats.orphanedFiles)}
             </div>
             <div className="text-xs text-txt-tertiary">{f.formatBytes(stats.orphanedSize)}</div>
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.unlinkedUploads')}</div>
             <div className={`text-lg font-semibold ${stats.unlinkedAttachments > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
               {f.formatNumber(stats.unlinkedAttachments)}
             </div>
             <div className="text-xs text-txt-tertiary">{f.formatBytes(stats.unlinkedSize)}</div>
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.danglingRecords')}</div>
             <div className={`text-lg font-semibold ${stats.danglingAttachments > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
               {f.formatNumber(stats.danglingAttachments)}
             </div>
             <div className="text-xs text-txt-tertiary">{f.formatBytes(stats.danglingSize)}</div>
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="text-xs text-txt-tertiary mb-0.5">{t('admin:storage.overview.staleUploads')}</div>
             <div className={`text-lg font-semibold ${stats.staleTusSessions > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
               {f.formatNumber(stats.staleTusSessions)}
@@ -276,7 +276,7 @@ export function StoragePanel() {
       {stats.breakdown.length > 0 && (
         <div>
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.breakdown.label')}</div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="space-y-1.5">
               {stats.breakdown.map((b) => (
                 <div key={b.type} className="flex items-center justify-between text-sm">
@@ -294,7 +294,7 @@ export function StoragePanel() {
       {/* Upload Limit */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.uploadLimit.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.uploadLimit.maxFileSize')}</label>
             <div className="flex items-center gap-3">
@@ -332,7 +332,7 @@ export function StoragePanel() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 border-t border-white/[0.04]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 border-t border-wash/[0.04]">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.uploadLimit.maxStickerSize')}</label>
             <div className="flex items-center gap-3">
               <input
@@ -374,7 +374,7 @@ export function StoragePanel() {
       {/* Cleanup Actions */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.cleanup.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-3">
           {!hasOrphans && (
             <div className="text-sm text-txt-tertiary">{t('admin:storage.cleanup.nothingFound')}</div>
           )}
@@ -384,7 +384,7 @@ export function StoragePanel() {
               <button data-icon-motion="press"
                 onClick={() => handleCleanup(true)}
                 disabled={cleaning}
-                className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 {cleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
               </button>
@@ -426,7 +426,7 @@ export function StoragePanel() {
       {/* Stale Uploads */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.stale.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-3">
           <div className="text-xs text-txt-tertiary">
             <Trans
               t={t}
@@ -455,7 +455,7 @@ export function StoragePanel() {
             <button data-icon-motion="press"
               onClick={() => handleTusCleanup(true)}
               disabled={tusCleaning || tusMaxAgeHours <= 0}
-              className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {tusCleaning ? t('common:states.scanning') : t('admin:storage.cleanup.preview')}
             </button>
@@ -493,7 +493,7 @@ export function StoragePanel() {
       {/* Media Retention */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.media.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.media.olderThan')}</label>
             <div className="flex items-center gap-3">
@@ -512,7 +512,7 @@ export function StoragePanel() {
             <button data-icon-motion="press"
               onClick={() => handleMediaCleanup(true)}
               disabled={mediaCleaning || mediaAgeDays < 1}
-              className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {mediaCleaning ? t('common:states.scanning') : t('common:actions.preview')}
             </button>

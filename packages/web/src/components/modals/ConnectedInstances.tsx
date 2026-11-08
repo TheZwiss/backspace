@@ -37,10 +37,10 @@ function safeHost(origin: string): string {
 function registryStatusColor(status: string): string {
   switch (status) {
     case 'connected': return 'bg-status-online/15 text-status-online';
-    case 'disconnected': return 'bg-white/5 text-txt-tertiary';
+    case 'disconnected': return 'bg-wash/5 text-txt-tertiary';
     case 'unreachable': return 'bg-accent-amber/15 text-accent-amber';
     case 'auth_expired': return 'bg-accent-rose/15 text-accent-rose';
-    default: return 'bg-white/5 text-txt-tertiary';
+    default: return 'bg-wash/5 text-txt-tertiary';
   }
 }
 
@@ -273,14 +273,14 @@ function RegistryFilterBar({
 
   return (
     <div className="flex items-center justify-between mb-3">
-      <div className="flex bg-white/[0.04] rounded-md p-0.5">
+      <div className="flex bg-wash/[0.04] rounded-md p-0.5">
         {tabs.map((tab) => (
           <button data-icon-motion="press"
             key={tab.key}
             type="button"
             onClick={() => setFilter(tab.key)}
             className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-              filter === tab.key ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+              filter === tab.key ? 'bg-wash/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
             {tab.label} <span className="text-ui-micro text-txt-tertiary ml-0.5">{tab.count}</span>
@@ -292,7 +292,7 @@ function RegistryFilterBar({
         <button data-icon-motion="press"
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-wash/[0.04] hover:bg-wash/[0.06] rounded transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -313,7 +313,7 @@ function RegistryFilterBar({
                   onClick={() => { setSortBy(opt.key); setSortOpen(false); }}
                   className={`w-full text-left px-2 py-1.5 text-xs rounded ${
                     sortBy === opt.key ? 'text-accent-lavender bg-accent-lavender/[0.08]' : 'text-txt-primary'
-                  } hover:bg-white/[0.06] transition-colors`}
+                  } hover:bg-wash/[0.06] transition-colors`}
                 >
                   {opt.label}
                 </button>
@@ -444,8 +444,8 @@ function DeleteIdentityDialog({
             disabled={loading}
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
               mode === 'leave'
-                ? 'bg-white/[0.03] border-white/[0.08]'
-                : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
+                ? 'bg-wash/[0.03] border-wash/[0.08]'
+                : 'bg-transparent border-wash/[0.04] hover:border-wash/[0.06]'
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.leave.title')}</div>
@@ -461,8 +461,8 @@ function DeleteIdentityDialog({
             disabled={loading}
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
               mode === 'soft'
-                ? 'bg-white/[0.03] border-white/[0.08]'
-                : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
+                ? 'bg-wash/[0.03] border-wash/[0.08]'
+                : 'bg-transparent border-wash/[0.04] hover:border-wash/[0.06]'
             } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">{t('federation:connections.deleteIdentity.soft.title')}</div>
@@ -479,7 +479,7 @@ function DeleteIdentityDialog({
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
               mode === 'full'
                 ? 'bg-accent-rose/[0.04] border-accent-rose/20'
-                : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
+                : 'bg-transparent border-wash/[0.04] hover:border-wash/[0.06]'
             } disabled:opacity-50`}
           >
             <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
@@ -504,7 +504,7 @@ function DeleteIdentityDialog({
                 className={`flex-1 px-2 py-1.5 text-ui-caption font-medium rounded transition-colors ${
                   scope === opt.key
                     ? 'bg-accent-lavender/15 text-accent-lavender'
-                    : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
+                    : 'bg-wash/[0.04] text-txt-tertiary hover:text-txt-secondary'
                 }`}
               >
                 {opt.label}
@@ -635,10 +635,10 @@ function RegistryRow({
 
   return (
     <>
-      <div className={`bg-white/[0.02] rounded-md transition-colors ${isDisconnected ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
+      <div className={`bg-wash/[0.02] rounded-md transition-colors ${isDisconnected ? 'opacity-70' : ''} ${expanded ? 'border border-wash/[0.06]' : ''}`}>
         {/* Compact row */}
         <div data-icon-motion="expand"
-          className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
+          className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-wash/[0.02] rounded-md"
           onClick={onToggleExpand}
         >
           <div className="flex items-center gap-2.5 min-w-0">
@@ -665,7 +665,7 @@ function RegistryRow({
         {/* Expanded details */}
         {expanded && (
           <div className="px-3 pb-3">
-            <div className="border-t border-white/[0.05] pt-3">
+            <div className="border-t border-wash/[0.05] pt-3">
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
@@ -720,7 +720,7 @@ function RegistryRow({
                     <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handleDisconnect(); }}
-                      className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
+                      className="px-3 py-1.5 text-xs font-medium bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.disconnect')}
                     </button>
@@ -786,7 +786,7 @@ function RegistryRow({
                     <button data-icon-motion="press"
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowForceRemoveConfirm(true); }}
-                      className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors"
+                      className="px-3 py-1.5 text-xs font-medium bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary rounded transition-colors"
                     >
                       {t('federation:connections.row.forceRemove')}
                     </button>
@@ -896,7 +896,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
   };
 
   return (
-    <div className="bg-white/[0.02] rounded-md px-3 py-2.5 flex items-center justify-between gap-3">
+    <div className="bg-wash/[0.02] rounded-md px-3 py-2.5 flex items-center justify-between gap-3">
       <div className="min-w-0">
         <div className="text-sm text-txt-primary truncate">
           {actionVerbPhrase(t, subscription.triggerReason, subscription.triggerTarget)}
@@ -917,7 +917,7 @@ function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscri
         type="button"
         onClick={handleCancel}
         disabled={busy}
-        className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors shrink-0 disabled:opacity-50"
+        className="px-3 py-1.5 text-xs font-medium bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary rounded transition-colors shrink-0 disabled:opacity-50"
       >
         {busy ? t('federation:connections.pending.cancelling') : t('common:actions.cancel')}
       </button>
@@ -939,7 +939,7 @@ function PendingPeeringSubscriptionsSection() {
       <p className="text-xs text-txt-tertiary mb-2">
         {t('federation:connections.pending.description')}
       </p>
-      <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
+      <div className="rounded-lg bg-wash/[0.02] p-3 space-y-2">
         {subscriptions.map((s) => (
           <PendingSubscriptionRow key={s.id} subscription={s} />
         ))}
@@ -1072,7 +1072,7 @@ function PeeringNotificationCard({
               type="button"
               onClick={handleDismiss}
               disabled={busy}
-              className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-xs font-medium bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary rounded transition-colors disabled:opacity-50"
             >
               {busy ? t('federation:connections.outcomes.dismissing') : t('common:actions.dismiss')}
             </button>
@@ -1248,7 +1248,7 @@ export function ConnectedInstances() {
       </div>
       <p className="text-xs text-txt-tertiary mb-2">{t('federation:connections.description')}</p>
 
-      <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
+      <div className="rounded-lg bg-wash/[0.02] p-3 space-y-2">
         {/* Home instance (always pinned, non-filterable) */}
         <div className="flex items-center justify-between p-3 bg-surface-channel rounded-lg">
           <div className="flex items-center gap-2 min-w-0">
@@ -1270,7 +1270,7 @@ export function ConnectedInstances() {
             {isElectron() && (
               <button data-icon-motion="arrow"
                 onClick={() => window.backspace?.clearInstanceUrl()}
-                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
+                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-wash/[0.04] rounded transition-colors"
               >
                 {t('common:actions.change')}
               </button>
@@ -1320,7 +1320,7 @@ export function ConnectedInstances() {
         ) : (
           <button data-icon-motion="press"
             onClick={() => setShowAddForm(true)}
-            className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-white/[0.06] hover:border-white/[0.12] transition-colors"
+            className="w-full p-2 text-sm text-txt-secondary hover:text-txt-primary hover:bg-surface-channel/50 rounded-lg border border-dashed border-wash/[0.06] hover:border-wash/[0.12] transition-colors"
           >
             {t('federation:connections.addButton')}
           </button>

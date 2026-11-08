@@ -263,7 +263,7 @@ export function StreamingPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.bandwidth.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.bandwidth.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
           {/* Allow Custom Bitrate */}
           <div className="flex items-center justify-between">
             <div>
@@ -339,7 +339,7 @@ export function StreamingPanel() {
           </div>
 
           {/* Bitrate Step — presets + custom input */}
-          <div className="pt-2 border-t border-white/[0.04]">
+          <div className="pt-2 border-t border-wash/[0.04]">
             <div className="flex items-center gap-2 mb-1.5">
               <span className="text-ui-caption text-txt-tertiary">{t('admin:streaming.bandwidth.step')}</span>
               <input
@@ -379,7 +379,7 @@ export function StreamingPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.quality.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.quality.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
           {/* Allowed Resolutions */}
           <div>
             <div className="text-xs text-txt-secondary mb-1.5">
@@ -441,7 +441,7 @@ export function StreamingPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.matrix.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.matrix.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
           {/* Scale slider */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -561,7 +561,7 @@ export function StreamingPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:streaming.camera.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:streaming.camera.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-4">
           <div>
             <div className="text-xs text-txt-secondary mb-1.5">{t('admin:streaming.camera.mode.label')}</div>
             <div className="flex flex-wrap gap-1.5">

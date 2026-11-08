@@ -225,7 +225,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   </p>
                   <div className="space-y-3">
                     {ownedSpaces.map(space => (
-                      <div key={space.id} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3">
+                      <div key={space.id} className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3">
                         <div className="text-sm font-medium text-txt-primary mb-2">{space.name}</div>
                         <div className="flex gap-2 mb-2">
                           <button data-icon-motion="press"
@@ -233,7 +233,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                             className={`px-2.5 py-1 text-xs rounded transition-colors ${
                               space.action === 'transfer'
                                 ? 'bg-accent-primary text-white'
-                                : 'bg-white/[0.06] text-txt-secondary hover:text-txt-primary'
+                                : 'bg-wash/[0.06] text-txt-secondary hover:text-txt-primary'
                             }`}
                           >
                             {t('settings:account.deletion.ownedSpaces.transfer')}
@@ -243,7 +243,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                             className={`px-2.5 py-1 text-xs rounded transition-colors ${
                               space.action === 'delete'
                                 ? 'bg-accent-rose text-white'
-                                : 'bg-white/[0.06] text-txt-secondary hover:text-txt-primary'
+                                : 'bg-wash/[0.06] text-txt-secondary hover:text-txt-primary'
                             }`}
                           >
                             {t('settings:account.deletion.ownedSpaces.delete')}
@@ -330,7 +330,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
               <div className="flex gap-3">
                 <button data-icon-motion="press"
                   onClick={() => { setStep('warning'); setError(''); }}
-                  className="flex-1 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors"
+                  className="flex-1 py-2 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors"
                 >
                   {t('common:actions.back')}
                 </button>
@@ -353,7 +353,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                 {instances.filter(i => i.status === 'connected').map(inst => {
                   const result = federationResults.find(r => r.origin === inst.origin);
                   return (
-                    <div key={inst.origin} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.04]">
+                    <div key={inst.origin} className="flex items-center justify-between px-3 py-2 rounded-lg bg-wash/[0.03] border border-wash/[0.04]">
                       <span className="text-sm text-txt-primary">{inst.label || new URL(inst.origin).host}</span>
                       {!result ? (
                         <svg className="animate-spin w-4 h-4 text-txt-tertiary" viewBox="0 0 24 24" fill="none">

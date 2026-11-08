@@ -392,7 +392,7 @@ export function AppLayout() {
         {/* Main chat area */}
         <div className="flex-1 bg-surface-chat flex flex-col">
           {/* Channel header */}
-          <div className="h-12 flex items-center px-4 border-b border-white/[0.04]">
+          <div className="h-12 flex items-center px-4 border-b border-wash/[0.04]">
             <div className="skeleton skeleton-bar w-32 h-3.5" />
           </div>
 

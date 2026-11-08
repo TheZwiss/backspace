@@ -150,7 +150,7 @@ export function LoginPage() {
         </form>
 
         {instanceInfo && (
-          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+          <div className="mt-6 pt-4 border-t border-wash/[0.04] flex justify-center">
             <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
           </div>
         )}

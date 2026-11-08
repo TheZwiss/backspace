@@ -79,7 +79,7 @@ export function BansPanel({ spaceId }: BansPanelProps) {
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('spaces:bans.listHeading', { total: f.formatNumber(bans.length) })}
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-2">
+          <div className="rounded-lg bg-wash/[0.02] p-2">
             <div className="space-y-0.5">
               {bans.map((ban) => {
                 const displayName = ban.user?.displayName ?? ban.user?.username ?? ban.userId;

@@ -94,16 +94,16 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   // Container: 6px radius (up from 4px), 44px height (up from 42px)
   const containerClass = `relative flex items-center gap-3 px-2 h-[44px] rounded-[6px] cursor-pointer transition-colors group ${
     isActive
-      ? 'bg-interactive-selected text-white'
+      ? 'bg-interactive-selected text-txt-primary'
       : isUnread
-        ? 'text-white hover:bg-interactive-hover'
+        ? 'text-txt-primary hover:bg-interactive-hover'
         : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
   }`;
 
   // Name: font-semibold for unread (deliberately NOT font-bold — design decision)
   const nameClass = `text-ui-message truncate leading-tight ${
-    isActive ? 'text-white font-medium'
-      : isUnread ? 'text-white font-semibold'
+    isActive ? 'text-txt-primary font-medium'
+      : isUnread ? 'text-txt-primary font-semibold'
       : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
   }`;
 

@@ -493,7 +493,7 @@ export function InviteModal() {
         )}
 
         {/* Share-link footer */}
-        <div className="pt-3 border-t border-white/[0.06]">
+        <div className="pt-3 border-t border-wash/[0.06]">
           <p className="text-ui-caption text-txt-tertiary mb-2">
             {t('spaces:invite.shareLink')}
           </p>

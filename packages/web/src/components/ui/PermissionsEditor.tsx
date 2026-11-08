@@ -516,7 +516,7 @@ export function PermissionsEditor({
                   ))
                 )}
               </div>
-              <div className="border-t border-white/[0.04] p-1.5">
+              <div className="border-t border-wash/[0.04] p-1.5">
                 <button data-icon-motion="press"
                   onClick={() => setShowAddRole(false)}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
@@ -599,7 +599,7 @@ export function PermissionsEditor({
                   ))
                 )}
               </div>
-              <div className="border-t border-white/[0.04] p-1.5">
+              <div className="border-t border-wash/[0.04] p-1.5">
                 <button data-icon-motion="press"
                   onClick={() => { setShowAddMember(false); setMemberSearch(''); }}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"

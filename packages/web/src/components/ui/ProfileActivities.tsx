@@ -83,7 +83,7 @@ function MediaProgress({
 
   return (
     <div className="mt-2.5">
-      <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full bg-wash/10 rounded-full overflow-hidden">
         <div
           className={`h-full ${barColorClass} rounded-full transition-all duration-300`}
           style={{ width: `${percent}%` }}
@@ -252,13 +252,13 @@ function ProcessCard({
             smallAlt={activity.assets?.smallText}
             size={PROFILE_ROW_ART}
             placeholder={
-              <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 shadow-sm">
+              <div className="w-10 h-10 rounded-lg bg-wash/10 flex items-center justify-center flex-shrink-0 shadow-sm">
                 <AppIcon name={activity.name} type={activity.type} size={20} fallbackEmoji={icon} />
               </div>
             }
           />
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-wash/10 flex items-center justify-center flex-shrink-0 shadow-sm">
             <AppIcon name={activity.name} type={activity.type} size={20} fallbackEmoji={icon} />
           </div>
         )}

@@ -60,13 +60,13 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
             <p className="text-ui-caption text-txt-tertiary mb-2">{t('spaces:sidebar.folder.color')}</p>
             <div className="flex gap-2">
               <button data-icon-motion="press"
-                className={`w-6 h-6 rounded-full border-2 ${!folder.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
+                className={`w-6 h-6 rounded-full border-2 ${!folder.color ? 'border-wash/40' : 'border-transparent'} bg-wash/10`}
                 onClick={() => { onUpdateFolder(folder.id, { color: null }); useContextMenuStore.getState().close(); }}
               />
               {FOLDER_COLORS.map(c => (
                 <button data-icon-motion="press"
                   key={c.name}
-                  className={`w-6 h-6 rounded-full border-2 ${folder.color === c.value ? 'border-white/40' : 'border-transparent'}`}
+                  className={`w-6 h-6 rounded-full border-2 ${folder.color === c.value ? 'border-wash/40' : 'border-transparent'}`}
                   style={{ background: c.value }}
                   onClick={() => { onUpdateFolder(folder.id, { color: c.value }); useContextMenuStore.getState().close(); }}
                 />

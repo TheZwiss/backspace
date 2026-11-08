@@ -107,7 +107,7 @@ export function ToastContainer() {
                 toast.action?.onClick();
                 removeToast(toast.id);
               }}
-              className="shrink-0 px-2 py-1 text-xs font-medium rounded-md text-accent-primary hover:bg-white/[0.08] transition-colors"
+              className="shrink-0 px-2 py-1 text-xs font-medium rounded-md text-accent-primary hover:bg-wash/[0.08] transition-colors"
             >
               {toast.action.label}
             </button>

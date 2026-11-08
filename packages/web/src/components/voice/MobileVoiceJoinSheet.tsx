@@ -422,7 +422,7 @@ export function MobileVoiceJoinSheet({
         {/* Drag handle + header — both belong to the drag-to-close region.
             The user can grab the visible pill OR the title row to drag down. */}
         <div {...dragHandleProps} className="touch-none">
-          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mt-3 mb-4" />
+          <div className="w-10 h-1 rounded-full bg-wash/20 mx-auto mt-3 mb-4" />
 
           {/* Header */}
           <div className="flex items-center justify-between px-5 mb-2">
@@ -464,7 +464,7 @@ export function MobileVoiceJoinSheet({
               <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
-                className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-white/[0.03] transition-colors"
+                className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-wash/[0.03] transition-colors"
                 aria-label={t('voice:joinSheet.enablePreview')}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="mb-1.5">

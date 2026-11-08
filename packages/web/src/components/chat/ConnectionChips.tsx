@@ -242,7 +242,7 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
   if (expired && expanded) {
     return (
       <li className="w-full">
-        <div className="w-full max-w-[22rem] p-3 rounded-xl bg-surface-elevated border border-white/[0.06] shadow-elevation-low space-y-2.5">
+        <div className="w-full max-w-[22rem] p-3 rounded-xl bg-surface-elevated border border-wash/[0.06] shadow-elevation-low space-y-2.5">
           <div className="text-ui-label leading-5">
             <ChipIdentity label={label} stateWord={stateWord} expired dimmed={false} />
           </div>

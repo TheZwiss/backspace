@@ -387,7 +387,7 @@ export function AccountPanel() {
         </div>
 
         {/* Live Preview Card */}
-        <div className="rounded-lg overflow-hidden border border-white/[0.06] mb-4 bg-surface-channel">
+        <div className="rounded-lg overflow-hidden border border-wash/[0.06] mb-4 bg-surface-channel">
           {/* Banner area */}
           <div
             className="w-full h-[128px]"
@@ -497,7 +497,7 @@ export function AccountPanel() {
               type="button"
               onClick={() => bannerInputRef.current?.click()}
               disabled={uploadingBanner}
-              className="relative group w-full h-[128px] rounded-lg overflow-hidden border border-white/[0.06]"
+              className="relative group w-full h-[128px] rounded-lg overflow-hidden border border-wash/[0.06]"
             >
               <div
                 className="w-full h-full"
@@ -619,7 +619,7 @@ export function AccountPanel() {
               />
               {accentColor && (
                 <div
-                  className="w-6 h-6 rounded-full border border-white/10 flex-shrink-0"
+                  className="w-6 h-6 rounded-full border border-wash/10 flex-shrink-0"
                   style={{ backgroundColor: accentColor }}
                 />
               )}
@@ -688,7 +688,7 @@ export function AccountPanel() {
                       role="option"
                       aria-selected={status === option.value}
                       onClick={() => { setStatus(option.value); setStatusOpen(false); }}
-                      className="w-full rounded px-2.5 py-2 flex items-center gap-2 text-left text-sm text-txt-primary hover:bg-white/[0.06]"
+                      className="w-full rounded px-2.5 py-2 flex items-center gap-2 text-left text-sm text-txt-primary hover:bg-wash/[0.06]"
                     >
                       <PresenceIndicator status={option.value} size={15} />
                       {t(option.labelKey)}

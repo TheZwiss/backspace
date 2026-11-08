@@ -25,6 +25,28 @@
     "sound": "Reproduzir som",
     "desktop": "Mostrar sobre o desktop em segundo plano"
   },
+  "theme": {
+    "label": "Tema",
+    "description": "Escolha a aparência do Backspace. Salvo neste navegador ou app, neste dispositivo.",
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "Superfícies foscas e quentes com detalhes de vidro fosco."
+      },
+      "light": {
+        "name": "Claro",
+        "description": "Superfícies de papel quente com texto em tinta escura."
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "Superfícies em preto puro que economizam bateria em telas OLED."
+      },
+      "anime": {
+        "name": "Anime",
+        "description": "Índigo crepuscular com detalhes em rosa sakura."
+      }
+    }
+  },
   "interfaceScale": {
     "label": "Escala da interface",
     "description": "Redimensiona textos, botões e painéis. Salva neste navegador ou app, neste dispositivo.",

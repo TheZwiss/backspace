@@ -22,7 +22,7 @@ export function ProfileRoles({ roles }: { roles: Role[] }) {
         {roles.map((role) => (
           <li
             key={role.id}
-            className="inline-flex items-center gap-1.5 max-w-full min-w-0 px-2 py-[3px] rounded-md bg-white/[0.05]"
+            className="inline-flex items-center gap-1.5 max-w-full min-w-0 px-2 py-[3px] rounded-md bg-wash/[0.05]"
           >
             <span
               className="w-2 h-2 rounded-full flex-shrink-0"

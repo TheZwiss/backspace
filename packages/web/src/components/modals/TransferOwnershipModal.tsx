@@ -25,7 +25,7 @@ function TransferMemberRow({
   return (
     <button data-icon-motion="press"
       onClick={() => onSelect(member.userId)}
-      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
+      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-wash/[0.06] transition-colors"
     >
       <Avatar
         src={canonical.avatar}
@@ -144,7 +144,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
         className="w-[380px] max-h-[480px] ui-dialog-surface flex flex-col animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">
+        <div className="px-4 pt-4 pb-3 border-b border-wash/[0.06]">
           <h3 className="text-base font-semibold text-txt-primary">{t('spaces:ownership.title')}</h3>
           <p className="text-xs text-txt-tertiary mt-0.5">
             <Trans

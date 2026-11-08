@@ -48,7 +48,7 @@ function inviteStatusPillColor(status: InviteStatus): string {
   switch (status) {
     case 'expired':   return 'bg-accent-rose/15 text-accent-rose';
     case 'exhausted': return 'bg-accent-amber/15 text-accent-amber';
-    case 'revoked':   return 'bg-white/5 text-txt-tertiary';
+    case 'revoked':   return 'bg-wash/5 text-txt-tertiary';
     case 'active':    return ''; // never rendered for active
   }
 }
@@ -164,7 +164,7 @@ function FilterDropdown({
       <button data-icon-motion="press"
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+        className="flex items-center gap-1.5 px-2.5 py-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary bg-wash/[0.04] hover:bg-wash/[0.06] rounded transition-colors"
       >
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
           <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -189,15 +189,15 @@ function FilterDropdown({
                     onClick={() => handleArchivedStatusToggle(s)}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${
                       archivedStatusFilter.has(s)
-                        ? 'text-txt-primary bg-white/[0.04]'
+                        ? 'text-txt-primary bg-wash/[0.04]'
                         : 'text-txt-tertiary'
-                    } hover:bg-white/[0.06] transition-colors`}
+                    } hover:bg-wash/[0.06] transition-colors`}
                   >
                     <div className={`w-2 h-2 rounded-full ${inviteStatusDotColor(s)}`} />
                     <span>{inviteStatusLabel(s)}</span>
                   </button>
                 ))}
-                <div className="h-px bg-white/[0.06] my-1" />
+                <div className="h-px bg-wash/[0.06] my-1" />
               </>
             )}
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
@@ -213,7 +213,7 @@ function FilterDropdown({
                       activeSort === opt.key
                         ? 'text-accent-lavender bg-accent-lavender/[0.08]'
                         : 'text-txt-primary'
-                    } hover:bg-white/[0.06] transition-colors`}
+                    } hover:bg-wash/[0.06] transition-colors`}
                   >
                     {opt.label}
                   </button>
@@ -227,7 +227,7 @@ function FilterDropdown({
                       archivedSort === opt.key
                         ? 'text-accent-lavender bg-accent-lavender/[0.08]'
                         : 'text-txt-primary'
-                    } hover:bg-white/[0.06] transition-colors`}
+                    } hover:bg-wash/[0.06] transition-colors`}
                   >
                     {opt.label}
                   </button>
@@ -1267,13 +1267,13 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
   return (
     <>
       <div
-        className={`bg-white/[0.02] rounded-md transition-colors ${
-          expanded ? 'border border-white/[0.06]' : ''
+        className={`bg-wash/[0.02] rounded-md transition-colors ${
+          expanded ? 'border border-wash/[0.06]' : ''
         }`}
       >
         {/* Collapsed clickable header */}
         <div data-icon-motion="expand"
-          className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
+          className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-wash/[0.02] rounded-md"
           onClick={onToggleExpand}
         >
           <div className="flex items-center gap-2.5 min-w-0">
@@ -1303,7 +1303,7 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         {/* Expanded body */}
         {expanded && (
           <div className="px-3 pb-3">
-            <div className="border-t border-white/[0.05] pt-3">
+            <div className="border-t border-wash/[0.05] pt-3">
               {/* Row 1: USED · (EXPIRES | terminal-status AT) · CREATED */}
               <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
@@ -1632,7 +1632,7 @@ export function RegistrationPanel() {
       {/* Public registration */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.public.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
               <div className="text-sm font-medium text-txt-primary">{t('admin:registration.public.toggleLabel')}</div>
@@ -1651,7 +1651,7 @@ export function RegistrationPanel() {
       {/* Federated registration */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:registration.federated.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <label className="flex items-center justify-between cursor-pointer gap-4">
             <div className="flex-1">
               <div className="text-sm font-medium text-txt-primary">{t('admin:registration.federated.toggleLabel')}</div>
@@ -1668,7 +1668,7 @@ export function RegistrationPanel() {
       </div>
 
       {/* Invite Links */}
-      <div className="border-t border-white/[0.06] pt-5">
+      <div className="border-t border-wash/[0.06] pt-5">
         {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider">{t('admin:invites.label')}</div>
@@ -1683,12 +1683,12 @@ export function RegistrationPanel() {
 
         {/* Row 2: tab strip (left) + FilterDropdown (right) */}
         <div className="flex items-center justify-between mb-3">
-          <div className="flex bg-white/[0.04] rounded-md p-0.5">
+          <div className="flex bg-wash/[0.04] rounded-md p-0.5">
             <button data-icon-motion="press"
               type="button"
               onClick={() => handleTabSwitch('active')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+                tab === 'active' ? 'bg-wash/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
               {t('admin:invites.tabs.active')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{activeCount}</span>
@@ -1697,7 +1697,7 @@ export function RegistrationPanel() {
               type="button"
               onClick={() => handleTabSwitch('archived')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+                tab === 'archived' ? 'bg-wash/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
               {t('admin:invites.tabs.archived')} <span className="text-ui-micro text-txt-tertiary ml-0.5">{archivedCount}</span>

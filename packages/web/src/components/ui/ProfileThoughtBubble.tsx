@@ -49,12 +49,12 @@ export function ProfileThoughtBubble({ text, avatarLeft, avatarTop, avatarSize, 
           <span
             key={size}
             aria-hidden="true"
-            className="absolute rounded-full bg-surface-elevated border border-white/[0.12] shadow-elevation-low"
+            className="absolute rounded-full bg-surface-elevated border border-wash/[0.12] shadow-elevation-low"
             style={{ width: size, height: size, left: startX + (bubbleLeft - startX) * at - size / 2, top: startY + (endY - startY) * at - size / 2 }}
           />
         ))}
         <div
-          className="absolute rounded-2xl bg-surface-elevated border border-white/[0.08] shadow-elevation-high px-3 py-2 text-ui-label text-txt-primary leading-snug break-words line-clamp-2 pointer-events-auto"
+          className="absolute rounded-2xl bg-surface-elevated border border-wash/[0.08] shadow-elevation-high px-3 py-2 text-ui-label text-txt-primary leading-snug break-words line-clamp-2 pointer-events-auto"
           style={{ left: bubbleLeft, top, maxWidth: `calc(100% - ${bubbleLeft + rightGap}px)` }}
           title={text}
         >

@@ -305,7 +305,7 @@ export function InstanceDiscoveryHint({
   };
 
   return (
-    <div className="mb-4 rounded-lg bg-white/[0.03] border border-white/[0.04] divide-y divide-white/[0.04]">
+    <div className="mb-4 rounded-lg bg-wash/[0.03] border border-wash/[0.04] divide-y divide-wash/[0.04]">
       {rows.map((row) => {
         const action = actionOf(row);
         const message = failure !== null && failure.row === row ? failure.message : '';
