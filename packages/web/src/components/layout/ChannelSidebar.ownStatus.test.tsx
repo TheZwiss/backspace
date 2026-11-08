@@ -35,9 +35,9 @@ function user(fields: Partial<User> & Pick<User, 'id' | 'username'>): User {
 function ownDotClass(username: string): string {
   const handle = screen.getByText(`@${username}`);
   const area = handle.closest('div.group');
-  const dot = area?.querySelector('[data-avatar] > div.absolute');
+  const dot = area?.querySelector('[data-avatar] > span.absolute svg');
   if (!dot) throw new Error('no status dot in the user area');
-  return dot.className;
+  return dot.getAttribute('class') ?? '';
 }
 
 function renderSidebar() {
@@ -70,7 +70,7 @@ describe('ChannelSidebar own status dot', () => {
 
     renderSidebar();
 
-    expect(ownDotClass('erin@nova.example')).toContain('bg-status-dnd');
+    expect(ownDotClass('erin@nova.example')).toContain('text-status-dnd');
   });
 
   it("shows a native session's own status", () => {
@@ -79,6 +79,6 @@ describe('ChannelSidebar own status dot', () => {
 
     renderSidebar();
 
-    expect(ownDotClass('jannis')).toContain('bg-status-idle');
+    expect(ownDotClass('jannis')).toContain('text-status-idle');
   });
 });

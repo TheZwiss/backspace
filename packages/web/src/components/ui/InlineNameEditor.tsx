@@ -130,6 +130,7 @@ export function InlineNameEditor({
         <form
           ref={formRef}
           tabIndex={-1}
+          data-owns-escape=""
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
           className="flex min-w-0 flex-1 items-center gap-2 outline-none"

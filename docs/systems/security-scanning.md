@@ -324,7 +324,8 @@ cannot be worked one at a time.
 Sixteen OSV findings are held in `osv-scanner.toml`, in two shapes. Fourteen need a
 major upgrade that is a separate decision with its own compatibility work. Two
 have no fixed release at all and sit only in build tooling. None of them is
-dismissed:
+dismissed. `braces` and `sprintf-js` left the list when the scanner stopped
+reporting them; `deepmerge`, `glob` and `minimatch` joined it:
 
 | Package | Findings | Bucket | Fixed in |
 |---------|----------|--------|----------|
@@ -333,8 +334,9 @@ dismissed:
 | `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
 | `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
 | `postcss-selector-parser` 6.1.4 | 1 | build-time (`tailwindcss` 3 and `postcss-nested`) | 7.1.6 only; tailwindcss 3 does not accept 7.x |
-| `braces` 3.0.3 | 1 | build-time (`tailwindcss` 3 through `chokidar` and `micromatch`) | no fixed release |
-| `sprintf-js` 1.1.3 | 1 | build-time (`electron-builder` to `@electron/get` to `global-agent` to `roarr`) | no fixed release |
+| `deepmerge` 4.3.1 | 1 | build-time (`vite-plugin-pwa` to `workbox-build`) | no fixed release |
+| `glob` 10.5.0 and 11.1.0 | 1 | server image (`@fastify/static` 7) and build-time (`workbox-build`) | 14.0.2 only |
+| `minimatch` 9.0.9 and 10.2.6 | 1 | server image (`@fastify/static` 7), packaging and ESLint | 11.0.1 only |
 
 The five fastify findings published on 2026-09-30 were each checked against the
 server rather than only deferred. Each needs a feature the server does not use:

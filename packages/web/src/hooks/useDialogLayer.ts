@@ -91,6 +91,9 @@ function createManager(doc: Document) {
     const floating = portals(active);
     if (event.key === 'Escape') {
       if (floating.length) return;
+      // An element marked data-owns-escape (an inline editor with something to
+      // abandon) consumes the key itself, so the dialog must not take it first.
+      if (event.target instanceof Element && event.target.closest('[data-owns-escape]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (active.dismissible()) active.close();

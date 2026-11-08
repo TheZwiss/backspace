@@ -109,7 +109,7 @@ describe('Message author context menu', () => {
     const { container } = renderChannel(dm.id, makeMessage(dm.id, true));
 
     rightClickAvatar(container, bob.id);
-    expect(menuLabels()).toEqual(['@Bob']);
+    expect(menuLabels()).toEqual(['Add Friend', 'Mute attention effects›', '@Bob']);
     fireEvent.click(screen.getByRole('menuitem', { name: '@Bob' }));
     await nextFrame();
 
@@ -127,7 +127,7 @@ describe('Message author context menu', () => {
     renderChannel('space-ch-1', makeMessage('space-ch-1', false));
 
     fireEvent.contextMenu(screen.getAllByText('Bobby')[0]!, { clientX: 20, clientY: 30 });
-    expect(menuLabels()).toEqual(['@Bobby', 'Poke']);
+    expect(menuLabels()).toEqual(['Add Friend', 'Mute attention effects›', '@Bobby', 'Poke']);
     fireEvent.click(screen.getByRole('menuitem', { name: '@Bobby' }));
     await nextFrame();
 
@@ -165,13 +165,13 @@ describe('Message author context menu', () => {
     expect(name).toHaveFocus();
 
     fireEvent.keyDown(name, { key: 'F10', shiftKey: true });
-    expect(menuLabels()).toEqual(['@Bobby', 'Poke']);
+    expect(menuLabels()).toEqual(['Add Friend', 'Mute attention effects›', '@Bobby', 'Poke']);
     expect(useContextMenuStore.getState().menu?.position).toEqual({ x: 116, y: 60 });
     expect(screen.getByRole('menuitem', { name: '@Bobby' }).closest('[role="menu"]')).toHaveFocus();
 
     act(() => useContextMenuStore.getState().close());
     fireEvent.keyDown(name, { key: 'ContextMenu' });
-    expect(menuLabels()).toEqual(['@Bobby', 'Poke']);
+    expect(menuLabels()).toEqual(['Add Friend', 'Mute attention effects›', '@Bobby', 'Poke']);
 
     act(() => useContextMenuStore.getState().close());
     fireEvent.keyDown(name, { key: 'F10' });
