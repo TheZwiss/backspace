@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockOverlayWindow } from './overlayWindowMock';
 import { getMsnWinkAsset, isMsnWinkEffect, type MsnWinkEffect } from './msnWinkCatalog';
 import { playMsnWink } from './msnWinks';
 
-const mocks = vi.hoisted(() => ({ windows: [] as any[], capture: vi.fn(), displays: [
+const mocks = vi.hoisted(() => ({ windows: [] as MockOverlayWindow[], capture: vi.fn(), displays: [
   { id: 1, bounds: { x: -1920, y: 0, width: 1920, height: 1080 } },
   { id: 2, bounds: { x: 0, y: -200, width: 2560, height: 1440 } },
 ] }));
@@ -47,11 +48,11 @@ describe('additional original MSN winks', () => {
       expect(w.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
       if (process.platform === 'linux') expect(w.setFullScreen).not.toHaveBeenCalled(); else expect(w.setFullScreen).toHaveBeenCalledWith(true);
       expect(w.destroyed).toBe(true);
-      const html = decodeURIComponent(w.loadURL.mock.calls[0][0]);
+      const html = decodeURIComponent(w.loadURL.mock.calls[0]![0]);
       expect(html.includes('<video preload="auto" muted')).toBe(i === 0);
     });
-    expect(mocks.windows[0].webContents.executeJavaScript.mock.calls[1][0])
-      .toBe(mocks.windows[1].webContents.executeJavaScript.mock.calls[1][0]);
+    expect(mocks.windows[0]!.webContents.executeJavaScript.mock.calls[1]![0])
+      .toBe(mocks.windows[1]!.webContents.executeJavaScript.mock.calls[1]![0]);
   });
   it('rejects names outside the catalog', () => {
     expect(isMsnWinkEffect('../../secret')).toBe(false);
@@ -61,8 +62,8 @@ describe('additional original MSN winks', () => {
   it('renders only on selected monitors and mutes the movie when requested', async () => {
     await playMsnWink('msn_fart_guy', 'Alice', undefined, undefined, { displayIds: [1], sound: false });
     expect(mocks.windows).toHaveLength(1);
-    expect(mocks.windows[0].options).toMatchObject(mocks.displays[0]!.bounds);
-    expect(decodeURIComponent(mocks.windows[0].loadURL.mock.calls[0][0])).toContain('<video preload="auto" muted');
+    expect(mocks.windows[0]!.options).toMatchObject(mocks.displays[0]!.bounds);
+    expect(decodeURIComponent(mocks.windows[0]!.loadURL.mock.calls[0]![0])).toContain('<video preload="auto" muted');
   });
   it('does not fall back onto a removed or excluded monitor', async () => {
     await playMsnWink('msn_fart_guy', 'Alice', undefined, undefined, { displayIds: [999] });

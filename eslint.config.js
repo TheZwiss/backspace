@@ -31,6 +31,7 @@ const nodeGlobals = {
   fetch: 'readonly',
   crypto: 'readonly',
   WebSocket: 'readonly',
+  performance: 'readonly',
   setTimeout: 'readonly',
   clearTimeout: 'readonly',
   setInterval: 'readonly',
@@ -132,6 +133,22 @@ module.exports = tseslint.config(
     rules: {
       'no-undef': 'error',
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  {
+    // AudioWorklet scripts run in the audio rendering scope, which has these
+    // globals instead of `window`. Loaded as classic scripts by `addModule`.
+    files: ['packages/web/src/audio/worklets/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        AudioWorkletProcessor: 'readonly',
+        registerProcessor: 'readonly',
+        sampleRate: 'readonly',
+        currentTime: 'readonly',
+        currentFrame: 'readonly',
+      },
     },
   },
 

@@ -4,7 +4,8 @@ self.onmessage = async (event: MessageEvent<{ id: number; operation: string; dat
   const { id, operation, data } = event.data;
   try {
     const result = await handleTextVoiceRequest(operation, data);
-    worker.postMessage({ id, ok: true, result }, result?.audio instanceof ArrayBuffer ? [result.audio] : []);
+    const audio = typeof result === 'object' && result !== null && 'audio' in result ? result.audio : null;
+    worker.postMessage({ id, ok: true, result }, audio instanceof ArrayBuffer ? [audio] : []);
   } catch (error) {
     worker.postMessage({ id, ok: false, error: error instanceof Error ? error.message : 'engine-failed' });
   }

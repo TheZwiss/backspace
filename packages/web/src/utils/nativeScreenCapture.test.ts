@@ -99,10 +99,8 @@ describe('native quality updates', () => {
       0, 0, 1, 0x41, 0,
     ]);
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
-      let controller!: ReadableStreamDefaultController<Uint8Array>;
       const body = new ReadableStream<Uint8Array>({
         start(value) {
-          controller = value;
           value.enqueue(audIdrAccessUnit);
           init.signal?.addEventListener('abort', () => value.close(), { once: true });
         },

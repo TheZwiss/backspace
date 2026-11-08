@@ -11,7 +11,7 @@ export async function connect(port = 9223, targetId = null) {
     const message = JSON.parse(data);
     if (message.id) {
       const request = pending.get(message.id);
-      if (request) { clearTimeout(request.timer); pending.delete(message.id); message.error ? request.reject(new Error(JSON.stringify(message.error))) : request.resolve(message.result); }
+      if (request) { clearTimeout(request.timer); pending.delete(message.id); if (message.error) request.reject(new Error(JSON.stringify(message.error))); else request.resolve(message.result); }
     } else events.push({ ...message, receivedAt: Date.now() });
   });
   const send = (method, params = {}) => new Promise((resolve,reject) => {

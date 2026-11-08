@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({
-  voice: {} as any, asr: {} as any, listeners: new Set<() => void>(),
+  voice: {} as Record<string, unknown>, asr: {} as Record<string, unknown>, listeners: new Set<() => void>(),
   getMic: vi.fn(), transcribe: vi.fn(), release: vi.fn(), speak: vi.fn(), prepare: vi.fn(), stopTrack: vi.fn(), connect: vi.fn(),
-  room: {} as any, recorder: null as any,
+  room: {} as Record<string, unknown>, recorder: null as unknown,
 }));
 vi.mock('../stores/voiceStore', () => ({ useVoiceStore: { getState: () => mock.voice, subscribe: (callback: () => void) => { mock.listeners.add(callback); return () => mock.listeners.delete(callback); } } }));
-vi.mock('../platform/speechRecognition', () => ({ useDictationStore: { getState: () => mock.asr, setState: (changes: any) => Object.assign(mock.asr, changes) }, speechRecognition: { transcribe: mock.transcribe, release: mock.release } }));
+vi.mock('../platform/speechRecognition', () => ({ useDictationStore: { getState: () => mock.asr, setState: (changes: Record<string, unknown>) => Object.assign(mock.asr, changes) }, speechRecognition: { transcribe: mock.transcribe, release: mock.release } }));
 vi.mock('../platform/textVoice', () => ({ getLocalTextVoiceProvider: () => ({ prepareTextVoice: mock.prepare }) }));
 vi.mock('../hooks/useLiveKit', () => ({ getActiveRoom: () => mock.room }));
 vi.mock('./textVoice', () => ({ canUseTextVoice: () => mock.voice.isLiveKitConnected && !mock.voice.isMuted, speakText: mock.speak, stopTextVoice: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({ resumeContext: async () => {}, ensureContext: () => ({ decodeAudioData: async () => ({ duration: 1 }) }) }) } }));
 import { pressDictation, releaseDictation, cancelDictation } from './dictation';
 class Recorder {
-  state = 'inactive'; mimeType = 'audio/webm'; onstop: (() => void) | null = null; ondataavailable: ((event: any) => void) | null = null;
+  state = 'inactive'; mimeType = 'audio/webm'; onstop: (() => void) | null = null; ondataavailable: ((event: { data: { size: number } }) => void) | null = null;
   constructor() { mock.recorder = this; }
   start() { this.state = 'recording'; }
   stop() { this.state = 'inactive'; this.ondataavailable?.({ data: { size: 100 } }); this.onstop?.(); }
@@ -42,7 +42,7 @@ it('records only while held, transcribes after release, then synthesizes to the 
   expect(mock.transcribe).toHaveBeenCalledOnce(); expect(mock.stopTrack).toHaveBeenCalled(); expect(mock.voice.textVoiceDraft).toBe('');
 });
 it('discards late microphone permission when the key is already released', async () => {
-  let grant!: (value: any) => void;
+  let grant!: (value: unknown) => void;
   mock.getMic.mockReturnValue(new Promise((resolve) => { grant = resolve; }));
   const press = pressDictation();
   await vi.waitFor(() => expect(mock.getMic).toHaveBeenCalledOnce()); releaseDictation();
@@ -50,7 +50,7 @@ it('discards late microphone permission when the key is already released', async
   expect(mock.stopTrack).toHaveBeenCalled(); expect(mock.transcribe).not.toHaveBeenCalled(); expect(mock.speak).not.toHaveBeenCalled();
 });
 it('cancels when changing call, including a late recognition result', async () => {
-  let recognize!: (value: any) => void;
+  let recognize!: (value: unknown) => void;
   mock.transcribe.mockReturnValue(new Promise((resolve) => { recognize = resolve; }));
   await pressDictation(); releaseDictation(); await vi.waitFor(() => expect(mock.transcribe).toHaveBeenCalledOnce());
   mock.room = {}; mock.voice.currentVoiceChannelId = 'another-call'; for (const callback of mock.listeners) callback();

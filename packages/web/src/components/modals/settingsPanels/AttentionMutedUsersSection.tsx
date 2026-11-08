@@ -26,13 +26,13 @@ export function AttentionMutedUsersSection() {
   const [query, setQuery] = useState(''), [duration, setDuration] = useState('3600000');
   const [results, setResults] = useState<Candidate[]>([]), [error, setError] = useState('');
   const [now, setNow] = useState(Date.now);
-  const active = entries.filter(entry => entry.owner === owner && (entry.until === null || entry.until > now));
+  const active = useMemo(() => entries.filter(entry => entry.owner === owner && (entry.until === null || entry.until > now)), [entries, owner, now]);
   useEffect(() => {
     const next = Math.min(...active.flatMap(entry => entry.until === null ? [] : [entry.until]));
     if (!Number.isFinite(next)) return;
     const timer = setTimeout(() => setNow(Date.now()), Math.max(1, next - Date.now() + 1));
     return () => clearTimeout(timer);
-  }, [entries, owner, now]);
+  }, [active]);
   useEffect(() => {
     let cancelled = false;
     setError(''); setResults([]);
@@ -52,7 +52,7 @@ export function AttentionMutedUsersSection() {
     for (const candidate of results) map.set(userKey(candidate.user, candidate.origin), candidate);
     const search = query.trim().toLocaleLowerCase();
     return [...map.values()].filter(({ user, origin }) => !isMine(user, origin, selfIdentityOf(self, rows)) && !attentionMuted(owner, user, origin) && (!search || `${user.displayName ?? ''} ${user.username}`.toLocaleLowerCase().includes(search))).slice(0, 20);
-  }, [friends, dms, results, query, entries, owner, self, rows, now]);
+  }, [friends, dms, results, query, owner, self, rows]);
   if (!self) return null;
   return <section className="settings-section space-y-4" aria-labelledby="attention-muted-users-title">
     <div><h3 id="attention-muted-users-title" className="text-sm font-semibold text-txt-primary">{t('settings:attentionMutes.title')}</h3><p className="text-xs text-txt-secondary mt-1">{t('settings:attentionMutes.description')}</p></div>
