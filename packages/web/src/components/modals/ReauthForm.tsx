@@ -180,6 +180,7 @@ export function ReauthForm({ origin, username, onDone, onCancel, className = '' 
       aria-label={t('federation:connections.row.reauthenticate')}
       aria-busy={loading}
       tabIndex={-1}
+      data-owns-escape=""
       className={`space-y-2.5 outline-none ${className}`}
       onKeyDown={handleKeyDown}
     >

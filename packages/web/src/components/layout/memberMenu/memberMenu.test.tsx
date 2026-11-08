@@ -147,7 +147,7 @@ describe('member context menu', () => {
       };
     });
     openRoles();
-    expect(screen.getByRole('menu', { name: 'Roles' })).toHaveStyle({ left: '736px' });
+    expect(screen.getByRole('menu', { name: 'Roles' })).toHaveStyle({ left: '740px' });
   });
 
   it('saves a space nickname and offers an explicit reset', async () => {

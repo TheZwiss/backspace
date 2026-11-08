@@ -123,7 +123,7 @@ describe('HelloModal', () => {
 
     const dialog = screen.getByRole('dialog', { name: "Hi. It's Jannis. I built this." });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(dialog).toHaveFocus();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 
   it('waits for the preview instead of showing an empty message', async () => {

@@ -128,7 +128,7 @@ function socketFor(origin: string): FakeWebSocket {
 }
 
 function panel(): HTMLElement {
-  return render(<ActivityPanel />).container;
+  return render(<MemoryRouter><ActivityPanel /></MemoryRouter>).container;
 }
 
 beforeEach(() => {

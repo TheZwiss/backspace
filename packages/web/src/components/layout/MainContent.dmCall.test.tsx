@@ -7,6 +7,7 @@ vi.mock('../../audio/AudioManager', () => ({
       setOutputDevice: vi.fn(),
       setVolume: vi.fn(),
       clearInputDenial: vi.fn(),
+      setTextInputOnly: vi.fn(),
       resumeContext: vi.fn(() => Promise.resolve()),
       setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),
@@ -98,7 +99,7 @@ describe('desktop DM header call actions', () => {
     useVoiceStore.setState({ voiceUsers: new Map([[dm.id, ['partner']]]), connectFn });
     renderDm();
     // The voice and video buttons both join; the voice one comes first.
-    fireEvent.click(screen.getAllByTitle('Join Call')[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Join Call' })[0]!);
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
     expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: dm.id, federatedCallId: null, callOrigin: null, livekit: null });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: dm.id }, '');

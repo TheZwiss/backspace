@@ -115,6 +115,7 @@ export function ChannelTopicEditor({ topic, canEdit, onSave }: ChannelTopicEdito
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}
+        data-owns-escape={isDirty ? '' : undefined}
         readOnly={isSaving}
         rows={3}
         maxLength={Math.max(CHANNEL_TOPIC_MAX_LENGTH, draft.length)}
