@@ -81,6 +81,34 @@ restart_server() {
   setsid nohup node --import tsx/esm src/index.ts >>"$SERVER_LOG" 2>&1 </dev/null 9>&- &
 }
 
+# True when every /assets/... file that index.html references exists under $1.
+# The server answers a missing asset with index.html (SPA fallback), so a dist
+# whose index.html points at chunks that are not on disk makes the main module
+# load as HTML: React never mounts and the desktop app reports render-stalled.
+dist_complete() {
+  local dir="$1" ref
+  [ -f "$dir/index.html" ] || return 1
+  while IFS= read -r ref; do
+    [ -f "$dir$ref" ] || { log "dist check: $ref referenced by index.html is missing in $dir"; return 1; }
+  done < <(grep -oE '(src|href)="/assets/[^"]+"' "$dir/index.html" | sed -E 's/^[a-z]+="//; s/"$//')
+  return 0
+}
+
+# Rebuild the web bundle in place when the live dist is incomplete, even if
+# there is no new commit. Used to heal a dist left half-written.
+heal_dist() {
+  local web="$REPO/packages/web"
+  [ -f "$web/dist/index.html" ] && dist_complete "$web/dist" && return 0
+  log "live web dist is incomplete, rebuilding it"
+  run_step "$BUILD_CMD" || { log "ERROR: heal build failed"; rm -rf "$web/dist.new"; return 1; }
+  dist_complete "$web/dist.new" || { log "ERROR: heal build is incomplete, keeping the old dist"; rm -rf "$web/dist.new"; return 1; }
+  rm -rf "$web/dist.prev"
+  [ -d "$web/dist" ] && mv "$web/dist" "$web/dist.prev"
+  mv "$web/dist.new" "$web/dist"
+  rm -rf "$web/dist.prev"
+  log "web dist healed"
+}
+
 changed() { git -C "$REPO" diff --name-only "$1" "$2" | grep -Eq "$3"; }
 
 run_step() {
@@ -113,7 +141,10 @@ cycle() {
   old="$(git -C "$REPO" rev-parse HEAD)"
   new="$(git -C "$REPO" rev-parse "$REMOTE/$BRANCH")"
 
-  [ "$old" = "$new" ] && return 0
+  if [ "$old" = "$new" ]; then
+    heal_dist
+    return 0
+  fi
 
   if ! git -C "$REPO" merge-base --is-ancestor "$old" "$new"; then
     log "skip: local $BRANCH (${old:0:8}) is not an ancestor of $REMOTE/$BRANCH (${new:0:8}); needs a human"
@@ -168,6 +199,9 @@ cycle() {
   if [ "$need_build" = 1 ]; then
     run_step "$BUILD_CMD" || { rollback "web build failed"; return 1; }
     local web="$REPO/packages/web"
+    if [ -d "$web/dist.new" ] && ! dist_complete "$web/dist.new"; then
+      rollback "web build is incomplete (index.html references missing files)"; return 1
+    fi
     if [ -d "$web/dist.new" ]; then
       rm -rf "$web/dist.prev"
       [ -d "$web/dist" ] && mv "$web/dist" "$web/dist.prev"
