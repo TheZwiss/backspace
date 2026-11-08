@@ -5,12 +5,11 @@ import {
   MAX_SPACE_STICKERS,
   MAX_STICKER_NAME_LENGTH,
   normalizeStickerName,
-  stickerPreviewUrl,
-  stickerUrl,
   type StickerCrop,
   type StickerPackDetail,
   type StickerPackShare,
 } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../../utils/stickerAssets';
 import { api } from '../../../api/client';
 import { useHomeInstanceInfo } from '../../../hooks/useHomeInstanceInfo';
 import { ImageCropModal } from '../../ui/ImageCropModal';
@@ -32,7 +31,7 @@ function imageData(file: File): Promise<string> {
 }
 
 function stickerImage(token: string): string {
-  return stickerPreviewUrl(token) ?? stickerUrl(token) ?? '';
+  return displayStickerPreviewUrl(token) ?? displayStickerUrl(token) ?? '';
 }
 
 export function StickerPackPanel({ spaceId }: { spaceId: string }) {

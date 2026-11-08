@@ -9,13 +9,13 @@ import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import * as schema from '../db/schema.js';
 import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits } from '@backspace/shared/src/permissions.js';
-const mocks = vi.hoisted(() => ({ current: null as unknown, status: {} as Record<string, unknown>, sendData: vi.fn().mockResolvedValue(undefined) }));
+const mocks = vi.hoisted(() => ({ current: null as unknown, status: {} as Record<string, unknown>, sendData: vi.fn().mockResolvedValue(undefined), apiUrls: [] as string[], internalUrl: undefined as string | undefined }));
 let db: ReturnType<typeof drizzle<typeof schema>>; let sqlite: Database.Database; let app: FastifyInstance;
 vi.mock('../db/index.js', () => ({ getDb: () => db, schema }));
-vi.mock('../config.js', () => ({ config: { livekit: { url: 'ws://127.0.0.1:7880', apiKey: 'key', apiSecret: 'secret' } } }));
+vi.mock('../config.js', () => ({ config: { livekit: { url: 'ws://127.0.0.1:7880', get internalUrl() { return mocks.internalUrl; }, apiKey: 'key', apiSecret: 'secret' } } }));
 vi.mock('../utils/federationAuth.js', () => ({ getOurOrigin: () => 'https://chat.test' }));
 vi.mock('../ws/handler.js', () => ({ connectionManager: { getUserRoom: () => mocks.current, getVoiceUserStatus: () => mocks.status } }));
-vi.mock('livekit-server-sdk', () => ({ DataPacket_Kind: { RELIABLE: 0 }, RoomServiceClient: class { sendData = mocks.sendData; } }));
+vi.mock('livekit-server-sdk', () => ({ DataPacket_Kind: { RELIABLE: 0 }, RoomServiceClient: class { sendData = mocks.sendData; constructor(url: string) { mocks.apiUrls.push(url); } } }));
 vi.mock('../utils/auth.js', () => ({ authenticate: async (request: FastifyRequest & { userId?: string; username?: string }, reply: FastifyReply) => { if (!request.headers.authorization) return reply.code(401).send(); request.userId = request.headers.authorization; request.username = request.userId; } }));
 import { soundboardRoutes, _resetSoundboardLimits } from './soundboard.js';
 import { validateSoundboardWav } from '../utils/soundboardAudio.js';
@@ -80,6 +80,19 @@ it('authorizes sound playback against the current room and sends only a short se
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') })).statusCode).toBe(200);
   mocks.current = null;
   expect((await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers() })).statusCode).toBe(403);
+});
+it('reaches LiveKit through the internal URL when one is set, and the public URL otherwise', async () => {
+  const sound = (await upload()).json();
+  mocks.apiUrls.length = 0;
+  await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') });
+  expect(mocks.apiUrls.at(-1)).toBe('http://127.0.0.1:7880');
+  mocks.internalUrl = 'http://10.1.1.1:7880';
+  try {
+    await app.inject({ method: 'POST', url: `/api/soundboard/${sound.id}/play`, headers: headers('member') });
+    expect(mocks.apiUrls.at(-1)).toBe('http://10.1.1.1:7880');
+  } finally {
+    mocks.internalUrl = undefined;
+  }
 });
 it('checks external-sound permission, server mute and active private calls', async () => {
   const sound = (await upload('s2')).json();

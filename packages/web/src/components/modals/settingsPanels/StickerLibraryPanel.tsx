@@ -5,12 +5,11 @@ import {
   MAX_PRIVATE_STICKERS_PER_PACK,
   MAX_STICKER_NAME_LENGTH,
   normalizeStickerName,
-  stickerPreviewUrl,
-  stickerUrl,
   type FavoriteSticker,
   type StickerCrop,
   type StickerPackDetail,
 } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../../utils/stickerAssets';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
 import { useHomeInstanceInfo } from '../../../hooks/useHomeInstanceInfo';
@@ -37,7 +36,7 @@ function imageData(file: File | Blob): Promise<string> {
 }
 
 function stickerImage(token: string): string {
-  return stickerPreviewUrl(token) ?? stickerUrl(token) ?? '';
+  return displayStickerPreviewUrl(token) ?? displayStickerUrl(token) ?? '';
 }
 
 export function StickerLibraryPanel() {

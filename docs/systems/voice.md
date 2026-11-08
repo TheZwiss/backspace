@@ -45,6 +45,10 @@ An admin with MANAGE_CHANNELS picks the quality of a space voice channel in its 
 - **Enforcement is client-side only**, as for the screen share limits below: the publish goes straight to the SFU, which has no audio bitrate cap to put in a token, so a modified client can send more. The server validates the value and who may set it.
 - **Federation:** nothing to relay. The channel and its setting live on the instance that owns the space; a client on another instance reads the field from that instance's API and WebSocket, resolved through the channel's origin like any other channel field.
 
+### Server-to-LiveKit address (`LIVEKIT_INTERNAL_URL`)
+
+`LIVEKIT_URL` is what browsers connect to, so it may be a LAN IP behind a self-signed Caddy certificate or a Tailscale name the server cannot dial from its own host. The server's own calls to LiveKit's HTTP API (soundboard playback sends its event through `RoomServiceClient.sendData`) use `config.livekit.internalUrl` (`LIVEKIT_INTERNAL_URL`, e.g. `http://127.0.0.1:7880`) and fall back to `LIVEKIT_URL`. When that call fails the player sees `voice_disabled` ("Voice and video are not configured on this instance"), which is why a working call can still have a soundboard that reports it.
+
 ### Listener mode (`micPermissionDenied`)
 
 When the user denies the prompt (or has previously denied at the OS level), the pre-arm's `setInputDevice` rejects with `NotAllowedError`. The `voiceStore.micPermissionDenied` flag is set to `true` and the LiveKit connect proceeds anyway — the user appears in the voice channel as a connected participant who can hear others but has no microphone publication. `useLiveKit.syncMic` checks the flag at the top of its body and skips the publish branch entirely.

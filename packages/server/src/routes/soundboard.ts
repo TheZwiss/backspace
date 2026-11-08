@@ -111,14 +111,15 @@ export async function soundboardRoutes(app: FastifyInstance): Promise<void> {
       const restriction = db.select().from(schema.voiceRestrictions).where(and(eq(schema.voiceRestrictions.spaceId, spaceId), eq(schema.voiceRestrictions.userId, request.userId))).get();
       if (restriction) return sendError(reply, 403, 'forbidden');
     }
-    if (!config.livekit.url || !config.livekit.apiKey || !config.livekit.apiSecret) return sendError(reply, 503, 'voice_disabled');
+    const livekitApiUrl = config.livekit.internalUrl ?? config.livekit.url;
+    if (!livekitApiUrl || !config.livekit.apiKey || !config.livekit.apiSecret) return sendError(reply, 503, 'voice_disabled');
     for (const [key, value] of grants) if (value.until < Date.now()) grants.delete(key);
     if (grants.size >= 2000) grants.delete(grants.keys().next().value!);
     const ticket = randomUUID(); grants.set(ticket, { assetId: sound.assetId, until: Date.now() + 90_000 });
     const channel = room.roomType === 'dm' ? db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, room.roomId)).get() : null;
     const livekitRoom = room.roomType === 'space' ? room.roomId : channel ? (channel.federatedId ?? `dm-${room.roomId}`) : room.roomId;
     try {
-      const client = new RoomServiceClient(config.livekit.url.replace(/^ws/, 'http'), config.livekit.apiKey, config.livekit.apiSecret);
+      const client = new RoomServiceClient(livekitApiUrl.replace(/^ws/, 'http'), config.livekit.apiKey, config.livekit.apiSecret);
       await client.sendData(livekitRoom, new TextEncoder().encode(JSON.stringify({ type: 'soundboard_play', senderIdentity: `${request.userId}:${request.username}`, senderUserId: request.userId, assetOrigin: getOurOrigin(), ticket, assetId: sound.assetId, name: sound.name, volume: sound.volume, createdAt: Date.now() })), DataPacket_Kind.RELIABLE, { topic: 'backspace.soundboard.v1' });
     } catch { grants.delete(ticket); return sendError(reply, 503, 'voice_disabled'); }
     return { success: true };

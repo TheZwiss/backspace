@@ -1,4 +1,4 @@
-import { stickerUrl } from '@backspace/shared/src/stickers';
+import { displayStickerUrl } from '../../utils/stickerAssets';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -55,7 +55,7 @@ function truncateName(name: string): string {
  */
 export function ReactionPill({ emoji, reactions, origin, onToggle, entering = false }: ReactionPillProps) {
   const { t } = useTranslation(['chat', 'common']);
-  const imageUrl = stickerUrl(emoji);
+  const imageUrl = displayStickerUrl(emoji);
   const fmt = useFormatters();
   const self = useSelfIdentity();
   const isMobile = useUIStore((s) => s.isMobile);

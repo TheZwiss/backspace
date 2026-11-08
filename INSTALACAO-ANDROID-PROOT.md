@@ -81,6 +81,7 @@ JWT_SECRET=<gerar com: openssl rand -hex 32>
 REGISTRATION_OPEN=true
 LIVEKIT_URL=wss://10.0.1.5:8443/livekit/
 LIVEKIT_URL_AUTO=1
+LIVEKIT_INTERNAL_URL=http://127.0.0.1:7880
 LIVEKIT_API_KEY=<mesma chave do livekit.yaml>
 LIVEKIT_API_SECRET=<mesmo secret do livekit.yaml>
 ```
@@ -90,6 +91,13 @@ LIVEKIT_API_SECRET=<mesmo secret do livekit.yaml>
 `wss://<host-da-página>:8443/livekit/`. Assim LAN, IP Tailscale e MagicDNS
 funcionam sem fixar um único endereço em `LIVEKIT_URL`. `LIVEKIT_URL` continua
 sendo o fallback (e o endereço usado em federação).
+
+`LIVEKIT_INTERNAL_URL` é o endereço que o próprio servidor usa para falar com o
+LiveKit (efeitos sonoros do soundboard). Sem ele o servidor tenta o
+`LIVEKIT_URL` público, que dentro do celular passa pelo Caddy com certificado
+autoassinado, falha e o app mostra "Voz e vídeo não estão configurados nesta
+instância". Para as figurinhas, defina também `PUBLIC_ORIGIN=https://backspace.<sua-tailnet>.ts.net`
+(com `DOMAIN=localhost:3000` o servidor gera `https://localhost:3000/...`).
 
 As três permissões de voz padrão do `@everyone` já incluem `CONNECT`, `SPEAK` e
 `STREAM`; o token emitido em `/api/livekit/token` contém

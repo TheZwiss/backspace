@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { stickerPreviewUrl, stickerUrl, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { type PersonalSticker } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../utils/stickerAssets';
 
 interface StickerGridProps {
   /** The entries the search leaves, in collection order. */
@@ -57,7 +58,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
               className="sticker-tile w-full p-2"
             >
               <img
-                src={stickerPreviewUrl(item.token) || stickerUrl(item.token) || undefined}
+                src={displayStickerPreviewUrl(item.token) || displayStickerUrl(item.token) || undefined}
                 alt={item.name}
                 className="aspect-square w-full object-contain transition-transform group-hover:scale-105"
                 loading="lazy"

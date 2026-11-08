@@ -5,11 +5,10 @@ import {
   MAX_STICKER_PACK_DESC_LENGTH,
   MAX_STICKER_PACK_NAME_LENGTH,
   MAX_STICKERS_PER_PACK,
-  stickerUrl,
-  stickerPreviewUrl,
   type StickerPackDetail,
   type StickerPackItem,
 } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../utils/stickerAssets';
 import { api } from '../../api/client';
 import { describeError } from '../../i18n/errors';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
@@ -283,7 +282,7 @@ export function StickerPackManageModal({ packId, onClose, onSaved }: StickerPack
                     className="group relative aspect-square rounded-xl bg-surface-base/60 border border-border-soft p-2 flex flex-col items-center justify-center overflow-hidden"
                   >
                     <img
-                      src={stickerPreviewUrl(item.token) || stickerUrl(item.token) || item.token.replace(/^sticker:/, '')}
+                      src={displayStickerPreviewUrl(item.token) || displayStickerUrl(item.token) || item.token.replace(/^sticker:/, '')}
                       alt={item.name}
                       className="max-h-full max-w-full object-contain pointer-events-none"
                     />

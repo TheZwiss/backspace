@@ -185,6 +185,31 @@ export function resolveStickerAssetUrl(token: string, localOrigin?: string): str
   return stickerUrl(token);
 }
 
+/** Hosts no other machine can reach: an asset URL on one of them was minted by a misconfigured instance. */
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return host === 'localhost' || host.endsWith('.localhost') || host === '::1' || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
+/**
+ * An asset URL that points at a loopback address can only have come from an
+ * instance whose `DOMAIN`/`PUBLIC_ORIGIN` was never set to its public address,
+ * and no browser but the host's own can load it. Draw it from `pageOrigin`
+ * instead, the instance the page itself was served by. Any other URL, and any
+ * page that is itself on a loopback address, is returned unchanged.
+ */
+export function localizeLoopbackAssetUrl(url: string, pageOrigin: string): string {
+  try {
+    const asset = new URL(url);
+    if (!isLoopbackHostname(asset.hostname)) return url;
+    const page = new URL(pageOrigin);
+    if (!['https:', 'http:'].includes(page.protocol) || isLoopbackHostname(page.hostname)) return url;
+    return `${page.origin}${asset.pathname}${asset.search}${asset.hash}`;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Returns the preview / thumbnail URL for a sticker token or asset URL, appending ?preview=1.
  */

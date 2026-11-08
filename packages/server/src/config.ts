@@ -256,6 +256,11 @@ export const config = {
 
   livekit: {
     url: envOptional('LIVEKIT_URL'),
+    // Where THIS server reaches LiveKit's HTTP API (e.g. http://127.0.0.1:7880).
+    // LIVEKIT_URL is the address browsers use, which can be a LAN IP behind a
+    // self-signed Caddy certificate or a Tailscale name the server cannot dial
+    // from inside its own host. When unset, LIVEKIT_URL is used for both.
+    internalUrl: envOptional('LIVEKIT_INTERNAL_URL'),
     apiKey: envOptional('LIVEKIT_API_KEY'),
     apiSecret: envOptional('LIVEKIT_API_SECRET'),
     // When true, a local token request that arrived through a reverse proxy

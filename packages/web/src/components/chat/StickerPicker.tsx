@@ -3,12 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   MAX_PERSONAL_STICKERS,
-  stickerPreviewUrl,
-  stickerUrl,
   type PersonalSticker,
   type StickerPackDetail,
   type StickerPackSummary,
 } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../utils/stickerAssets';
 import { api } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 import { StickerUploadForm } from './StickerUploadForm';
@@ -52,7 +51,7 @@ function PackStickerGrid({ pack, query, onSelect }: { pack: StickerPackDetail; q
             className="sticker-tile w-full p-2"
           >
             <img
-              src={stickerPreviewUrl(item.token) || stickerUrl(item.token) || ''}
+              src={displayStickerPreviewUrl(item.token) || displayStickerUrl(item.token) || ''}
               alt={item.name}
               className="aspect-square w-full object-contain transition-transform group-hover:scale-105"
               loading="lazy"
@@ -85,7 +84,7 @@ function TokenStickerGrid({ items, query, onSelect }: {
             className="sticker-tile w-full p-2"
           >
             <img
-              src={stickerPreviewUrl(item.token) || stickerUrl(item.token) || ''}
+              src={displayStickerPreviewUrl(item.token) || displayStickerUrl(item.token) || ''}
               alt={item.name}
               className="aspect-square w-full object-contain"
               loading="lazy"
@@ -588,7 +587,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   }`}
                 >
                   {pack.items[0]
-                    ? <img src={stickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
+                    ? <img src={displayStickerPreviewUrl(pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
                     : pack.name.slice(0, 1)}
                 </button></Tooltip>
               ))}
@@ -607,7 +606,7 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
                   }`}
                 >
                   {space.pack.items[0]
-                    ? <img src={stickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
+                    ? <img src={displayStickerPreviewUrl(space.pack.items[0].token) ?? ''} alt="" className="h-5 w-5 object-contain" />
                     : space.pack.name.slice(0, 1)}
                 </button></Tooltip>
               ))}
@@ -616,9 +615,9 @@ export function StickerPicker({ onSelect, mobile = false, manageable = true, spa
               {installedPacks.map(pack => {
                 const firstItemToken = (pack as Partial<StickerPackDetail>).items?.[0]?.token;
                 const cover =
-                  stickerPreviewUrl(pack.coverUrl) ||
+                  displayStickerPreviewUrl(pack.coverUrl) ||
                   pack.coverUrl ||
-                  (firstItemToken ? stickerPreviewUrl(firstItemToken) || stickerUrl(firstItemToken) : null);
+                  (firstItemToken ? displayStickerPreviewUrl(firstItemToken) || displayStickerUrl(firstItemToken) : null);
                 const tabId = `store:${pack.id}`;
                 const isActive = activeTab === tabId;
                 return (

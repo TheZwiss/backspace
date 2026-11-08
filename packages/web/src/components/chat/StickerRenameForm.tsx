@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAX_STICKER_NAME_LENGTH, normalizeStickerName, stickerUrl, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { MAX_STICKER_NAME_LENGTH, normalizeStickerName, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { displayStickerUrl } from '../../utils/stickerAssets';
 import { api } from '../../api/client';
 import { describeError } from '../../i18n/errors';
 import { usePickerEscapeClaim } from './pickerEscape';
@@ -72,7 +73,7 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
         <div className="flex min-h-40 items-center justify-center rounded-xl border border-border-soft bg-surface-input/40 p-4 sticker-checkerboard">
-          <img src={stickerUrl(sticker.token) ?? undefined} alt={sticker.name} className="h-32 w-full object-contain" />
+          <img src={displayStickerUrl(sticker.token) ?? undefined} alt={sticker.name} className="h-32 w-full object-contain" />
         </div>
         <div>
           <label htmlFor={inputId} className="mb-1.5 block text-xs font-medium text-txt-secondary">
