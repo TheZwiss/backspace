@@ -697,7 +697,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 64
+          "default": 128
         },
         "created_at": {
           "name": "created_at",

@@ -108,7 +108,7 @@ export const channels = sqliteTable('channels', {
   position: integer('position').default(0),
   categoryId: text('category_id'),
   /** Ceiling of the microphone bitrate in kbps; only voice channels use it. */
-  voiceBitrateKbps: integer('voice_bitrate_kbps').notNull().default(64),
+  voiceBitrateKbps: integer('voice_bitrate_kbps').notNull().default(128),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   spaceIdx: index('idx_channels_space_id').on(table.spaceId),

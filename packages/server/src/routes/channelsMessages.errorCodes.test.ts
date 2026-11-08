@@ -359,11 +359,11 @@ describe('channel and message routes send error codes', () => {
         }).run();
       });
 
-      it('a new voice channel starts at 64 kbps and reports it', async () => {
+      it('a new voice channel starts at 128 kbps and reports it', async () => {
         currentUserId = 'owner';
         const res = await app.inject({ method: 'PATCH', url: `/api/channels/${VOICE}`, payload: { name: 'lounge' } });
         expect(res.statusCode).toBe(200);
-        expect((JSON.parse(res.body) as { voiceBitrateKbps: number }).voiceBitrateKbps).toBe(64);
+        expect((JSON.parse(res.body) as { voiceBitrateKbps: number }).voiceBitrateKbps).toBe(128);
       });
 
       it.each([64, 128, 256])('stores the %i kbps preset', async (kbps) => {
@@ -381,7 +381,7 @@ describe('channel and message routes send error codes', () => {
         const body = JSON.parse(res.body) as ErrorBody;
         expect(body.code).toBe('voice_bitrate_invalid');
         expect(body.details).toEqual({ options: '64, 128, 256' });
-        expect(testDb.select().from(schema.channels).all().find((c) => c.id === VOICE)?.voiceBitrateKbps).toBe(64);
+        expect(testDb.select().from(schema.channels).all().find((c) => c.id === VOICE)?.voiceBitrateKbps).toBe(128);
       });
 
       it('a text channel has no voice quality → voice_bitrate_text_channel', async () => {

@@ -50,6 +50,7 @@ import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 import { enqueueTrackUpdate } from '../utils/activeTrackUpdates';
 import { applyMicBitrate, audioPresetForKbps } from '../utils/voiceQuality';
+import { DEFAULT_VOICE_BITRATE_KBPS } from '@backspace/shared/src/constants';
 
 let _activeRoom: Room | null = null;
 /**
@@ -907,10 +908,11 @@ export function useLiveKit() {
       // Refreshed per join; home's document arrives with every home `ready`.
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
       // A space voice channel carries the admin's chosen microphone quality;
-      // a DM call has none, and LiveKit's default stays.
+      // one from a server that predates the setting gets the same default the
+      // settings dialog shows. A DM call has none, and LiveKit's default stays.
       const channelBitrateKbps = isDm
         ? null
-        : useSpaceStore.getState().channels?.find((c) => c.id === channelId)?.voiceBitrateKbps ?? null;
+        : useSpaceStore.getState().channels?.find((c) => c.id === channelId)?.voiceBitrateKbps ?? DEFAULT_VOICE_BITRATE_KBPS;
       useVoiceStore.setState({ channelVoiceBitrateKbps: channelBitrateKbps });
       const newRoom = new Room({
         adaptiveStream: true,

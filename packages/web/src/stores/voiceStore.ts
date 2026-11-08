@@ -117,7 +117,7 @@ export interface VoiceState {
   /**
    * The microphone bitrate ceiling, in kbps, that the admin set on the space
    * voice channel this client is in; null in a DM call or on a server that
-   * predates the setting. Written when joining and by `channel_updated`, and
+   * predates the setting (then the default). Written when joining and by `channel_updated`, and
    * read by `useLiveKit`, which applies it to the live microphone. Not persisted.
    */
   channelVoiceBitrateKbps: number | null;

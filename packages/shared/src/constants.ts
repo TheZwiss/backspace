@@ -67,7 +67,7 @@ export const CHANNEL_TOPIC_MAX_LENGTH = 1024;
  */
 export const VOICE_BITRATE_OPTIONS_KBPS = [64, 128, 256] as const;
 export type VoiceBitrateKbps = (typeof VOICE_BITRATE_OPTIONS_KBPS)[number];
-export const DEFAULT_VOICE_BITRATE_KBPS: VoiceBitrateKbps = 64;
+export const DEFAULT_VOICE_BITRATE_KBPS: VoiceBitrateKbps = 128;
 
 export function isVoiceBitrateKbps(value: unknown): value is VoiceBitrateKbps {
   return typeof value === 'number' && (VOICE_BITRATE_OPTIONS_KBPS as readonly number[]).includes(value);

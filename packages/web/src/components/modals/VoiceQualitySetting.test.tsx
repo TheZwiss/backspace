@@ -11,9 +11,9 @@ describe('VoiceQualitySetting', () => {
     expect(radios.map((r) => r.checked)).toEqual([false, true, false]);
   });
 
-  it('shows 64 kbps for a channel that has no stored value', () => {
+  it('shows the 128 kbps default for a channel that has no stored value', () => {
     render(<VoiceQualitySetting value={undefined} canEdit onSave={vi.fn(async () => {})} />);
-    expect((screen.getAllByRole('radio') as HTMLInputElement[]).map((r) => r.checked)).toEqual([true, false, false]);
+    expect((screen.getAllByRole('radio') as HTMLInputElement[]).map((r) => r.checked)).toEqual([false, true, false]);
   });
 
   it('saves the picked preset', async () => {

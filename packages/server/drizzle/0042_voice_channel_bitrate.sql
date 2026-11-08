@@ -1,1 +1,1 @@
-ALTER TABLE `channels` ADD `voice_bitrate_kbps` integer DEFAULT 64 NOT NULL;
+ALTER TABLE `channels` ADD `voice_bitrate_kbps` integer DEFAULT 128 NOT NULL;

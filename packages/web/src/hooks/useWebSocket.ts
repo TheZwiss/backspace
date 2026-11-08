@@ -8,6 +8,7 @@ import React, { useEffect, useRef } from 'react';
 import { isMyIdentity, useAuthStore } from '../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
+import { DEFAULT_VOICE_BITRATE_KBPS } from '@backspace/shared/src/constants';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -1346,7 +1347,7 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // An admin changed the quality of the call this client is in: the live
       // microphone follows it (useLiveKit).
       if (event.channel.id === useVoiceStore.getState().currentVoiceChannelId) {
-        useVoiceStore.setState({ channelVoiceBitrateKbps: event.channel.voiceBitrateKbps ?? null });
+        useVoiceStore.setState({ channelVoiceBitrateKbps: event.channel.voiceBitrateKbps ?? DEFAULT_VOICE_BITRATE_KBPS });
       }
       break;
     }
