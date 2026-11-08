@@ -261,7 +261,10 @@ async function spawnOnPort(port: number, opts: SpawnInstanceOptions): Promise<Sp
   }
   // From packages/server/test/helpers → packages/server is up two levels.
   const serverDir = path.resolve(__dirname, '../../');
-  const proc = spawn('pnpm', ['exec', 'tsx', 'src/index.ts'], {
+  // Node plus the tsx loader, not `pnpm exec`: on Windows pnpm is pnpm.cmd,
+  // which spawn cannot start without a shell, and a shell would make kill()
+  // stop the wrapper and leave the server holding its port.
+  const proc = spawn(process.execPath, ['--import', 'tsx/esm', 'src/index.ts'], {
     cwd: serverDir,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],

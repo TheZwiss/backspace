@@ -30,7 +30,11 @@ export async function resizeProfileImage(
   const maxDim = PROFILE_LIMITS[type];
   const tmpPath = `${filepath}.tmp${path.extname(filepath)}`;
   try {
-    const metadata = await sharp(filepath, { animated: true }).metadata();
+    // Read the file into memory instead of handing sharp the path. On Windows
+    // libvips keeps a path-based input open, which makes the rename below fail
+    // and silently leaves the oversized original in place.
+    const input = fs.readFileSync(filepath);
+    const metadata = await sharp(input, { animated: true }).metadata();
     if (!metadata.width || metadata.width <= maxDim) return;
     if ((metadata.pages ?? 1) > MAX_ANIMATED_PAGES) {
       console.warn(
@@ -42,7 +46,7 @@ export async function resizeProfileImage(
       return;
     }
 
-    await sharp(filepath, { animated: true })
+    await sharp(input, { animated: true })
       .resize({ width: maxDim, withoutEnlargement: true })
       .toFile(tmpPath);
     fs.renameSync(tmpPath, filepath);
