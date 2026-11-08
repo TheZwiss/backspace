@@ -36,6 +36,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // A new cache name makes every client fill its precache again. Entries
+        // are keyed by their hashed URL, so ones stored while a server answered
+        // asset URLs with index.html (release 1.13.1's window) would otherwise
+        // be kept as they are for as long as the hash stays the same.
+        cacheId: 'backspace-r2',
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/uploads/],
         // No skipWaiting: a new worker activates only on SwAutoUpdate's
