@@ -1,4 +1,4 @@
-import { Track, type Room, type VideoCaptureOptions } from 'livekit-client';
+import { Track, VideoPresets, type Room, type VideoCaptureOptions } from 'livekit-client';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import { WIDTH_MAP, type StandardResolution } from '@backspace/shared/src/constants';
 import { resolveCameraLimits } from '../stores/settingsStore';
@@ -13,8 +13,14 @@ export interface CameraBuildResult {
   publish: {
     videoCodec: 'h264';
     videoEncoding: { maxBitrate: number; maxFramerate: number };
-    /** One encoding only: the camera is published as a single quality. */
-    simulcast: false;
+    /**
+     * Two encodings: the chosen quality and one 360p layer for tiles that are
+     * out of focus. LiveKit's default adds a third (720p) layer, which is what
+     * showed up as three simultaneous sources; `dynacast` pauses whichever
+     * layer nobody is watching.
+     */
+    simulcast: true;
+    videoSimulcastLayers: [typeof VideoPresets.h360];
     /** No second-codec copy of the camera either (LiveKit adds a VP8 one by default). */
     backupCodec: false;
   };
@@ -74,13 +80,17 @@ export function buildCameraOptions(
     publish: {
       videoCodec: 'h264',
       videoEncoding: { maxBitrate: bitrateBps, maxFramerate: config.fps },
-      simulcast: false,
+      simulcast: true,
+      videoSimulcastLayers: [VideoPresets.h360],
       backupCodec: false,
     },
     overdrive: {
       maxBitrate: bitrateBps,
       maxFramerate: config.fps,
       degradationPreference: 'maintain-framerate',
+      // Below the screen share's 'high': a short uplink starves the webcam
+      // before the screen share.
+      priority: 'low',
     },
   };
 }

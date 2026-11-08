@@ -13,6 +13,7 @@ import i18n from '../i18n';
 import { isElectron, getElectronAPI } from '../platform/platform';
 import { acquireAppExcludedSystemAudio } from './systemAudioSource';
 import { enqueueTrackUpdate } from './activeTrackUpdates';
+import { startScreenShareRecovery } from './screenShareRecovery';
 import {
   canUseNativeScreenCapture,
   openNativeScreenCaptureTrack,
@@ -46,6 +47,12 @@ export interface OverdriveOptions {
   maxBitrate: number;
   maxFramerate: number;
   degradationPreference: RTCDegradationPreference;
+  /**
+   * RTP priority of the sender's top encoding. Defaults to `'high'`. The camera
+   * asks for `'low'` so that, when the uplink is short, the congestion
+   * controller takes bandwidth from the webcam before the screen share.
+   */
+  priority?: RTCPriorityType;
 }
 
 export interface ScreenShareBuildResult {
@@ -201,13 +208,24 @@ export function buildScreenShareOptions(savedConfig: ScreenShareConfig): ScreenS
 
   // Convert to bps ONLY at the WebRTC boundary
   const bps = clampedKbps * 1000;
-  // The persisted config is the only source of codec intent. The VP8 backup
-  // remains simulcast: room dynacast pauses it when nobody needs it, while an
-  // incompatible subscriber can receive VP8 without regressing every viewer.
+  // The persisted config is the only source of codec intent. A VP9 share keeps
+  // a VP8 backup as simulcast: room dynacast pauses it when nobody needs it,
+  // while a subscriber that cannot decode VP9 can receive VP8 without
+  // regressing every viewer. An H.264 share has no backup: every client decodes
+  // H.264, so the second encode would only take uplink and CPU from the share.
 
   // Backup encoding: cap at 30fps and proportional bitrate to keep CPU overhead low
   const backupFps = Math.min(fps, 30);
   const backupBps = Math.round(bps * (backupFps / fps));
+  const backup = config.codec === 'vp9'
+    ? {
+        backupCodec: {
+          codec: 'vp8' as const,
+          encoding: { maxBitrate: backupBps, maxFramerate: backupFps },
+        },
+        backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
+      }
+    : {};
 
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
@@ -216,11 +234,7 @@ export function buildScreenShareOptions(savedConfig: ScreenShareConfig): ScreenS
       degradationPreference: mode === 'text' ? 'maintain-resolution' : 'maintain-framerate',
       videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
-      backupCodec: {
-        codec: 'vp8' as const,
-        encoding: { maxBitrate: backupBps, maxFramerate: backupFps },
-      },
-      backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
+      ...backup,
       audioPreset: AudioPresets.musicHighQualityStereo,
       dtx: false,
       red: false,
@@ -298,8 +312,9 @@ export async function applyOverdrive(
     const idx = params.encodings.length - 1;
     params.encodings[idx]!.maxBitrate = options.maxBitrate;
     params.encodings[idx]!.maxFramerate = options.maxFramerate;
-    params.encodings[idx]!.priority = 'high';
-    params.encodings[idx]!.networkPriority = 'high';
+    const priority = options.priority ?? 'high';
+    params.encodings[idx]!.priority = priority;
+    params.encodings[idx]!.networkPriority = priority;
     (params as any).degradationPreference = options.degradationPreference;
 
     try {
@@ -718,6 +733,11 @@ export async function publishScreenShare(
     installNativeCaptureBudget(room, videoTrack, opts.capture.frameRate);
     scheduleScreenShareOverdrive(room);
     scheduleEncoderDetection(room, config.codec, videoTrack.id);
+    startScreenShareRecovery(room, {
+      reapply: () => scheduleScreenShareOverdrive(room),
+      republish: () => enqueueTrackUpdate(() => republishScreenShare(room)),
+      targetBitrate: () => buildScreenShareOptions(useVoiceStore.getState().screenShareConfig).overdrive.maxBitrate,
+    });
     return true;
   } catch (err) {
     console.error('[ScreenShare] Failed to publish screen share:', err);

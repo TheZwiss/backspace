@@ -15,6 +15,7 @@ import {
   LocalTrackPublication,
   DisconnectReason,
   TrackEvent,
+  VideoPresets,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { homeIdentityOf } from '../utils/identity';
@@ -917,7 +918,7 @@ export function useLiveKit() {
       const newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
-        publishDefaults: { videoCodec: 'h264', simulcast: false, backupCodec: false, audioPreset: audioPresetForKbps(channelBitrateKbps) },
+        publishDefaults: { videoCodec: 'h264', simulcast: true, videoSimulcastLayers: [VideoPresets.h360], backupCodec: false, audioPreset: audioPresetForKbps(channelBitrateKbps) },
       });
       roomRef.current = newRoom;
       _previewCleanup.set(newRoom, startStreamPreviews(newRoom, {

@@ -678,6 +678,33 @@ describe('screen-share media options', () => {
     }));
   });
 
+  it('sets the RTP priority from the options, high by default', async () => {
+    const room = fakeRoom();
+    const video = makeVideoTrack();
+    const sender = attachPublishedSender(room, video, []);
+    sender.getParameters.mockImplementation(() => ({ encodings: [{ active: true }] }));
+
+    await applyOverdrive(room, Track.Source.ScreenShare, { maxBitrate: 3_000_000, maxFramerate: 30, degradationPreference: 'balanced' });
+    expect(sender.setParameters).toHaveBeenLastCalledWith(expect.objectContaining({
+      encodings: [expect.objectContaining({ priority: 'high', networkPriority: 'high' })],
+    }));
+
+    await applyOverdrive(room, Track.Source.ScreenShare, { maxBitrate: 3_000_000, maxFramerate: 30, degradationPreference: 'balanced', priority: 'low' });
+    expect(sender.setParameters).toHaveBeenLastCalledWith(expect.objectContaining({
+      encodings: [expect.objectContaining({ priority: 'low', networkPriority: 'low' })],
+    }));
+  });
+
+  it('keeps the VP8 backup for a VP9 share and drops it for H.264', () => {
+    const base = useVoiceStore.getState().screenShareConfig;
+    const vp9 = buildScreenShareOptions({ ...base, codec: 'vp9' });
+    const h264 = buildScreenShareOptions({ ...base, codec: 'h264' });
+
+    expect(vp9.publish.backupCodec?.codec).toBe('vp8');
+    expect(h264.publish.backupCodec).toBeUndefined();
+    expect(h264.publish.backupCodecPolicy).toBeUndefined();
+  });
+
   it('publishes VP9 directly without enabling the H.264 SDP hook', async () => {
     const room = fakeRoom();
     const video = makeVideoTrack();

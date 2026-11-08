@@ -105,10 +105,13 @@ describe('buildCameraOptions', () => {
     expect(options.publish.videoCodec).toBe('h264');
   });
 
-  it('publishes a single quality: no simulcast layers and no backup codec', () => {
+  it('publishes the chosen quality plus one 360p layer for tiles out of focus, and no backup codec', () => {
     const options = buildCameraOptions(limitsWith({}), { height: 720, fps: 30, customBitrateKbps: null });
-    expect(options.publish.simulcast).toBe(false);
+    expect(options.publish.simulcast).toBe(true);
+    expect(options.publish.videoSimulcastLayers).toHaveLength(1);
+    expect(options.publish.videoSimulcastLayers[0]).toMatchObject({ height: 360 });
     expect(options.publish.backupCodec).toBe(false);
+    expect(options.overdrive.priority).toBe('low');
   });
 
   it('uses a custom bitrate when the host allows it', () => {
