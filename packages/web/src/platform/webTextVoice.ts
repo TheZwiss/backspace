@@ -9,11 +9,13 @@ const assets: Record<string, { path: string; hash: string; bytes: number }> = {
   pm_santa: { path: 'voices/pm_santa.bin', hash: '8b012db3185778afe2e45a62cbad69db73021774fe68dda634bcc748a982eede', bytes: 522240 },
 };
 
+type TextVoiceSpeech = { audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string };
+
 /** Browser-only worker: models come straight from the public repository, never Backspace's CPU. */
 class WebTextVoice {
   private worker: Worker | null = null;
   private id = 0;
-  private jobs = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private jobs = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private status: LocalTextVoiceStatus = { phase: 'idle' };
   private listeners = new Set<(status: LocalTextVoiceStatus) => void>();
   private preparing: Promise<LocalTextVoiceStatus> | null = null;
@@ -35,8 +37,8 @@ class WebTextVoice {
     };
     this.worker.onerror = () => { this.releaseTextVoice(); this.update({ phase: 'error', error: 'engine-failed' }); };
   }
-  private request(operation: string, data: unknown, transfer: Transferable[] = []): Promise<any> {
-    return new Promise((resolve, reject) => {
+  private request<T = unknown>(operation: string, data: unknown, transfer: Transferable[] = []): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       const id = ++this.id;
       const timer = setTimeout(() => { this.jobs.delete(id); reject(new Error('engine-timeout')); }, 90_000);
       this.jobs.set(id, { resolve, reject, timer });
@@ -78,7 +80,7 @@ class WebTextVoice {
   private async initialize(device: Device): Promise<LocalTextVoiceStatus> {
     try {
       this.open(); this.update({ phase: 'loading', device });
-      const probe = await this.request('probe', {});
+      const probe = await this.request<{ adapter?: unknown }>('probe', {});
       const gpu = device !== 'cpu' && !!probe.adapter;
       if (device === 'gpu' && !gpu) throw new Error('gpu-unavailable');
       const load = async (useGpu: boolean) => {
@@ -86,7 +88,7 @@ class WebTextVoice {
         if (this.downloads.signal.aborted) throw new Error('engine-released');
         this.update({ phase: 'loading', device });
         const voices = Object.fromEntries(['pf_dora', 'pm_alex', 'pm_santa'].map((id, i) => [id, data[i]!]));
-        const loaded = await this.request('load', { device: useGpu ? 'gpu' : 'cpu', model, voices, assetBase: new URL('/local-text-voice/', location.href).href }, [model!, ...data]);
+        const loaded = await this.request<Partial<LocalTextVoiceStatus>>('load', { device: useGpu ? 'gpu' : 'cpu', model, voices, assetBase: new URL('/local-text-voice/', location.href).href }, [model!, ...data]);
         await this.request('synthesize', { text: 'Olá.', voice: 'pf_dora', speed: 1 });
         return loaded;
       };
@@ -100,17 +102,17 @@ class WebTextVoice {
       throw error;
     }
   }
-  synthesizeTextVoice = async (text: string, voice: string, speed: number): Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }> => {
+  synthesizeTextVoice = async (text: string, voice: string, speed: number): Promise<TextVoiceSpeech> => {
     if (!text.trim() || text.length > 400 || !['pf_dora', 'pm_alex', 'pm_santa'].includes(voice) || !Number.isFinite(speed) || speed < 0.8 || speed > 1.3) throw new Error('invalid-speech-request');
     if (this.busy || this.preparing || this.status.phase !== 'ready') throw new Error('speech-not-ready');
     this.busy = true;
     try {
-      try { return await this.request('synthesize', { text, voice, speed }); }
+      try { return await this.request<TextVoiceSpeech>('synthesize', { text, voice, speed }); }
       catch (error) {
         if (this.status.device !== 'auto' || this.status.backend !== 'webgpu' || this.downloads.signal.aborted) throw error;
         const loaded = await this.initialize('cpu');
         this.update({ ...loaded, device: 'auto' });
-        return await this.request('synthesize', { text, voice, speed });
+        return await this.request<TextVoiceSpeech>('synthesize', { text, voice, speed });
       }
     }
     finally { this.busy = false; this.armIdle(); }

@@ -360,7 +360,6 @@ describe('DmRosterPanel — action wiring', () => {
   });
 
   it('does not offer friendship removal in the group roster', async () => {
-    const u = userEvent.setup();
     const me = makeUser({ id: 'me' });
     const friend = makeUser({ id: 'friend-1', username: 'friend', displayName: 'Friend' });
     setScenario({

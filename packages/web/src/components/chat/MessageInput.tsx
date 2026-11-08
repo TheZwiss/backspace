@@ -361,7 +361,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
    * that has just staged one (the voice recorder) holds a render that does not
    * list it yet.
    */
-  const submitAttachments = (trimmed: string, staged: Transfer[]): void => {
+  const submitAttachments = useCallback((trimmed: string, staged: Transfer[]): void => {
     const clientId = crypto.randomUUID();
     const replyToId = chatReplyTo?.id ?? null;
 
@@ -398,7 +398,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
-  };
+  }, [chatReplyTo?.id, returnToPresent, appendBubble, channelId, clearComposer, chatSetReplyTo]);
 
   // ── Voice messages ──
   // Hands a finished recording to the composer as an attachment and sends it,

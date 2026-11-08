@@ -42,7 +42,7 @@ export async function pressDictation(auto = true): Promise<void> {
     recorder.onstop = () => { void finish(job); };
     recorder.start(250);
     job.timer = setTimeout(() => { if (current === job) { cancelDictation(); useDictationStore.setState({ error: 'recording-limit' }); } }, 60_000);
-  } catch (error) {
+  } catch {
     if (current === job) { cancelDictation(); useDictationStore.setState({ error: 'microphone-failed' }); }
   }
 }

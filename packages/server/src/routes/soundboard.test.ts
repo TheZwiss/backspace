@@ -1,6 +1,6 @@
 import { setWorkerId } from '../utils/snowflake.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
@@ -9,14 +9,14 @@ import { eq } from 'drizzle-orm';
 import path from 'node:path';
 import * as schema from '../db/schema.js';
 import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits } from '@backspace/shared/src/permissions.js';
-const mocks = vi.hoisted(() => ({ current: null as any, status: {} as any, sendData: vi.fn().mockResolvedValue(undefined) }));
+const mocks = vi.hoisted(() => ({ current: null as unknown, status: {} as Record<string, unknown>, sendData: vi.fn().mockResolvedValue(undefined) }));
 let db: ReturnType<typeof drizzle<typeof schema>>; let sqlite: Database.Database; let app: FastifyInstance;
 vi.mock('../db/index.js', () => ({ getDb: () => db, schema }));
 vi.mock('../config.js', () => ({ config: { livekit: { url: 'ws://127.0.0.1:7880', apiKey: 'key', apiSecret: 'secret' } } }));
 vi.mock('../utils/federationAuth.js', () => ({ getOurOrigin: () => 'https://chat.test' }));
 vi.mock('../ws/handler.js', () => ({ connectionManager: { getUserRoom: () => mocks.current, getVoiceUserStatus: () => mocks.status } }));
 vi.mock('livekit-server-sdk', () => ({ DataPacket_Kind: { RELIABLE: 0 }, RoomServiceClient: class { sendData = mocks.sendData; } }));
-vi.mock('../utils/auth.js', () => ({ authenticate: async (request: any, reply: any) => { if (!request.headers.authorization) return reply.code(401).send(); request.userId = request.headers.authorization; request.username = request.userId; } }));
+vi.mock('../utils/auth.js', () => ({ authenticate: async (request: FastifyRequest & { userId?: string; username?: string }, reply: FastifyReply) => { if (!request.headers.authorization) return reply.code(401).send(); request.userId = request.headers.authorization; request.username = request.userId; } }));
 import { soundboardRoutes, _resetSoundboardLimits } from './soundboard.js';
 import { validateSoundboardWav } from '../utils/soundboardAudio.js';
 function wav(samples = 4800) {

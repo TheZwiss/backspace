@@ -10,7 +10,10 @@ await build({ entryPoints: [path.join(root, 'src/preload.ts')], outfile: path.jo
 const out = path.join(root, 'dist', 'text-voice');
 await mkdir(out, { recursive: true });
 await build({ entryPoints: [path.join(root, 'engine/textVoiceEngine.ts')], outfile: path.join(out, 'engine.mjs'), bundle: true,
-  external: ['module'], format: 'esm', platform: 'browser', target: 'chrome136', legalComments: 'eof' });
+  external: ['module'], format: 'esm', platform: 'browser', target: 'chrome136', legalComments: 'eof',
+  // The engine bundles sources from packages/web, whose own node_modules is absent when only the desktop
+  // workspace is installed (the Flatpak build); fall back to this package's copies of the same pinned deps.
+  nodePaths: [path.join(root, 'node_modules')] });
 const ort = path.dirname(require.resolve('onnxruntime-web'));
 for (const name of ['.asyncify'].flatMap((variant) => ['mjs', 'wasm'].map((ext) => `ort-wasm-simd-threaded${variant}.${ext}`))) await copyFile(path.join(ort, name), path.join(out, name));
 await writeFile(path.join(out, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module" src="./engine.mjs"></script></body></html>');

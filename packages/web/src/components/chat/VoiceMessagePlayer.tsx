@@ -104,6 +104,7 @@ export function VoiceMessagePlayer({ url, mimetype, durationHint, federationBadg
   const fraction = duration > 0 ? Math.min(1, time / duration) : 0;
   const shownMs = (isPlaying || time > 0 ? time : duration) * 1000;
   const speed = SPEEDS[speedIndex]!;
+  const speedLabel = `${speed}x`;
 
   return (
     <div className="mt-1 inline-flex max-w-full flex-col gap-1">
@@ -174,10 +175,10 @@ export function VoiceMessagePlayer({ url, mimetype, durationHint, federationBadg
               type="button"
               data-icon-motion="none"
               onClick={cycleSpeed}
-              aria-label={t('chat:attachment.voice.speed', { speed: `${speed}x` })}
+              aria-label={t('chat:attachment.voice.speed', { speed: speedLabel })}
               className={`rounded-full px-1.5 py-px font-medium transition-colors ${speed === 1 ? 'hover:text-txt-secondary' : 'bg-accent-primary/15 text-accent-primary'}`}
             >
-              {speed}x
+              {speedLabel}
             </button>
           </div>
         </div>
