@@ -67,6 +67,16 @@
         "note": "Este canal fica oculto para membros sem acesso explícito. Usuários com a permissão de Administrador e os donos do espaço sempre podem ver todos os canais.",
         "unhideOnSave": "Ao salvar, este canal ficará visível para todos os membros."
       },
+      "voiceQuality": {
+        "label": "Qualidade de voz",
+        "option": "{{value}} kbps",
+        "description": {
+          "64": "Fala clara. Usa menos banda.",
+          "128": "Vozes mais cheias e naturais.",
+          "256": "Qualidade máxima, ideal para música. Usa mais banda."
+        },
+        "hint": "Define o maior bitrate de áudio que cada membro pode enviar neste canal. Vale para todos, inclusive para quem já está conectado."
+      },
       "deleteButton": "Excluir canal"
     },
     "delete": {

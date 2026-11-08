@@ -67,6 +67,16 @@
         "note": "Dieser Kanal ist für Mitglieder ohne ausdrücklichen Zugriff verborgen. Wer die Administrator-Berechtigung hat oder den Space besitzt, sieht immer alle Kanäle.",
         "unhideOnSave": "Beim Speichern wird dieser Kanal für alle Mitglieder sichtbar."
       },
+      "voiceQuality": {
+        "label": "Sprachqualität",
+        "option": "{{value}} kbps",
+        "description": {
+          "64": "Klare Sprache. Geringster Bandbreitenbedarf.",
+          "128": "Vollere, natürlichere Stimmen.",
+          "256": "Höchste Qualität, ideal für Musik. Höchster Bandbreitenbedarf."
+        },
+        "hint": "Legt die höchste Audiobitrate fest, die jedes Mitglied in diesem Kanal senden kann. Gilt für alle, auch für bereits verbundene Personen."
+      },
       "deleteButton": "Kanal löschen"
     },
     "delete": {

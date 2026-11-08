@@ -1343,6 +1343,11 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Also how a channel comes back into view after an override change,
       // in whichever space: the index entry is written wherever the space is.
       useSpaceStore.getState().upsertChannel(event.channel, event.spaceId, origin);
+      // An admin changed the quality of the call this client is in: the live
+      // microphone follows it (useLiveKit).
+      if (event.channel.id === useVoiceStore.getState().currentVoiceChannelId) {
+        useVoiceStore.setState({ channelVoiceBitrateKbps: event.channel.voiceBitrateKbps ?? null });
+      }
       break;
     }
 

@@ -36,6 +36,15 @@ See `docs/systems/websocket.md` → "Mid-session space join" for the full ration
 
 Pre-arm is fire-and-forget: the mic acquisition runs in parallel with the LiveKit handshake, and `AudioManager.inputSwitchChain`'s serialization guarantees `useLiveKit.syncMic`'s subsequent call short-circuits on the already-acquired `currentStream` (no double prompt, no second `getUserMedia`).
 
+### Channel voice quality (`channels.voice_bitrate_kbps`)
+
+An admin with MANAGE_CHANNELS picks the quality of a space voice channel in its settings Overview (`VoiceQualitySetting`): 64, 128 or 256 kbps (`VOICE_BITRATE_OPTIONS_KBPS` in shared), saved on click through `PATCH /api/channels/:id`. A channel starts at 64 kbps. It is the ceiling of each member's microphone Opus bitrate, not a server-side transcode.
+
+- **On join**, `useLiveKit.connect` reads the channel's `voiceBitrateKbps` from `spaceStore`, mirrors it into `voiceStore.channelVoiceBitrateKbps` and builds the `Room` with `publishDefaults.audioPreset = { maxBitrate: kbps * 1000 }` (`audioPresetForKbps`, `utils/voiceQuality.ts`), so every publish of the microphone, a device-change republish included, uses it. A DM call has no channel: it stores `null` and keeps LiveKit's default preset.
+- **Live changes** arrive as `channel_updated`; `useWebSocket` writes the new value to `voiceStore.channelVoiceBitrateKbps` when the channel is the one the client is in, and an effect in `useLiveKit` calls `applyMicBitrate`: it updates the room's `publishDefaults` and sets `maxBitrate` on the live microphone's `RTCRtpSender` in place, with no republish, so nobody hears a gap.
+- **Enforcement is client-side only**, as for the screen share limits below: the publish goes straight to the SFU, which has no audio bitrate cap to put in a token, so a modified client can send more. The server validates the value and who may set it.
+- **Federation:** nothing to relay. The channel and its setting live on the instance that owns the space; a client on another instance reads the field from that instance's API and WebSocket, resolved through the channel's origin like any other channel field.
+
 ### Listener mode (`micPermissionDenied`)
 
 When the user denies the prompt (or has previously denied at the OS level), the pre-arm's `setInputDevice` rejects with `NotAllowedError`. The `voiceStore.micPermissionDenied` flag is set to `true` and the LiveKit connect proceeds anyway — the user appears in the voice channel as a connected participant who can hear others but has no microphone publication. `useLiveKit.syncMic` checks the flag at the top of its body and skips the publish branch entirely.

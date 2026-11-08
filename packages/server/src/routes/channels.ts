@@ -20,6 +20,8 @@ import {
   CATEGORY_NAME_MIN_LENGTH,
   CHANNEL_NAME_MAX_LENGTH,
   CHANNEL_NAME_MIN_LENGTH,
+  VOICE_BITRATE_OPTIONS_KBPS,
+  isVoiceBitrateKbps,
   normalizeCategoryName,
   normalizeChannelName,
 } from '@backspace/shared/src/constants.js';
@@ -46,6 +48,7 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
     topic: row.topic,
     position: row.position ?? 0,
     categoryId: row.categoryId ?? null,
+    ...(row.type === 'voice' ? { voiceBitrateKbps: row.voiceBitrateKbps } : {}),
     createdAt: row.createdAt,
   };
 }
@@ -377,7 +380,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, topic, position, categoryId } = request.body;
+    const { name, topic, position, categoryId, voiceBitrateKbps } = request.body;
     const db = getDb();
 
     const channel = db.select().from(schema.channels).where(eq(schema.channels.id, id)).get();
@@ -416,6 +419,16 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 400, 'position_invalid');
       }
       updates.position = position;
+    }
+
+    if (voiceBitrateKbps !== undefined) {
+      if (channel.type !== 'voice') {
+        return sendError(reply, 400, 'voice_bitrate_text_channel');
+      }
+      if (!isVoiceBitrateKbps(voiceBitrateKbps)) {
+        return sendError(reply, 400, 'voice_bitrate_invalid', { options: VOICE_BITRATE_OPTIONS_KBPS.join(', ') });
+      }
+      updates.voiceBitrateKbps = voiceBitrateKbps;
     }
 
     if (categoryId !== undefined) {

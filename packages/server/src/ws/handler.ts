@@ -1824,6 +1824,7 @@ export function buildReadyPayload(userId: string): {
             position: ch.position ?? 0,
             categoryId: ch.categoryId ?? null,
             isPrivate: privateChannelIds.has(ch.id),
+            ...(ch.type === 'voice' ? { voiceBitrateKbps: ch.voiceBitrateKbps } : {}),
             createdAt: ch.createdAt,
             lastMessageId: lastMsgMap.get(ch.id) ?? null,
             myPermissions: permissionsToString(chPerms),

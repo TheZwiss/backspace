@@ -235,6 +235,8 @@ export const ERROR_CODES = [
   'channel_topic_invalid',
   'channel_topic_length',
   'channel_type_invalid',
+  'voice_bitrate_invalid',
+  'voice_bitrate_text_channel',
   'category_not_in_space',
   'channel_not_in_space',
   'position_invalid',

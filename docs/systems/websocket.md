@@ -291,7 +291,7 @@ its next follow-up or the next `ready`; its unread dot shows meanwhile.
 | `member_left` | spaceId, userId | space |
 | `member_banned` | spaceId, reason | user (banned) |
 | `channel_created` | channel, spaceId | space |
-| `channel_updated` | channel, spaceId | space |
+| `channel_updated` | channel, spaceId | space (a voice `channel` carries `voiceBitrateKbps`; clients in that call apply a change to their live microphone) |
 | `channel_deleted` | channelId, spaceId | space |
 | `category_created` | category, spaceId | space |
 | `category_updated` | category, spaceId | space |

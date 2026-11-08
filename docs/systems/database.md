@@ -93,6 +93,7 @@ PK: (spaceId, userId)
 | topic | text | | |
 | position | integer | 0 | |
 | categoryId | text | | Soft FK → channel_categories |
+| voiceBitrateKbps | integer NOT NULL | 64 | Voice channels only: ceiling of each member's microphone Opus bitrate. One of 64, 128, 256 (`VOICE_BITRATE_OPTIONS_KBPS`); the column holds the number so a preset can be added without a migration. Text channels keep the default and never report it. Migration `0042_voice_channel_bitrate` |
 | createdAt | integer NOT NULL | | |
 
 ### messages

@@ -12,8 +12,9 @@ import { describeError } from '../../i18n/errors';
 import { useEntityOverrides } from '../../hooks/useEntityOverrides';
 import { PrivacySetting } from './PrivacySetting';
 import { ChannelTopicEditor } from './ChannelTopicEditor';
+import { VoiceQualitySetting } from './VoiceQualitySetting';
 import { LOCK_ICON } from '../ui/LockNote';
-import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants';
+import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName, type VoiceBitrateKbps } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Channel Overrides ──────────────────────────────
 
@@ -49,6 +50,7 @@ function OverviewTab({
   channelName,
   channelType,
   channelTopic,
+  voiceBitrateKbps,
   isPrivate,
   isFetching,
   isLoading,
@@ -59,11 +61,13 @@ function OverviewTab({
   onDeleteChannel,
   onRename,
   onSaveTopic,
+  onSaveVoiceQuality,
 }: {
   channelId: string;
   channelName: string;
   channelType: string;
   channelTopic: string | null;
+  voiceBitrateKbps: number | undefined;
   isPrivate: boolean;
   isFetching: boolean;
   isLoading: boolean;
@@ -74,6 +78,7 @@ function OverviewTab({
   onDeleteChannel: () => void;
   onRename: (name: string) => Promise<void>;
   onSaveTopic: (topic: string | null) => Promise<void>;
+  onSaveVoiceQuality: (kbps: VoiceBitrateKbps) => Promise<void>;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
   return (
@@ -102,6 +107,11 @@ function OverviewTab({
           they offer to edit one, the same as the create dialog. */}
       {channelType === 'text' && (
         <ChannelTopicEditor key={channelId} topic={channelTopic} canEdit={canManageChannels} onSave={onSaveTopic} />
+      )}
+
+      {/* The microphone bitrate is the channel's own, so only voice channels have it. */}
+      {channelType === 'voice' && (
+        <VoiceQualitySetting key={channelId} value={voiceBitrateKbps} canEdit={canManageChannels} onSave={onSaveVoiceQuality} />
       )}
 
       {error && (
@@ -234,6 +244,16 @@ export function ChannelSettingsModal() {
     }
   };
 
+  const handleSaveVoiceQuality = async (kbps: VoiceBitrateKbps): Promise<void> => {
+    setError('');
+    try {
+      await useSpaceStore.getState().updateChannel(channelId, { voiceBitrateKbps: kbps });
+    } catch (err) {
+      setError(describeError(err));
+      throw err;
+    }
+  };
+
   const showTabs = canManageRoles;
 
   const tabClass = (target: typeof tab) =>
@@ -266,6 +286,7 @@ export function ChannelSettingsModal() {
                   channelName={channel.name}
                   channelType={channel.type}
                   channelTopic={channel.topic}
+                  voiceBitrateKbps={channel.voiceBitrateKbps}
                   isPrivate={isPrivate}
                   isFetching={isFetching}
                   isLoading={isLoading}
@@ -276,6 +297,7 @@ export function ChannelSettingsModal() {
                   onDeleteChannel={() => setShowDeleteConfirm(true)}
                   onRename={handleRenameChannel}
                   onSaveTopic={handleSaveTopic}
+                  onSaveVoiceQuality={handleSaveVoiceQuality}
                 />
               )}
               {tab === 'permissions' && (
@@ -299,6 +321,7 @@ export function ChannelSettingsModal() {
             channelName={channel.name}
             channelType={channel.type}
             channelTopic={channel.topic}
+                  voiceBitrateKbps={channel.voiceBitrateKbps}
             isPrivate={isPrivate}
             isFetching={isFetching}
             isLoading={isLoading}
@@ -309,6 +332,7 @@ export function ChannelSettingsModal() {
             onDeleteChannel={() => setShowDeleteConfirm(true)}
             onRename={handleRenameChannel}
             onSaveTopic={handleSaveTopic}
+                  onSaveVoiceQuality={handleSaveVoiceQuality}
           />
         )}
       </Modal>

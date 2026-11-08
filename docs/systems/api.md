@@ -162,7 +162,9 @@ A role in any answer carries `permissions` only for a viewer who holds `MANAGE_R
 ```
 GET    /spaces/:id/channels                              → { channels[] }  [VIEW_CHANNEL]
 POST   /spaces/:id/channels   { name, type?, topic?, categoryId? } → { channel }  [MANAGE_CHANNELS]
-PATCH  /channels/:id          { name?, type?, topic?, categoryId? } → { channel }  [MANAGE_CHANNELS]
+PATCH  /channels/:id          { name?, type?, topic?, categoryId?, voiceBitrateKbps? } → { channel }  [MANAGE_CHANNELS]
+                              voiceBitrateKbps: 64 | 128 | 256, voice channels only. 400 `voice_bitrate_invalid` (details.options) for another value,
+                              400 `voice_bitrate_text_channel` on a text channel. A voice channel in every response carries `voiceBitrateKbps`.
 DELETE /channels/:id                                     → { success }  [MANAGE_CHANNELS]
 PATCH  /spaces/:id/channels/reorder  { order }           → reordered  [MANAGE_CHANNELS]
 ```

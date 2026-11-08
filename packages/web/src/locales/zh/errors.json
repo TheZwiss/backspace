@@ -199,6 +199,8 @@
   "channel_topic_invalid": "频道主题必须是文本。",
   "channel_topic_length": "频道主题最多包含 {{max}} 个字符。",
   "channel_type_invalid": "频道类型必须是文字频道或语音频道。",
+  "voice_bitrate_invalid": "语音质量必须是以下之一：{{options}} kbps。",
+  "voice_bitrate_text_channel": "只有语音频道才有语音质量。",
   "category_not_in_space": "该分类不属于此空间。",
   "channel_not_in_space": "该频道不属于此空间。",
   "position_invalid": "位置序号必须为零或正数。",

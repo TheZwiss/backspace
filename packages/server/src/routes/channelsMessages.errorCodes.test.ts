@@ -350,6 +350,55 @@ describe('channel and message routes send error codes', () => {
       expect((JSON.parse(full.body) as { topic: string | null }).topic).toBe(atLimit);
     });
 
+    describe('voice quality', () => {
+      const VOICE = 'chan-voice';
+
+      beforeEach(() => {
+        testDb.insert(schema.channels).values({
+          id: VOICE, spaceId: SPACE, name: VOICE, type: 'voice', position: 1, categoryId: null, createdAt: 1,
+        }).run();
+      });
+
+      it('a new voice channel starts at 64 kbps and reports it', async () => {
+        currentUserId = 'owner';
+        const res = await app.inject({ method: 'PATCH', url: `/api/channels/${VOICE}`, payload: { name: 'lounge' } });
+        expect(res.statusCode).toBe(200);
+        expect((JSON.parse(res.body) as { voiceBitrateKbps: number }).voiceBitrateKbps).toBe(64);
+      });
+
+      it.each([64, 128, 256])('stores the %i kbps preset', async (kbps) => {
+        currentUserId = 'owner';
+        const res = await app.inject({ method: 'PATCH', url: `/api/channels/${VOICE}`, payload: { voiceBitrateKbps: kbps } });
+        expect(res.statusCode).toBe(200);
+        expect((JSON.parse(res.body) as { voiceBitrateKbps: number }).voiceBitrateKbps).toBe(kbps);
+        expect(testDb.select().from(schema.channels).all().find((c) => c.id === VOICE)?.voiceBitrateKbps).toBe(kbps);
+      });
+
+      it('a value that is not a preset → voice_bitrate_invalid, nothing stored', async () => {
+        currentUserId = 'owner';
+        const res = await app.inject({ method: 'PATCH', url: `/api/channels/${VOICE}`, payload: { voiceBitrateKbps: 96 } });
+        expect(res.statusCode).toBe(400);
+        const body = JSON.parse(res.body) as ErrorBody;
+        expect(body.code).toBe('voice_bitrate_invalid');
+        expect(body.details).toEqual({ options: '64, 128, 256' });
+        expect(testDb.select().from(schema.channels).all().find((c) => c.id === VOICE)?.voiceBitrateKbps).toBe(64);
+      });
+
+      it('a text channel has no voice quality → voice_bitrate_text_channel', async () => {
+        currentUserId = 'owner';
+        const res = await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { voiceBitrateKbps: 128 } });
+        expect(res.statusCode).toBe(400);
+        expect((JSON.parse(res.body) as ErrorBody).code).toBe('voice_bitrate_text_channel');
+      });
+
+      it('a member without MANAGE_CHANNELS cannot change it', async () => {
+        currentUserId = 'member';
+        const res = await app.inject({ method: 'PATCH', url: `/api/channels/${VOICE}`, payload: { voiceBitrateKbps: 256 } });
+        expect(res.statusCode).toBe(403);
+        expect((JSON.parse(res.body) as ErrorBody).code).toBe('missing_permission');
+      });
+    });
+
     it('editing a topic to null or blank clears it', async () => {
       currentUserId = 'owner';
       await app.inject({ method: 'PATCH', url: `/api/channels/${GENERAL}`, payload: { topic: 'Something' } });

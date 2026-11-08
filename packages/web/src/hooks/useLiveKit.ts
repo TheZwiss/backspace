@@ -49,6 +49,7 @@ import { StreamResumeMemory, type RememberedStream } from '../utils/streamResume
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 import { enqueueTrackUpdate } from '../utils/activeTrackUpdates';
+import { applyMicBitrate, audioPresetForKbps } from '../utils/voiceQuality';
 
 let _activeRoom: Room | null = null;
 /**
@@ -332,6 +333,9 @@ export function useLiveKit() {
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
   const cameraConfig = useVoiceStore((s) => s.cameraConfig);
+  // The quality the admin set on the channel this client is in. It changes
+  // while connected when an admin edits the channel (channel_updated).
+  const channelVoiceBitrateKbps = useVoiceStore((s) => s.channelVoiceBitrateKbps);
   // The host's limits shape the effective config, so a document that arrives
   // after the share started must reach the running encoder too.
   const { limits: streamHostLimits } = useStreamHostLimits();
@@ -802,6 +806,14 @@ export function useLiveKit() {
     void requestCameraQuality(r);
   }, [cameraConfig, isCameraOn, isConnected, streamHostLimits]);
 
+  // An admin changing the channel's voice quality reaches people already in
+  // the call; the join path above covers everyone arriving afterwards.
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected) return;
+    void applyMicBitrate(r, channelVoiceBitrateKbps);
+  }, [channelVoiceBitrateKbps, isConnected]);
+
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
     if (connectedChannelRef.current === storedId && roomRef.current?.state === ConnectionState.Connected) return;
@@ -894,7 +906,17 @@ export function useLiveKit() {
       useVoiceStore.setState({ livekitHostOrigin: hostOrigin });
       // Refreshed per join; home's document arrives with every home `ready`.
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
-      const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
+      // A space voice channel carries the admin's chosen microphone quality;
+      // a DM call has none, and LiveKit's default stays.
+      const channelBitrateKbps = isDm
+        ? null
+        : useSpaceStore.getState().channels?.find((c) => c.id === channelId)?.voiceBitrateKbps ?? null;
+      useVoiceStore.setState({ channelVoiceBitrateKbps: channelBitrateKbps });
+      const newRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        publishDefaults: { videoCodec: 'h264', simulcast: true, audioPreset: audioPresetForKbps(channelBitrateKbps) },
+      });
       roomRef.current = newRoom;
       _previewCleanup.set(newRoom, startStreamPreviews(newRoom, {
         getMode: () => useVoiceStore.getState().screenShareConfig.previewMode ?? 'normal',

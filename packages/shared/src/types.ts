@@ -308,6 +308,8 @@ export interface Channel {
   position: number;
   categoryId: string | null;
   isPrivate?: boolean;
+  /** Voice channels only: ceiling of each member's microphone bitrate, in kbps. */
+  voiceBitrateKbps?: number;
   createdAt: number;
   lastMessageId?: string | null;
   myPermissions?: string; // Computed per-user BigInt decimal string
@@ -911,6 +913,8 @@ export interface UpdateChannelRequest {
   topic?: string | null;
   position?: number;
   categoryId?: string | null;
+  /** Voice channels only; one of `VOICE_BITRATE_OPTIONS_KBPS`. */
+  voiceBitrateKbps?: number;
 }
 
 export interface UpdateSpaceRequest {

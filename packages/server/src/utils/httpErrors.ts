@@ -240,6 +240,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   channel_topic_invalid: 'Channel topic must be a string',
   channel_topic_length: 'Channel topic can be at most {{max}} characters',
   channel_type_invalid: 'Channel type must be "text" or "voice"',
+  voice_bitrate_invalid: 'Voice quality must be one of {{options}} kbps',
+  voice_bitrate_text_channel: 'Only voice channels have a voice quality',
   category_not_in_space: 'Category {{id}} does not belong to this space',
   channel_not_in_space: 'Channel {{id}} does not belong to this space',
   position_invalid: 'Position must be a non-negative number',

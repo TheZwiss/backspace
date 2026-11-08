@@ -114,6 +114,13 @@ export interface VoiceState {
    * call hosted elsewhere): its limits cannot be asked for. Not persisted.
    */
   livekitHostOrigin: string | null;
+  /**
+   * The microphone bitrate ceiling, in kbps, that the admin set on the space
+   * voice channel this client is in; null in a DM call or on a server that
+   * predates the setting. Written when joining and by `channel_updated`, and
+   * read by `useLiveKit`, which applies it to the live microphone. Not persisted.
+   */
+  channelVoiceBitrateKbps: number | null;
   /** System audio of the live share; null while not sharing. Not persisted. */
   screenShareAudio: ScreenShareAudioState | null;
   participants: ParticipantInfo[];
@@ -323,6 +330,7 @@ export const useVoiceStore = create<VoiceState>()(
       isScreenSharing: false,
       screenShareAudio: null,
       livekitHostOrigin: '',
+      channelVoiceBitrateKbps: null,
       micPermissionDenied: false,
       participants: [],
       speakingParticipantIds: new Set(),
