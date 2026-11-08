@@ -1,6 +1,6 @@
 import { desktopCapturer, screen } from 'electron';
 
-interface Geometry {
+export interface Geometry {
   window: number[];
   monitor: number[];
   minimized: boolean;

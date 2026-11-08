@@ -111,7 +111,7 @@ export function OverrideEntry({
   const hasLockedRow = !readOnly && permDefs.some((p) => (lockedBits & p.bit) !== 0n);
 
   return (
-    <div className="rounded-lg bg-white/[0.02] overflow-hidden">
+    <div className="rounded-lg bg-wash/[0.02] overflow-hidden">
       {/* The expand toggle and the remove action are siblings: a button inside
           a button is invalid HTML and reads as one control. */}
       <div className="flex items-center hover:bg-interactive-hover transition-colors">
@@ -170,7 +170,7 @@ export function OverrideEntry({
           id={panelId}
           role="region"
           aria-label={label}
-          className="px-3 pb-3 space-y-1.5 border-t border-white/[0.04] pt-2"
+          className="px-3 pb-3 space-y-1.5 border-t border-wash/[0.04] pt-2"
         >
           {(readOnly || hasLockedRow) && (
             <div className="flex items-start gap-2 pb-1 text-ui-caption leading-snug text-txt-tertiary">
@@ -210,7 +210,7 @@ export function OverrideEntry({
             );
           })}
           {removable && !readOnly && (
-            <div className="flex items-center justify-between gap-3 pt-2.5 !mt-2.5 border-t border-white/[0.04]">
+            <div className="flex items-center justify-between gap-3 pt-2.5 !mt-2.5 border-t border-wash/[0.04]">
               <span className="text-ui-caption leading-snug text-txt-tertiary">
                 {t(removeLocked ? 'spaces:permissions.removeUnheld' : 'spaces:permissions.removeOverrideHint')}
               </span>

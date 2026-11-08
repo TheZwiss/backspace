@@ -1,26 +1,30 @@
 import type * as Ort from 'onnxruntime-web';
 let ort: typeof Ort;
-import createEspeak from '@echogarden/espeak-ng-emscripten';
+import createEspeak, { type EspeakModule, type EspeakWorker } from '@echogarden/espeak-ng-emscripten';
+import { gpuOf } from './webGpu';
 import vocab from './kokoro-vocab.json';
 
 type Device = 'auto' | 'cpu' | 'gpu';
 let session: Ort.InferenceSession | null = null;
 let backend = '';
-let espeak: any = null;
-let espeakModule: any = null;
+let espeak: EspeakWorker | null = null;
+let espeakModule: EspeakModule | null = null;
 async function phonemizePt(text: string): Promise<string> {
   if (!espeak) {
     const response = await fetch(`${assetBase}espeak-ng.data`);
     if (!response.ok) throw new Error('phonemizer-unavailable');
     const data = await response.arrayBuffer();
-    espeakModule = await createEspeak({ getPreloadedPackage: () => data });
-    espeak = new espeakModule.eSpeakNGWorker();
-    espeak.set_voice('pt-br');
+    const created = await createEspeak({ getPreloadedPackage: () => data });
+    const worker = new created.eSpeakNGWorker();
+    worker.set_voice('pt-br');
+    espeakModule = created;
+    espeak = worker;
   }
+  const heap = espeakModule!;
   const pointer = espeak.convert_to_phonemes(text, true).ptr;
-  let end = pointer; while (espeakModule.HEAPU8[end]) end++;
-  const result = new TextDecoder().decode(espeakModule.HEAPU8.subarray(pointer, end));
-  espeakModule._free(pointer);
+  let end = pointer; while (heap.HEAPU8[end]) end++;
+  const result = new TextDecoder().decode(heap.HEAPU8.subarray(pointer, end));
+  heap._free(pointer);
   return result.replaceAll('_', '');
 }
 let adapterInfo: Record<string, string> | null = null;
@@ -42,8 +46,7 @@ async function runtime() {
 }
 
 async function gpuInfo() {
-  const gpu = (navigator as any).gpu;
-  const adapter = await gpu?.requestAdapter({ powerPreference: 'high-performance' });
+  const adapter = await gpuOf(globalThis)?.requestAdapter({ powerPreference: 'high-performance' });
   if (!adapter || adapter.isFallbackAdapter || adapter.info?.isFallbackAdapter) return null;
   const info = adapter.info;
   if (/swiftshader|llvmpipe|lavapipe|software|basic render/i.test(`${info?.vendor} ${info?.architecture} ${info?.description}`)) return null;
@@ -110,9 +113,13 @@ async function synthesize({ text, voice, speed }: { text: string; voice: string;
   return { audio, generationMs: performance.now() - start, audioSeconds: samples.length / 24000, backend, adapter: adapterInfo };
 }
 
-export async function handleTextVoiceRequest(operation: string, data: any): Promise<any> {
+type LoadRequest = NonNullable<Parameters<typeof load>[1]> & { device: Device };
+type SynthesizeRequest = Parameters<typeof synthesize>[0];
+
+/** Requests arrive over IPC and the main process validates them before forwarding, so each operation narrows `data` to its own shape. */
+export async function handleTextVoiceRequest(operation: string, data: unknown): Promise<unknown> {
   if (operation === 'probe') return { adapter: await gpuInfo(), threads: globalThis.crossOriginIsolated ? 2 : 1 };
-  if (operation === 'load') return load(data.device, data);
-  if (operation === 'synthesize') return synthesize(data);
+  if (operation === 'load') { const request = data as LoadRequest; return load(request.device, request); }
+  if (operation === 'synthesize') return synthesize(data as SynthesizeRequest);
   throw new Error('invalid-operation');
 }

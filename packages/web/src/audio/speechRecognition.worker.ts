@@ -1,23 +1,50 @@
 import { installSpeechModel, installedSpeechModels, removeSpeechModel, speechModel, speechModelCacheName, speechModelUrl, type SpeechModelId } from './speechModelCache';
-let transcriber: any = null;
+import { gpuOf } from './webGpu';
+
+/** What the worker uses of a loaded Transformers.js pipeline. */
+interface Transcriber {
+  (audio: Float32Array, options: Record<string, unknown>): Promise<{ text?: unknown }>;
+  dispose(): Promise<void>;
+}
+/** What the worker uses of the Transformers.js module it imports from the public asset folder at runtime. */
+interface TransformersRuntime {
+  env: {
+    allowLocalModels: boolean;
+    useBrowserCache: boolean;
+    useFSCache: boolean;
+    useCustomCache: boolean;
+    useWasmCache: boolean;
+    customCache: { match(url: string): Promise<Response | undefined>; put(): Promise<void> };
+    fetch: typeof fetch;
+    backends: { onnx: { wasm: { numThreads: number; wasmPaths: { mjs: string; wasm: string } } } };
+  };
+  pipeline(task: string, model: string, options: Record<string, unknown>): Promise<Transcriber>;
+}
+interface WorkerRequest {
+  id: number;
+  operation: string;
+  data: { model: SpeechModelId; device: 'auto' | 'cpu' | 'gpu'; audio?: unknown };
+}
+let transcriber: Transcriber | null = null;
 let loaded = '';
 let backend: 'webgpu' | 'cpu' = 'cpu';
-let library: any;
+let library: TransformersRuntime | undefined;
 const worker = self as unknown as { postMessage(value: unknown): void };
-async function runtime() {
+async function runtime(): Promise<TransformersRuntime> {
   if (library) return library;
   const base = new URL('/local-speech-recognition/', self.location.href).href;
-  library = await import(/* @vite-ignore */ `${base}transformers.mjs`);
-  library.env.allowLocalModels = true;
-  library.env.useBrowserCache = false;
-  library.env.useFSCache = false;
-  library.env.useCustomCache = true;
-  library.env.useWasmCache = false;
-  library.env.backends.onnx.wasm.numThreads = self.crossOriginIsolated ? 2 : 1;
-  library.env.backends.onnx.wasm.wasmPaths = { mjs: `${base}ort-wasm-simd-threaded.asyncify.mjs`, wasm: `${base}ort-wasm-simd-threaded.asyncify.wasm` };
+  const imported = await import(/* @vite-ignore */ `${base}transformers.mjs`) as TransformersRuntime;
+  imported.env.allowLocalModels = true;
+  imported.env.useBrowserCache = false;
+  imported.env.useFSCache = false;
+  imported.env.useCustomCache = true;
+  imported.env.useWasmCache = false;
+  imported.env.backends.onnx.wasm.numThreads = self.crossOriginIsolated ? 2 : 1;
+  imported.env.backends.onnx.wasm.wasmPaths = { mjs: `${base}ort-wasm-simd-threaded.asyncify.mjs`, wasm: `${base}ort-wasm-simd-threaded.asyncify.wasm` };
   // Missing optional tokenizer config is a 404. Inference can never download a model implicitly.
-  library.env.fetch = async () => new Response(null, { status: 404 });
-  return library;
+  imported.env.fetch = async () => new Response(null, { status: 404 });
+  library = imported;
+  return imported;
 }
 async function load(id: SpeechModelId, device: 'auto' | 'cpu' | 'gpu') {
   const key = `${id}:${device}`;
@@ -38,8 +65,9 @@ async function load(id: SpeechModelId, device: 'auto' | 'cpu' | 'gpu') {
   }, put: async () => {} };
   const create = (gpu: boolean) => lib.pipeline('automatic-speech-recognition', model.repo, { revision: model.revision, local_files_only: true, dtype: model.dtype, device: gpu ? 'webgpu' : 'wasm' });
   let gpu = false;
-  if (device !== 'cpu' && (self.navigator as any).gpu) {
-    const adapter = await (self.navigator as any).gpu.requestAdapter({ powerPreference: 'high-performance' });
+  const gpuApi = gpuOf(self);
+  if (device !== 'cpu' && gpuApi) {
+    const adapter = await gpuApi.requestAdapter({ powerPreference: 'high-performance' });
     const info = adapter?.info;
     gpu = !!adapter && !adapter.isFallbackAdapter && !/swiftshader|llvmpipe|software/iu.test(`${info?.vendor ?? ''} ${info?.description ?? ''}`);
   }
@@ -49,7 +77,7 @@ async function load(id: SpeechModelId, device: 'auto' | 'cpu' | 'gpu') {
   loaded = key; backend = gpu ? 'webgpu' : 'cpu'; return { backend };
 }
 let chain = Promise.resolve();
-self.onmessage = ({ data: { id, operation, data } }) => {
+self.onmessage = ({ data: { id, operation, data } }: MessageEvent<WorkerRequest>) => {
   chain = chain.then(async () => {
     try {
       let result: unknown;
@@ -60,9 +88,12 @@ self.onmessage = ({ data: { id, operation, data } }) => {
         case 'load': result = await load(data.model, data.device); break;
         case 'transcribe': {
           await load(data.model, data.device);
-          if (!(data.audio instanceof Float32Array) || data.audio.length < 1600 || data.audio.length > 16000 * 60) throw new Error('invalid-audio');
+          const audio = data.audio;
+          if (!(audio instanceof Float32Array) || audio.length < 1600 || audio.length > 16000 * 60) throw new Error('invalid-audio');
+          const active = transcriber;
+          if (!active) throw new Error('not-ready');
           const started = performance.now();
-          const run = () => transcriber(data.audio, { language: 'portuguese', task: 'transcribe', chunk_length_s: 30, stride_length_s: 5, return_timestamps: false, max_new_tokens: 440, condition_on_prev_tokens: false });
+          const run = () => active(audio, { language: 'portuguese', task: 'transcribe', chunk_length_s: 30, stride_length_s: 5, return_timestamps: false, max_new_tokens: 440, condition_on_prev_tokens: false });
           let output;
           try { output = await run(); }
           catch (error) {

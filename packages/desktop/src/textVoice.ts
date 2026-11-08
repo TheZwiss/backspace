@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
+export interface TextVoiceSpeech { audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }
 export type TextVoiceDevice = 'auto' | 'cpu' | 'gpu';
 export interface TextVoiceStatus {
   phase: 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
@@ -41,7 +42,7 @@ export class LocalTextVoice {
   private busy = false;
   private nextId = 0;
   private verified = new Set<string>();
-  private pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private downloads = new AbortController();
 
@@ -100,7 +101,7 @@ export class LocalTextVoice {
       if (Date.now() - lastUpdate > 200) { lastUpdate = Date.now(); this.update({ phase: 'downloading', device: this.status.device, progress: Math.min(99, Math.floor(bytes / asset.bytes * 100)) }); }
       callback(null, chunk);
     } });
-    await pipeline(Readable.fromWeb(response.body as any), meter, createWriteStream(temporary, { flags: 'wx' }));
+    await pipeline(Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream), meter, createWriteStream(temporary, { flags: 'wx' }));
     if (hash.digest('hex') !== asset.hash) throw new Error('download-integrity');
     await rename(temporary, filename); this.verified.add(name);
   }
@@ -125,8 +126,8 @@ export class LocalTextVoice {
     finally { cleanupReady(); }
   }
 
-  private request(operation: string, data: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
+  private request<T = unknown>(operation: string, data: unknown): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       const id = ++this.nextId;
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('engine-timeout')); }, 90_000);
       this.pending.set(id, { resolve, reject, timer });
@@ -145,21 +146,21 @@ export class LocalTextVoice {
   private async initialize(device: TextVoiceDevice): Promise<TextVoiceStatus> {
     try {
       this.update({ phase: 'loading', device }); await this.open();
-      const probe = await this.request('probe', {});
+      const probe = await this.request<{ adapter?: TextVoiceStatus['adapter'] }>('probe', {});
       const gpu = device !== 'cpu' && !!probe.adapter;
       if (device === 'gpu' && !gpu) throw new Error('gpu-unavailable');
       await Promise.all(['pf_dora.bin', 'pm_alex.bin', 'pm_santa.bin'].map((name) => this.asset(name)));
       await this.asset(gpu ? 'model-fp32.onnx' : 'model-int8.onnx');
       this.downloads.signal.throwIfAborted();
       this.update({ phase: 'loading', device });
-      let loaded;
+      let loaded: Pick<TextVoiceStatus, 'backend' | 'adapter'>;
       try {
-        loaded = await this.request('load', { device: gpu ? 'gpu' : 'cpu' });
+        loaded = await this.request<Pick<TextVoiceStatus, 'backend' | 'adapter'>>('load', { device: gpu ? 'gpu' : 'cpu' });
         await this.request('synthesize', { text: 'Olá.', voice: 'pf_dora', speed: 1 });
       } catch (error) {
         if (device !== 'auto' || !gpu) throw error;
         await this.asset('model-int8.onnx'); this.update({ phase: 'loading', device });
-        loaded = await this.request('load', { device: 'cpu' });
+        loaded = await this.request<Pick<TextVoiceStatus, 'backend' | 'adapter'>>('load', { device: 'cpu' });
         await this.request('synthesize', { text: 'Olá.', voice: 'pf_dora', speed: 1 });
       }
       this.update({ phase: 'ready', device, ...loaded }); return this.status;
@@ -169,17 +170,17 @@ export class LocalTextVoice {
       throw error;
     }
   }
-  async speech(value: unknown): Promise<{ audio: ArrayBuffer; generationMs: number; audioSeconds: number; backend: string }> {
+  async speech(value: unknown): Promise<TextVoiceSpeech> {
     if (!validTextVoiceRequest(value)) throw new Error('invalid-speech-request');
     if (this.busy || this.preparing || this.status.phase !== 'ready') throw new Error('speech-not-ready');
     this.busy = true;
     try {
-      try { return await this.request('synthesize', value); }
+      try { return await this.request<TextVoiceSpeech>('synthesize', value); }
       catch (error) {
         if (this.status.device !== 'auto' || this.status.backend !== 'webgpu' || this.downloads.signal.aborted) throw error;
         const loaded = await this.initialize('cpu');
         this.update({ ...loaded, device: 'auto' });
-        return await this.request('synthesize', value);
+        return await this.request<TextVoiceSpeech>('synthesize', value);
       }
     }
     finally { this.busy = false; this.armIdle(); }

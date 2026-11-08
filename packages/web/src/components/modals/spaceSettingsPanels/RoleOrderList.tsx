@@ -274,7 +274,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                   aria-label={t('roles.reorder.up', { name: role.name })}
                   disabled={!canUp}
                   onClick={(e) => { e.stopPropagation(); void move(index, index - 1, 'up'); }}
-                  className={`${isMobile ? 'w-10 h-10' : 'w-6 h-6'} flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-txt-tertiary disabled:cursor-default ${FOCUS_RING}`}
+                  className={`${isMobile ? 'w-10 h-10' : 'w-6 h-6'} flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-wash/[0.06] transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-txt-tertiary disabled:cursor-default ${FOCUS_RING}`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
@@ -286,7 +286,7 @@ export function RoleOrderList({ spaceId, onOpen }: RoleOrderListProps) {
                   aria-label={t('roles.reorder.down', { name: role.name })}
                   disabled={!canDown}
                   onClick={(e) => { e.stopPropagation(); void move(index, index + 1, 'down'); }}
-                  className={`${isMobile ? 'w-10 h-10' : 'w-6 h-6'} flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-txt-tertiary disabled:cursor-default ${FOCUS_RING}`}
+                  className={`${isMobile ? 'w-10 h-10' : 'w-6 h-6'} flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-wash/[0.06] transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-txt-tertiary disabled:cursor-default ${FOCUS_RING}`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />

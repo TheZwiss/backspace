@@ -209,7 +209,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         )}
 
         {/* Separator */}
-        <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
+        <div className="w-[1px] h-6 bg-wash/10 mx-0.5" />
 
         {!detached && <>
         {/* Chat Toggle */}
@@ -280,7 +280,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         )}
 
         {/* Separator */}
-        <div className="w-[1px] h-6 bg-white/10 mx-0.5" />
+        <div className="w-[1px] h-6 bg-wash/10 mx-0.5" />
 
         {/* Disconnect */}
         <Tooltip content={t('voice:controls.disconnect')} position="top"><button data-icon-motion="press" aria-label={t('voice:controls.disconnect')}

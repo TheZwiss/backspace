@@ -11,7 +11,7 @@ export function SettingsTabBar() {
   if (!ctx || ctx.sections.length === 0) return null;
 
   return (
-    <div className="flex gap-4 border-b border-white/[0.06] -mt-2 mb-4">
+    <div className="flex gap-4 border-b border-wash/[0.06] -mt-2 mb-4">
       {ctx.sections.map((s) => (
         s.invite === true ? (
           // The invitation wears the answer button's material so it reads as

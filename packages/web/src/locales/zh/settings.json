@@ -25,6 +25,28 @@
     "sound": "播放声音",
     "desktop": "在后台时显示桌面通知"
   },
+  "theme": {
+    "label": "主题",
+    "description": "选择 Backspace 的外观。设置保存在此设备上的当前浏览器或应用中。",
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "温暖的哑光表面，搭配磨砂玻璃点缀。"
+      },
+      "light": {
+        "name": "浅色",
+        "description": "温暖的纸质表面，搭配深色文字。"
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "纯黑表面，可在 OLED 屏幕上省电。"
+      },
+      "anime": {
+        "name": "动漫",
+        "description": "暮色靛紫搭配樱花粉点缀。"
+      }
+    }
+  },
   "interfaceScale": {
     "label": "界面缩放",
     "description": "调整文字、按钮和面板的大小。设置保存在此设备上的当前浏览器或应用中。",

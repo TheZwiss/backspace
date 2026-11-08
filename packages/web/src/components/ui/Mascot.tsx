@@ -1,5 +1,7 @@
 import { useId, useRef } from 'react';
 import { useMascotAnimation } from '../../hooks/useMascotAnimation';
+import { useThemeStore } from '../../stores/themeStore';
+import { Ahoge, ANIME_MASCOT_PALETTES, CheekMarks, EyeShine, NekoEars, Sparkle } from './MascotAnimeLayer';
 
 export const MASCOT_PALETTES = {
   idle:     { from: '#c8f0de', to: '#6dbf96', shadow: 'rgba(168,216,192,0.13)', blush: '#f5a8a8' },
@@ -16,12 +18,13 @@ interface MascotProps {
 }
 
 interface SvgProps {
-  palette: (typeof MASCOT_PALETTES)[MascotState];
+  palette: { from: string; to: string; shadow: string; blush: string };
   gradientId: string;
   svgRef: React.Ref<SVGSVGElement>;
+  anime: boolean;
 }
 
-function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
+function IdleSvg({ palette, gradientId, svgRef, anime }: SvgProps) {
   return (
     <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
@@ -33,6 +36,8 @@ function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
 
       {/* Shadow */}
       <ellipse data-mascot="shadow" cx="100" cy="188" rx="32" ry="6" fill={palette.shadow} />
+
+      {anime && <NekoEars pose="upright" color={palette.to} inner={palette.blush} />}
 
       {/* Body */}
       <path
@@ -60,6 +65,16 @@ function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
       <ellipse cx="64" cy="108" rx="8" ry="3.5" fill={palette.blush} opacity="0.28" transform="rotate(-8 64 108)" />
       <ellipse cx="136" cy="108" rx="8" ry="3.5" fill={palette.blush} opacity="0.28" transform="rotate(8 136 108)" />
 
+      {anime && (
+        <>
+          <Ahoge x={100} y={30} color={palette.to} />
+          <EyeShine leftX={80} rightX={120} y={92} />
+          <CheekMarks leftX={64} rightX={136} y={108} color={palette.blush} />
+          <Sparkle x={162} y={52} size={9} color="#fff3b0" />
+          <Sparkle x={36} y={118} size={6} color="#ffd6ea" delay={0.7} />
+        </>
+      )}
+
       {/* Mouth */}
       <path
         data-mascot="mouth"
@@ -73,7 +88,7 @@ function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
   );
 }
 
-function SleepingSvg({ palette, gradientId, svgRef }: SvgProps) {
+function SleepingSvg({ palette, gradientId, svgRef, anime }: SvgProps) {
   return (
     <svg ref={svgRef} viewBox="0 0 220 130" aria-hidden="true" width="100%" height="100%">
       <defs>
@@ -85,6 +100,8 @@ function SleepingSvg({ palette, gradientId, svgRef }: SvgProps) {
 
       {/* Shadow */}
       <ellipse data-mascot="shadow" cx="110" cy="120" rx="50" ry="5" fill={palette.shadow} />
+
+      {anime && <NekoEars pose="resting" color={palette.to} inner={palette.blush} />}
 
       {/* Body */}
       <path
@@ -122,13 +139,21 @@ function SleepingSvg({ palette, gradientId, svgRef }: SvgProps) {
       <ellipse cx="78" cy="76" rx="8" ry="3" fill={palette.blush} opacity="0.22" />
       <ellipse cx="142" cy="76" rx="8" ry="3" fill={palette.blush} opacity="0.22" />
 
+      {anime && (
+        <>
+          <Ahoge x={110} y={24} color={palette.to} />
+          <CheekMarks leftX={78} rightX={142} y={72} color={palette.blush} />
+          <Sparkle x={196} y={34} size={8} color="#e8dcff" />
+        </>
+      )}
+
       {/* Mouth */}
       <ellipse data-mascot="mouth" cx="110" cy="78" rx="4" ry="3.2" fill="#2a2a36" opacity="0.3" />
     </svg>
   );
 }
 
-function ExcitedSvg({ palette, gradientId, svgRef }: SvgProps) {
+function ExcitedSvg({ palette, gradientId, svgRef, anime }: SvgProps) {
   return (
     <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
@@ -140,6 +165,8 @@ function ExcitedSvg({ palette, gradientId, svgRef }: SvgProps) {
 
       {/* Shadow */}
       <ellipse data-mascot="shadow" cx="100" cy="188" rx="32" ry="6" fill={palette.shadow} />
+
+      {anime && <NekoEars pose="upright" color={palette.to} inner={palette.blush} />}
 
       {/* Body */}
       <path
@@ -167,6 +194,17 @@ function ExcitedSvg({ palette, gradientId, svgRef }: SvgProps) {
       <ellipse cx="64" cy="108" rx="8" ry="3.5" fill={palette.blush} opacity="0.3" transform="rotate(-8 64 108)" />
       <ellipse cx="136" cy="108" rx="8" ry="3.5" fill={palette.blush} opacity="0.3" transform="rotate(8 136 108)" />
 
+      {anime && (
+        <>
+          <Ahoge x={100} y={30} color={palette.to} />
+          <EyeShine leftX={80} rightX={120} y={92} />
+          <CheekMarks leftX={64} rightX={136} y={108} color={palette.blush} />
+          <Sparkle x={166} y={44} size={11} color="#fff3b0" />
+          <Sparkle x={30} y={70} size={8} color="#ffd6ea" delay={0.5} />
+          <Sparkle x={150} y={20} size={6} color="#ffffff" delay={1} />
+        </>
+      )}
+
       {/* Mouth — wider smile */}
       <path
         data-mascot="mouth"
@@ -180,7 +218,7 @@ function ExcitedSvg({ palette, gradientId, svgRef }: SvgProps) {
   );
 }
 
-function LonelySvg({ palette, gradientId, svgRef }: SvgProps) {
+function LonelySvg({ palette, gradientId, svgRef, anime }: SvgProps) {
   return (
     <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
@@ -192,6 +230,8 @@ function LonelySvg({ palette, gradientId, svgRef }: SvgProps) {
 
       {/* Shadow — smaller */}
       <ellipse data-mascot="shadow" cx="100" cy="188" rx="28" ry="5" fill={palette.shadow} />
+
+      {anime && <NekoEars pose="upright" color={palette.to} inner={palette.blush} />}
 
       {/* Body — different from idle */}
       <path
@@ -217,6 +257,13 @@ function LonelySvg({ palette, gradientId, svgRef }: SvgProps) {
       <ellipse cx="64" cy="112" rx="7" ry="3" fill={palette.blush} opacity="0.18" />
       <ellipse cx="136" cy="112" rx="7" ry="3" fill={palette.blush} opacity="0.18" />
 
+      {anime && (
+        <>
+          <Ahoge x={100} y={34} color={palette.to} />
+          <CheekMarks leftX={64} rightX={136} y={112} color={palette.blush} />
+        </>
+      )}
+
       {/* Mouth — frown */}
       <path
         data-mascot="mouth"
@@ -234,7 +281,8 @@ function LonelySvg({ palette, gradientId, svgRef }: SvgProps) {
 export function Mascot({ state, className }: MascotProps) {
   const uid = useId();
   const gradientId = `mascot-grad-${uid.replace(/:/g, '')}`;
-  const palette = MASCOT_PALETTES[state];
+  const anime = useThemeStore(store => store.theme === 'anime');
+  const palette = anime ? ANIME_MASCOT_PALETTES[state] : MASCOT_PALETTES[state];
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -242,10 +290,10 @@ export function Mascot({ state, className }: MascotProps) {
 
   return (
     <div ref={containerRef} role="presentation" className={`relative ${className ?? 'w-32 h-32'}`}>
-      {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
-      {state === 'lonely' && <LonelySvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} anime={anime} />}
+      {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} anime={anime} />}
+      {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} anime={anime} />}
+      {state === 'lonely' && <LonelySvg palette={palette} gradientId={gradientId} svgRef={svgRef} anime={anime} />}
       {state === 'sleeping' && (
         <div
           data-mascot="z-container"

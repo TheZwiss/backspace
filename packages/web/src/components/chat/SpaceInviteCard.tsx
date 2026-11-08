@@ -143,8 +143,8 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
   };
 
   return (
-    <div className={`my-1.5 max-w-md rounded-lg border border-white/[0.06] bg-surface-channel overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
-      <div className="px-3 py-1 text-ui-caption text-txt-tertiary border-b border-white/[0.06]">
+    <div className={`my-1.5 max-w-md rounded-lg border border-wash/[0.06] bg-surface-channel overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
+      <div className="px-3 py-1 text-ui-caption text-txt-tertiary border-b border-wash/[0.06]">
         {t('chat:invite.sentBy', { name: senderName })}
       </div>
       <div className="flex items-center gap-3 p-3">

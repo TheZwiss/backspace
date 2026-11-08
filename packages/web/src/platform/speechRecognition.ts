@@ -15,7 +15,7 @@ export const useDictationStore = create<{
 class SpeechRecognition {
   private worker: Worker | null = null;
   private nextId = 0;
-  private pending = new Map<number, { resolve(value: any): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
+  private pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private idle: ReturnType<typeof setTimeout> | null = null;
   private open() {
     if (this.worker) return;
@@ -29,15 +29,15 @@ class SpeechRecognition {
     };
     this.worker.onerror = () => { this.release(); useDictationStore.setState({ error: 'recognition-failed' }); };
   }
-  private request(operation: string, data: unknown = {}, transfer: Transferable[] = []): Promise<any> {
+  private request<T = unknown>(operation: string, data: unknown = {}, transfer: Transferable[] = []): Promise<T> {
     this.open(); if (this.idle) clearTimeout(this.idle);
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       const id = ++this.nextId;
       const timer = setTimeout(() => { this.release(); reject(new Error('recognition-timeout')); }, 20 * 60_000);
       this.pending.set(id, { resolve, reject, timer }); this.worker!.postMessage({ id, operation, data }, transfer);
     });
   }
-  async refresh() { const installed: string[] = await this.request('list'); useDictationStore.setState({ installed }); return installed; }
+  async refresh() { const installed = await this.request<string[]>('list'); useDictationStore.setState({ installed }); return installed; }
   async install() {
     const state = useDictationStore.getState(); if (!['idle', 'ready'].includes(state.phase)) return;
     useDictationStore.setState({ phase: 'downloading', progress: 0, error: '' });
@@ -51,13 +51,13 @@ class SpeechRecognition {
     const state = useDictationStore.getState();
     if (!state.installed.includes(state.model)) throw new Error('model-not-installed');
     useDictationStore.setState({ phase: 'loading', error: '' });
-    try { const result = await this.request('load', { model: state.model, device: state.device }); useDictationStore.setState({ phase: 'ready', ...(result ?? {}) }); }
+    try { const result = await this.request<{ backend: 'cpu' | 'webgpu' }>('load', { model: state.model, device: state.device }); useDictationStore.setState({ phase: 'ready', ...(result ?? {}) }); }
     catch (error) { useDictationStore.setState({ phase: 'idle' }); throw error; }
   }
   async transcribe(audio: Float32Array) {
     const { model, device } = useDictationStore.getState();
     useDictationStore.setState({ phase: 'transcribing', error: '' });
-    try { const result = await this.request('transcribe', { model, device, audio }, [audio.buffer]); useDictationStore.setState({ backend: result.backend ?? '' }); return result; }
+    try { const result = await this.request<{ text: string; elapsedMs: number; backend?: string }>('transcribe', { model, device, audio }, [audio.buffer]); useDictationStore.setState({ backend: result.backend ?? '' }); return result; }
     finally { useDictationStore.setState({ phase: this.worker ? 'ready' : 'idle' }); }
   }
   release() {

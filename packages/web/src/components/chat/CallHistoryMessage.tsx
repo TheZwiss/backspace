@@ -58,7 +58,7 @@ export function CallHistoryMessage({ event, actorName }: { event: CallHistoryEve
           <div className="mt-1 text-ui-micro text-txt-tertiary">{t('history.duration')}</div>
         </div>}
       </div>
-      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-3 border-t border-white/5 bg-black/10 px-4 py-3">
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-4 gap-y-3 border-t border-wash/5 bg-black/10 px-4 py-3">
         {timestamp(t('history.from'), event.connectedAt ?? event.startedAt)}
         {event.endedAt !== null && timestamp(t('history.to'), event.endedAt)}
       </div>

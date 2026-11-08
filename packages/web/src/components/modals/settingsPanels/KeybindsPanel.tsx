@@ -75,7 +75,7 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
       className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all ${
         isRecording
           ? 'ring-2 ring-accent-mint bg-surface-elevated'
-          : 'bg-white/[0.03] hover:bg-surface-elevated'
+          : 'bg-wash/[0.03] hover:bg-surface-elevated'
       }`}
     >
       <div className="flex-1 min-w-0">
@@ -97,7 +97,7 @@ function KeybindRow({ actionId, label, keybind, isRecording, recordingDisplay, o
           <>
             <button data-icon-motion="press"
               onClick={onStartRecording}
-              className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
+              className="text-xs px-2.5 py-1 rounded text-txt-tertiary hover:text-txt-primary hover:bg-wash/[0.06] transition-colors"
             >
               {keybind ? t('common:actions.edit') : t('keybinds.row.record')}
             </button>
@@ -329,7 +329,7 @@ export function KeybindsPanel() {
             <button data-icon-motion="arrow" type="button" onClick={() => {
               setIntegrationError(false);
               void window.backspace?.integrateKeybindAppImage?.().then((ok) => setIntegrationError(!ok)).catch(() => setIntegrationError(true));
-            }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+            }} className="mt-3 rounded px-3 py-1.5 bg-wash/[0.06] text-txt-primary hover:bg-wash/[0.1]">
               {t('keybinds.portal.integrateAppImage')}
             </button>
           )}
@@ -338,21 +338,21 @@ export function KeybindsPanel() {
             <button data-icon-motion="gear" type="button" onClick={() => {
               setPortalConfigureError(false);
               void window.backspace?.configureKeybindPortal?.().then((opened) => setPortalConfigureError(!opened)).catch(() => setPortalConfigureError(true));
-            }} className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+            }} className="mt-3 rounded px-3 py-1.5 bg-wash/[0.06] text-txt-primary hover:bg-wash/[0.1]">
               {t('keybinds.portal.configure')}
             </button>
           )}
           {portalConfigureError && <p className="mt-2 text-amber-200">{t('keybinds.portal.configureError')}</p>}
           {portal.state === 'unavailable' && (
             <button data-icon-motion="arrow" type="button" onClick={() => window.backspace?.retryKeybindPortal?.()}
-              className="mt-3 rounded px-3 py-1.5 bg-white/[0.06] text-txt-primary hover:bg-white/[0.1]">
+              className="mt-3 rounded px-3 py-1.5 bg-wash/[0.06] text-txt-primary hover:bg-wash/[0.1]">
               {t('keybinds.portal.retry')}
             </button>
           )}
         </div>
         <dl className="space-y-1.5">
           {BINDABLE_ACTIONS.map((action) => (
-            <div key={action.id} className="rounded-lg bg-white/[0.03] px-4 py-3">
+            <div key={action.id} className="rounded-lg bg-wash/[0.03] px-4 py-3">
               <dt className="text-sm text-txt-primary">{t(`keybinds.action.${action.id}`)}</dt>
               <dd className="text-xs text-txt-tertiary mt-1">
                 {portal.shortcuts[action.id]
@@ -435,7 +435,7 @@ export function KeybindsPanel() {
 
       {/* Conflict dialog */}
       {conflict && (
-        <div className="rounded-lg bg-surface-elevated border border-white/[0.06] p-3.5">
+        <div className="rounded-lg bg-surface-elevated border border-wash/[0.06] p-3.5">
           <div className="text-sm text-txt-primary">
             <Trans
               t={t}
@@ -456,7 +456,7 @@ export function KeybindsPanel() {
             </button>
             <button data-icon-motion="press"
               onClick={cancelConflict}
-              className="text-xs px-3 py-1.5 rounded bg-white/[0.06] text-txt-secondary hover:bg-white/[0.1] transition-colors"
+              className="text-xs px-3 py-1.5 rounded bg-wash/[0.06] text-txt-secondary hover:bg-wash/[0.1] transition-colors"
             >
               {t('common:actions.cancel')}
             </button>

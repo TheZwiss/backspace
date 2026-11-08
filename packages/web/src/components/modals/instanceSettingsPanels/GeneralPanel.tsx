@@ -303,7 +303,7 @@ export function GeneralPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.instanceName.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.instanceName.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <input
             type="text"
             value={draft.instanceName}
@@ -322,7 +322,7 @@ export function GeneralPanel() {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.discovery.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('admin:general.discovery.description')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           {/*
             The group owns the three rungs and nothing else: a `radiogroup` may
             own only radios, so what hangs under the global rung is a sibling of
@@ -422,7 +422,7 @@ export function GeneralPanel() {
                 </div>
               )}
               {/* What the pinger last did, the same shape as the telemetry panel's line */}
-              <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3 space-y-1">
+              <div className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3 space-y-1">
                 <div className="text-xs text-txt-tertiary">{pingLabel}</div>
                 {instanceSettings.directoryListedSpaceCount > 0 && (
                   <div className="text-xs text-txt-tertiary">
@@ -446,7 +446,7 @@ export function GeneralPanel() {
             so it reads as its own row under a rule rather than as a fourth
             rung of a ladder it does not belong to.
           */}
-          <div className="mt-3 pt-3 border-t border-white/[0.04]">
+          <div className="mt-3 pt-3 border-t border-wash/[0.04]">
             <label className={`flex items-center justify-between gap-3 ${noDirectoryEndpoint ? '' : 'cursor-pointer'}`}>
               <div className="min-w-0">
                 <div className="text-sm font-medium text-txt-primary">{t('admin:general.browse.toggleLabel')}</div>
@@ -483,7 +483,7 @@ export function GeneralPanel() {
         <p className="text-xs text-txt-tertiary mb-2">
           {t('admin:general.gif.description')}
         </p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-2">
           <input
             type="password"
             value={gifKeyDirty ? gifKeyDraft : ''}
@@ -494,7 +494,7 @@ export function GeneralPanel() {
           />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 text-ui-caption font-medium px-1.5 py-0.5 rounded ${
-              instanceSettings.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
+              instanceSettings.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-wash/5 text-txt-tertiary'
             }`}>
               {instanceSettings.gifEnabled ? t('admin:general.gif.enabled') : t('admin:general.gif.notConfigured')}
             </span>
@@ -516,7 +516,7 @@ export function GeneralPanel() {
       */}
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:general.supportCard.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <div className="min-w-0">
               <div className="text-sm font-medium text-txt-primary">{t('admin:general.supportCard.toggleLabel')}</div>

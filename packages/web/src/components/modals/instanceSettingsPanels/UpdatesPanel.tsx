@@ -43,7 +43,7 @@ function CommandBlock({ command }: { command: string }) {
       <button data-icon-motion="press"
         type="button"
         onClick={copy}
-        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition-colors ${copied ? 'text-accent-mint' : 'text-txt-secondary hover:text-txt-primary'}`}
+        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-wash/[0.04] hover:bg-wash/[0.08] transition-colors ${copied ? 'text-accent-mint' : 'text-txt-secondary hover:text-txt-primary'}`}
       >
         {copied && <CopiedCheck />}
         {copied ? t('common:actions.copied') : t('common:actions.copy')}
@@ -119,7 +119,7 @@ export function UpdatesPanel() {
         <button data-icon-motion="press"
           type="button"
           onClick={() => void load(false)}
-          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
+          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors"
         >
           {t('common:actions.tryAgain')}
         </button>
@@ -166,7 +166,7 @@ export function UpdatesPanel() {
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('admin:updates.running.label')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3.5">
           <div className="text-sm text-txt-primary font-medium">
             {t('common:appName')} {status.current.version}
           </div>
@@ -261,7 +261,7 @@ export function UpdatesPanel() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3.5">
           {status.state === 'up-to-date' && (
             <div className="text-sm text-accent-mint">{t('admin:updates.upToDate')}</div>
           )}
@@ -304,7 +304,7 @@ export function UpdatesPanel() {
           type="button"
           onClick={() => void load(true)}
           disabled={checking || !status.checkEnabled}
-          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors disabled:opacity-50"
         >
           {checking ? t('admin:updates.checking') : t('admin:updates.checkAgain')}
         </button>

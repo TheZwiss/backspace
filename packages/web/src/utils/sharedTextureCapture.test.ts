@@ -79,7 +79,7 @@ describe('shared texture capture', () => {
     expect(await promise).toBeNull(); expect(stopNativeScreenCapture).toHaveBeenCalledWith('capture');
   });
   it('falls back once on capture failure and keeps duplicate errors bounded', async () => {
-    const track = await open();
+    await open();
     const error = () => window.dispatchEvent(new MessageEvent('message', { source: window, data: { type: 'backspace:shared-texture-error', id: 'capture' } }));
     error(); error(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect(fallback).toHaveBeenCalledOnce(); expect(stopNativeScreenCapture).toHaveBeenCalledOnce();

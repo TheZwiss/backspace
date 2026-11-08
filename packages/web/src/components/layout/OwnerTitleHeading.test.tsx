@@ -53,7 +53,8 @@ describe('owner title heading', () => {
     await userEvent.type(screen.getByLabelText('Owner title'), '  首席摸鱼官  ');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(update).toHaveBeenCalledWith('space', { ownerTitle: '首席摸鱼官' });
-    expect(screen.getByRole('heading', { name: 'Owner — 1' })).toBeInTheDocument();
+    // The open dialog hides the page behind it from assistive technology, so the heading is read past that.
+    expect(screen.getByRole('heading', { name: 'Owner — 1', hidden: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
     await act(async () => confirm({ ...space, ownerTitle: '首席摸鱼官' }));
     expect(screen.getByRole('heading', { name: '首席摸鱼官 — 1' })).toBeInTheDocument();
@@ -68,7 +69,7 @@ describe('owner title heading', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Database is unavailable');
     expect(screen.getByLabelText('Owner title')).toHaveValue('Captain');
-    expect(screen.getByRole('heading', { name: 'Owner — 1' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Owner — 1', hidden: true })).toBeInTheDocument();
   });
 
   it('closes without a write when the title is unchanged', async () => {

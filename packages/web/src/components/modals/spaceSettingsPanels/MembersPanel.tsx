@@ -340,7 +340,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('spaces:settings.members.listHeading', { total: f.formatNumber(members.length) })}
         </div>
-        <div className="rounded-lg bg-white/[0.02] p-2">
+        <div className="rounded-lg bg-wash/[0.02] p-2">
           <div className="space-y-0.5">
             {members.map((member) => (
               <MembersPanelRow

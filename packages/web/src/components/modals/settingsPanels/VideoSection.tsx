@@ -557,7 +557,7 @@ export function VideoSection() {
               type="button"
               onClick={startPreviewFromUser}
               aria-label={t('voice.video.preview.testAria')}
-              className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+              className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
             >
               <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="mb-2">
                 <path d="M8 5v14l11-7z" />
@@ -654,7 +654,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
 }) {
   const { t } = useTranslation(['settings', 'common']);
   return (
-    <div className="mt-4 pt-3 border-t border-white/[0.06]">
+    <div className="mt-4 pt-3 border-t border-wash/[0.06]">
       <div className="text-ui-label font-medium text-txt-primary mb-1.5">
         {t('voice.video.camera.quality.label')}
       </div>

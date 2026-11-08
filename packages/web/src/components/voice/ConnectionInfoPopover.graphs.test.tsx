@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 
-const state = vi.hoisted(() => ({ room: {} as object | null, stats: null as any }));
+const state = vi.hoisted(() => ({ room: {} as object | null, stats: null as unknown }));
 vi.mock('../../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
 vi.mock('../../hooks/useLiveKit', () => ({ getActiveRoom: () => state.room }));
 vi.mock('../../hooks/useTrackStats', () => ({ useTrackStats: () => state.stats }));

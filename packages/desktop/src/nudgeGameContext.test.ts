@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { detectNudgeGames, hasNudgeGameActivity, isWallpaperEngineProcess } from './nudgeGameContext';
+import type { Display } from 'electron';
+import { detectNudgeGames, hasNudgeGameActivity, isWallpaperEngineProcess, type Geometry } from './nudgeGameContext';
 
 const mocks = vi.hoisted(() => ({ sources: vi.fn(), displays: [
   { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } },
   { id: 2, bounds: { x: -1920, y: 0, width: 1920, height: 1080 } },
 ] }));
 vi.mock('electron', () => ({ desktopCapturer: { getSources: mocks.sources }, screen: { getAllDisplays: () => mocks.displays } }));
-const options = () => ({ query: vi.fn(async () => ({ window: [0, 0, 1900, 1000], monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, process: 'game.exe' })),
-  isGame: (process: string): boolean => process === 'game.exe', knownGameRunning: false, physicalBounds: (display: any) => display.bounds, platform: 'win32' as const });
+const options = () => ({ query: vi.fn(async (): Promise<Geometry> => ({ window: [0, 0, 1900, 1000], monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, process: 'game.exe' })),
+  isGame: (process: string): boolean => process === 'game.exe', knownGameRunning: false, physicalBounds: (display: Display) => display.bounds, platform: 'win32' as const });
 
 describe('on-demand game display detection', () => {
   beforeEach(() => { mocks.sources.mockResolvedValue([{ id: 'window:123:0' }]); });
@@ -35,7 +36,7 @@ describe('on-demand game display detection', () => {
   it.each(['wallpaper32.exe', 'Wallpaper64.exe', 'wallpaperservice32.exe', 'C:\\Steam\\Wallpaper Engine\\wallpaper64.exe'])('excludes %s from game protection', async process => {
     const input = options();
     input.isGame = () => true;
-    input.query.mockResolvedValue({ window: [0, 0, 1920, 1080], monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, process, exclusive: true } as any);
+    input.query.mockResolvedValue({ window: [0, 0, 1920, 1080], monitor: [0, 0, 1920, 1080], minimized: false, foreground: true, process, exclusive: true });
     expect((await detectNudgeGames(input))).toMatchObject({ gameRunning: false, foregroundGame: false, gameDisplayIds: [] });
   });
   it('does not count wallpaper activity, but retains genuine games alongside it', () => {

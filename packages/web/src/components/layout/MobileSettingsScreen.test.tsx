@@ -1,3 +1,4 @@
+import { RELEASES_URL } from '../../platform/desktopDownload';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceInfoResponse, User } from '@backspace/shared';
@@ -160,7 +161,7 @@ describe('MobileSettingsScreen Desktop entry', () => {
     // The version reaches the panel, so the links name release assets.
     expect(await screen.findByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
       'href',
-      'https://github.com/TheZwiss/backspace/releases/download/v1.2.1/Backspace-1.2.1-win-x64.exe',
+      `${RELEASES_URL}/download/v1.2.1/Backspace-1.2.1-win-x64.exe`,
     );
     // The Electron-only panel stays out of the browser.
     expect(screen.queryByRole('button', { name: 'Change Instance' })).not.toBeInTheDocument();

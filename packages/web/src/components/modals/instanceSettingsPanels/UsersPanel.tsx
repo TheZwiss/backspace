@@ -274,7 +274,7 @@ export function UsersPanel() {
 
             return (
               <div key={user.id}>
-                <div className={`flex items-center gap-3 rounded-lg bg-white/[0.02] p-3.5 ${hasTempPassword ? 'rounded-b-none' : ''}`}>
+                <div className={`flex items-center gap-3 rounded-lg bg-wash/[0.02] p-3.5 ${hasTempPassword ? 'rounded-b-none' : ''}`}>
                   {/* Avatar */}
                   <div className={isDeleted ? 'opacity-50' : ''}>
                     <Avatar
@@ -330,7 +330,7 @@ export function UsersPanel() {
                             ? 'text-accent-amber hover:bg-accent-amber/10'
                             : isFederated
                               ? 'text-txt-tertiary/30 cursor-not-allowed'
-                              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06]'
+                              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.06]'
                         }`}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -346,7 +346,7 @@ export function UsersPanel() {
                         className={`p-1.5 rounded transition-colors ${
                           isFederated
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
-                            : 'text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06]'
+                            : 'text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.06]'
                         }`}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -391,7 +391,7 @@ export function UsersPanel() {
                       </code>
                       <button data-icon-motion="press"
                         onClick={() => navigator.clipboard.writeText(tempPassword.password)}
-                        className="px-2 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-xs rounded transition-colors"
+                        className="px-2 py-1 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-xs rounded transition-colors"
                       >
                         {t('common:actions.copy')}
                       </button>
@@ -413,7 +413,7 @@ export function UsersPanel() {
           <button data-icon-motion="press"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {t('common:actions.previous')}
           </button>
@@ -423,7 +423,7 @@ export function UsersPanel() {
           <button data-icon-motion="press"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {t('common:actions.next')}
           </button>

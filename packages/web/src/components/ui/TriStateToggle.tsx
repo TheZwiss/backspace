@@ -24,7 +24,7 @@ export function TriStateToggle({
     if (!active) return `${base} ${interaction} text-txt-tertiary${disabled ? '' : ' hover:text-txt-secondary'}`;
     switch (v) {
       case 'deny': return `${base} ${interaction} bg-accent-rose/15 text-accent-rose`;
-      case 'neutral': return `${base} ${interaction} bg-white/[0.06] text-txt-tertiary`;
+      case 'neutral': return `${base} ${interaction} bg-wash/[0.06] text-txt-tertiary`;
       case 'allow': return `${base} ${interaction} bg-accent-primary/15 text-accent-primary`;
     }
   };

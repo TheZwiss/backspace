@@ -352,7 +352,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.visibility.hint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <div className="space-y-1.5">
             {visibilityOptions.map((opt) => (
               <label
@@ -383,7 +383,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-2.5">
           <label className={`flex items-center justify-between gap-4 ${directoryLocked ? 'cursor-default' : 'cursor-pointer'}`}>
             <div>
               <div className="text-sm font-medium text-txt-primary">{t('spaces:settings.discovery.directory.label')}</div>
@@ -445,7 +445,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       <div>
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.description.hint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
@@ -696,7 +696,7 @@ export function SpaceSettingsModal() {
               <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
 
-            <div className="border-t border-white/[0.04] my-2 mx-2" />
+            <div className="border-t border-wash/[0.04] my-2 mx-2" />
             <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
             <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
             {canManageRoles && (
@@ -737,7 +737,7 @@ export function SpaceSettingsModal() {
                 <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
 
-              <div className="border-t border-white/[0.04] my-2 mx-2" />
+              <div className="border-t border-wash/[0.04] my-2 mx-2" />
               <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
               <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
               {canManageRoles && (

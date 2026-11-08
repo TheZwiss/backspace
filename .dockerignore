@@ -11,6 +11,13 @@ dist-electron
 .DS_Store
 .idea
 .vscode
-packages/desktop
+packages/desktop/*
+# The web build imports these shared UI definitions from the desktop package.
+!packages/desktop/resources
+packages/desktop/resources/*
+!packages/desktop/resources/icon-motion.js
+!packages/desktop/resources/icon-motion.json
+!packages/desktop/resources/icon-motion.d.ts
+!packages/desktop/resources/ui-theme.json
 npm
 livekit

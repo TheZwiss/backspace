@@ -403,7 +403,7 @@ export function PictureInPicture() {
   return (
     <div
       ref={containerRef}
-      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-surface-base select-none ${
+      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-wash/10 bg-surface-base select-none ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
       style={{

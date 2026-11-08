@@ -452,7 +452,7 @@ export function RegisterPage() {
               {/* Closed-registration invite entry — shown when registration is closed and:
                   (a) no URL token is present, or (b) the URL token has already failed validation */}
               {showManualEntry && (
-                <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-white/[0.06] space-y-2">
+                <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-wash/[0.06] space-y-2">
                   <div className="text-sm text-txt-secondary">
                     {t('auth:register.invite.closedNotice')}
                   </div>
@@ -757,7 +757,7 @@ export function RegisterPage() {
 
         {/* AGPL § 13: source offer for anonymous visitors, shown on both steps. */}
         {instanceInfo && (
-          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+          <div className="mt-6 pt-4 border-t border-wash/[0.04] flex justify-center">
             <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
           </div>
         )}

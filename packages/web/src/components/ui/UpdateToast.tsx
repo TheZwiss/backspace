@@ -94,7 +94,7 @@ export function UpdateToast() {
 
           <button data-icon-motion="press"
             onClick={handleLater}
-            className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06] transition-colors"
+            className="shrink-0 -mt-1 -mr-1 p-1.5 rounded-lg text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.06] transition-colors"
             aria-label={t('desktop:update.dismiss')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -121,7 +121,7 @@ export function UpdateToast() {
           )}
           <button data-icon-motion="press"
             onClick={handleLater}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-white/[0.06] transition-colors"
+            className="px-3 py-1.5 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary hover:bg-wash/[0.06] transition-colors"
           >
             {t('desktop:update.later')}
           </button>

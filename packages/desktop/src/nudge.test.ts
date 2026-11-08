@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockOverlayWindow } from './overlayWindowMock';
 vi.mock('./nudgeToast', () => ({ showNudgeToast: vi.fn() }));
 vi.mock('./desktopScreenshot', () => ({ captureDisplayFrames: vi.fn() }));
 
 // Ensure Wayland is not detected in tests
 vi.stubGlobal('process', { ...process, platform: 'linux', env: { ...process.env, XDG_SESSION_TYPE: '', WAYLAND_DISPLAY: '' } });
 
-const mocks = vi.hoisted(() => ({ windows: [] as any[], getSources: vi.fn(), displays: [
+const mocks = vi.hoisted(() => ({ windows: [] as MockOverlayWindow[], getSources: vi.fn(), displays: [
   { id: 1, bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, size: { width: 1920, height: 1080 }, scaleFactor: 1 },
   { id: 2, bounds: { x: 0, y: -200, width: 2560, height: 1440 }, size: { width: 2560, height: 1440 }, scaleFactor: 1.5 },
 ] }));
@@ -56,15 +57,15 @@ describe('desktop nudge overlays', () => {
       expect(w.setFullScreen).not.toHaveBeenCalled();
       expect(w.setBounds).toHaveBeenLastCalledWith(mocks.displays[i]!.bounds);
       expect(w.showInactive).toHaveBeenCalledOnce();
-      expect(w.webContents.executeJavaScript.mock.calls[0][0]).toContain('.decode()');
+      expect(w.webContents.executeJavaScript.mock.calls[0]![0]).toContain('.decode()');
       expect(w.setOpacity).toHaveBeenCalledWith(1);
-      expect(w.setOpacity.mock.invocationCallOrder[0]).toBeGreaterThan(
-        Math.max(...mocks.windows.map(other => other.webContents.executeJavaScript.mock.invocationCallOrder[0])),
+      expect(w.setOpacity.mock.invocationCallOrder[0]!).toBeGreaterThan(
+        Math.max(...mocks.windows.map(other => other.webContents.executeJavaScript.mock.invocationCallOrder[0]!)),
       );
       expect(w.destroyed).toBe(true);
     });
-    expect(mocks.windows[0].webContents.executeJavaScript.mock.calls[1][0])
-      .toBe(mocks.windows[1].webContents.executeJavaScript.mock.calls[1][0]);
+    expect(mocks.windows[0]!.webContents.executeJavaScript.mock.calls[1]![0])
+      .toBe(mocks.windows[1]!.webContents.executeJavaScript.mock.calls[1]![0]);
     await playNudge();
     expect(mocks.windows).toHaveLength(2);
   });

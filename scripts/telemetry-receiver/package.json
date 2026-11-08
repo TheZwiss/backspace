@@ -1,6 +1,6 @@
 {
   "name": "@backspace/telemetry-receiver",
-  "version": "1.12.2",
+  "version": "1.13.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "Jannis Braun",
@@ -15,7 +15,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260925.2",
     "typescript": "^5.8.0",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "wrangler": "^4.141.0"
   }
 }

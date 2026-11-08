@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const listeners = new Set<() => void>();
-  const state: any = {};
-  const update = (changes: any) => { Object.assign(state, changes); for (const listener of listeners) listener(); };
-  return { state, listeners, update, speech: vi.fn(), source: null as any, hold: false, starts: vi.fn(), destination: {}, master: {}, connections: [] as unknown[], gains: [] as any[],
-    room: { state: 'connected', localParticipant: { getTrackPublication: () => ({ track: {}, isMuted: false }) } } as any,
+  const state: Record<string, unknown> = {};
+  const update = (changes: Record<string, unknown>) => { Object.assign(state, changes); for (const listener of listeners) listener(); };
+  return { state, listeners, update, speech: vi.fn(), source: null as unknown, hold: false, starts: vi.fn(), destination: {}, master: {}, connections: [] as unknown[], gains: [] as Array<{ gain: { value: number } }>,
+    room: { state: 'connected', localParticipant: { getTrackPublication: () => ({ track: {}, isMuted: false }) } } as { state: string; localParticipant: unknown },
   };
 });
 vi.mock('../platform/textVoice', () => ({ supportsLocalTextVoice: () => true, synthesizeLocalTextVoice: (...args: unknown[]) => mocks.speech(...args) }));
@@ -24,7 +24,7 @@ vi.mock('../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({
     decodeAudioData: async () => ({ duration: 0.1 }),
     createGain: () => { const gain = { gain: { value: 1 }, connect: (node: unknown) => mocks.connections.push(node), disconnect: () => {} }; mocks.gains.push(gain); return gain; },
     createBufferSource: () => {
-      const source: any = { connect: () => {}, disconnect: () => {}, onended: null, start: () => { mocks.starts(); if (!mocks.hold) setTimeout(() => source.onended?.(), 0); }, stop: () => source.onended?.() };
+      const source: { onended: (() => void) | null; connect: () => void; disconnect: () => void; start: () => void; stop: () => void } = { connect: () => {}, disconnect: () => {}, onended: null, start: () => { mocks.starts(); if (!mocks.hold) setTimeout(() => source.onended?.(), 0); }, stop: () => source.onended?.() };
       mocks.source = source; return source;
     },
   }),
@@ -48,7 +48,7 @@ it('bounds phrases without dropping Portuguese words', () => {
 it('sends synthesized audio to the microphone graph, not the local speakers', async () => {
   await speakText('Olá, pessoal!');
   expect(mocks.speech).toHaveBeenCalledWith('Olá, pessoal!', 'pf_dora', 1, expect.any(AbortSignal));
-  expect(mocks.connections).toContain(mocks.destination); expect(mocks.gains[1].gain.value).toBe(0);
+  expect(mocks.connections).toContain(mocks.destination); expect(mocks.gains[1]!.gain.value).toBe(0);
   expect(mocks.starts).toHaveBeenCalledOnce(); expect(mocks.state.textVoiceBusy).toBe(false);
 });
 it('discards pending synthesis immediately when muted', async () => {
@@ -86,8 +86,8 @@ it('monitors only synthesized voice and changes monitoring immediately', async (
   const pending = speakText('Minha voz sintetizada.');
   await vi.waitFor(() => expect(mocks.starts).toHaveBeenCalledOnce());
   expect(mocks.connections).toContain(mocks.destination); expect(mocks.connections).toContain(mocks.master);
-  expect(mocks.gains[1].gain.value).toBe(0.75);
-  mocks.update({ textVoiceMonitor: false }); expect(mocks.gains[1].gain.value).toBe(0);
-  mocks.update({ textVoiceMonitor: true, outputVolume: 50 }); expect(mocks.gains[1].gain.value).toBe(0.5);
+  expect(mocks.gains[1]!.gain.value).toBe(0.75);
+  mocks.update({ textVoiceMonitor: false }); expect(mocks.gains[1]!.gain.value).toBe(0);
+  mocks.update({ textVoiceMonitor: true, outputVolume: 50 }); expect(mocks.gains[1]!.gain.value).toBe(0.5);
   stopTextVoice(); await expect(pending).rejects.toHaveProperty('name', 'AbortError');
 });

@@ -301,7 +301,7 @@ export function UserProfileModal() {
         </div>
 
         {/* Tab bar */}
-        <div className="px-5 flex-shrink-0 border-b border-white/[0.06]">
+        <div className="px-5 flex-shrink-0 border-b border-wash/[0.06]">
           <div className="flex gap-1">
             {tabs.map((tab) => (
               <button data-icon-motion="press"
@@ -377,7 +377,7 @@ export function UserProfileModal() {
                       <button data-icon-motion="press"
                         key={friend.id}
                         onClick={() => handleViewFriend(friend)}
-                        className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-colors text-left"
+                        className="flex items-center gap-2.5 p-2.5 rounded-lg bg-wash/[0.03] hover:bg-wash/[0.06] border border-wash/[0.04] transition-colors text-left"
                       >
                         <Avatar
                           src={friend.avatar}
@@ -432,7 +432,7 @@ export function UserProfileModal() {
                     <button data-icon-motion="press"
                       key={`${space.id}:${space._instanceOrigin}`}
                       onClick={() => handleGoToSpace(space.id)}
-                      className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-white/[0.06] transition-colors text-left"
+                      className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-wash/[0.06] transition-colors text-left"
                     >
                       <div className="relative shrink-0">
                         {space.icon ? (
@@ -450,7 +450,7 @@ export function UserProfileModal() {
                           </div>
                         )}
                         {space._instanceOrigin && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-[#1a1a23] flex items-center justify-center">
+                          <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-channel flex items-center justify-center">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80">
                               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                             </svg>
@@ -482,7 +482,7 @@ export function UserProfileModal() {
         {/* Action buttons. Your own profile offers none: nobody messages or
             befriends themselves. */}
         {friendship.state !== 'self' && (
-          <div className="flex-shrink-0 px-5 py-3 border-t border-white/[0.06] flex gap-2">
+          <div className="flex-shrink-0 px-5 py-3 border-t border-wash/[0.06] flex gap-2">
             <button data-icon-motion="send"
               onClick={handleSendMessage}
               className="ui-button ui-button-primary flex-1 transition-colors"
@@ -492,7 +492,7 @@ export function UserProfileModal() {
 
             {friendship.state === 'none' && (
               <button data-icon-motion="pulse" onClick={handleAddFriend} disabled={friendActionLoading}
-                className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
+                className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-primary border border-wash/[0.08] bg-wash/[0.06] hover:bg-wash/[0.10] transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:profile.addFriend')}
               </button>
             )}
@@ -511,7 +511,7 @@ export function UserProfileModal() {
                   {friendActionLoading ? '...' : t('common:actions.accept')}
                 </button>
                 <button data-icon-motion="press" onClick={handleDeclineRequest} disabled={friendActionLoading}
-                  className="py-2 px-3 rounded-lg text-ui-label font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
+                  className="py-2 px-3 rounded-lg text-ui-label font-medium text-txt-tertiary border border-wash/[0.06] hover:bg-wash/[0.06] transition-colors disabled:opacity-50">
                   {friendActionLoading ? '...' : t('social:request.ignore')}
                 </button>
               </>

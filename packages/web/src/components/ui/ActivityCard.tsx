@@ -95,9 +95,9 @@ export interface ArtworkSize {
 
 export const PROFILE_ROW_ART: ArtworkSize = {
   wrapper: 'relative shrink-0 w-10 h-10',
-  large: 'w-10 h-10 rounded-lg object-cover bg-white/[0.04]',
-  badge: 'absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-[#13131a] ring-2 ring-[rgba(20,20,26,0.85)]',
-  single: 'w-10 h-10 rounded-lg object-cover bg-white/[0.04]',
+  large: 'w-10 h-10 rounded-lg object-cover bg-wash/[0.04]',
+  badge: 'absolute -bottom-1 -right-1 w-4 h-4 rounded-full object-cover bg-surface-chat ring-2 ring-surface-chat/85',
+  single: 'w-10 h-10 rounded-lg object-cover bg-wash/[0.04]',
 };
 
 /** Stand-in for a game without an icon: keeps the rows' text aligned. It is only drawn, never cached or uploaded. */
@@ -106,7 +106,7 @@ export function GameIconPlaceholder() {
     <div
       data-testid="game-icon-placeholder"
       aria-hidden="true"
-      className="shrink-0 w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center text-txt-tertiary"
+      className="shrink-0 w-10 h-10 rounded-lg bg-wash/[0.06] flex items-center justify-center text-txt-tertiary"
     >
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
@@ -118,9 +118,9 @@ export function GameIconPlaceholder() {
 
 export const POPOUT_ART: ArtworkSize = {
   wrapper: 'relative shrink-0 w-[60px] h-[60px]',
-  large: 'w-[60px] h-[60px] rounded-[10px] object-cover bg-white/[0.04]',
-  badge: 'absolute -bottom-1.5 -right-1.5 w-[22px] h-[22px] rounded-full object-cover bg-[#13131a] ring-2 ring-[rgba(20,20,26,0.85)]',
-  single: 'w-[60px] h-[60px] rounded-[10px] object-cover bg-white/[0.04]',
+  large: 'w-[60px] h-[60px] rounded-[10px] object-cover bg-wash/[0.04]',
+  badge: 'absolute -bottom-1.5 -right-1.5 w-[22px] h-[22px] rounded-full object-cover bg-surface-chat ring-2 ring-surface-chat/85',
+  single: 'w-[60px] h-[60px] rounded-[10px] object-cover bg-wash/[0.04]',
 };
 
 export interface ActivityArtworkProps {
@@ -347,7 +347,7 @@ export function ActivityDetailCard({ activities }: { activities: Activity[] }) {
         smallAlt={assets?.smallText}
         size={POPOUT_ART}
         placeholder={
-          <div className="w-[60px] h-[60px] rounded-[10px] bg-white/[0.06] flex items-center justify-center text-txt-secondary">
+          <div className="w-[60px] h-[60px] rounded-[10px] bg-wash/[0.06] flex items-center justify-center text-txt-secondary">
             <AppIcon name={headline} type={primary.type} size={28} />
           </div>
         }

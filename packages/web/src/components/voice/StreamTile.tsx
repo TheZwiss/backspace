@@ -587,7 +587,7 @@ export function StreamTile({ tile, large, stats, borderless = false, chromeRevea
       ref={containerRef}
       data-context-menu
       style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: 'calc(100 * var(--app-vw))', height: 'calc(100 * var(--app-dvh))', zIndex: 'var(--layer-fullscreen)' } : undefined}
-      className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
+      className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-wash/[0.06] hover:ring-wash/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
       onContextMenu={handleContextMenu}

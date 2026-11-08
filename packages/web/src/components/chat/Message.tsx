@@ -442,9 +442,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const displayName = spaceMemberName(spaceMemberOf(message.userId), displayIdentity);
 
   const getMemberDisplayColor = (userId: string) => {
-    if (isDmMessage) return { color: '#d8d8de' };
+    if (isDmMessage) return { color: 'rgb(var(--text-message))' };
     const member = spaceMemberOf(userId);
-    return { color: memberNameColor(member ?? { userId, roles: [] }, ownerId) ?? '#d8d8de' };
+    return { color: memberNameColor(member ?? { userId, roles: [] }, ownerId) ?? 'rgb(var(--text-message))' };
   };
 
   const roleColor = getMemberDisplayColor(message.userId);
@@ -797,7 +797,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
         <div data-side="top" className="motion-floating-enter absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
-            <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
+            <div className="flex items-center px-1 border-r border-wash/[0.06] h-full">
               {['👍', '❤️', '😂', '😮'].map(emoji => (
                 <button data-icon-motion="pulse"
                   key={emoji}

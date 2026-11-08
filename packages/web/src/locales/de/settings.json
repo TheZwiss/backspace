@@ -25,6 +25,28 @@
     "sound": "Ton abspielen",
     "desktop": "Im Hintergrund über dem Desktop anzeigen"
   },
+  "theme": {
+    "label": "Design",
+    "description": "Lege fest, wie Backspace aussieht. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "Warme matte Flächen mit Milchglas-Akzenten."
+      },
+      "light": {
+        "name": "Hell",
+        "description": "Warme Papierflächen mit dunkler Schrift."
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "Tiefschwarze Flächen, die Strom auf OLED-Displays sparen."
+      },
+      "anime": {
+        "name": "Anime",
+        "description": "Dämmerungs-Indigo mit Sakura-rosa Akzenten."
+      }
+    }
+  },
   "interfaceScale": {
     "label": "Oberflächenskalierung",
     "description": "Größe von Text, Schaltflächen und Bereichen. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",

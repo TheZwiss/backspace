@@ -49,7 +49,8 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
     setStage('ask');
     setFailed(false);
     // The ask arrives unprompted, so it takes focus: screen readers announce it
-    // and the keyboard reaches its controls without a click first.
+    // and the keyboard reaches its controls without a click first. The dialog
+    // role and its name come from the Modal around this content.
     dialogRef.current?.focus();
   }, [open]);
 
@@ -79,9 +80,6 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
     <Modal isOpen={open} onClose={close} maxWidth="max-w-3xl" mobileStyle="fullscreen">
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={headingId}
         tabIndex={-1}
         className="flex flex-col desktop:flex-row gap-6 outline-none"
       >

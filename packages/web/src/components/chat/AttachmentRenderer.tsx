@@ -240,7 +240,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     return (
       <div className="mt-1 max-w-fit">
         <div
-          className="relative rounded-lg overflow-hidden border border-white/[0.06]"
+          className="relative rounded-lg overflow-hidden border border-wash/[0.06]"
           style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 400), maxHeight: 300 } : undefined}
         >
           <img

@@ -122,7 +122,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
         <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
         <p className="text-xs text-txt-tertiary">{t('spaces:roles.description')}</p>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:roles.hierarchyHint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-2">
+        <div className="rounded-lg bg-wash/[0.02] p-2">
           <RoleOrderList
             spaceId={spaceId}
             onOpen={(roleId) => { setIsNewRole(false); setEditingRoleId(roleId); }}
@@ -362,7 +362,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
         <div>
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
           {/* A disabled fieldset disables every control inside it. */}
-          <fieldset disabled={!canEdit} className={`rounded-lg bg-white/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
+          <fieldset disabled={!canEdit} className={`rounded-lg bg-wash/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
                 {t('spaces:roles.nameLabel')}
@@ -428,7 +428,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
           <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {groupTitle(group.id)}
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="space-y-1">
               {group.perms.map((perm) => {
                 const isAdminBit = perm.bit === PermissionBits.ADMINISTRATOR;
@@ -520,7 +520,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                 </>
               )}
               {hasChanges && (
-                <div className="w-px h-5 bg-white/10" />
+                <div className="w-px h-5 bg-wash/10" />
               )}
               <button data-icon-motion="press"
                 onClick={handleCopy}
@@ -531,7 +531,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
               </button>
               {offersDelete && (
                 <>
-                  <div className="w-px h-5 bg-white/10" />
+                  <div className="w-px h-5 bg-wash/10" />
                   <button data-icon-motion="press"
                     onClick={handleDelete}
                     disabled={deleting || deleteCarriesUnheld}

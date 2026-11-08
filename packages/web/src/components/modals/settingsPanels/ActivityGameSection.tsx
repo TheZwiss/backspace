@@ -8,7 +8,7 @@ const PRIMARY_BUTTON =
   'px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 const LINK_BUTTON = 'text-xs text-txt-tertiary hover:text-txt-secondary transition-colors';
 const ICON_BUTTON =
-  'w-6 h-6 flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] transition-colors disabled:opacity-30 disabled:pointer-events-none';
+  'w-6 h-6 flex items-center justify-center rounded text-txt-tertiary hover:text-txt-primary hover:bg-wash/[0.06] transition-colors disabled:opacity-30 disabled:pointer-events-none';
 
 /**
  * The player's say over the games shown as playing: add a game the detector
@@ -153,7 +153,7 @@ export function ActivityGameSection() {
   };
 
   return (
-    <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-4">
+    <div className="mt-3 pt-3 border-t border-wash/[0.06] space-y-4">
       {rows.keys.length > 0 && (
         <div>
           <div className="text-sm text-txt-primary">{t('privacy.activity.game.gamesLabel')}</div>
@@ -210,7 +210,7 @@ export function ActivityGameSection() {
                     ⋮
                   </span>
                   <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${runningKeys.has(key) ? 'bg-accent-mint' : 'bg-white/[0.15]'}`}
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${runningKeys.has(key) ? 'bg-accent-mint' : 'bg-wash/[0.15]'}`}
                     aria-hidden="true"
                   />
                   <span className={`flex-1 min-w-0 truncate text-sm ${isHidden ? 'text-txt-tertiary line-through' : 'text-txt-primary'}`} title={name}>

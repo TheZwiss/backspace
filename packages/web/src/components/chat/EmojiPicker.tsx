@@ -4,6 +4,7 @@ import { StickerPicker } from './StickerPicker';
 import React, { useRef, useEffect, useState } from 'react';
 import Picker from '@emoji-mart/react';
 import { loadEmojiData } from '../../utils/emojiData';
+import { useThemeStore } from '../../stores/themeStore';
 
 interface EmojiPickerProps {
   onEmojiSelect: (emoji: { native: string }) => void;
@@ -33,6 +34,7 @@ export function EmojiPicker({
   manageable = true,
 }: EmojiPickerProps) {
   const { t } = useTranslation('chat');
+  const isLightTheme = useThemeStore(state => state.theme === 'light');
   const [showStickers, setShowStickers] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -96,7 +98,7 @@ export function EmojiPicker({
       {stickers && showStickers ? <StickerPicker mobile={mobile} manageable={manageable} onSelect={token => onEmojiSelect({ native: token })} /> : <Picker
         data={loadEmojiData}
         onEmojiSelect={onEmojiSelect}
-        theme="dark"
+        theme={isLightTheme ? 'light' : 'dark'}
         set="native"
         skinTonePosition="search"
         previewPosition="none"

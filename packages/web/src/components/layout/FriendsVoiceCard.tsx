@@ -23,7 +23,7 @@ export function FriendsVoiceCard({ group, children }: { group: VoiceGroup; child
     openSpace(group.channelId);
     joinVoiceChannel(group.channelId, useVoiceStore.getState().connectFn ?? undefined);
   };
-  return <div className="rounded-[10px] bg-white/[0.03] border border-border-soft p-2 mb-2">
+  return <div className="rounded-[10px] bg-wash/[0.03] border border-border-soft p-2 mb-2">
     <button data-icon-motion="press" type="button" onClick={() => openSpace()} className="flex w-full items-center gap-2 rounded-lg p-1 text-left hover:bg-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary" title={t('activity.openSpace')}>
       <Avatar src={resolveAssetUrl(group.space.icon, group.space._instanceOrigin)} name={group.space.name} size={28} palette="space" userId={group.space.id} avatarColor={group.space.avatarColor} />
       <span className="text-xs font-semibold text-txt-primary truncate">{group.space.name}</span>

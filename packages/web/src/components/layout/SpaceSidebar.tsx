@@ -24,6 +24,8 @@ import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { describeCodedError } from '../../i18n/errors';
 import { useStaticAvatar } from '../../utils/staticAvatar';
+import { useThemeStore } from '../../stores/themeStore';
+import { SakuraMark } from '../ui/SakuraMark';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
@@ -77,6 +79,7 @@ interface SidebarItemProps {
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
   const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
+  const isAnimeTheme = useThemeStore(state => state.theme === 'anime');
   const firstLetter = name.charAt(0).toUpperCase();
 
   const getPillHeight = () => {
@@ -126,7 +129,9 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   const buttonContent = (
     <Tooltip content={tooltipText ? undefined : name} position="top"><button data-icon-motion="press" aria-label={name} onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle}  aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
-        <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
+        isAnimeTheme
+          ? <SakuraMark size={24} />
+          : <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
         actionType === 'add' ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -248,7 +253,7 @@ function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpac
           </div>
         ))}
         {display.length < 4 && Array.from({ length: 4 - display.length }).map((_, i) => (
-          <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-white/[0.04]" />
+          <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-wash/[0.04]" />
         ))}
       </div>
       {remaining > 0 && (
@@ -449,7 +454,7 @@ function FolderFlyout({
             <button data-icon-motion="press"
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
                 isDimmed ? 'opacity-40 saturate-50' : ''
-              } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
+              } ${isActive ? 'bg-wash/[0.10]' : 'hover:bg-wash/[0.06]'}`}
               style={{ width: 'calc(100% - 8px)' }}
               draggable
               onMouseEnter={() => setHoveredSpaceId(space.id)}
@@ -1097,7 +1102,7 @@ export function SpaceSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
+      <div className="w-8 h-[2px] bg-wash/[0.06] rounded-full mb-1.5 shrink-0" />
 
       {/* Unified space list (ordered by user layout) */}
       {resolvedLayout.map((item) => {
@@ -1172,14 +1177,14 @@ export function SpaceSidebar() {
                       <p className="text-ui-caption text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
                       <div className="flex gap-1.5">
                         <button data-icon-motion="press"
-                          className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
+                          className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-wash/40' : 'border-transparent'} bg-wash/10`}
                           onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
                           title={t('common:states.default')}
                         />
                         {FOLDER_COLORS.map((c) => (
                           <button data-icon-motion="press"
                             key={c.name}
-                            className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-white/40' : 'border-transparent'}`}
+                            className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-wash/40' : 'border-transparent'}`}
                             style={{ background: c.value }}
                             onClick={() => { handleFolderColorChange(folderRef.id, c.value); useContextMenuStore.getState().close(); }}
                             title={t(c.labelKey)}
@@ -1220,7 +1225,7 @@ export function SpaceSidebar() {
         );
       })}
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
+      <div className="w-8 h-[2px] bg-wash/[0.06] rounded-full mb-1.5 shrink-0" />
 
       <SidebarItem
         id="add-space"

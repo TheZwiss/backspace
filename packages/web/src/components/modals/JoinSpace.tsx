@@ -291,11 +291,11 @@ export function JoinSpaceModal() {
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-white/[0.06]" />
+            <div className="flex-1 h-px bg-wash/[0.06]" />
             <span className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">
               {t('spaces:join.inviteDivider')}
             </span>
-            <div className="flex-1 h-px bg-white/[0.06]" />
+            <div className="flex-1 h-px bg-wash/[0.06]" />
           </div>
 
           {/* ── Invite-code section (secondary) ── */}
@@ -378,7 +378,7 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
+                <div className="w-px h-5 bg-wash/10" />
                 <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
@@ -427,7 +427,7 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
+                <div className="w-px h-5 bg-wash/10" />
                 <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
@@ -510,7 +510,7 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
+                <div className="w-px h-5 bg-wash/10" />
                 <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}

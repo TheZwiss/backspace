@@ -8,6 +8,7 @@ import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { splitMentions } from '../../utils/mentionTokens';
+import { useThemeStore } from '../../stores/themeStore';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -80,25 +81,37 @@ const aetherTheme = {
   },
 };
 
+// One Dark's pastel tokens vanish on the light theme's white code surface, so
+// it swaps to One Light, on the same surface and text variables.
+const aetherLightTheme = {
+  ...themes.oneLight,
+  plain: {
+    ...themes.oneLight.plain,
+    backgroundColor: 'rgb(var(--bg-input))',
+    color: 'rgb(var(--text-message))',
+  },
+};
+
 // ─── Markdown Component Overrides ──────────────────────────────────────────
 
 const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang, remarkEmojiShortcodes];
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
+  const isLightTheme = useThemeStore(state => state.theme === 'light');
   // 'text' means a bare fenced block with no language — render without highlighting
   if (language === 'text') {
     return (
-      <pre className="mt-1 p-3 bg-surface-elevated border border-white/[0.06] rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
+      <pre className="mt-1 p-3 bg-surface-elevated border border-wash/[0.06] rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
         <code>{code}</code>
       </pre>
     );
   }
 
   return (
-    <Highlight theme={aetherTheme} code={code} language={language}>
+    <Highlight theme={isLightTheme ? aetherLightTheme : aetherTheme} code={code} language={language}>
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
-          className="mt-1 rounded border border-white/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
+          className="mt-1 rounded border border-wash/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
           style={{ ...style, padding: '0.625rem 0.75rem', margin: 0 }}
         >
           {tokens.map((line, i) => {
@@ -180,7 +193,7 @@ function buildComponents(): Components {
       // Inline code
       return (
         <code
-          className="px-[6px] py-px bg-[#111115] border border-border-soft rounded text-ui-label font-mono text-accent-lavender"
+          className="px-[6px] py-px bg-surface-input border border-border-soft rounded text-ui-label font-mono text-accent-lavender"
           {...rest}
         >
           {children}
@@ -238,7 +251,7 @@ function buildComponents(): Components {
     ),
     thead: ({ children }) => <thead className="border-b border-border-soft">{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
-    tr: ({ children }) => <tr className="border-b border-white/[0.06]">{children}</tr>,
+    tr: ({ children }) => <tr className="border-b border-wash/[0.06]">{children}</tr>,
     th: ({ children }) => <th className="px-3 py-1.5 text-left text-txt-primary font-semibold">{children}</th>,
     td: ({ children }) => <td className="px-3 py-1.5">{children}</td>,
   };

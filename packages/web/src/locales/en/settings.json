@@ -25,6 +25,28 @@
     "sound": "Play a sound",
     "desktop": "Show over the desktop while in the background"
   },
+  "theme": {
+    "label": "Theme",
+    "description": "Choose how Backspace looks. Saved in this browser or app on this device.",
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "Warm matte surfaces with frosted glass accents."
+      },
+      "light": {
+        "name": "Light",
+        "description": "Warm paper surfaces with dark ink text."
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "True black surfaces that save power on OLED screens."
+      },
+      "anime": {
+        "name": "Anime",
+        "description": "Twilight indigo with sakura-pink accents."
+      }
+    }
+  },
   "interfaceScale": {
     "label": "Interface scale",
     "description": "Resize text, buttons, and panels. Saved in this browser or app on this device.",
