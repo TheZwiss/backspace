@@ -17,10 +17,13 @@ export type ScreenSharePickerMode = 'app' | 'system';
  * then shows a "choose" card that triggers the portal on click, like a browser.
  * X11, macOS and Windows list everything without a prompt.
  *
- * This reads the session type, which is a guess: the app can run under XWayland
- * inside a Wayland session, where the capture stack behaves like X11. A wrong
- * guess costs one extra click — the renderer's prompted fallback handles the
- * source list arriving after the request instead of before it.
+ * This reads the session type the process was relaunched with
+ * (`captureSessionType()` in `ozonePlatform.ts`): `x11` on KDE, where the X11
+ * capturer sees the whole desktop, `wayland` on compositors whose XWayland only
+ * draws X11 clients (Hyprland, GNOME, …), so capture there goes through the
+ * portal. A wrong guess costs one extra click — the renderer's prompted
+ * fallback handles the source list arriving after the request instead of
+ * before it.
  */
 export function screenSharePickerMode(
   platform: NodeJS.Platform,

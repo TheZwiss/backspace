@@ -154,6 +154,7 @@ scripts/testenv.sh reset    # stop and delete .testenv/ (next up re-seeds)
 **Linux / Wayland (KDE Plasma, GNOME):**
 - The compositor ignores `x`/`y`, `setPosition()` and `setBounds()` for normal windows, so toasts and overlays land in the screen centre; `desktopCapturer` goes through the portal (slow, partial, opens a dialog).
 - The only measured fix is running under XWayland. `main.ts` re-executes the process once with `--ozone-platform=x11` as a real argument when `shouldForceX11Ozone()` finds an X socket. `app.commandLine.appendSwitch` and `ELECTRON_OZONE_PLATFORM_HINT` are NOT honoured early enough on Wayland sessions; do not rely on them.
+- `XDG_SESSION_TYPE` picks WebRTC's capture backend, not the ozone platform. The relaunch sets it from `captureSessionType()`: `x11` only on KDE (KWin shows the whole desktop to X11 apps); on Hyprland, GNOME and other compositors XWayland sees only X11 clients, so an X11 capture is black and screen share must stay on the portal (`wayland`).
 - Without XWayland, `nudge.ts` falls back to the toast-only mode instead of the full-screen effect.
 - Do not add `setPosition` calls after `showInactive()` to work around this; they were tried and have no effect on Wayland.
 

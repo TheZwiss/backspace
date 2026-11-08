@@ -1,4 +1,4 @@
-import { shouldForceX11Ozone } from './ozonePlatform';
+import { captureSessionType, shouldForceX11Ozone } from './ozonePlatform';
 import { linuxVideoAccelerationFeatures } from './videoAcceleration';
 import { app } from 'electron';
 import path from 'path';
@@ -9,15 +9,17 @@ import { spawnSync } from 'child_process';
 // On Wayland (KDE Plasma, GNOME, etc.) the compositor ignores setPosition()
 // and setBounds() from Electron - toasts/overlays appear centered - and
 // desktopCapturer opens the screencast portal. Under XWayland the X server
-// honours the coordinates and capture is immediate.
+// honours the coordinates.
 // The ozone platform is chosen before any JS runs, and neither appendSwitch nor
 // ELECTRON_OZONE_PLATFORM_HINT is honoured by then on Wayland sessions, so the
 // process re-executes itself once with --ozone-platform=x11 as a real argument.
-// XDG_SESSION_TYPE is set to x11 as well: WebRTC's screen capturer picks the
-// PipeWire/portal backend from that variable, not from the ozone platform.
+// WebRTC's screen capturer picks the PipeWire/portal backend from
+// XDG_SESSION_TYPE, not from the ozone platform. It is rewritten to x11 only
+// where the X server can see the whole desktop (KDE); elsewhere (Hyprland,
+// GNOME, …) an X11 capture is black, so capture stays on the portal.
 const X11_OZONE_ARG = '--ozone-platform=x11';
 if (process.platform === 'linux' && !process.argv.includes(X11_OZONE_ARG) && shouldForceX11Ozone()) {
-  const result = spawnSync(process.execPath, [X11_OZONE_ARG, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, XDG_SESSION_TYPE: 'x11' } });
+  const result = spawnSync(process.execPath, [X11_OZONE_ARG, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, XDG_SESSION_TYPE: captureSessionType() } });
   process.exit(result.status ?? 1);
 }
 

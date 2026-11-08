@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldForceX11Ozone } from './ozonePlatform';
+import { captureSessionType, shouldForceX11Ozone } from './ozonePlatform';
 
 const socketPresent = () => true;
 const socketMissing = () => false;
@@ -33,5 +33,28 @@ describe('shouldForceX11Ozone', () => {
 
   it('não propaga erro ao checar o socket', () => {
     expect(shouldForceX11Ozone('linux', { DISPLAY: ':0' }, () => { throw new Error('eacces'); })).toBe(false);
+  });
+});
+
+describe('captureSessionType', () => {
+  it('usa a captura X11 no KDE Plasma, onde o KWin expõe o desktop a apps X11', () => {
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'KDE' })).toBe('x11');
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'ubuntu:KDE' })).toBe('x11');
+  });
+
+  it('mantém o portal nos compositores em que o XWayland só vê clientes X11', () => {
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'Hyprland' })).toBe('wayland');
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'sway' })).toBe('wayland');
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'ubuntu:GNOME' })).toBe('wayland');
+  });
+
+  it('usa X11 numa sessão X11 de verdade, sem WAYLAND_DISPLAY', () => {
+    expect(captureSessionType({ XDG_CURRENT_DESKTOP: 'i3' })).toBe('x11');
+    expect(captureSessionType({})).toBe('x11');
+  });
+
+  it('mantém o portal quando o desktop é desconhecido', () => {
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1' })).toBe('wayland');
+    expect(captureSessionType({ WAYLAND_DISPLAY: 'wayland-1', XDG_CURRENT_DESKTOP: 'KDE-like' })).toBe('wayland');
   });
 });
