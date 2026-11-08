@@ -6,13 +6,17 @@ import { useVoiceStore, type CameraConfig } from '../stores/voiceStore';
 import { applyOverdrive, type OverdriveOptions } from './screenShare';
 import { getStreamHostLimits } from './streamHostLimits';
 import { markIntentionalCameraOff } from './cameraFlags';
+import { pickCameraCapture, resolveCameraModes, type CameraCapture } from './cameraModes';
 
 export interface CameraBuildResult {
   capture: { width: number; height: number; frameRate: number };
   publish: {
     videoCodec: 'h264';
     videoEncoding: { maxBitrate: number; maxFramerate: number };
-    simulcast: true;
+    /** One encoding only: the camera is published as a single quality. */
+    simulcast: false;
+    /** No second-codec copy of the camera either (LiveKit adds a VP8 one by default). */
+    backupCodec: false;
   };
   overdrive: OverdriveOptions;
 }
@@ -70,7 +74,8 @@ export function buildCameraOptions(
     publish: {
       videoCodec: 'h264',
       videoEncoding: { maxBitrate: bitrateBps, maxFramerate: config.fps },
-      simulcast: true,
+      simulcast: false,
+      backupCodec: false,
     },
     overdrive: {
       maxBitrate: bitrateBps,
@@ -80,13 +85,26 @@ export function buildCameraOptions(
   };
 }
 
-async function republishCamera(room: Room, options: CameraBuildResult): Promise<void> {
-  const deviceId = useVoiceStore.getState().cameraDeviceId;
-  const capture: VideoCaptureOptions = {
-    resolution: options.capture,
-    frameRate: options.capture.frameRate,
-  };
+/**
+ * The capture options for the camera, with the wanted size fitted to a 16:9
+ * mode the device was measured to deliver. Without that fit the browser treats
+ * the size as a preference and settles on the nearest mode it has, which on
+ * many webcams is 4:3. When nothing could be measured the wanted size is used
+ * as is.
+ */
+export async function buildCameraCaptureOptions(
+  options: CameraBuildResult,
+  deviceId: string | null,
+): Promise<{ capture: VideoCaptureOptions; fitted: CameraCapture }> {
+  const modes = await resolveCameraModes(deviceId);
+  const fitted = pickCameraCapture(modes, options.capture.height, options.capture.frameRate) ?? options.capture;
+  const capture: VideoCaptureOptions = { resolution: fitted, frameRate: fitted.frameRate };
   if (deviceId) capture.deviceId = deviceId;
+  return { capture, fitted };
+}
+
+async function republishCamera(room: Room, options: CameraBuildResult): Promise<void> {
+  const { capture } = await buildCameraCaptureOptions(options, useVoiceStore.getState().cameraDeviceId);
 
   markIntentionalCameraOff();
   await room.localParticipant.setCameraEnabled(false);
@@ -107,10 +125,12 @@ async function applyCameraQuality(room: Room): Promise<void> {
   if (!publication?.track || !mediaTrack) return;
 
   try {
+    const { fitted } = await buildCameraCaptureOptions(options, useVoiceStore.getState().cameraDeviceId);
     await mediaTrack.applyConstraints({
-      width: { ideal: options.capture.width },
-      height: { ideal: options.capture.height },
-      frameRate: { ideal: options.capture.frameRate },
+      width: { ideal: fitted.width },
+      height: { ideal: fitted.height },
+      aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: fitted.frameRate },
     });
   } catch (err) {
     console.warn('[Camera] applyConstraints failed; republishing the camera', err);

@@ -105,6 +105,12 @@ describe('buildCameraOptions', () => {
     expect(options.publish.videoCodec).toBe('h264');
   });
 
+  it('publishes a single quality: no simulcast layers and no backup codec', () => {
+    const options = buildCameraOptions(limitsWith({}), { height: 720, fps: 30, customBitrateKbps: null });
+    expect(options.publish.simulcast).toBe(false);
+    expect(options.publish.backupCodec).toBe(false);
+  });
+
   it('uses a custom bitrate when the host allows it', () => {
     const options = buildCameraOptions(
       limitsWith({}),
@@ -132,6 +138,7 @@ describe('requestCameraQuality', () => {
     expect(applyConstraints).toHaveBeenCalledWith({
       width: { ideal: 1280 },
       height: { ideal: 720 },
+      aspectRatio: { ideal: 16 / 9 },
       frameRate: { ideal: 30 },
     });
     expect(applyOverdrive).toHaveBeenCalledWith(

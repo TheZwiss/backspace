@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Track } from 'livekit-client';
 import { useVoiceStore, type CameraConfig } from '../../../stores/voiceStore';
@@ -7,8 +7,15 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { getActiveRoom } from '../../../hooks/useLiveKit';
 import { useStreamHostLimits } from '../../../utils/streamHostLimits';
 import { effectiveCameraConfig, resolveCameraLimits } from '../../../utils/camera';
+import type { CameraMode } from '../../../utils/cameraModes';
 import { RESOLUTION_LABELS, type Resolution } from '@backspace/shared/src/constants';
 import { isElectron, getElectronAPI } from '../../../platform/platform';
+import {
+  getCachedCameraModes,
+  openCameraPreview,
+  subscribeCameraModes,
+  supportedCameraChoices,
+} from '../../../utils/cameraModes';
 
 /**
  * Permission state machine for the Video section.
@@ -94,6 +101,12 @@ export function VideoSection() {
   const policyLimits = hostLimits ?? homeLimits;
   const cameraLimits = policyLimits ? resolveCameraLimits(policyLimits) : null;
   const effectiveCamera = policyLimits ? effectiveCameraConfig(cameraConfig, policyLimits) : null;
+  const effectiveHeight = effectiveCamera?.height ?? cameraConfig.height;
+  const effectiveFps = effectiveCamera?.fps ?? cameraConfig.fps;
+  const measuredModes = useSyncExternalStore(
+    subscribeCameraModes,
+    () => getCachedCameraModes(cameraDeviceId),
+  );
 
   const [permState, setPermState] = useState<PermissionStatus>('unknown');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -337,9 +350,7 @@ export function VideoSection() {
 
     const start = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : true,
-        });
+        const stream = await openCameraPreview(cameraDeviceId, effectiveHeight, effectiveFps);
         if (gen !== startGenRef.current || !mountedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -371,7 +382,7 @@ export function VideoSection() {
       // Bumping gen invalidates the in-flight start; actual track stop happens
       // when the user clicks Stop preview or via the unmount cleanup below.
     };
-  }, [cameraDeviceId, previewActive, isCameraOn, permState]);
+  }, [cameraDeviceId, previewActive, isCameraOn, permState, effectiveHeight, effectiveFps]);
 
   // Component-unmount cleanup: stop any live preview stream so the LED goes off
   // when the modal closes / settings tab changes / route changes.
@@ -397,9 +408,7 @@ export function VideoSection() {
     setPreviewActive(true);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : true,
-      });
+      const stream = await openCameraPreview(cameraDeviceId, effectiveHeight, effectiveFps);
       if (gen !== startGenRef.current || !mountedRef.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -451,6 +460,7 @@ export function VideoSection() {
       cameraLimits={cameraLimits}
       effectiveCamera={effectiveCamera}
       setCameraConfig={setCameraConfig}
+      measuredModes={measuredModes}
     />
   );
 
@@ -647,12 +657,25 @@ export function VideoSection() {
   );
 }
 
-function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig }: {
+function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig, measuredModes }: {
   cameraLimits: CameraStreamingLimits;
   effectiveCamera: CameraConfig;
   setCameraConfig: (config: Partial<CameraConfig>) => void;
+  measuredModes: readonly CameraMode[] | null;
 }) {
   const { t } = useTranslation(['settings', 'common']);
+  // Once the camera has been measured, offer only what it delivers; before
+  // that (no preview or call yet) every host-allowed choice is shown.
+  const choices = measuredModes ? supportedCameraChoices(measuredModes) : null;
+  const heights = choices
+    ? cameraLimits.allowedResolutions.filter((h) => choices.heights.has(h))
+    : cameraLimits.allowedResolutions;
+  const shownHeights = heights.length > 0 ? heights : cameraLimits.allowedResolutions;
+  const fpsCeiling = choices ? choices.maxFpsByHeight.get(effectiveCamera.height) : undefined;
+  const framerates = fpsCeiling
+    ? cameraLimits.allowedFramerates.filter((f) => f <= fpsCeiling)
+    : cameraLimits.allowedFramerates;
+  const shownFramerates = framerates.length > 0 ? framerates : cameraLimits.allowedFramerates;
   return (
     <div className="mt-4 pt-3 border-t border-wash/[0.06]">
       <div className="text-ui-label font-medium text-txt-primary mb-1.5">
@@ -673,7 +696,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
               {t('voice.video.camera.quality.resolution')}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {cameraLimits.allowedResolutions.map((height) => (
+              {shownHeights.map((height) => (
                 <button data-icon-motion="toggle"
                   key={height}
                   type="button"
@@ -694,7 +717,7 @@ function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig 
               {t('voice.video.camera.quality.framerate')}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {cameraLimits.allowedFramerates.map((fps) => (
+              {shownFramerates.map((fps) => (
                 <button data-icon-motion="toggle"
                   key={fps}
                   type="button"

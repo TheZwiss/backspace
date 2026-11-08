@@ -1,4 +1,3 @@
-import type { VideoCaptureOptions } from 'livekit-client';
 import { useVoiceStore, type ActiveDmCall } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
@@ -7,7 +6,7 @@ import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit, preArmMicrophone } from './voice';
 import { dmCallOrigin, dmCallRoomKey, sendDmCallEnd } from './dmCall';
 import { stopScreenShare } from './screenShare';
-import { buildCameraOptions } from './camera';
+import { buildCameraCaptureOptions, buildCameraOptions } from './camera';
 import { consumeIntentionalCameraOff, markIntentionalCameraOff } from './cameraFlags';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
 
@@ -79,11 +78,7 @@ export async function handleCameraAction(): Promise<void> {
     if (willEnable) {
       const cameraDeviceId = useVoiceStore.getState().cameraDeviceId;
       const options = buildCameraOptions();
-      const captureOpts: VideoCaptureOptions = {
-        resolution: options.capture,
-        frameRate: options.capture.frameRate,
-      };
-      if (cameraDeviceId) captureOpts.deviceId = cameraDeviceId;
+      const { capture: captureOpts } = await buildCameraCaptureOptions(options, cameraDeviceId);
       await room.localParticipant.setCameraEnabled(true, captureOpts, options.publish);
     } else {
       // Mark this disable as intentional so the track-`ended` handler skips

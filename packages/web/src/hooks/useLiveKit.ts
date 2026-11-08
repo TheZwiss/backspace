@@ -917,7 +917,7 @@ export function useLiveKit() {
       const newRoom = new Room({
         adaptiveStream: true,
         dynacast: true,
-        publishDefaults: { videoCodec: 'h264', simulcast: true, audioPreset: audioPresetForKbps(channelBitrateKbps) },
+        publishDefaults: { videoCodec: 'h264', simulcast: false, backupCodec: false, audioPreset: audioPresetForKbps(channelBitrateKbps) },
       });
       roomRef.current = newRoom;
       _previewCleanup.set(newRoom, startStreamPreviews(newRoom, {
