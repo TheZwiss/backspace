@@ -23,6 +23,11 @@ proxy HTTPS respondendo corretamente.
 O endereço canônico é publicado pelo nó `backspace`. O nó Android
 `mi-9t-pro` é separado e não deve ser usado como URL principal.
 
+Mas a **mídia UDP** é anunciada no IP do nó Android (`node_ip` do LiveKit), porque
+o `tailscale serve` do nó `backspace` (userspace) não encaminha UDP. Quem recebeu
+só o compartilhamento do `backspace` cai em TURN/TCP (`3479`). Para a mídia ir por
+UDP direto, compartilhe também o `mi-9t-pro` com essas pessoas.
+
 O roteamento HTTPS atual é:
 
 ```text

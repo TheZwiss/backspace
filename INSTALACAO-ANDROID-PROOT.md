@@ -155,7 +155,10 @@ bind_addresses:
   - 0.0.0.0
 rtc:
   node_ip: 100.113.4.54
-  advertise_internal_ip: true
+  advertise_internal_ip: false
+  ips:
+    excludes:
+      - 10.0.0.0/8
   use_external_ip: false
   udp_port: 7882
   tcp_port: 7881
@@ -191,13 +194,65 @@ turn:backspace.<sua-tailnet>.ts.net:3479?transport=tcp
 
 Se o firewall do cliente bloquear UDP, o TURN/TLS em 5349 é o fallback.
 
-`node_ip` + `advertise_internal_ip: true` fazem o LiveKit anunciar **os dois**
-candidatos ICE: `10.0.1.5:7882` (LAN) e `100.113.4.54:7882` (Tailscale). Isso foi
-confirmado nos candidatos enviados ao cliente e no log do servidor.
+#### Candidatos ICE: só o IP do Tailscale (estado validado em 2026-11-08)
 
-Se o Tailscale estiver desligado, o candidato Tailscale fica inútil mas a LAN
-continua. Se os IPs mudarem, ajuste `node_ip`, `LIVEKIT_PRORT_ADDRS`, o SAN do
+O servidor anuncia **um único** candidato de mídia: `100.113.4.54:7882/udp` (IP
+do Tailscale do Android). `advertise_internal_ip: false` e
+`ips.excludes: 10.0.0.0/8` mantêm o IP da LAN (`wlan0`) fora da lista.
+
+**Por quê.** Com `advertise_internal_ip: true` o LiveKit anunciava dois
+candidatos (`10.0.1.8` e `100.113.4.54`). Um cliente de fora (ex.: celular em 4G)
+só alcançava o servidor através de um relé do TURN, e o ICE ficava trocando de
+par entre os dois endereços: `ice reconnected or switched pair` aparecia a cada
+2 a 6 segundos (47 vezes em 5 minutos), o que se via como picos de ping. Com um
+só candidato, a mesma sessão ficou com **0 trocas** e **0 avisos** no log, e o
+par escolhido passou a ser `udp host ↔ udp host` (sem `relay`).
+
+**O que isso NÃO muda.** O bloco `turn:` continua ligado, de propósito: ele é o
+fallback para quem não alcança o IP UDP. Quem tem só o compartilhamento do nó
+`backspace` (e não o do nó Android `mi-9t-pro`) não consegue chegar a
+`100.113.4.54:7882` e cai em TURN/TCP (`3479`), que é o pior caminho (bloqueio de
+cabeça de fila do TCP dentro do WireGuard em userspace).
+
+**Para os amigos terem UDP direto**, compartilhe também o nó Android: Tailscale
+admin → Machines → `mi-9t-pro` → Share. A página e o sinal continuam entrando por
+`https://backspace.<sua-tailnet>.ts.net`; só a mídia passa a usar o nó Android.
+Abrir a porta no roteador não é opção atrás de CGNAT.
+
+**Como conferir.** No painel de estatísticas da chamada, o par ativo deve ser
+`udp` com tipo `host` ou `srflx`. `relay` com `tcp` é o fallback. No servidor:
+
+```bash
+grep -a "participant active" /var/log/livekit/livekit.log | tail -2   # connectionType: udp
+grep -a "switched pair" /var/log/livekit/livekit.log | wc -l           # não deve crescer
+```
+
+**Custo.** Quem está na LAN também usa o caminho do Tailscale (mediana de cerca de
+4,5 ms, contra cerca de 1,9 ms pela LAN pura). Para voltar ao comportamento
+antigo, ponha `advertise_internal_ip: true`, remova o bloco `ips.excludes` e
+reinicie o LiveKit.
+
+Medições que descartaram outras causas (2026-11-08): o PRoot não é o gargalo
+(eco UDP nativo no Termux e dentro do PRoot deram a mesma distribuição, jitter de
+cerca de 1,5 a 2 ms, e `Seccomp: 2` está ativo); e o binário patchado é não-PIE,
+então o Android não o executa fora do PRoot sem recompilar com
+`-buildmode=pie`. O jitter de 7 a 9 ms que o painel mostra é jitter RTP, que
+inclui o ritmo de envio, não só a rede.
+
+Se o Tailscale estiver desligado, o candidato fica inútil e a chamada falha. Se os
+IPs mudarem, ajuste `node_ip`, `ips.excludes`, `LIVEKIT_PRORT_ADDRS`, o SAN do
 certificado e `LIVEKIT_URL`/`LIVEKIT_URL_AUTO`.
+
+**Reiniciar o LiveKit sem matá-lo.** O PRoot usa `--kill-on-exit`: um
+`proot-distro login ... livekit-server &` morre quando a sessão de login acaba.
+Para reiniciar fora do `start-stack.sh`, rode numa sessão persistente:
+
+```bash
+pkill -x livekit-server   # com participantes, mande o sinal duas vezes
+setsid nohup proot-distro login debian -- bash -lc \
+  "cd /opt/livekit && livekit-server --config /opt/livekit/livekit.yaml >>/var/log/livekit/livekit.log 2>&1" \
+  >/dev/null 2>&1 </dev/null &
+```
 
 ## 6. Caddy (`/opt/caddy/Caddyfile`)
 

@@ -4,8 +4,15 @@ bind_addresses:
   - 0.0.0.0
 
 rtc:
+  # Advertise ONLY the Android Tailscale IP. Advertising the LAN IP as well made
+  # remote clients pair against both addresses and the ICE selected pair flipped
+  # every 2-6 s (about 47 switches in 5 min), which showed up as ping spikes.
+  # See INSTALACAO-ANDROID-PROOT.md, section 5.
   node_ip: <TAILSCALE_IP>
-  advertise_internal_ip: true
+  advertise_internal_ip: false
+  ips:
+    excludes:
+      - <LAN_CIDR>   # e.g. 10.0.0.0/8; keeps the wlan0 address out of the candidates
   use_external_ip: false
   udp_port: 7882
   tcp_port: 7881
