@@ -256,6 +256,7 @@
   },
   "channelDuration": "Channel active for {{duration}}",
   "controls": {
+    "openChannel": "Open {{channel}}",
     "callWindowFailed": "Could not open the call window.",
     "callInWindow": "Call is in a separate window — click to show",
     "openCallWindow": "Open call in a separate window",

@@ -258,6 +258,7 @@
   },
   "channelDuration": "Канал активен {{duration}}",
   "controls": {
+    "openChannel": "Открыть {{channel}}",
     "callWindowFailed": "Не удалось открыть окно звонка.",
     "callInWindow": "Звонок в отдельном окне — нажмите, чтобы открыть",
     "openCallWindow": "Открыть звонок в отдельном окне",

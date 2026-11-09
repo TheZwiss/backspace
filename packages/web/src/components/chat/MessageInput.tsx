@@ -970,8 +970,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
               aria-label={t('chat:composer.gifPicker')}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="1" y="4" width="22" height="16" rx="4.5" />
+                <path d="M10.4 9.8A3.4 3.4 0 1 0 10.8 13.4V12H8.2" />
+                <path d="M13 8.6v6.8" />
+                <path d="M15.6 15.4V8.6H20M15.6 12h3.4" />
               </svg>
             </button></Tooltip>
           )}

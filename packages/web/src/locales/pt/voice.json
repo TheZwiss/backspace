@@ -257,6 +257,7 @@
   },
   "channelDuration": "Canal ativo há {{duration}}",
   "controls": {
+    "openChannel": "Abrir {{channel}}",
     "callWindowFailed": "Não foi possível abrir a janela da chamada.",
     "callInWindow": "A chamada está em outra janela — clique para mostrar",
     "openCallWindow": "Abrir chamada em outra janela",

@@ -2,6 +2,8 @@ import { Tooltip } from '../ui/Tooltip';
 import { StrikeLine } from '../ui/StrikeLine';
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
@@ -34,6 +36,8 @@ export function VoiceControls() {
   const shareBtnRef = useRef<HTMLButtonElement>(null);
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  const voiceSpaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : undefined);
+  const navigate = useNavigate();
   const channelPerms = useSpaceStore((s) => currentVoiceChannelId ? s.channelPermissions.get(currentVoiceChannelId) : undefined);
 
   // In DM calls, all permissions are granted; in space channels, check SPEAK and STREAM
@@ -51,6 +55,13 @@ export function VoiceControls() {
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? (activeDmCall ? t('voice:status.dmCall') : t('voice:status.voiceChannel'));
+
+  const handleOpenChannel = () => {
+    if (!voiceSpaceId || !currentVoiceChannelId) return;
+    useSpaceStore.getState().setCurrentSpace(voiceSpaceId);
+    useUIStore.getState().setShowDms(false);
+    navigate(`/channels/${voiceSpaceId}/${currentVoiceChannelId}`);
+  };
 
   const handleScreenShare = () => {
     if (isScreenSharing) {
@@ -133,9 +144,20 @@ export function VoiceControls() {
           <div title={statusLabel} className={`truncate text-ui-label font-semibold leading-[18px] ${statusColor}`}>
             {statusLabel}
           </div>
-          <div title={detailLabel} className="text-ui-caption text-txt-tertiary truncate leading-[16px]">
-            {detailLabel}
-          </div>
+          {voiceSpaceId && currentVoiceChannelId && !connectionDetail ? (
+            <button
+              type="button"
+              title={t('voice:controls.openChannel', { channel: detailLabel })}
+              onClick={handleOpenChannel}
+              className="block max-w-full text-left text-ui-caption text-txt-tertiary hover:text-txt-primary hover:underline truncate leading-[16px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary rounded-sm"
+            >
+              {detailLabel}
+            </button>
+          ) : (
+            <div title={detailLabel} className="text-ui-caption text-txt-tertiary truncate leading-[16px]">
+              {detailLabel}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">

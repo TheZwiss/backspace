@@ -255,6 +255,7 @@
   },
   "channelDuration": "频道已激活 {{duration}}",
   "controls": {
+    "openChannel": "打开 {{channel}}",
     "callWindowFailed": "无法打开通话窗口。",
     "callInWindow": "通话位于独立窗口中 — 点击显示",
     "openCallWindow": "在独立窗口中打开通话",

@@ -256,6 +256,7 @@
   },
   "channelDuration": "Kanal seit {{duration}} aktiv",
   "controls": {
+    "openChannel": "{{channel}} öffnen",
     "callWindowFailed": "Das Anruffenster konnte nicht geöffnet werden.",
     "callInWindow": "Der Anruf ist in einem separaten Fenster – zum Anzeigen klicken",
     "openCallWindow": "Anruf in einem separaten Fenster öffnen",

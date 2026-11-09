@@ -8,7 +8,9 @@ const { voice } = vi.hoisted(() => ({ voice: {
 } }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../stores/voiceStore', () => ({ useVoiceStore: (selector: (state: typeof voice) => unknown) => selector(voice) }));
-vi.mock('../../stores/spaceStore', () => ({ useSpaceStore: (selector: (state: unknown) => unknown) => selector({ channels: [{ id: 'voice', name: 'General' }], channelPermissions: new Map() }) }));
+vi.mock('../../stores/spaceStore', () => ({ useSpaceStore: Object.assign((selector: (state: unknown) => unknown) => selector({ channels: [{ id: 'voice', name: 'General' }], channelToSpaceMap: new Map([['voice', 'space1']]), setCurrentSpace: vi.fn(), channelPermissions: new Map() }), { getState: () => ({ setCurrentSpace: vi.fn() }) }) }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('../../stores/uiStore', () => ({ useUIStore: Object.assign(() => undefined, { getState: () => ({ setShowDms: vi.fn() }) }) }));
 vi.mock('./TextVoice', () => ({ TextVoiceButton: ({ className, variant }: { className?: string; variant?: string }) => <button className={className} data-variant={variant}>Text voice</button> }));
 vi.mock('./Soundboard', () => ({ SoundboardButton: ({ className }: { className?: string }) => <button className={className}>Soundboard</button> }));
 vi.mock('./ScreenShareSettingsPopover', () => ({ ScreenShareSettingsPopover: () => null }));
