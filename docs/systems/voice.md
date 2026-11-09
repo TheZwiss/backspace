@@ -532,7 +532,7 @@ The screen-share button is the **only** control-bar entry to screen sharing and 
 | State | Click |
 |-------|-------|
 | Not sharing | `handleScreenShareAction()` → `openScreenShareSetup()` → the setup screen above |
-| Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` |
+| Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` and `onChangeSource`. "Change stream" (`handleChangeScreenShareAction`) opens the setup screen in `replace` mode, so another screen or window is picked and swapped in without stopping the share |
 
 `ScreenShareSettingsPopover` takes an optional `onStopSharing` callback. When present it appends a full-width `bg-accent-rose` "Stop Sharing" button below the stats footer; the control bars pass it (they have no other stop control), while the local `StreamTile` context menu omits it because it already carries its own "Stop Streaming" item. Quality changes made from the popover apply mid-stream through the `screenShareConfig` effect in `useLiveKit` (constraints + overdrive re-applied; a codec change republishes).
 

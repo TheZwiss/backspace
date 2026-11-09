@@ -11,7 +11,7 @@ import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { SoundboardButton } from './Soundboard';
 import { TextVoiceButton } from './TextVoice';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
+import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, handleChangeScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -76,6 +76,11 @@ export function VoiceControls() {
   const handleStopSharing = () => {
     setShowShareMenu(false);
     handleScreenShareAction();
+  };
+
+  const handleChangeSource = () => {
+    setShowShareMenu(false);
+    handleChangeScreenShareAction();
   };
 
   const handleDisconnect = handleDisconnectAction;
@@ -265,6 +270,7 @@ export function VoiceControls() {
           open={showShareMenu && isScreenSharing}
           onClose={() => setShowShareMenu(false)}
           anchorRef={shareBtnRef}
+          onChangeSource={handleChangeSource}
           onStopSharing={handleStopSharing}
         />
       </div>

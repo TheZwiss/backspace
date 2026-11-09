@@ -1,3 +1,4 @@
+import { ConnectionState } from 'livekit-client';
 import { useVoiceStore, type ActiveDmCall } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
@@ -123,6 +124,18 @@ export async function handleScreenShareActionForWindow(targetDocument?: Document
   } catch (err) {
     console.error('[voiceActions] Failed to stop screen share:', err);
   }
+}
+
+/**
+ * Switch a live share to another screen or window without stopping it: opens
+ * the setup screen in `replace` mode, whose Start swaps the published track in
+ * place (`replaceScreenShare`). No-op unless a share is live in a connected room.
+ */
+export function handleChangeScreenShareAction(targetDocument?: Document): void {
+  const room = getActiveRoom();
+  if (!room || room.state === ConnectionState.Disconnected) return;
+  if (!useVoiceStore.getState().isScreenSharing) return;
+  openScreenShareSetup(targetDocument, 'replace');
 }
 
 /**

@@ -12,7 +12,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleScreenShareActionForWindow, handleDisconnectAction } from '../../utils/voiceActions';
+import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleScreenShareActionForWindow, handleChangeScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
@@ -93,6 +93,11 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
   const handleStopSharing = () => {
     setShareMenuOpen(false);
     handleScreenShareAction();
+  };
+
+  const handleChangeSource = () => {
+    setShareMenuOpen(false);
+    handleChangeScreenShareAction(detached ? shareBtnRef.current?.ownerDocument : undefined);
   };
 
   // A share that ends outside the menu (OS "Stop sharing" bar, track loss,
@@ -203,6 +208,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
               open={shareMenuOpen && isScreenSharing}
               onClose={() => setShareMenuOpen(false)}
               anchorRef={shareBtnRef}
+              onChangeSource={handleChangeSource}
               onStopSharing={handleStopSharing}
             />
           </>
