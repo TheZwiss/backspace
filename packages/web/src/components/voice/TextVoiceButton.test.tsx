@@ -7,7 +7,7 @@ vi.mock('../../stores/voiceStore', () => ({ useVoiceStore: (selector: (state: ty
 vi.mock('../../platform/textVoice', () => ({ supportsLocalTextVoice: () => true, getLocalTextVoiceProvider: () => ({}) }));
 vi.mock('../../utils/textVoice', () => ({ canUseTextVoice: vi.fn(), speakText: vi.fn(), stopTextVoice: vi.fn() }));
 vi.mock('../../utils/dictation', () => ({ cancelDictation: vi.fn() }));
-vi.mock('./DictationControls', () => ({ DictationControls: () => null }));
+vi.mock('./DictationControls', () => ({ DictationMicButton: () => null, canRecordDictation: () => true, useDictationModels: () => true }));
 vi.mock('../ui/Modal', () => ({ Modal: ({ isOpen }: { isOpen: boolean }) => isOpen ? <div role="dialog" /> : null }));
 import { TextVoiceButton } from './TextVoice';
 
