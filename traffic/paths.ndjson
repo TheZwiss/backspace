@@ -708,3 +708,13 @@
 {"snapshot_date":"2026-11-10","dimension":"/TheZwiss/backspace/tree/main","title":"/tree/main","count":12,"uniques":7}
 {"snapshot_date":"2026-11-10","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/chat.webp","title":"/blob/main/docs/screenshots/chat.webp","count":10,"uniques":10}
 {"snapshot_date":"2026-11-10","dimension":"/TheZwiss/backspace/branches","title":"/branches","count":9,"uniques":5}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace","title":"Overview","count":518,"uniques":259}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/releases/tag/v1.11.0","title":"/releases/tag/v1.11.0","count":78,"uniques":63}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/releases","title":"/releases","count":36,"uniques":20}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/pulls","title":"/pulls","count":33,"uniques":16}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/issues","title":"/issues","count":25,"uniques":16}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/voice-video-grid.webp","title":"/blob/main/docs/screenshots/voice-video-grid.webp","count":23,"uniques":21}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/commits/main","title":"/commits/main","count":16,"uniques":2}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/tree/main","title":"/tree/main","count":12,"uniques":7}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/blob/main/README.ru.md","title":"/blob/main/README.ru.md","count":11,"uniques":7}
+{"snapshot_date":"2026-11-11","dimension":"/TheZwiss/backspace/blob/main/docs/screenshots/chat.webp","title":"/blob/main/docs/screenshots/chat.webp","count":10,"uniques":10}
