@@ -40,13 +40,13 @@ export function shouldForceX11Ozone(
  * consegue ver: em quase todo compositor ele só desenha clientes X11, então a
  * captura X11 devolve a tela preta e a lista de janelas só tem o próprio app.
  *
- * O KWin (KDE Plasma 6) é a exceção medida: expõe o desktop inteiro a apps X11
- * legados, e lá a captura X11 é imediata e sem diálogo. Nos demais (Hyprland,
- * Sway, GNOME, …) a sessão continua `wayland` para que o portal faça a captura.
- * Sem WAYLAND_DISPLAY a sessão é X11 de verdade e o portal não se aplica.
+ * Vale para todo compositor, KDE Plasma incluído. Uma versão anterior mantinha
+ * `x11` no KDE por achar que o KWin expõe o desktop inteiro a apps X11, mas no
+ * Plasma 6.8 isso não vale mais: a captura X11 volta tela preta com só o cursor.
+ * Por isso a decisão não depende do desktop: com WAYLAND_DISPLAY a sessão fica
+ * `wayland` e o portal faz a captura. Sem WAYLAND_DISPLAY a sessão é X11 de
+ * verdade e o portal não se aplica.
  */
 export function captureSessionType(env: NodeJS.ProcessEnv = process.env): 'x11' | 'wayland' {
-  if (!env.WAYLAND_DISPLAY) return 'x11';
-  const desktops = (env.XDG_CURRENT_DESKTOP ?? '').toLowerCase().split(':');
-  return desktops.includes('kde') ? 'x11' : 'wayland';
+  return env.WAYLAND_DISPLAY ? 'wayland' : 'x11';
 }

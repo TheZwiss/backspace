@@ -14,9 +14,9 @@ import { spawnSync } from 'child_process';
 // ELECTRON_OZONE_PLATFORM_HINT is honoured by then on Wayland sessions, so the
 // process re-executes itself once with --ozone-platform=x11 as a real argument.
 // WebRTC's screen capturer picks the PipeWire/portal backend from
-// XDG_SESSION_TYPE, not from the ozone platform. It is rewritten to x11 only
-// where the X server can see the whole desktop (KDE); elsewhere (Hyprland,
-// GNOME, …) an X11 capture is black, so capture stays on the portal.
+// XDG_SESSION_TYPE, not from the ozone platform. XWayland only draws X11
+// clients on every compositor (KDE Plasma 6.8 included), so an X11 capture is
+// black; the relaunched process keeps `wayland` and capture uses the portal.
 const X11_OZONE_ARG = '--ozone-platform=x11';
 if (process.platform === 'linux' && !process.argv.includes(X11_OZONE_ARG) && shouldForceX11Ozone()) {
   const result = spawnSync(process.execPath, [X11_OZONE_ARG, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, XDG_SESSION_TYPE: captureSessionType() } });

@@ -18,12 +18,11 @@ export type ScreenSharePickerMode = 'app' | 'system';
  * X11, macOS and Windows list everything without a prompt.
  *
  * This reads the session type the process was relaunched with
- * (`captureSessionType()` in `ozonePlatform.ts`): `x11` on KDE, where the X11
- * capturer sees the whole desktop, `wayland` on compositors whose XWayland only
- * draws X11 clients (Hyprland, GNOME, …), so capture there goes through the
- * portal. A wrong guess costs one extra click — the renderer's prompted
- * fallback handles the source list arriving after the request instead of
- * before it.
+ * (`captureSessionType()` in `ozonePlatform.ts`): `wayland` on every Wayland
+ * compositor (KDE, Hyprland, GNOME, …), whose XWayland only draws X11 clients,
+ * so capture goes through the portal; `x11` only on a real X11 session. A wrong
+ * guess costs one extra click — the renderer's prompted fallback handles the
+ * source list arriving after the request instead of before it.
  */
 export function screenSharePickerMode(
   platform: NodeJS.Platform,
