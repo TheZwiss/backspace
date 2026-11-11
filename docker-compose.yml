@@ -41,6 +41,11 @@ services:
       # install.sh generates this before bringing the stack up; this guard only
       # bites the manual `cp .env.example .env && docker compose up` path.
       - "JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env - generate one with: openssl rand -hex 32}"
+    # LiveKit runs with network_mode: host, so the app reaches its HTTP API
+    # (soundboard playback, room service) through the host gateway. install.sh
+    # points LIVEKIT_INTERNAL_URL at http://host.docker.internal:7880 for it.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - internal
     healthcheck:
