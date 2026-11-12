@@ -461,24 +461,33 @@
   padding-top: 118px;
 }
 
+/* The Messenger "display picture": a translucent glass rim around a grey-blue
+   picture well holding the grey buddy silhouette. Three background layers share
+   one box: the silhouette and the well are clipped to the padding box, the rim
+   gradient (semi-transparent, so the card shows through) to the border box. */
 :root[data-theme="msn"] [data-auth-card]::before {
   content: '';
   position: absolute;
-  top: 18px;
+  top: 22px;
   left: 50%;
-  width: 84px;
-  height: 84px;
-  margin-left: -42px;
-  border: 2px solid #5f86c6;
+  width: 124px;
+  height: 124px;
+  margin-left: -62px;
+  box-sizing: border-box;
+  border: 14px solid transparent;
   border-radius: 6px;
-  background-color: #dcebfb;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%232f7bd6'%3E%3Ccircle cx='12' cy='7' r='3.6'/%3E%3Cpath d='M5.2 21c0-4.2 2.8-7.2 6.8-7.2s6.8 3 6.8 7.2c0 .5-.4.9-.9.9H6.1c-.5 0-.9-.4-.9-.9Z'/%3E%3Ccircle cx='4.8' cy='10' r='2.2' opacity='.55'/%3E%3Ccircle cx='19.2' cy='10' r='2.2' opacity='.55'/%3E%3C/g%3E%3C/svg%3E"),
-    linear-gradient(180deg, #ffffff 0%, #bcd6f5 100%);
-  background-size: 74% 74%, 100% 100%;
-  background-position: center, center;
-  background-repeat: no-repeat;
-  box-shadow: inset 0 0 0 1px #ffffff, 0 2px 5px rgba(10, 36, 90, 0.3);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='b' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f4f7fb'/%3E%3Cstop offset='1' stop-color='%2397a9bf'/%3E%3C/linearGradient%3E%3ClinearGradient id='h' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='1' stop-color='%23b4c2d4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M14 98c0-22 9-34 22-38 5-2 8-5 8-9h12c0 4 3 7 8 9 13 4 22 16 22 38z' fill='url(%23b)' stroke='%237f93ab' stroke-width='1.6'/%3E%3Ccircle cx='50' cy='30' r='19' fill='url(%23h)' stroke='%237f93ab' stroke-width='1.6'/%3E%3Cellipse cx='43' cy='22' rx='8' ry='5' fill='%23ffffff' opacity='.55'/%3E%3C/svg%3E") center 78% / 96% 96% no-repeat padding-box,
+    linear-gradient(180deg, #e6edf5 0%, #aebfd3 100%) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(176, 202, 232, 0.5) 50%, rgba(120, 156, 204, 0.6) 100%) border-box;
+  box-shadow:
+    0 0 0 1px rgba(95, 128, 172, 0.75),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 4px 10px rgba(10, 36, 90, 0.3);
+}
+
+:root[data-theme="msn"] [data-auth-card] {
+  padding-top: 160px;
 }
 
 :root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card] {
@@ -488,9 +497,8 @@
 }
 
 :root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card]::before {
-  border-color: #c3d3ec;
-  border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(10, 36, 90, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 3px 10px rgba(10, 36, 90, 0.22);
 }
 
 :root[data-theme="msn"] [data-auth-card] h1 {
@@ -501,4 +509,63 @@
 :root[data-theme="msn"] [data-auth-card] label {
   color: #46587a;
   font-weight: 600;
+}
+
+/* ── Private-chat photo frames ───────────────────────────────────────────
+   In direct messages every contact photo sits in a translucent glass frame
+   tinted with that person's presence: green online, amber away, red busy,
+   grey offline. Opted in by `data-frame-status` (set by DM messages and the
+   DM roster); the presence dot is redundant there and is hidden. */
+:root[data-theme="msn"] [data-avatar][data-frame-status] {
+  --frame-a: 150, 166, 192;
+  --frame-b: 110, 128, 158;
+  border-radius: 4px;
+}
+
+:root[data-theme="msn"] [data-avatar][data-frame-status="online"] { --frame-a: 120, 206, 84; --frame-b: 52, 150, 40; }
+:root[data-theme="msn"] [data-avatar][data-frame-status="idle"] { --frame-a: 252, 200, 90; --frame-b: 212, 140, 18; }
+:root[data-theme="msn"] [data-avatar][data-frame-status="dnd"] { --frame-a: 246, 130, 116; --frame-b: 200, 50, 40; }
+
+:root[data-theme="msn"] [data-avatar][data-frame-status]::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  z-index: 0;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(var(--frame-a), 0.62) 45%, rgba(var(--frame-b), 0.7) 100%);
+  border: 1px solid rgba(var(--frame-b), 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55), 0 1px 3px rgba(10, 36, 90, 0.25);
+  pointer-events: none;
+}
+
+:root[data-theme="msn"] [data-avatar][data-frame-status] > div:first-child {
+  position: relative;
+  z-index: 1;
+  border-radius: 3px;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  box-shadow: 0 0 0 1px rgba(var(--frame-b), 0.9);
+}
+
+:root[data-theme="msn"] [data-avatar][data-frame-status] img,
+:root[data-theme="msn"] [data-avatar][data-frame-status] .avatar-fallback {
+  border-radius: 2px;
+}
+
+:root[data-theme="msn"] [data-avatar][data-frame-status] > span.absolute {
+  display: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status]::before {
+  border-radius: 10px;
+  border-color: rgba(var(--frame-b), 0.35);
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status],
+:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] > div:first-child,
+:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] img,
+:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] .avatar-fallback {
+  border-radius: 6px;
+  box-shadow: none;
 }
