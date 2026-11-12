@@ -28,6 +28,10 @@
   "theme": {
     "label": "Тема",
     "description": "Выберите внешний вид Backspace. Сохраняется в этом браузере или приложении на этом устройстве.",
+    "msnFrames": {
+      "label": "Рамки Windows XP",
+      "description": "Скошенные синие рамки окон, как в Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",

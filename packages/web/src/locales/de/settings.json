@@ -28,6 +28,10 @@
   "theme": {
     "label": "Design",
     "description": "Lege fest, wie Backspace aussieht. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",
+    "msnFrames": {
+      "label": "Windows-XP-Rahmen",
+      "description": "Abgeschrägte blaue Fensterrahmen wie in Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",

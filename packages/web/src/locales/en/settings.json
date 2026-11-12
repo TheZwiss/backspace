@@ -28,6 +28,10 @@
   "theme": {
     "label": "Theme",
     "description": "Choose how Backspace looks. Saved in this browser or app on this device.",
+    "msnFrames": {
+      "label": "Windows XP frames",
+      "description": "Bevelled blue window borders, like Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_THEME, normalizeTheme } from './themeStore';
+import { DEFAULT_THEME, normalizeMsnFrames, normalizeTheme } from './themeStore';
 
 describe('normalizeTheme', () => {
   it.each(['aether-drift', 'oled', 'anime', 'msn'])('keeps %s', id => {
@@ -8,5 +8,15 @@ describe('normalizeTheme', () => {
 
   it.each([undefined, null, 3, 'neon', ''])('falls back for %s', value => {
     expect(normalizeTheme(value)).toBe(DEFAULT_THEME);
+  });
+});
+
+describe('normalizeMsnFrames', () => {
+  it.each([true, false])('keeps %s', value => {
+    expect(normalizeMsnFrames(value)).toBe(value);
+  });
+
+  it.each([undefined, null, 'no', 0])('falls back to on for %s', value => {
+    expect(normalizeMsnFrames(value)).toBe(true);
   });
 });

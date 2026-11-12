@@ -28,6 +28,10 @@
   "theme": {
     "label": "主题",
     "description": "选择 Backspace 的外观。设置保存在此设备上的当前浏览器或应用中。",
+    "msnFrames": {
+      "label": "Windows XP 边框",
+      "description": "类似 Windows XP 的斜面蓝色窗口边框。"
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",

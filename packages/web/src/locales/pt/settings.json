@@ -28,6 +28,10 @@
   "theme": {
     "label": "Tema",
     "description": "Escolha a aparência do Backspace. Salvo neste navegador ou app, neste dispositivo.",
+    "msnFrames": {
+      "label": "Bordas do Windows XP",
+      "description": "Bordas azuis chanfradas nas janelas, como no Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",

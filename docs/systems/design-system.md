@@ -108,8 +108,15 @@ frames, glossy gradient buttons, a dark-blue space strip, glossy header bands,
 white conversation pane with a docked composer, Segoe UI/Tahoma type, 4px radii
 and no backdrop blur. It changes no DOM or behaviour; only the sidebar home tile
 swaps to `MsnMark`. `isLightTheme(theme)` in `themeStore` is true for `light` and
-`msn` and drives the emoji picker and code theme. References: dsn10-theme,
-msn-js, Windows-Live-Messenger.
+`msn` and drives the emoji picker and code theme. The Windows XP (Luna) bevels and double borders are a
+device-local option, `themeStore.msnFrames` (default on, persisted in
+`backspace-theme`, shown as a switch under the theme list only while `msn` is
+selected); `platform/theme.ts` mirrors it to `html[data-msn-frames="xp|flat"]`
+and the `flat` block at the end of `theme-msn.css` removes the bevels. Login and
+register carry `data-auth-page` / `data-auth-card` (inert markers) so the theme
+can draw the Messenger sign-in window (sky background, framed display picture)
+around the unchanged form. References: dsn10-theme, msn-js,
+Windows-Live-Messenger.
 `anime` also changes elements, not just colours, all gated on `theme === 'anime'`
 (or `:root[data-theme="anime"]`): the `Mascot` gets cat ears, an ahoge, star
 catchlights, cheek marks, twinkling sparkles and the sakura palette

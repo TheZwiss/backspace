@@ -18,16 +18,31 @@ export function isLightTheme(theme: ThemeId): boolean {
 interface ThemeState {
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
+  /** MSN theme only: Windows XP (Luna) bevelled frames on or off. */
+  msnFrames: boolean;
+  setMsnFrames: (enabled: boolean) => void;
+}
+
+export const DEFAULT_MSN_FRAMES = true;
+
+export function normalizeMsnFrames(value: unknown): boolean {
+  return typeof value === 'boolean' ? value : DEFAULT_MSN_FRAMES;
 }
 
 export const useThemeStore = create<ThemeState>()(persist(
-  set => ({ theme: DEFAULT_THEME, setTheme: theme => set({ theme: normalizeTheme(theme) }) }),
+  set => ({
+    theme: DEFAULT_THEME,
+    setTheme: theme => set({ theme: normalizeTheme(theme) }),
+    msnFrames: DEFAULT_MSN_FRAMES,
+    setMsnFrames: enabled => set({ msnFrames: normalizeMsnFrames(enabled) }),
+  }),
   {
     name: 'backspace-theme',
-    partialize: state => ({ theme: state.theme }),
+    partialize: state => ({ theme: state.theme, msnFrames: state.msnFrames }),
     merge: (stored, current) => ({
       ...current,
       theme: normalizeTheme((stored as Partial<ThemeState> | undefined)?.theme),
+      msnFrames: normalizeMsnFrames((stored as Partial<ThemeState> | undefined)?.msnFrames),
     }),
   },
 ));

@@ -9,13 +9,15 @@ const THEME_COLOR: Record<ThemeId, string> = {
   msn: '#2a5fae',
 };
 
-function applyTheme(theme: ThemeId): void {
+function applyTheme(theme: ThemeId, msnFrames: boolean): void {
   document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.msnFrames = msnFrames ? 'xp' : 'flat';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme]);
 }
 
 /** Apply before React mounts, so the persisted theme also covers login and portals. */
 export function initializeTheme(): () => void {
-  applyTheme(useThemeStore.getState().theme);
-  return useThemeStore.subscribe(state => applyTheme(state.theme));
+  const initial = useThemeStore.getState();
+  applyTheme(initial.theme, initial.msnFrames);
+  return useThemeStore.subscribe(state => applyTheme(state.theme, state.msnFrames));
 }

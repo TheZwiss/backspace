@@ -361,3 +361,144 @@
   color: #ffffff;
   text-shadow: 0 -1px 0 rgba(10, 40, 80, 0.35);
 }
+
+/* ── Frames off: flat Live Messenger 2009 look ──────────────────────────
+   Windows XP (Luna) frames are the default. With the "Windows XP frames"
+   switch off (`html[data-msn-frames="flat"]`) the bevels, double borders and
+   dark outlines go away and each surface keeps one soft hairline. */
+:root[data-theme="msn"][data-msn-frames="flat"] .glass-modal {
+  border: 1px solid #b7c9e6;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(10, 36, 90, 0.28);
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .glass,
+:root[data-theme="msn"][data-msn-frames="flat"] .glass-bubble,
+:root[data-theme="msn"][data-msn-frames="flat"] .glass-pill {
+  border-color: #c3d3ec;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(20, 50, 110, 0.14);
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .glass-strip,
+:root[data-theme="msn"][data-msn-frames="flat"] nav[data-pip-obstacle="left"] {
+  border-right-color: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .bg-surface-channel.flex-col,
+:root[data-theme="msn"][data-msn-frames="flat"] .bg-surface-members {
+  border-color: #d3dff2;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .h-12.border-b {
+  background-image: linear-gradient(180deg, #ffffff 0%, #eef4fc 100%);
+  border-bottom-color: #d3dff2;
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .bg-interactive-selected,
+:root[data-theme="msn"][data-msn-frames="flat"] .bg-interactive-active {
+  background-image: none;
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .hover\:bg-interactive-hover:hover {
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] button.bg-accent-primary,
+:root[data-theme="msn"][data-msn-frames="flat"] a.bg-accent-primary,
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-primary,
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-secondary,
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-danger,
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-warning {
+  border-color: transparent;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-secondary {
+  border-color: #c3d3ec;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .input-standard,
+:root[data-theme="msn"][data-msn-frames="flat"] .input-search,
+:root[data-theme="msn"][data-msn-frames="flat"] .input-danger,
+:root[data-theme="msn"][data-msn-frames="flat"] .ui-select {
+  border-color: #c3d3ec;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] .absolute.glass-bubble.z-\[110\] {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* ── Sign-in and register: the Messenger sign-in window ─────────────────
+   Sky background, a framed "display picture" above the form and a white
+   card, drawn entirely with CSS around the unchanged form. */
+:root[data-theme="msn"] [data-auth-page] {
+  background-color: #cfe3fb;
+  background-image:
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(120, 190, 90, 0.55) 0%, rgba(120, 190, 90, 0) 70%),
+    radial-gradient(ellipse 90% 60% at 50% 0%, #ffffff 0%, rgba(255, 255, 255, 0) 65%),
+    linear-gradient(180deg, #9cc4f2 0%, #d6e8fb 55%, #eef6ff 100%);
+}
+
+:root[data-theme="msn"] [data-auth-page] > .absolute {
+  display: none;
+}
+
+:root[data-theme="msn"] [data-auth-card] {
+  position: relative;
+  background-color: #ffffff;
+  background-image: linear-gradient(180deg, #ffffff 0%, #eef5fe 100%);
+  border: 1px solid #5f86c6;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px #a9c4ee, 0 14px 40px rgba(10, 36, 90, 0.35);
+  padding-top: 118px;
+}
+
+:root[data-theme="msn"] [data-auth-card]::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: 84px;
+  height: 84px;
+  margin-left: -42px;
+  border: 2px solid #5f86c6;
+  border-radius: 6px;
+  background-color: #dcebfb;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%232f7bd6'%3E%3Ccircle cx='12' cy='7' r='3.6'/%3E%3Cpath d='M5.2 21c0-4.2 2.8-7.2 6.8-7.2s6.8 3 6.8 7.2c0 .5-.4.9-.9.9H6.1c-.5 0-.9-.4-.9-.9Z'/%3E%3Ccircle cx='4.8' cy='10' r='2.2' opacity='.55'/%3E%3Ccircle cx='19.2' cy='10' r='2.2' opacity='.55'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(180deg, #ffffff 0%, #bcd6f5 100%);
+  background-size: 74% 74%, 100% 100%;
+  background-position: center, center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px #ffffff, 0 2px 5px rgba(10, 36, 90, 0.3);
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card] {
+  border-color: #b7c9e6;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(10, 36, 90, 0.25);
+}
+
+:root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card]::before {
+  border-color: #c3d3ec;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(10, 36, 90, 0.2);
+}
+
+:root[data-theme="msn"] [data-auth-card] h1 {
+  color: #123c86;
+  text-shadow: 0 1px 0 #ffffff;
+}
+
+:root[data-theme="msn"] [data-auth-card] label {
+  color: #46587a;
+  font-weight: 600;
+}
