@@ -86,8 +86,11 @@ export async function probeCameraTrack(track: MediaStreamTrack): Promise<CameraM
     const settings = track.getSettings();
     if (settings.width !== width || settings.height !== height) continue;
 
+    // A camera that cannot exceed the fallback rate has one candidate, and the
+    // size just applied already delivered a frame rate: read it back instead of
+    // spending another capture restart confirming it.
     let best = 0;
-    for (const fps of fpsCandidates) {
+    for (const fps of fpsCandidates.length > 1 ? fpsCandidates : []) {
       if (!(await tryConstraints(track, { width: { exact: width }, height: { exact: height }, frameRate: { exact: fps } }))) continue;
       best = fps;
       break;

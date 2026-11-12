@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useActiveDmCall } from '../../hooks/useActiveDmCall';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import {
   handleCameraAction,
   handleDisconnectAction,
@@ -42,6 +43,7 @@ export function MobileVoiceFullScreen() {
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const isCameraStarting = useVoiceStore((s) => s.isCameraStarting);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const participants = useVoiceStore((s) => s.participants);
@@ -457,6 +459,8 @@ export function MobileVoiceFullScreen() {
         <div className="relative" ref={cameraPickerAnchorRef}>
           <button data-icon-motion="toggle"
             onClick={handleCameraAction}
+            disabled={isCameraStarting}
+            aria-busy={isCameraStarting || undefined}
             className={`w-11 h-11 desktop:w-12 desktop:h-12 rounded-full flex items-center justify-center transition-colors ${
               isCameraOn
                 ? 'bg-accent-mint/20 text-accent-mint'
@@ -464,18 +468,20 @@ export function MobileVoiceFullScreen() {
             }`}
             aria-label={isCameraOn ? t('voice:camera.turnOff') : t('voice:camera.turnOn')}
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"
-              />
-            </svg>
+            {isCameraStarting ? <LoadingSpinner size={20} /> : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z"
+                />
+              </svg>
+            )}
           </button>
           {showCameraSwitcher && (
             <button data-icon-motion="toggle"

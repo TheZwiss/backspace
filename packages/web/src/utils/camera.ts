@@ -6,7 +6,7 @@ import { useVoiceStore, type CameraConfig } from '../stores/voiceStore';
 import { applyOverdrive, type OverdriveOptions } from './screenShare';
 import { getStreamHostLimits } from './streamHostLimits';
 import { markIntentionalCameraOff } from './cameraFlags';
-import { pickCameraCapture, resolveCameraModes, type CameraCapture } from './cameraModes';
+import { getCachedCameraModes, pickCameraCapture, resolveCameraModes, type CameraCapture } from './cameraModes';
 
 export interface CameraBuildResult {
   capture: { width: number; height: number; frameRate: number };
@@ -95,20 +95,30 @@ export function buildCameraOptions(
   };
 }
 
+/** Camera frames are 16:9; asked as an `ideal` it steers a camera without the exact size away from 4:3. */
+const CAMERA_ASPECT = 16 / 9;
+
 /**
  * The capture options for the camera, with the wanted size fitted to a 16:9
  * mode the device was measured to deliver. Without that fit the browser treats
  * the size as a preference and settles on the nearest mode it has, which on
- * many webcams is 4:3. When nothing could be measured the wanted size is used
- * as is.
+ * many webcams is 4:3.
+ *
+ * `measure: false` never measures: it fits only to modes already known and
+ * otherwise asks for the wanted size with an `ideal` 16:9 aspect ratio. Starting
+ * the camera uses it, because measuring a camera that has never been seen takes
+ * seconds (every size is applied in turn) and the person is waiting on the
+ * click. The measurement still happens, off the click path, in the settings
+ * preview and on a live quality change.
  */
 export async function buildCameraCaptureOptions(
   options: CameraBuildResult,
   deviceId: string | null,
+  { measure = true }: { measure?: boolean } = {},
 ): Promise<{ capture: VideoCaptureOptions; fitted: CameraCapture }> {
-  const modes = await resolveCameraModes(deviceId);
+  const modes = measure ? await resolveCameraModes(deviceId) : (getCachedCameraModes(deviceId) ?? []);
   const fitted = pickCameraCapture(modes, options.capture.height, options.capture.frameRate) ?? options.capture;
-  const capture: VideoCaptureOptions = { resolution: fitted, frameRate: fitted.frameRate };
+  const capture: VideoCaptureOptions = { resolution: { ...fitted, aspectRatio: CAMERA_ASPECT }, frameRate: fitted.frameRate };
   if (deviceId) capture.deviceId = deviceId;
   return { capture, fitted };
 }

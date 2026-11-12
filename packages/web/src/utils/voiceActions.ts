@@ -73,13 +73,18 @@ export function toggleDeafenFromControl(): void {
 export async function handleCameraAction(): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
-  const isCameraOn = useVoiceStore.getState().isCameraOn;
+  const voice = useVoiceStore.getState();
+  // A start is in flight: a second click would publish the camera twice.
+  if (voice.isCameraStarting) return;
+  const isCameraOn = voice.isCameraOn;
+  const willEnable = !isCameraOn;
+  if (willEnable) voice.setCameraStarting(true);
   try {
-    const willEnable = !isCameraOn;
     if (willEnable) {
       const cameraDeviceId = useVoiceStore.getState().cameraDeviceId;
       const options = buildCameraOptions();
-      const { capture: captureOpts } = await buildCameraCaptureOptions(options, cameraDeviceId);
+      // Never measure the camera on the click path: see buildCameraCaptureOptions.
+      const { capture: captureOpts } = await buildCameraCaptureOptions(options, cameraDeviceId, { measure: false });
       await room.localParticipant.setCameraEnabled(true, captureOpts, options.publish);
     } else {
       // Mark this disable as intentional so the track-`ended` handler skips
@@ -98,6 +103,8 @@ export async function handleCameraAction(): Promise<void> {
     broadcastVoiceStatus();
   } catch (err) {
     console.error('[voiceActions] Failed to toggle camera:', err);
+  } finally {
+    if (willEnable) useVoiceStore.getState().setCameraStarting(false);
   }
 }
 
