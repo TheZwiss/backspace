@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import { MarkdownRenderer, codeText } from './MarkdownRenderer';
 
 // MentionBadge reads the space and UI stores at render time. Only the mention
 // case touches them; stub them so the rest of the file needs no app state.
@@ -50,6 +50,29 @@ const MIXED = [
   'plain fenced text',
   '```',
 ].join('\n');
+
+describe('empty fenced code blocks', () => {
+  it.each([['```js'], ['```'], ['```js\n```'], ['```\n```']])('shows no "undefined" for %j', (content) => {
+    const { container } = render(<MarkdownRenderer content={content} />);
+    expect(container.textContent).not.toContain('undefined');
+  });
+
+  it('still shows the code of a block that has some', () => {
+    const { container } = render(<MarkdownRenderer content={'```js\nconst a = 1;\n```'} />);
+    expect(container.textContent).toContain('const a = 1;');
+  });
+});
+
+describe('codeText', () => {
+  it('turns whatever <code> was given into text', () => {
+    expect(codeText(undefined)).toBe('');
+    expect(codeText(null)).toBe('');
+    expect(codeText(false)).toBe('');
+    expect(codeText('x')).toBe('x');
+    expect(codeText(['a', 'b', undefined, 'c'])).toBe('abc');
+    expect(codeText(0)).toBe('0');
+  });
+});
 
 describe('MarkdownRenderer', () => {
   it('renders every element of a mixed markdown message', () => {

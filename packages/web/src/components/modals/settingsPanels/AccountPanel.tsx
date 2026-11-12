@@ -497,6 +497,7 @@ export function AccountPanel() {
               type="button"
               onClick={() => bannerInputRef.current?.click()}
               disabled={uploadingBanner}
+              aria-label={t('settings:account.profile.banner.change')}
               className="relative group w-full h-[128px] rounded-lg overflow-hidden border border-wash/[0.06]"
             >
               <div

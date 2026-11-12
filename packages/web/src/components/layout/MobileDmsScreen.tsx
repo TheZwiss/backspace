@@ -183,7 +183,7 @@ function MobileDmRow({
 }
 
 export function MobileDmsScreen() {
-  const { t } = useTranslation(['dm', 'common']);
+  const { t } = useTranslation(['dm', 'common', 'spaces']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const openModal = useUIStore((s) => s.openModal);
 
@@ -305,6 +305,7 @@ export function MobileDmsScreen() {
       {/* FAB — New DM */}
       <button data-icon-motion="press"
         onClick={() => openModal('newDm')}
+        aria-label={t('spaces:sidebar.dmList.newDm')}
         className="fixed bottom-20 right-4 w-14 h-14 rounded-full bg-accent-primary text-white shadow-elevation-high flex items-center justify-center z-20 hover:bg-accent-primary-hover active:bg-accent-primary-active transition-colors"
       >
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

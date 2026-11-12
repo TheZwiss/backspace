@@ -122,6 +122,9 @@ function formatHoverTime(timestamp: number): string {
   return formatters.formatTime(timestamp);
 }
 
+/** How long after a touch a `mouseenter` is treated as the browser's compatibility event, not a real mouse. */
+const TOUCH_COMPAT_MOUSE_MS = 1000;
+
 const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|static\.klipy\.com)\/.+$/;
 
 function isGifOnlyMessage(content: string | null): boolean {
@@ -152,6 +155,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const fmt = useFormatters();
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
+  // A tap makes the browser fire compatibility mouse events at the tapped point,
+  // so `mouseenter` arrives right after `touchend`. Without this the desktop
+  // action bar (reactions, reply, delete) pops up under the finger and the click
+  // that follows lands on one of its buttons.
+  const lastTouchAt = useRef(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   // The reaction picker, and what opened it: the "+" of the hover bar, or the
   // message menu ('row'). On desktop it hangs off that button or the message
@@ -513,7 +521,12 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
           : 'hover:bg-[rgba(255,255,255,0.025)]'
       }`}
-      onMouseEnter={() => setIsHovered(true)}
+      onPointerDownCapture={(e) => { if (e.pointerType === 'touch') lastTouchAt.current = Date.now(); }}
+      onMouseEnter={() => {
+        // Touch has no hover: the long-press menu is how a phone reaches these actions
+        if (isMobile || Date.now() - lastTouchAt.current < TOUCH_COMPAT_MOUSE_MS) return;
+        setIsHovered(true);
+      }}
       onMouseLeave={() => {
         setIsHovered(false);
         if (confirmingDelete) {
@@ -795,7 +808,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       )}
 
       {/* Action buttons on hover */}
-      {showInteractions && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
+      {showInteractions && !isMobile && (isHovered || reactionPicker === 'button' || confirmingDelete) && !isEditing && (
         <div data-side="top" className="motion-floating-enter absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-wash/[0.06] h-full">

@@ -267,6 +267,7 @@ export function UserProfileModal() {
           {/* Close button */}
           <button data-icon-motion="press"
             onClick={closeModal}
+            aria-label={t('common:actions.close')}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="white">

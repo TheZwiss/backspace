@@ -59,7 +59,7 @@ function AutoLaunchSettings() {
             {t('desktop.autoLaunch.openAtLogin.description')}
           </div>
         </div>
-        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} />
+        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} ariaLabel={t('desktop.autoLaunch.openAtLogin.label')} />
       </div>
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4">
@@ -68,7 +68,7 @@ function AutoLaunchSettings() {
             {t('desktop.autoLaunch.startMinimized.description')}
           </div>
         </div>
-        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} />
+        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} ariaLabel={t('desktop.autoLaunch.startMinimized.label')} />
       </div>
     </>
   );

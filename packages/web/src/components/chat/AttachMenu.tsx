@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toggle } from '../ui/Toggle';
+import { MobilePickerSheet } from './MobilePickerSheet';
+import { useUIStore } from '../../stores/uiStore';
 
 interface AttachMenuProps {
   /** Photos and videos; compressed unless the sender turned compression off. */
@@ -19,13 +21,19 @@ const ROW =
  * The popover of the composer's attach button: "Photo or video" (shrunk on this
  * device by default) and "Document" (the original file, untouched), plus the
  * switch for the default. A floating surface, so it is glass (design-system.md).
+ * On a phone it is a bottom sheet over a dimmed backdrop instead, like the other
+ * composer pickers: a glass popover on top of message text is hard to read, and
+ * the sheet also closes on a tap outside, a drag down and the system Back.
  */
 export function AttachMenu({ onPickMedia, onPickDocument, compressMedia, onCompressMediaChange, onClose }: AttachMenuProps) {
   const { t } = useTranslation('chat');
   const ref = useRef<HTMLDivElement>(null);
+  const isMobile = useUIStore((s) => s.isMobile);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent): void => {
+      // The phone's sheet owns its backdrop
+      if (isMobile) return;
       if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -37,14 +45,14 @@ export function AttachMenu({ onPickMedia, onPickDocument, compressMedia, onCompr
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, isMobile]);
 
-  return (
+  const menu = (
     <div
       ref={ref}
       role="menu"
       aria-label={t('composer.attach.menuLabel')}
-      className="glass absolute bottom-full left-2 mb-2 w-72 rounded-xl p-1.5 z-30 shadow-elevation-high"
+      className={isMobile ? 'p-1.5' : 'glass absolute bottom-full left-2 mb-2 w-72 rounded-xl p-1.5 z-30 shadow-elevation-high'}
     >
       <button
         type="button"
@@ -81,8 +89,12 @@ export function AttachMenu({ onPickMedia, onPickDocument, compressMedia, onCompr
           <div className="text-xs text-txt-secondary">{t('composer.attach.compressDefault')}</div>
           <div className="text-ui-caption text-txt-tertiary">{t('composer.attach.compressDefaultHint')}</div>
         </div>
-        <Toggle enabled={compressMedia} onChange={onCompressMediaChange} />
+        <Toggle enabled={compressMedia} onChange={onCompressMediaChange} ariaLabel={t('composer.attach.compressDefault')} />
       </div>
     </div>
   );
+
+  return isMobile ? (
+    <MobilePickerSheet onClose={onClose} label={t('composer.attach.menuLabel')}>{menu}</MobilePickerSheet>
+  ) : menu;
 }

@@ -590,6 +590,30 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
   };
 
+  const placeholderText =
+    placeholder ??
+    (channelName.startsWith('@')
+      ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
+      : t('chat:composer.placeholder.channel', { name: channelName }));
+
+  // The field fits its content: typing does it in `handleChange`, this covers
+  // everything else. On a phone the placeholder wraps to two lines next to the
+  // four composer buttons, and a field that kept its one-row height cut the
+  // second line off until the first keystroke.
+  const fitTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+  }, []);
+  useLayoutEffect(fitTextarea, [fitTextarea, draftText, placeholderText]);
+  useEffect(() => {
+    // The web font arrives after the first layout and changes where the text wraps; so does a turn of the phone
+    void document.fonts?.ready.then(fitTextarea);
+    window.addEventListener('resize', fitTextarea);
+    return () => window.removeEventListener('resize', fitTextarea);
+  }, [fitTextarea]);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
     updateMention(e);
 
@@ -1004,12 +1028,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={canAttachFiles ? handlePaste : undefined}
-            placeholder={
-              placeholder ??
-              (channelName.startsWith('@')
-                ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
-                : t('chat:composer.placeholder.channel', { name: channelName }))
-            }
+            placeholder={placeholderText}
             className="input-embedded relative block w-full py-[10px] px-1 resize-none text-ui-message leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
             rows={1}
           />

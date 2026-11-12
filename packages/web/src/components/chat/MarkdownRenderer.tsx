@@ -96,6 +96,17 @@ const aetherLightTheme = {
 
 const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang, remarkEmojiShortcodes];
 
+/**
+ * The text inside a fenced block. An empty block (a lone fence line such as
+ * "```js") hands `<code>` no children at all, and `String(undefined)` would
+ * print the word "undefined" in the message.
+ */
+export function codeText(children: React.ReactNode): string {
+  if (children === null || children === undefined || typeof children === 'boolean') return '';
+  if (Array.isArray(children)) return children.map(codeText).join('');
+  return String(children);
+}
+
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const isLightScheme = useThemeStore(state => isLightTheme(state.theme));
   // 'text' means a bare fenced block with no language — render without highlighting
@@ -187,7 +198,7 @@ function buildComponents(): Components {
     code: ({ className, children, ...rest }) => {
       const match = /language-(\w+)/.exec(className || '');
       if (match) {
-        const code = String(children).replace(/\n$/, '');
+        const code = codeText(children).replace(/\n$/, '');
         return <MemoizedCodeBlock language={match[1]!} code={code} />;
       }
       // Inline code

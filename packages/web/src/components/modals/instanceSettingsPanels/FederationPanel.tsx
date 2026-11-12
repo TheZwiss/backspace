@@ -84,7 +84,7 @@ function FederationGlobalSettings() {
             <div className="text-sm font-medium text-txt-primary">{t('federation:admin.relay.enable.label')}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{t('federation:admin.relay.enable.description')}</div>
           </div>
-          <Toggle enabled={draft.federationRelayEnabled} onChange={(v) => setDraft({ ...draft, federationRelayEnabled: v })} />
+          <Toggle enabled={draft.federationRelayEnabled} onChange={(v) => setDraft({ ...draft, federationRelayEnabled: v })} ariaLabel={t('federation:admin.relay.enable.label')} />
         </label>
 
         <label className="flex items-center justify-between cursor-pointer">
@@ -92,7 +92,7 @@ function FederationGlobalSettings() {
             <div className="text-sm font-medium text-txt-primary">{t('federation:admin.relay.autoAccept.label')}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{t('federation:admin.relay.autoAccept.description')}</div>
           </div>
-          <Toggle enabled={draft.autoAcceptPeering} onChange={(v) => setDraft({ ...draft, autoAcceptPeering: v })} />
+          <Toggle enabled={draft.autoAcceptPeering} onChange={(v) => setDraft({ ...draft, autoAcceptPeering: v })} ariaLabel={t('federation:admin.relay.autoAccept.label')} />
         </label>
 
         <div>

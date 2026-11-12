@@ -1,3 +1,4 @@
+import { useBackDismiss } from '../../utils/overlayBack';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import { StrikeLine } from '../ui/StrikeLine';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -38,6 +39,8 @@ export function MobileVoiceJoinSheet({
   const { t } = useTranslation(['voice', 'common']);
   const [preMuted, setPreMuted] = useState(false);
   const [visible, setVisible] = useState(false);
+  // The system Back closes the sheet instead of leaving the screen behind it
+  useBackDismiss(onClose);
 
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
