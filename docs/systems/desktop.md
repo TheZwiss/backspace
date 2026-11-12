@@ -1082,7 +1082,7 @@ Step 3: If remote version > local version → atomic write to cache, save ETag, 
 
 **Guard:** `isPolling` flag prevents overlapping polls while a previous scan is still in flight.
 
-**Error handling:** First command failure (ps/tasklist path) logs a warning and stops detection entirely (`stopActivityDetection()`). The `hasErrored` flag prevents repeated log spam. The Linux `/proc` walk is crash-guarded and degrades to the `ps` path instead of stopping detection.
+**Error handling:** `getProcessCommands()` lists every command a platform can use, best first (Windows: the PowerShell `Get-CimInstance` query, then `tasklist /fo csv /nh`). The child runs with `PROCESS_QUERY_EXEC_OPTIONS`: a 64 MB `maxBuffer`, a 20 s timeout and `windowsHide` (no console window flashing every 15 s). A failed poll tries the next command and, if all fail, only logs once (`hasErrored`) and polls again next interval; `consecutiveListFailures` logs the recovery. Detection stops for good only when **no** command exists (`isPermanentProcessListFailure`: every error is `ENOENT`). Before this, the 1 MB cap made the Windows query fail on any desktop with browsers and launchers running (the JSON carries every process's command line), and the first failure switched detection off for the rest of the session, silently. The Linux `/proc` walk is crash-guarded and degrades to the `ps` path.
 
 ### Platform Process Sources
 

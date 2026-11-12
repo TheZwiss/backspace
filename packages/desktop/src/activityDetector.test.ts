@@ -10,6 +10,9 @@ import {
   parseProcessList,
   parseDarwinProcessList,
   parseWindowsProcessJson,
+  getProcessCommands,
+  isPermanentProcessListFailure,
+  PROCESS_QUERY_EXEC_OPTIONS,
   parsePlatformProcesses,
   matchesProcessName,
   findMatchingGame,
@@ -200,6 +203,48 @@ describe('parseProcessList', () => {
   it('parses macOS ps -c output and skips the COMM header', () => {
     const out = 'COMM\nWindowServer\nOBS\n';
     expect(parseProcessList(out, 'darwin')).toEqual(new Set(['windowserver', 'obs']));
+  });
+});
+
+describe('process listing resilience (Windows detection stopping after one failure)', () => {
+  it('asks PowerShell first and falls back to tasklist on Windows', () => {
+    const commands = getProcessCommands('win32');
+    expect(commands.map((c) => c.executable)).toEqual(['powershell.exe', 'tasklist.exe']);
+    expect(commands[1]!.args).toEqual(['/fo', 'csv', '/nh']);
+  });
+
+  it('uses a single ps command elsewhere', () => {
+    expect(getProcessCommands('linux').map((c) => c.executable)).toEqual(['ps']);
+    expect(getProcessCommands('darwin').map((c) => c.executable)).toEqual(['ps']);
+  });
+
+  it('leaves room for the command line of every process and hides the console window', () => {
+    // A desktop running browsers, launchers and a game produces several MB of
+    // JSON; the previous 1 MB cap failed every poll and stopped detection.
+    expect(PROCESS_QUERY_EXEC_OPTIONS.maxBuffer).toBeGreaterThanOrEqual(32 * 1024 * 1024);
+    expect(PROCESS_QUERY_EXEC_OPTIONS.windowsHide).toBe(true);
+    expect(PROCESS_QUERY_EXEC_OPTIONS.timeout).toBeGreaterThan(0);
+  });
+
+  it('parses a process list larger than the old 1 MB limit', () => {
+    const rows = Array.from({ length: 900 }, (_, i) => ({
+      ProcessId: i + 1,
+      Name: `proc${i}.exe`,
+      ExecutablePath: `C:\\Apps\\proc${i}.exe`,
+      CommandLine: `"C:\\Apps\\proc${i}.exe" ${'--flag=value '.repeat(120)}`,
+    }));
+    const json = JSON.stringify(rows);
+    expect(json.length).toBeGreaterThan(1024 * 1024);
+    expect(parseWindowsProcessJson(json)).toHaveLength(900);
+  });
+
+  it('treats only a missing executable as permanent', () => {
+    const enoent = Object.assign(new Error('spawn x ENOENT'), { code: 'ENOENT' });
+    const buffer = Object.assign(new Error('maxBuffer length exceeded'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' });
+    expect(isPermanentProcessListFailure([enoent, enoent])).toBe(true);
+    expect(isPermanentProcessListFailure([enoent, buffer])).toBe(false);
+    expect(isPermanentProcessListFailure([buffer])).toBe(false);
+    expect(isPermanentProcessListFailure([])).toBe(false);
   });
 });
 
