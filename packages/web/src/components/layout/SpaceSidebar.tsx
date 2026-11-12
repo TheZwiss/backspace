@@ -24,7 +24,7 @@ import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { describeCodedError } from '../../i18n/errors';
 import { useStaticAvatar } from '../../utils/staticAvatar';
-import { useThemeStore } from '../../stores/themeStore';
+import { isMsnTheme, useThemeStore } from '../../stores/themeStore';
 import { SakuraMark } from '../ui/SakuraMark';
 import { MsnMark } from '../ui/MsnMark';
 
@@ -81,7 +81,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
   const isAnimeTheme = useThemeStore(state => state.theme === 'anime');
-  const isMsnTheme = useThemeStore(state => state.theme === 'msn');
+  const isMsnFamily = useThemeStore(state => isMsnTheme(state.theme));
   const firstLetter = name.charAt(0).toUpperCase();
 
   const getPillHeight = () => {
@@ -133,7 +133,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
       {type === 'dm' ? (
         isAnimeTheme
           ? <SakuraMark size={24} />
-          : isMsnTheme
+          : isMsnFamily
           ? <MsnMark size={24} />
           : <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (

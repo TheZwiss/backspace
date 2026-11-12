@@ -52,6 +52,10 @@
       "msn": {
         "name": "MSN",
         "description": "明亮的 Live Messenger 蓝色，带有光泽按钮和 Segoe 字体。"
+      },
+      "msn-dark": {
+        "name": "MSN 深色",
+        "description": "深海军蓝底色上的 Live Messenger 蓝色，带有光泽按钮。"
       }
     }
   },

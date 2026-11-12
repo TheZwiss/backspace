@@ -102,7 +102,7 @@ the `theme-color` meta before React mounts, so login and portals are covered.
 text-neutral, interactive and glass tokens: every structural surface is true
 black (`0 0 0`), `--bg-elevated` is `20 20 20`, `--bg-input` is `12 12 12`, and
 separation comes from hairline borders. Accents and status colours are shared.
-`msn` ("Live Messenger") is a light, presentation-only theme in its own file,
+`msn` ("Live Messenger") and `msn-dark` ("Live Messenger Dark", deep navy) are two variants of one presentation-only family (`isMsnTheme`; `platform/theme.ts` sets `html[data-msn]` for both, and every structural rule keys on it; the `msn-dark` block at the end of `theme-msn.css` only restates colours). `msn` is a light theme in its own file,
 `styles/theme-msn.css` (unlayered, imported after `globals.css`): Luna/Aero blue
 frames, glossy gradient buttons, a dark-blue space strip, glossy header bands,
 white conversation pane with a docked composer, Segoe UI/Tahoma type, 4px radii

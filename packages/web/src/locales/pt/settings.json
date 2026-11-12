@@ -52,6 +52,10 @@
       "msn": {
         "name": "MSN",
         "description": "Azul claro do Live Messenger com botões brilhantes e fonte Segoe."
+      },
+      "msn-dark": {
+        "name": "MSN Escuro",
+        "description": "Azul do Live Messenger sobre marinho profundo, com botões brilhantes."
       }
     }
   },

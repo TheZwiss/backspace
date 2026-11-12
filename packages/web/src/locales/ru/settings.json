@@ -52,6 +52,10 @@
       "msn": {
         "name": "MSN",
         "description": "Светлый синий Live Messenger с глянцевыми кнопками и шрифтом Segoe."
+      },
+      "msn-dark": {
+        "name": "MSN Тёмный",
+        "description": "Синий Live Messenger на глубоком тёмно-синем фоне, с глянцевыми кнопками."
       }
     }
   },

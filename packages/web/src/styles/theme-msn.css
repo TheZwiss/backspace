@@ -1,11 +1,11 @@
-/* ── MSN theme ("Live Messenger") ─────────────────────────────────────────
+/* ── MSN themes ("Live Messenger" light and "Live Messenger Dark") ─────────────────────────────────────────
    A bright, modern take on Windows Live Messenger: Luna/Aero blue frames,
    glossy gradient buttons, white conversation panes, green/amber/red presence
    and Segoe UI / Tahoma type. References: dsn10-theme (MSN 7 / Explorer 10
    palette and bevels), Windows-Live-Messenger and msn-js (window and chat
    structure).
 
-   Everything is gated on :root[data-theme="msn"] and only touches presentation
+   Everything is gated on :root[data-msn] and only touches presentation
    (colours, borders, radii, type, shadows). No component, handler or DOM
    structure changes with the theme. This file is imported after globals.css and
    is unlayered, so it wins over the @layer components glass tiers. */
@@ -64,33 +64,33 @@
   color-scheme: light;
 }
 
-:root[data-theme="msn"],
-:root[data-theme="msn"] body,
-:root[data-theme="msn"] #root {
+:root[data-msn],
+:root[data-msn] body,
+:root[data-msn] #root {
   font-family: 'Segoe UI', Tahoma, 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   -webkit-font-smoothing: auto;
 }
 
-:root[data-theme="msn"] ::selection {
+:root[data-msn] ::selection {
   background: #316bc6;
   color: #fff;
 }
 
-:root[data-theme="msn"] input:-webkit-autofill,
-:root[data-theme="msn"] input:-webkit-autofill:hover,
-:root[data-theme="msn"] input:-webkit-autofill:focus {
+:root[data-msn] input:-webkit-autofill,
+:root[data-msn] input:-webkit-autofill:hover,
+:root[data-msn] input:-webkit-autofill:focus {
   -webkit-text-fill-color: #142040;
   -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
 }
 
 /* ── Window frame: the app sits on the Luna blue "title" colour ── */
-:root[data-theme="msn"] #root > div {
+:root[data-msn] #root > div {
   background-image: linear-gradient(180deg, #e4eefb 0%, #c3d6f0 100%);
 }
 
 /* ── Surfaces: no blur, bevelled gradient panels with a blue hairline ── */
-:root[data-theme="msn"] .glass,
-:root[data-theme="msn"] .glass-bubble {
+:root[data-msn] .glass,
+:root[data-msn] .glass-bubble {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background-image: linear-gradient(180deg, #ffffff 0%, #e9f1fc 100%);
@@ -99,7 +99,7 @@
   box-shadow: 0 2px 6px rgba(20, 50, 110, 0.22), inset 0 1px 0 #ffffff;
 }
 
-:root[data-theme="msn"] .glass-modal {
+:root[data-msn] .glass-modal {
   border: 1px solid #1c4a96;
   border-radius: 6px;
   box-shadow:
@@ -108,7 +108,7 @@
     inset 0 0 0 1px #d6e4fa;
 }
 
-:root[data-theme="msn"] .glass-modal::before {
+:root[data-msn] .glass-modal::before {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background-color: #f4f8fe;
@@ -116,13 +116,13 @@
   border-radius: inherit;
 }
 
-:root[data-theme="msn"] .ui-dialog-title {
+:root[data-msn] .ui-dialog-title {
   color: #123c86;
   font-weight: 700;
   text-shadow: 0 1px 0 #ffffff;
 }
 
-:root[data-theme="msn"] .glass-pill {
+:root[data-msn] .glass-pill {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background-image: linear-gradient(180deg, #ffffff 0%, #e2ecfa 100%);
@@ -131,25 +131,25 @@
   box-shadow: 0 1px 1px rgba(20, 50, 110, 0.12);
 }
 
-:root[data-theme="msn"] .glass-pill:hover {
+:root[data-msn] .glass-pill:hover {
   background-image: linear-gradient(180deg, #ffffff 0%, #cfe0f8 100%);
   border-color: #6c93cf;
 }
 
-:root[data-theme="msn"] .glass-pill-mine {
+:root[data-msn] .glass-pill-mine {
   background-image: linear-gradient(180deg, #f4fff0 0%, #cdeec2 100%);
   border-color: #6dae55;
 }
 
-:root[data-theme="msn"] .drop-scrim {
+:root[data-msn] .drop-scrim {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgba(214, 228, 250, 0.85);
 }
 
 /* ── Space strip: the dark-blue Messenger window frame on the far left ── */
-:root[data-theme="msn"] .glass-strip,
-:root[data-theme="msn"] nav[data-pip-obstacle="left"] {
+:root[data-msn] .glass-strip,
+:root[data-msn] nav[data-pip-obstacle="left"] {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background-color: #2a5fae;
@@ -159,51 +159,51 @@
 }
 
 /* ── Contact list (channel / DM sidebar) ── */
-:root[data-theme="msn"] .bg-surface-channel.flex-col {
+:root[data-msn] .bg-surface-channel.flex-col {
   background-image: linear-gradient(180deg, #ffffff 0%, #e6effb 60%, #cddff6 100%);
   border-right: 1px solid #8aa8d6;
 }
 
-:root[data-theme="msn"] .bg-surface-members {
+:root[data-msn] .bg-surface-members {
   background-image: linear-gradient(180deg, #f7faff 0%, #dbe8f9 100%);
   border-left: 1px solid #8aa8d6;
 }
 
 /* Title bars: the glossy Messenger header band */
-:root[data-theme="msn"] .h-12.border-b {
+:root[data-msn] .h-12.border-b {
   background-image: linear-gradient(180deg, #fbfdff 0%, #dfeafa 48%, #cbddf6 52%, #dbe8fa 100%);
   border-bottom: 1px solid #8aa8d6;
   box-shadow: inset 0 1px 0 #ffffff;
 }
 
 /* Category labels read as the blue group headings of the contact list */
-:root[data-theme="msn"] .uppercase {
+:root[data-msn] .uppercase {
   text-transform: none;
   letter-spacing: 0;
 }
 
-:root[data-theme="msn"] .bg-surface-channel .text-ui-caption.font-medium.uppercase,
-:root[data-theme="msn"] .bg-surface-members .text-ui-caption.font-bold {
+:root[data-msn] .bg-surface-channel .text-ui-caption.font-medium.uppercase,
+:root[data-msn] .bg-surface-members .text-ui-caption.font-bold {
   color: #1e4896 !important;
   font-weight: 700;
 }
 
 /* Selected / hovered rows: the pale-blue highlight with a bevelled edge */
-:root[data-theme="msn"] .bg-interactive-selected,
-:root[data-theme="msn"] .bg-interactive-active {
+:root[data-msn] .bg-interactive-selected,
+:root[data-msn] .bg-interactive-active {
   background-image: linear-gradient(180deg, #ffffff 0%, #cfe0f8 100%);
   box-shadow: inset 0 0 0 1px #8fb0e2;
 }
 
-:root[data-theme="msn"] .hover\:bg-interactive-hover:hover {
+:root[data-msn] .hover\:bg-interactive-hover:hover {
   background-color: rgba(214, 230, 252, 0.85);
   box-shadow: inset 0 0 0 1px #b4cbee;
 }
 
 /* ── Buttons: glossy Aero blue / silver ── */
-:root[data-theme="msn"] button.bg-accent-primary,
-:root[data-theme="msn"] a.bg-accent-primary,
-:root[data-theme="msn"] .ui-button-primary {
+:root[data-msn] button.bg-accent-primary,
+:root[data-msn] a.bg-accent-primary,
+:root[data-msn] .ui-button-primary {
   background-image: linear-gradient(180deg, #7dbbf6 0%, #3f8be0 48%, #1f6cc8 52%, #3c92e6 100%);
   border: 1px solid #1a579f;
   color: #ffffff;
@@ -212,19 +212,19 @@
   border-radius: 4px;
 }
 
-:root[data-theme="msn"] button.bg-accent-primary:hover,
-:root[data-theme="msn"] a.bg-accent-primary:hover,
-:root[data-theme="msn"] .ui-button-primary:hover {
+:root[data-msn] button.bg-accent-primary:hover,
+:root[data-msn] a.bg-accent-primary:hover,
+:root[data-msn] .ui-button-primary:hover {
   background-image: linear-gradient(180deg, #96cdfb 0%, #55a0ef 48%, #2d7ad6 52%, #55a9f0 100%);
 }
 
-:root[data-theme="msn"] button.bg-accent-primary:active,
-:root[data-theme="msn"] .ui-button-primary:active {
+:root[data-msn] button.bg-accent-primary:active,
+:root[data-msn] .ui-button-primary:active {
   background-image: linear-gradient(180deg, #2a6cc2 0%, #3a82d8 100%);
   box-shadow: inset 0 1px 3px rgba(10, 40, 100, 0.5);
 }
 
-:root[data-theme="msn"] .ui-button-secondary {
+:root[data-msn] .ui-button-secondary {
   background-image: linear-gradient(180deg, #ffffff 0%, #e3ecf9 48%, #cfdcf1 52%, #e2ebf8 100%);
   border: 1px solid #7f9fd0;
   color: #18305c;
@@ -232,12 +232,12 @@
   border-radius: 4px;
 }
 
-:root[data-theme="msn"] .ui-button-secondary:hover {
+:root[data-msn] .ui-button-secondary:hover {
   background-image: linear-gradient(180deg, #ffffff 0%, #eaf3ff 48%, #d3e5fb 52%, #e6f0fd 100%);
   border-color: #4f84d0;
 }
 
-:root[data-theme="msn"] .ui-button-danger {
+:root[data-msn] .ui-button-danger {
   background-image: linear-gradient(180deg, #f6998f 0%, #e0584a 48%, #c63a2c 52%, #e46a5c 100%);
   border: 1px solid #962a1f;
   color: #ffffff;
@@ -245,7 +245,7 @@
   border-radius: 4px;
 }
 
-:root[data-theme="msn"] .ui-button-warning {
+:root[data-msn] .ui-button-warning {
   background-image: linear-gradient(180deg, #ffe39a 0%, #f6b83b 48%, #e49b0f 52%, #f5bf4b 100%);
   border: 1px solid #a8700a;
   color: #3a2600;
@@ -253,11 +253,11 @@
 }
 
 /* ── Inputs: white field with the classic recessed blue-grey edge ── */
-:root[data-theme="msn"] .input-standard,
-:root[data-theme="msn"] .input-search,
-:root[data-theme="msn"] .input-embedded,
-:root[data-theme="msn"] .input-danger,
-:root[data-theme="msn"] .ui-select {
+:root[data-msn] .input-standard,
+:root[data-msn] .input-search,
+:root[data-msn] .input-embedded,
+:root[data-msn] .input-danger,
+:root[data-msn] .ui-select {
   background-color: #ffffff;
   color: #142040;
   border: 1px solid #7f9db9;
@@ -265,35 +265,35 @@
   box-shadow: inset 1px 1px 2px rgba(20, 50, 110, 0.15);
 }
 
-:root[data-theme="msn"] .input-danger {
+:root[data-msn] .input-danger {
   border-color: #cf5a50;
 }
 
-:root[data-theme="msn"] .input-embedded {
+:root[data-msn] .input-embedded {
   border-color: transparent;
   box-shadow: none;
 }
 
 /* ── Chat: conversation pane + docked composer ── */
-:root[data-theme="msn"] .bg-surface-chat {
+:root[data-msn] .bg-surface-chat {
   background-image: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
-:root[data-theme="msn"] .group.relative.flex.gap-4 {
+:root[data-msn] .group.relative.flex.gap-4 {
   border-bottom: 1px solid #e7eef9;
 }
 
-:root[data-theme="msn"] .group.relative.flex.gap-4 img.rounded-full,
-:root[data-theme="msn"] .group.relative.flex.gap-4 .rounded-full {
+:root[data-msn] .group.relative.flex.gap-4 img.rounded-full,
+:root[data-msn] .group.relative.flex.gap-4 .rounded-full {
   border-radius: 3px;
 }
 
-:root[data-theme="msn"] .group.relative.flex.gap-4 .font-semibold {
+:root[data-msn] .group.relative.flex.gap-4 .font-semibold {
   color: #4a5b7c;
 }
 
 /* The composer docks to the bottom edge like the Messenger input area. */
-:root[data-theme="msn"] .absolute.glass-bubble.z-\[110\] {
+:root[data-msn] .absolute.glass-bubble.z-\[110\] {
   left: 0;
   right: 0;
   bottom: 0;
@@ -304,37 +304,37 @@
 }
 
 /* ── Presence dots: glossy orbs ── */
-:root[data-theme="msn"] .bg-status-online,
-:root[data-theme="msn"] .bg-status-idle,
-:root[data-theme="msn"] .bg-status-dnd,
-:root[data-theme="msn"] .bg-status-offline {
+:root[data-msn] .bg-status-online,
+:root[data-msn] .bg-status-idle,
+:root[data-msn] .bg-status-dnd,
+:root[data-msn] .bg-status-offline {
   background-image: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 55%);
 }
 
 /* ── Unread badges: Messenger's red notification ── */
-:root[data-theme="msn"] .bg-notification {
+:root[data-msn] .bg-notification {
   background-image: linear-gradient(180deg, #ff8a7c 0%, #d93a2b 100%);
   color: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 /* ── Scrollbars: Luna ── */
-:root[data-theme="msn"] ::-webkit-scrollbar-thumb {
+:root[data-msn] ::-webkit-scrollbar-thumb {
   background-color: #a9c0e8;
   border: 1px solid #6f90cc;
   border-radius: 3px;
 }
 
-:root[data-theme="msn"] ::-webkit-scrollbar-thumb:hover {
+:root[data-msn] ::-webkit-scrollbar-thumb:hover {
   background-color: #8aaae0;
 }
 
-:root[data-theme="msn"] ::-webkit-scrollbar-track {
+:root[data-msn] ::-webkit-scrollbar-track {
   background-color: #eef3fb;
 }
 
 /* ── Emoji picker follows the light palette ── */
-:root[data-theme="msn"] .emoji-picker-wrapper em-emoji-picker {
+:root[data-msn] .emoji-picker-wrapper em-emoji-picker {
   --em-rgb-background: 250, 252, 255;
   --em-rgb-input: 255, 255, 255;
   --em-rgb-color: 20, 30, 50;
@@ -342,7 +342,7 @@
 }
 
 /* Strip tiles: pale glossy buttons so their coloured glyphs read on the blue frame. */
-:root[data-theme="msn"] nav[data-pip-obstacle="left"] button.rounded-\[20px\] {
+:root[data-msn] nav[data-pip-obstacle="left"] button.rounded-\[20px\] {
   background-color: #eaf2fd;
   background-image: linear-gradient(180deg, #ffffff 0%, #d4e3f8 100%);
   border: 1px solid #16356b;
@@ -350,14 +350,14 @@
 }
 
 /* Soft sheen on the home tile; nothing animates in this theme. */
-:root[data-theme="msn"] nav .rounded-\[13px\],
-:root[data-theme="msn"] nav .rounded-\[20px\] {
+:root[data-msn] nav .rounded-\[13px\],
+:root[data-msn] nav .rounded-\[20px\] {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 2px rgba(10, 36, 90, 0.35);
 }
 
 /* Filled pastel controls pair a dark label with the dark themes; on these
    mid-tone fills the label must be white. */
-:root[data-theme="msn"] .text-surface-base {
+:root[data-msn] .text-surface-base {
   color: #ffffff;
   text-shadow: 0 -1px 0 rgba(10, 40, 80, 0.35);
 }
@@ -366,72 +366,72 @@
    Windows XP (Luna) frames are the default. With the "Windows XP frames"
    switch off (`html[data-msn-frames="flat"]`) the bevels, double borders and
    dark outlines go away and each surface keeps one soft hairline. */
-:root[data-theme="msn"][data-msn-frames="flat"] .glass-modal {
+:root[data-msn][data-msn-frames="flat"] .glass-modal {
   border: 1px solid #b7c9e6;
   border-radius: 8px;
   box-shadow: 0 12px 36px rgba(10, 36, 90, 0.28);
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .glass,
-:root[data-theme="msn"][data-msn-frames="flat"] .glass-bubble,
-:root[data-theme="msn"][data-msn-frames="flat"] .glass-pill {
+:root[data-msn][data-msn-frames="flat"] .glass,
+:root[data-msn][data-msn-frames="flat"] .glass-bubble,
+:root[data-msn][data-msn-frames="flat"] .glass-pill {
   border-color: #c3d3ec;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(20, 50, 110, 0.14);
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .glass-strip,
-:root[data-theme="msn"][data-msn-frames="flat"] nav[data-pip-obstacle="left"] {
+:root[data-msn][data-msn-frames="flat"] .glass-strip,
+:root[data-msn][data-msn-frames="flat"] nav[data-pip-obstacle="left"] {
   border-right-color: transparent;
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .bg-surface-channel.flex-col,
-:root[data-theme="msn"][data-msn-frames="flat"] .bg-surface-members {
+:root[data-msn][data-msn-frames="flat"] .bg-surface-channel.flex-col,
+:root[data-msn][data-msn-frames="flat"] .bg-surface-members {
   border-color: #d3dff2;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .h-12.border-b {
+:root[data-msn][data-msn-frames="flat"] .h-12.border-b {
   background-image: linear-gradient(180deg, #ffffff 0%, #eef4fc 100%);
   border-bottom-color: #d3dff2;
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .bg-interactive-selected,
-:root[data-theme="msn"][data-msn-frames="flat"] .bg-interactive-active {
+:root[data-msn][data-msn-frames="flat"] .bg-interactive-selected,
+:root[data-msn][data-msn-frames="flat"] .bg-interactive-active {
   background-image: none;
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .hover\:bg-interactive-hover:hover {
+:root[data-msn][data-msn-frames="flat"] .hover\:bg-interactive-hover:hover {
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] button.bg-accent-primary,
-:root[data-theme="msn"][data-msn-frames="flat"] a.bg-accent-primary,
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-primary,
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-secondary,
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-danger,
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-warning {
+:root[data-msn][data-msn-frames="flat"] button.bg-accent-primary,
+:root[data-msn][data-msn-frames="flat"] a.bg-accent-primary,
+:root[data-msn][data-msn-frames="flat"] .ui-button-primary,
+:root[data-msn][data-msn-frames="flat"] .ui-button-secondary,
+:root[data-msn][data-msn-frames="flat"] .ui-button-danger,
+:root[data-msn][data-msn-frames="flat"] .ui-button-warning {
   border-color: transparent;
   border-radius: 8px;
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-button-secondary {
+:root[data-msn][data-msn-frames="flat"] .ui-button-secondary {
   border-color: #c3d3ec;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .input-standard,
-:root[data-theme="msn"][data-msn-frames="flat"] .input-search,
-:root[data-theme="msn"][data-msn-frames="flat"] .input-danger,
-:root[data-theme="msn"][data-msn-frames="flat"] .ui-select {
+:root[data-msn][data-msn-frames="flat"] .input-standard,
+:root[data-msn][data-msn-frames="flat"] .input-search,
+:root[data-msn][data-msn-frames="flat"] .input-danger,
+:root[data-msn][data-msn-frames="flat"] .ui-select {
   border-color: #c3d3ec;
   border-radius: 6px;
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] .absolute.glass-bubble.z-\[110\] {
+:root[data-msn][data-msn-frames="flat"] .absolute.glass-bubble.z-\[110\] {
   border-radius: 0;
   box-shadow: none;
 }
@@ -439,7 +439,7 @@
 /* ── Sign-in and register: the Messenger sign-in window ─────────────────
    Sky background, a framed "display picture" above the form and a white
    card, drawn entirely with CSS around the unchanged form. */
-:root[data-theme="msn"] [data-auth-page] {
+:root[data-msn] [data-auth-page] {
   background-color: #cfe3fb;
   background-image:
     radial-gradient(ellipse 70% 40% at 50% 100%, rgba(120, 190, 90, 0.55) 0%, rgba(120, 190, 90, 0) 70%),
@@ -447,11 +447,11 @@
     linear-gradient(180deg, #9cc4f2 0%, #d6e8fb 55%, #eef6ff 100%);
 }
 
-:root[data-theme="msn"] [data-auth-page] > .absolute {
+:root[data-msn] [data-auth-page] > .absolute {
   display: none;
 }
 
-:root[data-theme="msn"] [data-auth-card] {
+:root[data-msn] [data-auth-card] {
   position: relative;
   background-color: #ffffff;
   background-image: linear-gradient(180deg, #ffffff 0%, #eef5fe 100%);
@@ -465,7 +465,7 @@
    picture well holding the grey buddy silhouette. Three background layers share
    one box: the silhouette and the well are clipped to the padding box, the rim
    gradient (semi-transparent, so the card shows through) to the border box. */
-:root[data-theme="msn"] [data-auth-card]::before {
+:root[data-msn] [data-auth-card]::before {
   content: '';
   position: absolute;
   top: 22px;
@@ -486,27 +486,27 @@
     0 4px 10px rgba(10, 36, 90, 0.3);
 }
 
-:root[data-theme="msn"] [data-auth-card] {
+:root[data-msn] [data-auth-card] {
   padding-top: 160px;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card] {
+:root[data-msn][data-msn-frames="flat"] [data-auth-card] {
   border-color: #b7c9e6;
   border-radius: 12px;
   box-shadow: 0 14px 40px rgba(10, 36, 90, 0.25);
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] [data-auth-card]::before {
+:root[data-msn][data-msn-frames="flat"] [data-auth-card]::before {
   border-radius: 16px;
   box-shadow: 0 3px 10px rgba(10, 36, 90, 0.22);
 }
 
-:root[data-theme="msn"] [data-auth-card] h1 {
+:root[data-msn] [data-auth-card] h1 {
   color: #123c86;
   text-shadow: 0 1px 0 #ffffff;
 }
 
-:root[data-theme="msn"] [data-auth-card] label {
+:root[data-msn] [data-auth-card] label {
   color: #46587a;
   font-weight: 600;
 }
@@ -516,17 +516,17 @@
    tinted with that person's presence: green online, amber away, red busy,
    grey offline. Opted in by `data-frame-status` (set by DM messages and the
    DM roster); the presence dot is redundant there and is hidden. */
-:root[data-theme="msn"] [data-avatar][data-frame-status] {
+:root[data-msn] [data-avatar][data-frame-status] {
   --frame-a: 150, 166, 192;
   --frame-b: 110, 128, 158;
   border-radius: 4px;
 }
 
-:root[data-theme="msn"] [data-avatar][data-frame-status="online"] { --frame-a: 120, 206, 84; --frame-b: 52, 150, 40; }
-:root[data-theme="msn"] [data-avatar][data-frame-status="idle"] { --frame-a: 252, 200, 90; --frame-b: 212, 140, 18; }
-:root[data-theme="msn"] [data-avatar][data-frame-status="dnd"] { --frame-a: 246, 130, 116; --frame-b: 200, 50, 40; }
+:root[data-msn] [data-avatar][data-frame-status="online"] { --frame-a: 120, 206, 84; --frame-b: 52, 150, 40; }
+:root[data-msn] [data-avatar][data-frame-status="idle"] { --frame-a: 252, 200, 90; --frame-b: 212, 140, 18; }
+:root[data-msn] [data-avatar][data-frame-status="dnd"] { --frame-a: 246, 130, 116; --frame-b: 200, 50, 40; }
 
-:root[data-theme="msn"] [data-avatar][data-frame-status]::before {
+:root[data-msn] [data-avatar][data-frame-status]::before {
   content: '';
   position: absolute;
   inset: -5px;
@@ -538,7 +538,7 @@
   pointer-events: none;
 }
 
-:root[data-theme="msn"] [data-avatar][data-frame-status] > div:first-child {
+:root[data-msn] [data-avatar][data-frame-status] > div:first-child {
   position: relative;
   z-index: 1;
   border-radius: 3px;
@@ -547,25 +547,262 @@
   box-shadow: 0 0 0 1px rgba(var(--frame-b), 0.9);
 }
 
-:root[data-theme="msn"] [data-avatar][data-frame-status] img,
-:root[data-theme="msn"] [data-avatar][data-frame-status] .avatar-fallback {
+:root[data-msn] [data-avatar][data-frame-status] img,
+:root[data-msn] [data-avatar][data-frame-status] .avatar-fallback {
   border-radius: 2px;
 }
 
-:root[data-theme="msn"] [data-avatar][data-frame-status] > span.absolute {
+:root[data-msn] [data-avatar][data-frame-status] > span.absolute {
   display: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status]::before {
+:root[data-msn][data-msn-frames="flat"] [data-avatar][data-frame-status]::before {
   border-radius: 10px;
   border-color: rgba(var(--frame-b), 0.35);
   box-shadow: none;
 }
 
-:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status],
-:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] > div:first-child,
-:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] img,
-:root[data-theme="msn"][data-msn-frames="flat"] [data-avatar][data-frame-status] .avatar-fallback {
+:root[data-msn][data-msn-frames="flat"] [data-avatar][data-frame-status],
+:root[data-msn][data-msn-frames="flat"] [data-avatar][data-frame-status] > div:first-child,
+:root[data-msn][data-msn-frames="flat"] [data-avatar][data-frame-status] img,
+:root[data-msn][data-msn-frames="flat"] [data-avatar][data-frame-status] .avatar-fallback {
   border-radius: 6px;
   box-shadow: none;
+}
+
+/* ══ MSN Dark ═══════════════════════════════════════════════════════════
+   Same structure as the light theme (`html[data-msn]`), re-pitched to deep
+   navy: the Messenger blue stays the accent, surfaces and bevels go dark.
+   Every rule here only restates colours the light rules set. */
+:root[data-theme="msn-dark"] {
+  --bg-base: 10 20 40;
+  --bg-channel: 18 33 62;
+  --bg-chat: 14 25 47;
+  --bg-members: 16 29 55;
+  --bg-elevated: 26 44 78;
+  --bg-input: 9 17 34;
+  --bg-overlay: rgba(2, 8, 22, 0.7);
+  --wash: 180 208 255;
+
+  --border-hard: 44 70 118;
+  --border-soft: 34 56 98;
+
+  --accent-mint: 120 210 130;
+  --accent-peach: 250 160 120;
+  --accent-lavender: 160 176 250;
+  --accent-sky: 110 190 250;
+  --accent-amber: 250 200 90;
+  --accent-rose: 250 130 120;
+  --accent-coral: 250 150 80;
+  --accent-primary: 59 138 230;
+  --accent-primary-hover: 74 154 244;
+  --accent-primary-active: 44 118 208;
+
+  --text-primary: 232 240 252;
+  --text-secondary: 170 192 226;
+  --text-tertiary: 138 162 202;
+  --text-category: 140 184 245;
+  --text-message: 222 232 248;
+  --text-link: 120 186 255;
+  --text-positive: 130 214 120;
+  --text-warning: 250 200 90;
+  --text-danger: 250 140 130;
+
+  --interactive-hover: rgba(110, 170, 255, 0.12);
+  --interactive-active: rgba(110, 170, 255, 0.2);
+  --interactive-selected: rgba(110, 170, 255, 0.28);
+  --interactive-muted: 52 76 122;
+
+  --status-online: 96 196 64;
+  --status-idle: 248 176 48;
+  --status-dnd: 232 70 56;
+  --status-offline: 104 124 160;
+
+  --glass-bg: rgba(18, 33, 62, 0.98);
+  --glass-modal-bg: rgba(16, 30, 58, 1);
+  --glass-border: rgba(90, 130, 200, 0.55);
+  --glass-highlight: rgba(150, 190, 255, 0.14);
+  --notification: 232 70 56;
+
+  --control-radius: 4px;
+  color-scheme: dark;
+}
+
+:root[data-theme="msn-dark"] ::selection { background: #2f6fcf; color: #fff; }
+
+:root[data-theme="msn-dark"] input:-webkit-autofill,
+:root[data-theme="msn-dark"] input:-webkit-autofill:hover,
+:root[data-theme="msn-dark"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e8f0fc;
+  -webkit-box-shadow: 0 0 0px 1000px #091122 inset;
+}
+
+:root[data-theme="msn-dark"] #root > div {
+  background-image: linear-gradient(180deg, #14264a 0%, #0a1428 100%);
+}
+
+:root[data-theme="msn-dark"] .glass,
+:root[data-theme="msn-dark"] .glass-bubble {
+  background-image: linear-gradient(180deg, #1d3560 0%, #132546 100%);
+  border-color: #3a5f9e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(150, 190, 255, 0.2);
+}
+
+:root[data-theme="msn-dark"] .glass-modal {
+  border-color: #6aa0ee;
+  box-shadow: 0 0 0 3px #20407a, 0 12px 36px rgba(0, 0, 0, 0.7), inset 0 0 0 1px #2a4d8c;
+}
+
+:root[data-theme="msn-dark"] .glass-modal::before {
+  background-color: #12223f;
+  background-image: linear-gradient(180deg, #1a2f57 0%, #0f1d38 100%);
+}
+
+:root[data-theme="msn-dark"] .ui-dialog-title { color: #9cc4fb; text-shadow: none; }
+
+:root[data-theme="msn-dark"] .glass-pill {
+  background-image: linear-gradient(180deg, #223a68 0%, #172b50 100%);
+  border-color: #3f64a4;
+}
+
+:root[data-theme="msn-dark"] .glass-pill:hover {
+  background-image: linear-gradient(180deg, #2b4a84 0%, #1d3665 100%);
+  border-color: #6aa0ee;
+}
+
+:root[data-theme="msn-dark"] .glass-pill-mine {
+  background-image: linear-gradient(180deg, #24562a 0%, #173c1d 100%);
+  border-color: #4f9a50;
+}
+
+:root[data-theme="msn-dark"] .drop-scrim { background: rgba(10, 22, 46, 0.85); }
+
+:root[data-theme="msn-dark"] .glass-strip,
+:root[data-theme="msn-dark"] nav[data-pip-obstacle="left"] {
+  background-color: #14305e;
+  background-image: linear-gradient(90deg, #1e4a8c 0%, #163a72 55%, #0f2c58 100%);
+  border-right-color: #07142b;
+}
+
+:root[data-theme="msn-dark"] .bg-surface-channel.flex-col {
+  background-image: linear-gradient(180deg, #172b52 0%, #112140 60%, #0c1a35 100%);
+  border-right-color: #2c4a80;
+}
+
+:root[data-theme="msn-dark"] .bg-surface-members {
+  background-image: linear-gradient(180deg, #14264b 0%, #0d1b36 100%);
+  border-left-color: #2c4a80;
+}
+
+:root[data-theme="msn-dark"] .h-12.border-b {
+  background-image: linear-gradient(180deg, #24407a 0%, #1a3266 48%, #142a56 52%, #1b3569 100%);
+  border-bottom-color: #07142b;
+  box-shadow: inset 0 1px 0 rgba(150, 190, 255, 0.3);
+}
+
+:root[data-theme="msn-dark"] .bg-surface-channel .text-ui-caption.font-medium.uppercase,
+:root[data-theme="msn-dark"] .bg-surface-members .text-ui-caption.font-bold {
+  color: #8db8f5 !important;
+}
+
+:root[data-theme="msn-dark"] .bg-interactive-selected,
+:root[data-theme="msn-dark"] .bg-interactive-active {
+  background-image: linear-gradient(180deg, #2c4c88 0%, #1e3a70 100%);
+  box-shadow: inset 0 0 0 1px #4f7fc8;
+}
+
+:root[data-theme="msn-dark"] .hover\:bg-interactive-hover:hover {
+  background-color: rgba(60, 100, 170, 0.45);
+  box-shadow: inset 0 0 0 1px #35599a;
+}
+
+:root[data-theme="msn-dark"] .ui-button-secondary {
+  background-image: linear-gradient(180deg, #34517f 0%, #263e69 48%, #1d335c 52%, #2a4573 100%);
+  border-color: #5a82c4;
+  color: #e8f0fc;
+  box-shadow: inset 0 1px 0 rgba(150, 190, 255, 0.25);
+}
+
+:root[data-theme="msn-dark"] .ui-button-secondary:hover {
+  background-image: linear-gradient(180deg, #41629a 0%, #314f84 48%, #264474 52%, #36588d 100%);
+  border-color: #8db8f5;
+}
+
+:root[data-theme="msn-dark"] .input-standard,
+:root[data-theme="msn-dark"] .input-search,
+:root[data-theme="msn-dark"] .input-embedded,
+:root[data-theme="msn-dark"] .input-danger,
+:root[data-theme="msn-dark"] .ui-select {
+  background-color: #0a1428;
+  color: #e8f0fc;
+  border-color: #3a5f9e;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="msn-dark"] .input-danger { border-color: #d0584c; }
+
+:root[data-theme="msn-dark"] .input-embedded { border-color: transparent; box-shadow: none; }
+
+:root[data-theme="msn-dark"] .bg-surface-chat {
+  background-image: linear-gradient(180deg, #101e38 0%, #0c182f 100%);
+}
+
+:root[data-theme="msn-dark"] .group.relative.flex.gap-4 { border-bottom-color: #1b2f55; }
+
+:root[data-theme="msn-dark"] .group.relative.flex.gap-4 .font-semibold { color: #9db4d8; }
+
+:root[data-theme="msn-dark"] .absolute.glass-bubble.z-\[110\] {
+  background-image: linear-gradient(180deg, #1a3160 0%, #12244a 100%);
+  box-shadow: inset 0 1px 0 rgba(150, 190, 255, 0.25);
+}
+
+:root[data-theme="msn-dark"] ::-webkit-scrollbar-thumb { background-color: #36568f; border-color: #5a82c4; }
+:root[data-theme="msn-dark"] ::-webkit-scrollbar-thumb:hover { background-color: #4a6fb0; }
+:root[data-theme="msn-dark"] ::-webkit-scrollbar-track { background-color: #0d1930; }
+
+:root[data-theme="msn-dark"] .emoji-picker-wrapper em-emoji-picker {
+  --em-rgb-background: 22, 38, 70;
+  --em-rgb-input: 10, 20, 40;
+  --em-rgb-color: 222, 232, 248;
+}
+
+/* Frames off, dark */
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .glass-modal { border-color: #2c4a80; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6); }
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .glass,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .glass-bubble,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .glass-pill { border-color: #2c4a80; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .bg-surface-channel.flex-col,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .bg-surface-members { border-color: #1f3868; }
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .h-12.border-b {
+  background-image: linear-gradient(180deg, #1c3566 0%, #14284f 100%);
+  border-bottom-color: #1f3868;
+}
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .ui-button-secondary,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .input-standard,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .input-search,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .input-danger,
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] .ui-select { border-color: #2c4a80; }
+
+/* Sign-in and register, dark: night sky over a dark-green hill */
+:root[data-theme="msn-dark"] [data-auth-page] {
+  background-color: #0c1a36;
+  background-image:
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(50, 120, 60, 0.5) 0%, rgba(50, 120, 60, 0) 70%),
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(90, 140, 220, 0.4) 0%, rgba(90, 140, 220, 0) 65%),
+    linear-gradient(180deg, #17315f 0%, #0d1d3c 60%, #091328 100%);
+}
+
+:root[data-theme="msn-dark"] [data-auth-card] {
+  background-color: #12223f;
+  background-image: linear-gradient(180deg, #1a2f57 0%, #0f1d38 100%);
+  border-color: #6aa0ee;
+  box-shadow: 0 0 0 3px #20407a, 0 14px 40px rgba(0, 0, 0, 0.65);
+}
+
+:root[data-theme="msn-dark"] [data-auth-card] h1 { color: #9cc4fb; text-shadow: none; }
+:root[data-theme="msn-dark"] [data-auth-card] label { color: #aac0e2; }
+
+:root[data-msn][data-msn-frames="flat"][data-theme="msn-dark"] [data-auth-card] {
+  border-color: #2c4a80;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
 }

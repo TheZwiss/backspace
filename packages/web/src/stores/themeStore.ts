@@ -1,13 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export const THEMES = ['aether-drift', 'light', 'oled', 'anime', 'msn'] as const;
+export const THEMES = ['aether-drift', 'light', 'oled', 'anime', 'msn', 'msn-dark'] as const;
 export type ThemeId = (typeof THEMES)[number];
 
 export const DEFAULT_THEME: ThemeId = 'aether-drift';
 
 export function normalizeTheme(value: unknown): ThemeId {
   return THEMES.find(theme => theme === value) ?? DEFAULT_THEME;
+}
+
+/** The MSN family: both variants share `theme-msn.css` and the XP-frames option. */
+export function isMsnTheme(theme: ThemeId): boolean {
+  return theme === 'msn' || theme === 'msn-dark';
 }
 
 /** Themes drawn on light surfaces: they take light code, emoji and similar palettes. */

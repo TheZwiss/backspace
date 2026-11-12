@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Toggle } from '../../ui/Toggle';
-import { THEMES, useThemeStore, type ThemeId } from '../../../stores/themeStore';
+import { THEMES, isMsnTheme, useThemeStore, type ThemeId } from '../../../stores/themeStore';
 
 /** Swatches mirror the theme's chat, sidebar and elevated surfaces. */
 const SWATCHES: Record<ThemeId, { chat: string; side: string; raised: string }> = {
@@ -9,6 +9,7 @@ const SWATCHES: Record<ThemeId, { chat: string; side: string; raised: string }> 
   oled: { chat: '#000000', side: '#000000', raised: '#141414' },
   anime: { chat: '#130e25', side: '#18112c', raised: '#db3d87' },
   msn: { chat: '#ffffff', side: '#cddff6', raised: '#2f7bd6' },
+  'msn-dark': { chat: '#0e192f', side: '#172b52', raised: '#3b8ae6' },
 };
 
 export function ThemeSection() {
@@ -46,7 +47,7 @@ export function ThemeSection() {
             );
           })}
         </div>
-        {theme === 'msn' && (
+        {isMsnTheme(theme) && (
           <div className="mt-4 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <span className="block text-sm font-medium text-txt-primary">{t('theme.msnFrames.label')}</span>
