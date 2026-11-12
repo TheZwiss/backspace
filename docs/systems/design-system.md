@@ -102,6 +102,14 @@ the `theme-color` meta before React mounts, so login and portals are covered.
 text-neutral, interactive and glass tokens: every structural surface is true
 black (`0 0 0`), `--bg-elevated` is `20 20 20`, `--bg-input` is `12 12 12`, and
 separation comes from hairline borders. Accents and status colours are shared.
+`msn` ("Live Messenger") is a light, presentation-only theme in its own file,
+`styles/theme-msn.css` (unlayered, imported after `globals.css`): Luna/Aero blue
+frames, glossy gradient buttons, a dark-blue space strip, glossy header bands,
+white conversation pane with a docked composer, Segoe UI/Tahoma type, 4px radii
+and no backdrop blur. It changes no DOM or behaviour; only the sidebar home tile
+swaps to `MsnMark`. `isLightTheme(theme)` in `themeStore` is true for `light` and
+`msn` and drives the emoji picker and code theme. References: dsn10-theme,
+msn-js, Windows-Live-Messenger.
 `anime` also changes elements, not just colours, all gated on `theme === 'anime'`
 (or `:root[data-theme="anime"]`): the `Mascot` gets cat ears, an ahoge, star
 catchlights, cheek marks, twinkling sparkles and the sakura palette

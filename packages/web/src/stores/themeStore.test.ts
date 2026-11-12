@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_THEME, normalizeTheme } from './themeStore';
 
 describe('normalizeTheme', () => {
-  it.each(['aether-drift', 'oled', 'anime'])('keeps %s', id => {
+  it.each(['aether-drift', 'oled', 'anime', 'msn'])('keeps %s', id => {
     expect(normalizeTheme(id)).toBe(id);
   });
 

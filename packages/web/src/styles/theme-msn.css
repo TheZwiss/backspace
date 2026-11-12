@@ -1,0 +1,363 @@
+/* ── MSN theme ("Live Messenger") ─────────────────────────────────────────
+   A bright, modern take on Windows Live Messenger: Luna/Aero blue frames,
+   glossy gradient buttons, white conversation panes, green/amber/red presence
+   and Segoe UI / Tahoma type. References: dsn10-theme (MSN 7 / Explorer 10
+   palette and bevels), Windows-Live-Messenger and msn-js (window and chat
+   structure).
+
+   Everything is gated on :root[data-theme="msn"] and only touches presentation
+   (colours, borders, radii, type, shadows). No component, handler or DOM
+   structure changes with the theme. This file is imported after globals.css and
+   is unlayered, so it wins over the @layer components glass tiers. */
+
+:root[data-theme="msn"] {
+  --bg-base: 205 220 241;
+  --bg-channel: 232 240 251;
+  --bg-chat: 255 255 255;
+  --bg-members: 238 244 252;
+  --bg-elevated: 250 252 255;
+  --bg-input: 255 255 255;
+  --bg-overlay: rgba(16, 40, 84, 0.45);
+  --wash: 28 62 118;
+
+  --border-hard: 160 183 217;
+  --border-soft: 196 211 235;
+
+  --accent-mint: 38 140 58;
+  --accent-peach: 196 96 44;
+  --accent-lavender: 88 104 200;
+  --accent-sky: 20 118 200;
+  --accent-amber: 178 112 0;
+  --accent-rose: 205 60 52;
+  --accent-coral: 214 104 28;
+  --accent-primary: 47 123 214;
+  --accent-primary-hover: 37 105 189;
+  --accent-primary-active: 29 87 159;
+
+  --text-primary: 22 40 72;
+  --text-secondary: 58 80 118;
+  --text-tertiary: 92 112 148;
+  --text-category: 30 72 150;
+  --text-message: 20 30 50;
+  --text-link: 11 95 196;
+  --text-positive: 30 130 52;
+  --text-warning: 160 100 0;
+  --text-danger: 192 48 40;
+
+  --interactive-hover: rgba(80, 140, 224, 0.13);
+  --interactive-active: rgba(80, 140, 224, 0.22);
+  --interactive-selected: rgba(80, 140, 224, 0.30);
+  --interactive-muted: 176 192 220;
+
+  --status-online: 84 178 56;
+  --status-idle: 245 166 35;
+  --status-dnd: 217 56 44;
+  --status-offline: 150 166 192;
+
+  --glass-bg: rgba(246, 250, 255, 0.98);
+  --glass-modal-bg: rgba(240, 246, 255, 1);
+  --glass-border: rgba(110, 146, 200, 0.75);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --notification: 217 56 44;
+
+  --control-radius: 4px;
+  color-scheme: light;
+}
+
+:root[data-theme="msn"],
+:root[data-theme="msn"] body,
+:root[data-theme="msn"] #root {
+  font-family: 'Segoe UI', Tahoma, 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: auto;
+}
+
+:root[data-theme="msn"] ::selection {
+  background: #316bc6;
+  color: #fff;
+}
+
+:root[data-theme="msn"] input:-webkit-autofill,
+:root[data-theme="msn"] input:-webkit-autofill:hover,
+:root[data-theme="msn"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #142040;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+}
+
+/* ── Window frame: the app sits on the Luna blue "title" colour ── */
+:root[data-theme="msn"] #root > div {
+  background-image: linear-gradient(180deg, #e4eefb 0%, #c3d6f0 100%);
+}
+
+/* ── Surfaces: no blur, bevelled gradient panels with a blue hairline ── */
+:root[data-theme="msn"] .glass,
+:root[data-theme="msn"] .glass-bubble {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-image: linear-gradient(180deg, #ffffff 0%, #e9f1fc 100%);
+  border: 1px solid #8aa8d6;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(20, 50, 110, 0.22), inset 0 1px 0 #ffffff;
+}
+
+:root[data-theme="msn"] .glass-modal {
+  border: 1px solid #1c4a96;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 3px #7fa6e2,
+    0 12px 36px rgba(10, 36, 90, 0.45),
+    inset 0 0 0 1px #d6e4fa;
+}
+
+:root[data-theme="msn"] .glass-modal::before {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: #f4f8fe;
+  background-image: linear-gradient(180deg, #ffffff 0%, #eaf2fd 100%);
+  border-radius: inherit;
+}
+
+:root[data-theme="msn"] .ui-dialog-title {
+  color: #123c86;
+  font-weight: 700;
+  text-shadow: 0 1px 0 #ffffff;
+}
+
+:root[data-theme="msn"] .glass-pill {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-image: linear-gradient(180deg, #ffffff 0%, #e2ecfa 100%);
+  border: 1px solid #9fb8de;
+  border-radius: 10px;
+  box-shadow: 0 1px 1px rgba(20, 50, 110, 0.12);
+}
+
+:root[data-theme="msn"] .glass-pill:hover {
+  background-image: linear-gradient(180deg, #ffffff 0%, #cfe0f8 100%);
+  border-color: #6c93cf;
+}
+
+:root[data-theme="msn"] .glass-pill-mine {
+  background-image: linear-gradient(180deg, #f4fff0 0%, #cdeec2 100%);
+  border-color: #6dae55;
+}
+
+:root[data-theme="msn"] .drop-scrim {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(214, 228, 250, 0.85);
+}
+
+/* ── Space strip: the dark-blue Messenger window frame on the far left ── */
+:root[data-theme="msn"] .glass-strip,
+:root[data-theme="msn"] nav[data-pip-obstacle="left"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: #2a5fae;
+  background-image: linear-gradient(90deg, #3e78cc 0%, #2c5fae 55%, #254f94 100%);
+  border-right: 1px solid #16356b;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.18), 2px 0 6px rgba(10, 36, 90, 0.3);
+}
+
+/* ── Contact list (channel / DM sidebar) ── */
+:root[data-theme="msn"] .bg-surface-channel.flex-col {
+  background-image: linear-gradient(180deg, #ffffff 0%, #e6effb 60%, #cddff6 100%);
+  border-right: 1px solid #8aa8d6;
+}
+
+:root[data-theme="msn"] .bg-surface-members {
+  background-image: linear-gradient(180deg, #f7faff 0%, #dbe8f9 100%);
+  border-left: 1px solid #8aa8d6;
+}
+
+/* Title bars: the glossy Messenger header band */
+:root[data-theme="msn"] .h-12.border-b {
+  background-image: linear-gradient(180deg, #fbfdff 0%, #dfeafa 48%, #cbddf6 52%, #dbe8fa 100%);
+  border-bottom: 1px solid #8aa8d6;
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+/* Category labels read as the blue group headings of the contact list */
+:root[data-theme="msn"] .uppercase {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+:root[data-theme="msn"] .bg-surface-channel .text-ui-caption.font-medium.uppercase,
+:root[data-theme="msn"] .bg-surface-members .text-ui-caption.font-bold {
+  color: #1e4896 !important;
+  font-weight: 700;
+}
+
+/* Selected / hovered rows: the pale-blue highlight with a bevelled edge */
+:root[data-theme="msn"] .bg-interactive-selected,
+:root[data-theme="msn"] .bg-interactive-active {
+  background-image: linear-gradient(180deg, #ffffff 0%, #cfe0f8 100%);
+  box-shadow: inset 0 0 0 1px #8fb0e2;
+}
+
+:root[data-theme="msn"] .hover\:bg-interactive-hover:hover {
+  background-color: rgba(214, 230, 252, 0.85);
+  box-shadow: inset 0 0 0 1px #b4cbee;
+}
+
+/* ── Buttons: glossy Aero blue / silver ── */
+:root[data-theme="msn"] button.bg-accent-primary,
+:root[data-theme="msn"] a.bg-accent-primary,
+:root[data-theme="msn"] .ui-button-primary {
+  background-image: linear-gradient(180deg, #7dbbf6 0%, #3f8be0 48%, #1f6cc8 52%, #3c92e6 100%);
+  border: 1px solid #1a579f;
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgba(10, 40, 100, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 2px rgba(10, 40, 100, 0.3);
+  border-radius: 4px;
+}
+
+:root[data-theme="msn"] button.bg-accent-primary:hover,
+:root[data-theme="msn"] a.bg-accent-primary:hover,
+:root[data-theme="msn"] .ui-button-primary:hover {
+  background-image: linear-gradient(180deg, #96cdfb 0%, #55a0ef 48%, #2d7ad6 52%, #55a9f0 100%);
+}
+
+:root[data-theme="msn"] button.bg-accent-primary:active,
+:root[data-theme="msn"] .ui-button-primary:active {
+  background-image: linear-gradient(180deg, #2a6cc2 0%, #3a82d8 100%);
+  box-shadow: inset 0 1px 3px rgba(10, 40, 100, 0.5);
+}
+
+:root[data-theme="msn"] .ui-button-secondary {
+  background-image: linear-gradient(180deg, #ffffff 0%, #e3ecf9 48%, #cfdcf1 52%, #e2ebf8 100%);
+  border: 1px solid #7f9fd0;
+  color: #18305c;
+  box-shadow: inset 0 1px 0 #ffffff;
+  border-radius: 4px;
+}
+
+:root[data-theme="msn"] .ui-button-secondary:hover {
+  background-image: linear-gradient(180deg, #ffffff 0%, #eaf3ff 48%, #d3e5fb 52%, #e6f0fd 100%);
+  border-color: #4f84d0;
+}
+
+:root[data-theme="msn"] .ui-button-danger {
+  background-image: linear-gradient(180deg, #f6998f 0%, #e0584a 48%, #c63a2c 52%, #e46a5c 100%);
+  border: 1px solid #962a1f;
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgba(90, 10, 0, 0.5);
+  border-radius: 4px;
+}
+
+:root[data-theme="msn"] .ui-button-warning {
+  background-image: linear-gradient(180deg, #ffe39a 0%, #f6b83b 48%, #e49b0f 52%, #f5bf4b 100%);
+  border: 1px solid #a8700a;
+  color: #3a2600;
+  border-radius: 4px;
+}
+
+/* ── Inputs: white field with the classic recessed blue-grey edge ── */
+:root[data-theme="msn"] .input-standard,
+:root[data-theme="msn"] .input-search,
+:root[data-theme="msn"] .input-embedded,
+:root[data-theme="msn"] .input-danger,
+:root[data-theme="msn"] .ui-select {
+  background-color: #ffffff;
+  color: #142040;
+  border: 1px solid #7f9db9;
+  border-radius: 3px;
+  box-shadow: inset 1px 1px 2px rgba(20, 50, 110, 0.15);
+}
+
+:root[data-theme="msn"] .input-danger {
+  border-color: #cf5a50;
+}
+
+:root[data-theme="msn"] .input-embedded {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* ── Chat: conversation pane + docked composer ── */
+:root[data-theme="msn"] .bg-surface-chat {
+  background-image: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+:root[data-theme="msn"] .group.relative.flex.gap-4 {
+  border-bottom: 1px solid #e7eef9;
+}
+
+:root[data-theme="msn"] .group.relative.flex.gap-4 img.rounded-full,
+:root[data-theme="msn"] .group.relative.flex.gap-4 .rounded-full {
+  border-radius: 3px;
+}
+
+:root[data-theme="msn"] .group.relative.flex.gap-4 .font-semibold {
+  color: #4a5b7c;
+}
+
+/* The composer docks to the bottom edge like the Messenger input area. */
+:root[data-theme="msn"] .absolute.glass-bubble.z-\[110\] {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0;
+  border-width: 1px 0 0 0;
+  background-image: linear-gradient(180deg, #e8f0fc 0%, #cddff6 100%);
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+/* ── Presence dots: glossy orbs ── */
+:root[data-theme="msn"] .bg-status-online,
+:root[data-theme="msn"] .bg-status-idle,
+:root[data-theme="msn"] .bg-status-dnd,
+:root[data-theme="msn"] .bg-status-offline {
+  background-image: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 55%);
+}
+
+/* ── Unread badges: Messenger's red notification ── */
+:root[data-theme="msn"] .bg-notification {
+  background-image: linear-gradient(180deg, #ff8a7c 0%, #d93a2b 100%);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ── Scrollbars: Luna ── */
+:root[data-theme="msn"] ::-webkit-scrollbar-thumb {
+  background-color: #a9c0e8;
+  border: 1px solid #6f90cc;
+  border-radius: 3px;
+}
+
+:root[data-theme="msn"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #8aaae0;
+}
+
+:root[data-theme="msn"] ::-webkit-scrollbar-track {
+  background-color: #eef3fb;
+}
+
+/* ── Emoji picker follows the light palette ── */
+:root[data-theme="msn"] .emoji-picker-wrapper em-emoji-picker {
+  --em-rgb-background: 250, 252, 255;
+  --em-rgb-input: 255, 255, 255;
+  --em-rgb-color: 20, 30, 50;
+  --font-family: 'Segoe UI', Tahoma, system-ui, sans-serif;
+}
+
+/* Strip tiles: pale glossy buttons so their coloured glyphs read on the blue frame. */
+:root[data-theme="msn"] nav[data-pip-obstacle="left"] button.rounded-\[20px\] {
+  background-color: #eaf2fd;
+  background-image: linear-gradient(180deg, #ffffff 0%, #d4e3f8 100%);
+  border: 1px solid #16356b;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 2px rgba(10, 36, 90, 0.4);
+}
+
+/* Soft sheen on the home tile; nothing animates in this theme. */
+:root[data-theme="msn"] nav .rounded-\[13px\],
+:root[data-theme="msn"] nav .rounded-\[20px\] {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 2px rgba(10, 36, 90, 0.35);
+}
+
+/* Filled pastel controls pair a dark label with the dark themes; on these
+   mid-tone fills the label must be white. */
+:root[data-theme="msn"] .text-surface-base {
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgba(10, 40, 80, 0.35);
+}

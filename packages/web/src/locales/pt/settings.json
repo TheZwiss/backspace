@@ -44,6 +44,10 @@
       "anime": {
         "name": "Anime",
         "description": "Índigo crepuscular com detalhes em rosa sakura."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Azul claro do Live Messenger com botões brilhantes e fonte Segoe."
       }
     }
   },

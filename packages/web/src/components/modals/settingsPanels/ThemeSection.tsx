@@ -7,6 +7,7 @@ const SWATCHES: Record<ThemeId, { chat: string; side: string; raised: string }> 
   light: { chat: '#fcfbfe', side: '#f2f1f7', raised: '#6b5ce0' },
   oled: { chat: '#000000', side: '#000000', raised: '#141414' },
   anime: { chat: '#130e25', side: '#18112c', raised: '#db3d87' },
+  msn: { chat: '#ffffff', side: '#cddff6', raised: '#2f7bd6' },
 };
 
 export function ThemeSection() {

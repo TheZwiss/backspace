@@ -6,6 +6,7 @@ const THEME_COLOR: Record<ThemeId, string> = {
   light: '#e4e2ec',
   oled: '#000000',
   anime: '#0e0a1c',
+  msn: '#2a5fae',
 };
 
 function applyTheme(theme: ThemeId): void {

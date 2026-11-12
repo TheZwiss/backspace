@@ -8,7 +8,7 @@ import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { splitMentions } from '../../utils/mentionTokens';
-import { useThemeStore } from '../../stores/themeStore';
+import { isLightTheme, useThemeStore } from '../../stores/themeStore';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -97,7 +97,7 @@ const aetherLightTheme = {
 const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang, remarkEmojiShortcodes];
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
-  const isLightTheme = useThemeStore(state => state.theme === 'light');
+  const isLightScheme = useThemeStore(state => isLightTheme(state.theme));
   // 'text' means a bare fenced block with no language — render without highlighting
   if (language === 'text') {
     return (
@@ -108,7 +108,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }
 
   return (
-    <Highlight theme={isLightTheme ? aetherLightTheme : aetherTheme} code={code} language={language}>
+    <Highlight theme={isLightScheme ? aetherLightTheme : aetherTheme} code={code} language={language}>
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className="mt-1 rounded border border-wash/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"

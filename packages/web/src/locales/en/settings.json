@@ -44,6 +44,10 @@
       "anime": {
         "name": "Anime",
         "description": "Twilight indigo with sakura-pink accents."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Bright Live Messenger blue with glossy buttons and Segoe type."
       }
     }
   },
