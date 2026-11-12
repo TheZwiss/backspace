@@ -1,5 +1,5 @@
 {
-"attentionMutes": {
+  "attentionMutes": {
     "title": "Muted people",
     "description": "Mute attention sounds, animations and notices from specific people on this device. Messages and calls remain available.",
     "mute": "Mute attention effects",
@@ -396,6 +396,10 @@
         "dragHandle": "Drag {{name}} to change its priority",
         "manualNameLabel": "Name of {{name}}",
         "save": "Save"
+      },
+      "hideBrowserMedia": {
+        "label": "Hide browser players",
+        "description": "Tabs playing in Chrome, Firefox, Edge and other browsers (a YouTube video, a web player) are not shown as listening or watching."
       }
     }
   },

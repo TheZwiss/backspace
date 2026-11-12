@@ -1,5 +1,5 @@
 {
-"attentionMutes": {
+  "attentionMutes": {
     "title": "Stummgeschaltete Personen",
     "description": "Unterdrücke Anstups-Töne, Animationen und Hinweise bestimmter Personen auf diesem Gerät. Nachrichten und Anrufe bleiben verfügbar.",
     "mute": "Anstupser stummschalten",
@@ -396,6 +396,10 @@
         "dragHandle": "{{name}} ziehen, um die Priorität zu ändern",
         "manualNameLabel": "Name von {{name}}",
         "save": "Speichern"
+      },
+      "hideBrowserMedia": {
+        "label": "Browser-Player ausblenden",
+        "description": "Tabs, die in Chrome, Firefox, Edge und anderen Browsern laufen (ein YouTube-Video, ein Web-Player), werden nicht als Hören oder Ansehen angezeigt."
       }
     }
   },

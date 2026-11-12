@@ -1,5 +1,5 @@
 {
-"attentionMutes": {
+  "attentionMutes": {
     "title": "已静音的用户",
     "description": "在此设备上屏蔽指定用户的提醒声音、动画和通知。消息和通话仍可正常使用。",
     "mute": "静音窗口提醒",
@@ -395,6 +395,10 @@
         "dragHandle": "拖动 {{name}} 以更改优先级",
         "manualNameLabel": "{{name}} 的名称",
         "save": "保存"
+      },
+      "hideBrowserMedia": {
+        "label": "隐藏浏览器播放器",
+        "description": "在 Chrome、Firefox、Edge 等浏览器中播放的标签页（如 YouTube 视频、网页播放器）不会显示为正在收听或观看。"
       }
     }
   },

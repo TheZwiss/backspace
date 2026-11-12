@@ -11,6 +11,7 @@ export function PrivacyPanel() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const showActivity = useActivityStore((s) => s.showActivity);
+  const hideBrowserMedia = useActivityStore((s) => s.hideBrowserMedia);
   const [discoverable, setDiscoverable] = useState(user?.discoverable !== false);
   const [saving, setSaving] = useState(false);
 
@@ -80,6 +81,20 @@ export function PrivacyPanel() {
               }}
             />
           </div>
+          {showActivity && (
+            <div className="flex items-center justify-between py-1 mt-2 border-t border-border-soft pt-3">
+              <div className="flex-1 mr-4">
+                <div className="text-sm text-txt-primary">{t('settings:privacy.activity.hideBrowserMedia.label')}</div>
+                <div className="text-xs text-txt-tertiary mt-0.5">
+                  {t('settings:privacy.activity.hideBrowserMedia.description')}
+                </div>
+              </div>
+              <Toggle
+                enabled={hideBrowserMedia}
+                onChange={(enabled) => useActivityStore.getState().setHideBrowserMedia(enabled)}
+              />
+            </div>
+          )}
           {showActivity && <ActivityGameSection />}
         </div>
       </div>

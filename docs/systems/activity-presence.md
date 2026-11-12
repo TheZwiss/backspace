@@ -323,6 +323,8 @@ function handleActivityUpdate(event, userId) {
 
 `activityStore.pushActivities()` checks `showActivity` and returns early if false (`activityStore.ts:69`).
 
+**Browser players (`hideBrowserMedia`).** A tab playing in Chrome, Firefox, Edge or another browser is reported by the OS media session like any player, so it shows as listening or watching. Settings → Privacy → Activity status has **Hide browser players**: when on, `applyChoices` drops `listening`/`watching` activities whose player (`assets.smallText`) is a browser (`utils/browserMedia.ts`, whole-word match on `chrome`, `chromium`, `edge`, `firefox`, `brave`, `opera`, `vivaldi`, `arc`, `safari`, `librewolf`… so "Yandex Music" or "Archive Player" are not caught, and Linux MPRIS names such as `Chromium.instance4821` are). Games are never filtered. Like the game choices it is a per-client choice kept in `localStorage` (`backspace_hide_browser_media`, cleared with the account), applied before the push, so the server and federation never see the hidden activity. Off by default.
+
 ---
 
 ## Desktop Activity Detection (Boundary)

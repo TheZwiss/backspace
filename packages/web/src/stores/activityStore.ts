@@ -1,3 +1,4 @@
+import { clearHideBrowserMedia, loadHideBrowserMedia, saveHideBrowserMedia, withoutBrowserMedia } from '../utils/browserMedia';
 import { create } from 'zustand';
 import type { Activity } from '@backspace/shared';
 import { wsSendAll } from '../hooks/useWebSocket';
@@ -337,6 +338,8 @@ interface ActivityState {
   manualGames: ManualGame[];
   /** Name keys of games the player does not want shown. */
   hiddenGames: string[];
+  /** Keep browser tabs (a YouTube video, a web player) out of the activity this client sends. */
+  hideBrowserMedia: boolean;
   /** Name keys in the player's priority order; the first shown leads the lists. */
   gameOrder: string[];
   /** Detected name (lowercased) → the name the player wants shown for it. */
@@ -364,6 +367,7 @@ interface ActivityState {
   renameManualGame: (from: string, to: string) => void;
   /** Stop (or resume) showing one game; remembered. */
   setGameHidden: (name: string, hidden: boolean) => void;
+  setHideBrowserMedia: (hide: boolean) => void;
   /** The priority order of games, by name key; remembered. */
   setGameOrder: (keys: string[]) => void;
   /** Show a detected game under another name from now on (null restores its own name). */
@@ -375,7 +379,7 @@ interface ActivityState {
 
 const initialOverrides = loadOverrides();
 
-type Choices = { manualGames: ManualGame[]; hiddenGames: string[]; gameOrder: string[]; gameRenames: Record<string, string> };
+type Choices = { manualGames: ManualGame[]; hiddenGames: string[]; hideBrowserMedia: boolean; gameOrder: string[]; gameRenames: Record<string, string> };
 
 /**
  * What the player's choices make of a detected list, before icons and renames:
@@ -385,7 +389,7 @@ type Choices = { manualGames: ManualGame[]; hiddenGames: string[]; gameOrder: st
  */
 function applyChoices(list: Activity[], choices: Choices): Activity[] {
   return withOrder(
-    withoutHidden(withManualGames(list, choices.manualGames), choices.hiddenGames),
+    withoutHidden(withManualGames(withoutBrowserMedia(list, choices.hideBrowserMedia), choices.manualGames), choices.hiddenGames),
     choices.gameOrder,
   ).slice(0, ACTIVITY_LIMITS.MAX_ACTIVITIES_PER_USER);
 }
@@ -408,6 +412,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   detectedActivities: [],
   manualGames: initialOverrides.manualGames,
   hiddenGames: initialOverrides.hidden,
+  hideBrowserMedia: loadHideBrowserMedia(),
   gameOrder: initialOverrides.order,
   gameRenames: initialOverrides.renames,
 
@@ -596,6 +601,12 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
     get().republish();
   },
 
+  setHideBrowserMedia: (hide) => {
+    set({ hideBrowserMedia: hide });
+    saveHideBrowserMedia(hide);
+    get().republish();
+  },
+
   setGameOrder: (keys) => {
     set({ gameOrder: keys.slice(0, 200) });
     persistChoices(get());
@@ -633,11 +644,13 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       detectedActivities: [],
       manualGames: [],
       hiddenGames: [],
+      hideBrowserMedia: false,
       gameOrder: [],
       gameRenames: {},
     });
     // The choices belong to the signed-in player; the next account starts clean
     clearOverrides();
+    clearHideBrowserMedia();
     syncManualBindings([]);
   },
 }));
