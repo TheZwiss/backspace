@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { CopiedCheck } from '../../ui/CopiedCheck';
 import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters, type Formatters } from '../../../i18n/formatters';
@@ -22,12 +22,24 @@ function CommandBlock({ command }: { command: string }) {
   const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const [copied, setCopied] = useState(false);
+  // The "Copied" confirmation resets itself. The timer is kept so it can be
+  // cancelled when the block unmounts (or copies again): left running it fires
+  // into an unmounted component, and in a test after its environment is gone.
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+  }, []);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(() => {
+        resetTimer.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       // Clipboard access can be refused. The command is selectable either way,
       // so say so rather than failing silently.

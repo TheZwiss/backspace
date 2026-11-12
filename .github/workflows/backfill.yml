@@ -54,7 +54,10 @@ jobs:
     # Skip entirely on forks. A fork's dispatch still resolves
     # `github.repository` to its own slug and would reconstruct the fork's
     # history into the fork's own `metrics-data`; see header.
-    if: ${{ !github.event.repository.fork }}
+    # Also skip in a detached copy of the project (not a GitHub fork, so the
+    # `fork` flag is false, yet it has no release bot either): its token step
+    # would fail on every run. Only the upstream repository owns the app.
+    if: ${{ !github.event.repository.fork && github.repository == 'TheZwiss/backspace' }}
     runs-on: ubuntu-latest
     # The stargazer list is the one genuinely long paginated call this
     # package makes (100/page, no fixed cap) and this job has no other slow

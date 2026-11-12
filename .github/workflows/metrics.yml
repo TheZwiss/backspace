@@ -86,7 +86,10 @@ jobs:
     # RELEASE_BOT_APP_ID and RELEASE_BOT_PRIVATE_KEY (secrets do not propagate
     # to forks), so the token step would otherwise fail loudly on a schedule
     # the fork owner never opted into.
-    if: ${{ !github.event.repository.fork }}
+    # Also skip in a detached copy of the project (not a GitHub fork, so the
+    # `fork` flag is false, yet it has no release bot either): its token step
+    # would fail on every run. Only the upstream repository owns the app.
+    if: ${{ !github.event.repository.fork && github.repository == 'TheZwiss/backspace' }}
     runs-on: ubuntu-latest
     # Both scopes are load-bearing, and Scorecard's Token-Permissions check
     # reports a job-level `contents` or `actions` write whatever the reason
