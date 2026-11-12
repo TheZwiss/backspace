@@ -66,12 +66,14 @@
     "confirmDelete": "Delete the sound “{{name}}”?",
     "search": "Search sounds",
     "add": "Add sound",
-    "uploadHint": "Up to 5.2 seconds, 5 MB source file. Maximum 40 sounds per server.",
+    "uploadHint": "Source file up to 5 MB; longer than 5 seconds? Trim it to a 5-second clip. Maximum 40 sounds per server.",
     "name": "Sound name",
     "audioFile": "Audio file",
     "clipVolume": "Effect volume",
     "permissionHint": "A role with Create soundboard sounds permission is required to add effects.",
-    "invalidAudio": "Choose a valid audio file up to 5.2 seconds and 5 MB."
+    "invalidAudio": "Choose a valid audio file up to 5 MB.",
+    "cutSummary": "{{file}}: {{start}} s to {{end}} s",
+    "editCut": "Edit cut"
   },
   "chatPanel": {
     "title": "Chat",
@@ -419,5 +421,26 @@
     "secureContext": "Dictation needs microphone access over HTTPS, localhost, or the updated Electron client.",
     "callHint": "Join a call and unmute synthesized voice to send automatically. You can still dictate to fill the text box.",
     "gpuError": "GPU unavailable for this model. Use CPU or Automatic."
+  },
+  "trimmer": {
+    "title": "Trim sound effect",
+    "tooLong": "{{file}} lasts {{total}}. Choose up to {{max}} to keep.",
+    "fits": "{{file}} lasts {{total}}. You can trim it; up to {{max}} is kept.",
+    "seconds": "{{value}} s",
+    "start": "Start",
+    "end": "End",
+    "length": "Length",
+    "preview": "Preview",
+    "stop": "Stop",
+    "trimSilence": "Trim silence",
+    "trimSilenceHint": "Frame the audible part and drop silence at the edges",
+    "reset": "Reset",
+    "fade": "Fade edges",
+    "help": "Drag the handles to resize, drag the middle or click the waveform to move. With a handle focused, use the arrow keys (Shift for larger steps).",
+    "apply": "Use this cut",
+    "windowHandle": "Selected part",
+    "startHandle": "Cut start",
+    "endHandle": "Cut end",
+    "windowValue": "{{start}} to {{end}}"
   }
 }
