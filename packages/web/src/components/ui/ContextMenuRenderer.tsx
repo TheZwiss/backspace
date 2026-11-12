@@ -13,6 +13,7 @@ import {
 } from '../../stores/contextMenuStore';
 import { useUIStore } from '../../stores/uiStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
+import { useBackDismiss } from '../../utils/overlayBack';
 
 // ── Desktop item button ──────────────────────────────────────────────────────
 
@@ -690,6 +691,8 @@ export function ContextMenuRenderer() {
 
   // Global long-press detection — enables context menus on all touch targets
   useGlobalLongPress(isMobile);
+  // The system Back closes the open menu sheet instead of leaving the screen
+  useBackDismiss(close, isMobile && menu !== null);
 
   if (!menu) return null;
 

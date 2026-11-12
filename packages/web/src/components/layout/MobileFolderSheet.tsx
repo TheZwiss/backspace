@@ -1,3 +1,4 @@
+import { useBackDismiss } from '../../utils/overlayBack';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SpaceFolder } from '@backspace/shared';
@@ -30,6 +31,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(folder.name || '');
   const openContextMenu = useContextMenuStore((s) => s.open);
+  useBackDismiss(onClose);
 
   const folderSpaces = folder.spaceIds
     .map(sid => spaces.find(s => s.id === sid))

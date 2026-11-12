@@ -1,3 +1,4 @@
+import { useBackDismiss } from '../../utils/overlayBack';
 import { userSocialMenuItems } from './memberMenu/memberSocialActions';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -84,6 +85,8 @@ export function MobileSpacesScreen() {
   );
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
+  // The system Back closes the add-space sheet (it has no close button of its own)
+  useBackDismiss(() => setShowAddSheet(false), showAddSheet);
   const [leaveConfirmSpaceId, setLeaveConfirmSpaceId] = useState<string | null>(null);
   const [deleteChannelId, setDeleteChannelId] = useState<string | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
@@ -690,6 +693,7 @@ export function MobileSpacesScreen() {
             setMobileTab('dms');
             navigate('/channels/@me');
           }}
+          aria-label={t('spaces:sidebar.directMessages')}
           className="w-10 h-10 rounded-2xl bg-surface-elevated flex items-center justify-center text-txt-secondary hover:text-txt-primary hover:bg-accent-primary transition-all"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -792,6 +796,8 @@ export function MobileSpacesScreen() {
         {/* Add space button */}
         <button data-icon-motion="press"
           onClick={() => setShowAddSheet(true)}
+          aria-label={t('spaces:sidebar.addSpace')}
+          aria-haspopup="menu"
           className="w-10 h-10 rounded-2xl bg-surface-elevated flex items-center justify-center text-accent-mint hover:bg-accent-mint/10 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -811,6 +817,7 @@ export function MobileSpacesScreen() {
             {canInvite && (
               <button data-icon-motion="press"
                 onClick={() => openModal('invite', { spaceId: selectedSpaceId })}
+                aria-label={t('spaces:invite.title')}
                 className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -821,6 +828,7 @@ export function MobileSpacesScreen() {
             {canManageSpace && (
               <button data-icon-motion="gear"
                 onClick={() => openModal('spaceSettings', { spaceId: selectedSpaceId })}
+                aria-label={t('spaces:sidebar.space.settings')}
                 className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

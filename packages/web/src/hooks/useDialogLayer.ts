@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { registerBackDismissOnMobile } from '../utils/overlayBack';
 
 interface DialogOptions {
   open?: boolean;
@@ -165,6 +166,10 @@ export function useDialogLayer(ref: RefObject<HTMLElement>, options: DialogOptio
     observer.observe(element, { childList: true, subtree: true, characterData: true });
     const layer: DialogLayer = { element, close: () => current.current.onClose(), dismissible: () => current.current.dismissible !== false };
     manager.add(layer);
-    return () => { observer.disconnect(); manager.remove(layer, previousFocus.current); };
+    // On a phone the system Back closes the dialog instead of leaving the screen under it
+    const unregisterBack = layer.dismissible()
+      ? registerBackDismissOnMobile(() => { if (layer.dismissible()) layer.close(); })
+      : null;
+    return () => { unregisterBack?.(); observer.disconnect(); manager.remove(layer, previousFocus.current); };
   }, [open, ref]);
 }

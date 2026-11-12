@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { useDragToClose } from '../../hooks/useDragToClose';
 import { PickerEscapeScope } from './pickerEscape';
+import { useBackDismiss } from '../../utils/overlayBack';
 
 interface MobilePickerSheetProps {
   onClose: () => void;
@@ -30,6 +31,8 @@ export function MobilePickerSheet({ onClose, header, label, children }: MobilePi
   // during snap-back / close-out, which would otherwise fight the inline
   // transform the hook is animating.
   const { sheetStyle, handleProps, hasInteracted } = useDragToClose({ onClose });
+  // The system Back closes the picker instead of leaving the chat
+  useBackDismiss(onClose);
 
   return createPortal(
     <>
