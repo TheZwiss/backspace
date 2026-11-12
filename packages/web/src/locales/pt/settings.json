@@ -28,6 +28,10 @@
   "theme": {
     "label": "Tema",
     "description": "Escolha a aparência do Backspace. Salvo neste navegador ou app, neste dispositivo.",
+    "msnFrames": {
+      "label": "Bordas do Windows XP",
+      "description": "Bordas azuis chanfradas nas janelas, como no Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",
@@ -44,6 +48,14 @@
       "anime": {
         "name": "Anime",
         "description": "Índigo crepuscular com detalhes em rosa sakura."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Azul claro do Live Messenger com botões brilhantes e fonte Segoe."
+      },
+      "msn-dark": {
+        "name": "MSN Escuro",
+        "description": "Azul do Live Messenger sobre marinho profundo, com botões brilhantes."
       }
     }
   },

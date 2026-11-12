@@ -178,6 +178,7 @@ export function DmMemberRow({
           name={displayName}
           size={32}
           status={isOffline ? null : canonical.status}
+          frameStatus={canonical.status}
           user={canonical}
           origin={origin}
           placement="left"

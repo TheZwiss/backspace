@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { THEMES, useThemeStore, type ThemeId } from '../../../stores/themeStore';
+import { Toggle } from '../../ui/Toggle';
+import { THEMES, isMsnTheme, useThemeStore, type ThemeId } from '../../../stores/themeStore';
 
 /** Swatches mirror the theme's chat, sidebar and elevated surfaces. */
 const SWATCHES: Record<ThemeId, { chat: string; side: string; raised: string }> = {
@@ -7,12 +8,16 @@ const SWATCHES: Record<ThemeId, { chat: string; side: string; raised: string }> 
   light: { chat: '#fcfbfe', side: '#f2f1f7', raised: '#6b5ce0' },
   oled: { chat: '#000000', side: '#000000', raised: '#141414' },
   anime: { chat: '#130e25', side: '#18112c', raised: '#db3d87' },
+  msn: { chat: '#ffffff', side: '#cddff6', raised: '#2f7bd6' },
+  'msn-dark': { chat: '#0e192f', side: '#172b52', raised: '#3b8ae6' },
 };
 
 export function ThemeSection() {
   const { t } = useTranslation('settings');
   const theme = useThemeStore(state => state.theme);
   const setTheme = useThemeStore(state => state.setTheme);
+  const msnFrames = useThemeStore(state => state.msnFrames);
+  const setMsnFrames = useThemeStore(state => state.setMsnFrames);
 
   return (
     <div>
@@ -42,6 +47,15 @@ export function ThemeSection() {
             );
           })}
         </div>
+        {isMsnTheme(theme) && (
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="block text-sm font-medium text-txt-primary">{t('theme.msnFrames.label')}</span>
+              <span className="block text-xs text-txt-tertiary">{t('theme.msnFrames.description')}</span>
+            </div>
+            <Toggle enabled={msnFrames} onChange={setMsnFrames} ariaLabel={t('theme.msnFrames.label')} />
+          </div>
+        )}
       </div>
     </div>
   );

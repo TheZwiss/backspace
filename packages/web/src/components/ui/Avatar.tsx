@@ -22,6 +22,12 @@ interface AvatarProps {
    */
   palette?: 'user' | 'space';
   animate?: boolean;
+  /**
+   * Presence the avatar's surrounding frame is tinted with. Purely presentational
+   * (read by themes through `data-frame-status`); it draws nothing by itself and
+   * is independent of `status`, which controls the dot.
+   */
+  frameStatus?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
 
 /**
@@ -56,7 +62,7 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user', animate = false }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user', animate = false, frameStatus }: AvatarProps) {
   const imageUrl = src ? ((src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/')) ? src : `/api/uploads/${src}`) : null;
   const displayedSrc = useStaticAvatar(imageUrl, animate || palette === 'space');
   const initials = name.charAt(0).toUpperCase();
@@ -79,6 +85,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   return (
     <div data-icon-motion-target="" data-icon-motion={onClick ? 'press' : undefined}
       data-avatar
+      data-frame-status={frameStatus ?? undefined}
       className={`relative inline-flex flex-shrink-0 ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: outerSize, height: outerSize }}
       onClick={onClick}

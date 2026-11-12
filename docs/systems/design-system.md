@@ -102,6 +102,25 @@ the `theme-color` meta before React mounts, so login and portals are covered.
 text-neutral, interactive and glass tokens: every structural surface is true
 black (`0 0 0`), `--bg-elevated` is `20 20 20`, `--bg-input` is `12 12 12`, and
 separation comes from hairline borders. Accents and status colours are shared.
+`msn` ("Live Messenger") and `msn-dark` ("Live Messenger Dark", deep navy) are two variants of one presentation-only family (`isMsnTheme`; `platform/theme.ts` sets `html[data-msn]` for both, and every structural rule keys on it; the `msn-dark` block at the end of `theme-msn.css` only restates colours). `msn` is a light theme in its own file,
+`styles/theme-msn.css` (unlayered, imported after `globals.css`): Luna/Aero blue
+frames, glossy gradient buttons, a dark-blue space strip, glossy header bands,
+white conversation pane with a docked composer, Segoe UI/Tahoma type, 4px radii
+and no backdrop blur. It changes no DOM or behaviour; only the sidebar home tile
+swaps to `MsnMark`. `isLightTheme(theme)` in `themeStore` is true for `light` and
+`msn` and drives the emoji picker and code theme. The Windows XP (Luna) bevels and double borders are a
+device-local option, `themeStore.msnFrames` (default on, persisted in
+`backspace-theme`, shown as a switch under the theme list only while `msn` is
+selected); `platform/theme.ts` mirrors it to `html[data-msn-frames="xp|flat"]`
+and the `flat` block at the end of `theme-msn.css` removes the bevels. Login and
+register carry `data-auth-page` / `data-auth-card` (inert markers) so the theme
+can draw the Messenger sign-in window (sky background, framed display picture)
+around the unchanged form. In direct messages the MSN theme frames each
+contact photo in a translucent glass frame tinted by presence (green online,
+amber idle, red busy, grey offline): `Avatar` takes an optional `frameStatus`
+prop that only sets `data-frame-status` (DM messages and `DmMemberRow` pass it;
+the dot is hidden by CSS under that attribute). References: dsn10-theme, msn-js,
+Windows-Live-Messenger.
 `anime` also changes elements, not just colours, all gated on `theme === 'anime'`
 (or `:root[data-theme="anime"]`): the `Mascot` gets cat ears, an ahoge, star
 catchlights, cheek marks, twinkling sparkles and the sakura palette

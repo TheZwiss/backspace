@@ -28,6 +28,10 @@
   "theme": {
     "label": "主题",
     "description": "选择 Backspace 的外观。设置保存在此设备上的当前浏览器或应用中。",
+    "msnFrames": {
+      "label": "Windows XP 边框",
+      "description": "类似 Windows XP 的斜面蓝色窗口边框。"
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",
@@ -44,6 +48,14 @@
       "anime": {
         "name": "动漫",
         "description": "暮色靛紫搭配樱花粉点缀。"
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "明亮的 Live Messenger 蓝色，带有光泽按钮和 Segoe 字体。"
+      },
+      "msn-dark": {
+        "name": "MSN 深色",
+        "description": "深海军蓝底色上的 Live Messenger 蓝色，带有光泽按钮。"
       }
     }
   },

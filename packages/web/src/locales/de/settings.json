@@ -28,6 +28,10 @@
   "theme": {
     "label": "Design",
     "description": "Lege fest, wie Backspace aussieht. Wird in diesem Browser oder dieser App auf diesem Gerät gespeichert.",
+    "msnFrames": {
+      "label": "Windows-XP-Rahmen",
+      "description": "Abgeschrägte blaue Fensterrahmen wie in Windows XP."
+    },
     "options": {
       "aether-drift": {
         "name": "Aether Drift",
@@ -44,6 +48,14 @@
       "anime": {
         "name": "Anime",
         "description": "Dämmerungs-Indigo mit Sakura-rosa Akzenten."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Helles Live-Messenger-Blau mit glänzenden Schaltflächen und Segoe-Schrift."
+      },
+      "msn-dark": {
+        "name": "MSN Dunkel",
+        "description": "Live-Messenger-Blau auf tiefem Marineblau, mit glänzenden Schaltflächen."
       }
     }
   },
