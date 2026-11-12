@@ -41,6 +41,7 @@ import { cspReportRoutes } from './routes/cspReport.js';
 import { buildCspHeaderValue, CSP_REPORT_GROUP, CSP_REPORT_PATH } from './utils/csp.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
+import { startDiskPressureWorker, stopDiskPressureWorker } from './utils/diskPressure.js';
 import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
 import { startDirectoryPinger, stopDirectoryPinger } from './directory/pinger.js';
 import { errorBody } from './utils/httpErrors.js';
@@ -340,6 +341,7 @@ async function main(): Promise<void> {
   }
 
   startBackupWorker();
+  startDiskPressureWorker();
 
   // The space directory pinger stays outside the workers guard on purpose:
   // the two-instance harness disables the workers and still needs the pinger,
@@ -352,6 +354,7 @@ async function main(): Promise<void> {
     stopTelemetryReporter();
     stopDirectoryPinger();
     stopBackupWorker();
+    stopDiskPressureWorker();
     await app.close();
     closeDatabase(); // checkpoints WAL — leaves a complete on-disk file
     process.exit(0);

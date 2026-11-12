@@ -444,6 +444,61 @@ export function cleanupOldMedia(maxAgeDays: number, dryRun: boolean): CleanupRes
   return { dryRun, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
 }
 
+/** Most chat attachments one pressure sweep will consider; the rest wait for the next sweep. */
+const PRESSURE_CANDIDATE_CAP = 20_000;
+/** Files deleted between two checks of `shouldStop`, so the disk is not re-read per file. */
+const PRESSURE_STOP_CHECK_EVERY = 20;
+
+/**
+ * Delete chat attachments oldest first, until `shouldStop()` says the disk has
+ * room again. Used by the disk-pressure worker (`diskPressure.ts`) after the
+ * safe cleanups were not enough.
+ *
+ * - Nothing newer than `minAgeDays` is touched, however full the disk is.
+ * - Files in use as a profile image (avatar, banner, space icon) are skipped.
+ * - The attachment row goes with its file, the same as `cleanupOldMedia`; the
+ *   message keeps its text.
+ *
+ * `shouldStop` is asked before the first deletion and then every
+ * PRESSURE_STOP_CHECK_EVERY files, so a disk that is already fine deletes nothing.
+ */
+export function deleteOldestMedia(minAgeDays: number, shouldStop: () => boolean): CleanupResult {
+  const db = getDb();
+  const cutoff = Date.now() - minAgeDays * 24 * 60 * 60 * 1000;
+  const profileReferenced = getProfileReferencedFilenames();
+  const errors: string[] = [];
+  let deletedFiles = 0;
+  let freedBytes = 0;
+  let deletedAttachmentRecords = 0;
+
+  if (shouldStop()) return { dryRun: false, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+
+  const candidates = getRawDb().prepare(`
+    SELECT id, filename, size FROM attachments
+    WHERE (message_id IS NOT NULL OR dm_message_id IS NOT NULL)
+      AND created_at < ?
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(cutoff, PRESSURE_CANDIDATE_CAP) as { id: string; filename: string; size: number }[];
+
+  for (const att of candidates) {
+    if (profileReferenced.has(path.basename(att.filename))) continue;
+    try {
+      deleteUploadFile(att.filename);
+      db.delete(schema.attachments).where(eq(schema.attachments.id, att.id)).run();
+    } catch (err: unknown) {
+      errors.push(`Failed to delete old media ${att.id}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    deletedFiles++;
+    freedBytes += att.size;
+    deletedAttachmentRecords++;
+    if (deletedFiles % PRESSURE_STOP_CHECK_EVERY === 0 && shouldStop()) break;
+  }
+
+  return { dryRun: false, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+}
+
 /**
  * Delete federation outbox rows past their relay TTL, by queue: see
  * `expireOutboxQueues`. Returns the number of rows deleted.

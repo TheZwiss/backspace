@@ -333,6 +333,20 @@ export const config = {
       ? 'https://explore.backspacechat.com'
       : process.env.DIRECTORY_ENDPOINT.trim().replace(/\/+$/, ''),
   },
+  /**
+   * Automatic cleanup when the disk holding the data directory fills up. Off by
+   * default because it deletes members' old attachments; see utils/diskPressure.ts.
+   */
+  diskCleanup: {
+    enabled: envBool('DISK_CLEANUP', false),
+    /** Used-space percentage at which a sweep starts. */
+    thresholdPercent: envInt('DISK_CLEANUP_THRESHOLD_PERCENT', 90),
+    /** A sweep deletes old chat media until usage falls below this percentage. */
+    targetPercent: envInt('DISK_CLEANUP_TARGET_PERCENT', 80),
+    intervalMinutes: envInt('DISK_CLEANUP_INTERVAL_MINUTES', 15),
+    /** Chat attachments newer than this many days are never deleted by a sweep. */
+    minAgeDays: envInt('DISK_CLEANUP_MIN_AGE_DAYS', 30),
+  },
   backup: {
     dir: envOptional('BACKUP_DIR') ?? resolve(dirname(env('DB_PATH', resolve(__dirname, '../../../data/backspace.db'))), 'backups'),
     intervalHours: envInt('BACKUP_INTERVAL_HOURS', 24),

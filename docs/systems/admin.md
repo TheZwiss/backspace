@@ -237,6 +237,7 @@ All admin-only.
 
 ```
 GET  /api/admin/storage/stats         → StorageStats
+GET  /api/admin/storage/disk          → DiskPressureStatus (live disk usage, DISK_CLEANUP settings, last sweep)
 GET  /api/admin/storage/orphans       → { orphans: OrphanedFile[] }
 POST /api/admin/storage/cleanup       { dryRun?: boolean } → CleanupResult
 POST /api/admin/storage/cleanup-media { maxAgeDays: number, dryRun?: boolean } → CleanupResult

@@ -441,6 +441,7 @@ Errors: `400 validation_failed` (no known field, or a value of the wrong kind), 
 ## Admin (`routes/admin.ts`) — admin required
 ```
 GET    /admin/storage/stats                                → StorageStats
+GET    /admin/storage/disk                                 → DiskPressureStatus
 GET    /admin/storage/orphans                              → { orphans[] }
 POST   /admin/storage/cleanup        { dryRun? }           → CleanupResult
 POST   /admin/storage/cleanup-media  { maxAgeDays, dryRun? } → CleanupResult
