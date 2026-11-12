@@ -86,6 +86,8 @@ let isPolling = false;
 let manualBindings: ManualBinding[] = [];
 
 let hasErrored = false;
+/** Polls in a row whose process listing failed; reset by the first success. */
+let consecutiveListFailures = 0;
 let onChangeCallback: ((activity: Activity | null) => void) | null = null;
 let onListChangeCallback: ((activities: Activity[]) => void) | null = null;
 
@@ -291,15 +293,53 @@ export function readProcessInfoByPid(pid: number, procRoot = '/proc'): ProcessIn
 const WINDOWS_PROCESS_QUERY =
   'Get-CimInstance Win32_Process | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress';
 
-function getProcessCommand(): { executable: string; args: string[] } {
-  if (process.platform === 'win32') {
-    return { executable: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_PROCESS_QUERY] };
+interface ProcessCommand {
+  executable: string;
+  args: string[];
+}
+
+/**
+ * Every command that can list processes on a platform, best first. Windows
+ * tries the structured PowerShell query and falls back to `tasklist` (image
+ * names only) when PowerShell is blocked, slow or missing.
+ */
+export function getProcessCommands(platform: NodeJS.Platform = process.platform): ProcessCommand[] {
+  if (platform === 'win32') {
+    return [
+      { executable: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_PROCESS_QUERY] },
+      { executable: 'tasklist.exe', args: ['/fo', 'csv', '/nh'] },
+    ];
   }
-  if (process.platform === 'darwin') {
-    return { executable: 'ps', args: ['-axo', 'pid=,command='] };
+  if (platform === 'darwin') {
+    return [{ executable: 'ps', args: ['-axo', 'pid=,command='] }];
   }
   // Linux and other Unix
-  return { executable: 'ps', args: ['-A', '-o', 'comm'] };
+  return [{ executable: 'ps', args: ['-A', '-o', 'comm'] }];
+}
+
+/**
+ * Options for the process-listing child. The Windows query returns the command
+ * line of every process as JSON, which on a desktop with browsers, launchers and
+ * a game running is several MB: the old 1 MB cap made every poll fail with
+ * "maxBuffer exceeded", and the first failure used to switch detection off for
+ * the rest of the session. `windowsHide` keeps PowerShell from flashing a
+ * console window on every poll, and the timeout stops a hung query from holding
+ * the poll lock forever.
+ */
+export const PROCESS_QUERY_EXEC_OPTIONS = {
+  maxBuffer: 64 * 1024 * 1024,
+  timeout: 20_000,
+  windowsHide: true,
+  encoding: 'buffer' as const,
+};
+
+/**
+ * Whether a failed listing means no later poll can ever succeed. Only a missing
+ * executable qualifies; a timeout, a full buffer or a non-zero exit is
+ * transient and the next poll tries again.
+ */
+export function isPermanentProcessListFailure(errors: ReadonlyArray<NodeJS.ErrnoException>): boolean {
+  return errors.length > 0 && errors.every((err) => err.code === 'ENOENT');
 }
 
 /**
@@ -1341,25 +1381,50 @@ function poll(): void {
   pollViaCommand();
 }
 
+function runProcessCommand(command: ProcessCommand): Promise<{ stdout: string } | { error: NodeJS.ErrnoException }> {
+  return new Promise((resolve) => {
+    execFile(command.executable, command.args, PROCESS_QUERY_EXEC_OPTIONS, (error, stdout) => {
+      if (error) {
+        resolve({ error: error as NodeJS.ErrnoException });
+        return;
+      }
+      resolve({ stdout: typeof stdout === 'string' ? stdout : decodeWin32Output(stdout) });
+    });
+  });
+}
+
 function pollViaCommand(): void {
-  const { executable, args } = getProcessCommand();
-
-  execFile(executable, args, { maxBuffer: 1024 * 1024, encoding: 'buffer' }, (error, stdout) => {
-    isPolling = false;
-
-    if (error) {
+  void (async () => {
+    const errors: NodeJS.ErrnoException[] = [];
+    try {
+      for (const command of getProcessCommands()) {
+        const result = await runProcessCommand(command);
+        if ('error' in result) {
+          errors.push(result.error);
+          continue;
+        }
+        if (consecutiveListFailures > 0) {
+          console.log(`[ActivityDetector] process listing recovered after ${consecutiveListFailures} failed poll(s)`);
+          hasErrored = false;
+          consecutiveListFailures = 0;
+        }
+        const infos = parsePlatformProcesses(result.stdout);
+        applyDetectedGames(detectActivitiesWithInfo(infos, gameEntries, undefined, undefined, manualBindings), infos);
+        return;
+      }
+      consecutiveListFailures++;
       if (!hasErrored) {
-        console.warn('[ActivityDetector] execFile failed:', error.message, '— stopping detection');
         hasErrored = true;
+        console.warn('[ActivityDetector] process listing failed:', errors.map((e) => e.message).join(' | '));
+      }
+      if (isPermanentProcessListFailure(errors)) {
+        console.warn('[ActivityDetector] no process-listing command exists on this system — stopping detection');
         stopActivityDetection();
       }
-      return;
+    } finally {
+      isPolling = false;
     }
-
-    const rawString = typeof stdout === 'string' ? stdout : decodeWin32Output(stdout);
-    const infos = parsePlatformProcesses(rawString);
-    applyDetectedGames(detectActivitiesWithInfo(infos, gameEntries, undefined, undefined, manualBindings), infos);
-  });
+  })();
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -1386,6 +1451,7 @@ export function startActivityDetection(
   onChangeCallback = onActivityChange;
   onListChangeCallback = onActivitiesChange ?? null;
   hasErrored = false;
+  consecutiveListFailures = 0;
 
   // Run first poll immediately
   poll();

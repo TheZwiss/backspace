@@ -210,3 +210,84 @@ describe('cleanupStorage — dm_channels.icon protection', () => {
     expect(result.deletedFiles).toBe(1);
   });
 });
+
+describe('deleteOldestMedia — disk-pressure eviction', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysAgo = (n: number): number => Date.now() - n * DAY;
+
+  // The rule under test is which attachments go, not the message graph behind them
+  beforeEach(() => { testRawDb.pragma('foreign_keys = OFF'); });
+
+  function chatMedia(id: string, filename: string, ageDays: number, size = 100): void {
+    writeFile(filename);
+    insertAttachment({ id, filename, size, createdAt: daysAgo(ageDays), messageId: `msg-${id}` });
+  }
+
+  const rowIds = (): string[] => (testRawDb.prepare('SELECT id FROM attachments ORDER BY id').all() as { id: string }[]).map((r) => r.id);
+
+  it('deletes nothing when the disk already has room', async () => {
+    const { deleteOldestMedia } = await import('./storageJanitor.js');
+    chatMedia('old', 'old.png', 90);
+
+    const result = deleteOldestMedia(30, () => true);
+
+    expect(result.deletedFiles).toBe(0);
+    expect(fs.existsSync(path.join(tmpUploadDir, 'old.png'))).toBe(true);
+    expect(rowIds()).toEqual(['old']);
+  });
+
+  it('deletes oldest first and never anything newer than the age floor', async () => {
+    const { deleteOldestMedia } = await import('./storageJanitor.js');
+    chatMedia('a-oldest', 'a.png', 120, 500);
+    chatMedia('b-old', 'b.png', 60, 300);
+    chatMedia('c-recent', 'c.png', 10, 200);
+
+    const result = deleteOldestMedia(30, () => false);
+
+    expect(result).toMatchObject({ deletedFiles: 2, freedBytes: 800, deletedAttachmentRecords: 2, dryRun: false });
+    expect(fs.existsSync(path.join(tmpUploadDir, 'a.png'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpUploadDir, 'b.png'))).toBe(false);
+    // 10 days old is under the 30-day floor, however full the disk is
+    expect(fs.existsSync(path.join(tmpUploadDir, 'c.png'))).toBe(true);
+    expect(rowIds()).toEqual(['c-recent']);
+  });
+
+  it('stops as soon as the disk has room, oldest first', async () => {
+    const { deleteOldestMedia } = await import('./storageJanitor.js');
+    for (let i = 0; i < 45; i++) chatMedia(`m${String(i).padStart(2, '0')}`, `f${i}.png`, 200 - i);
+
+    // Room appears after the first batch of 20 files (the check runs every 20)
+    let checks = 0;
+    const result = deleteOldestMedia(30, () => ++checks > 1);
+
+    expect(result.deletedFiles).toBe(20);
+    const left = rowIds();
+    expect(left).toHaveLength(25);
+    // The 20 deleted are the 20 oldest (m00..m19)
+    expect(left[0]).toBe('m20');
+  });
+
+  it('skips files in use as a profile image', async () => {
+    const { deleteOldestMedia } = await import('./storageJanitor.js');
+    chatMedia('avatar-copy', 'icon.png', 200);
+    chatMedia('plain', 'plain.png', 100);
+    insertDmChannel({ id: 'dm-1', icon: 'icon.png' });
+
+    const result = deleteOldestMedia(30, () => false);
+
+    expect(result.deletedFiles).toBe(1);
+    expect(fs.existsSync(path.join(tmpUploadDir, 'icon.png'))).toBe(true);
+    expect(rowIds()).toEqual(['avatar-copy']);
+  });
+
+  it('leaves attachments that were never linked to a message to the safe cleanup', async () => {
+    const { deleteOldestMedia } = await import('./storageJanitor.js');
+    writeFile('unlinked.png');
+    insertAttachment({ id: 'unlinked', filename: 'unlinked.png', createdAt: daysAgo(300) });
+
+    const result = deleteOldestMedia(30, () => false);
+
+    expect(result.deletedFiles).toBe(0);
+    expect(rowIds()).toEqual(['unlinked']);
+  });
+});

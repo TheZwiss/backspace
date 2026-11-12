@@ -59,6 +59,19 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rolldownOptions: {
+      output: {
+        // The video encoder (mediabunny) is only fetched when someone sends a
+        // video, so it gets its own directory and stays out of the precache
+        // (PRECACHE_EXCLUDED_PREFIXES); every client would otherwise download it
+        // on install.
+        codeSplitting: {
+          groups: [{ name: 'media-compression/mediabunny', test: /node_modules[\\/]mediabunny[\\/]/ }],
+        },
+      },
+    },
+  },
   worker: { format: 'es', rollupOptions: { external: ['module'], output: { entryFileNames: 'local-text-voice/[name]-[hash].js', chunkFileNames: 'local-text-voice/[name]-[hash].js' } } },
   test: {
     globals: true,

@@ -102,6 +102,22 @@
       "denied": "麦克风权限被阻止。请允许 Backspace 使用麦克风以录音。",
       "unavailable": "没有可用于录音的麦克风。",
       "limit": "已达到录制上限，你的语音消息已发送。"
+    },
+    "attach": {
+      "menuLabel": "附加",
+      "photoVideo": "照片或视频",
+      "photoVideoCompressed": "发送前在你的设备上压缩",
+      "photoVideoOriginal": "按原样发送（压缩已关闭）",
+      "document": "文档",
+      "documentHint": "任何文件，按原样发送",
+      "compressDefault": "压缩照片和视频",
+      "compressDefaultHint": "上传更小。关闭后保留原件。"
+    },
+    "preparing": {
+      "image": "正在压缩照片…",
+      "video": "正在压缩视频… {{percent}}%",
+      "sendOriginal": "发送原件",
+      "cancel": "取消"
     }
   },
   "menu": {

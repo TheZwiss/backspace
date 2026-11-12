@@ -244,5 +244,9 @@
   "sticker_limit_out_of_range": "Das Sticker-Größenlimit muss zwischen {{min}} und {{max}} MB liegen.",
   "game_icon_invalid_image": "Lade ein PNG-, JPEG- oder WebP-Bild mit höchstens {{max}} MB hoch.",
   "game_icon_not_found": "Dieses Spielsymbol gibt es nicht mehr.",
-  "game_icon_collection_full": "Die Sammlung der Spielsymbole ist mit {{max}} Symbolen voll."
+  "game_icon_collection_full": "Die Sammlung der Spielsymbole ist mit {{max}} Symbolen voll.",
+  "disk_cleanup_threshold_out_of_range": "Die Startschwelle muss eine ganze Zahl zwischen {{min}} und {{max}} sein.",
+  "disk_cleanup_target_out_of_range": "Das Bereinigungsziel muss eine ganze Zahl zwischen {{min}} und {{max}} sein.",
+  "disk_cleanup_age_out_of_range": "Das Alter muss eine ganze Zahl von Tagen zwischen {{min}} und {{max}} sein.",
+  "disk_cleanup_disabled": "Die automatische Festplattenbereinigung ist ausgeschaltet."
 }

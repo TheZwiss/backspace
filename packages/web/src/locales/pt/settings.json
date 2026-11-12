@@ -1,5 +1,5 @@
 {
-"attentionMutes": {
+  "attentionMutes": {
     "title": "Pessoas silenciadas",
     "description": "Silencie sons, animações e avisos de atenção de pessoas específicas neste dispositivo. Mensagens e chamadas continuam disponíveis.",
     "mute": "Silenciar chamadas de atenção",
@@ -397,6 +397,10 @@
         "dragHandle": "Arraste {{name}} para mudar a prioridade",
         "manualNameLabel": "Nome de {{name}}",
         "save": "Salvar"
+      },
+      "hideBrowserMedia": {
+        "label": "Ocultar players de navegador",
+        "description": "Abas tocando no Chrome, Firefox, Edge e outros navegadores (um vídeo do YouTube, um player web) não aparecem como ouvindo ou assistindo."
       }
     }
   },

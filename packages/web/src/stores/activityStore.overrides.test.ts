@@ -387,3 +387,38 @@ describe('removing a manual game', () => {
     expect(useActivityStore.getState().hiddenGames).toEqual(['hades']);
   });
 });
+
+describe('hide browser players', () => {
+  const TAB: Activity = { type: 'listening', name: 'Lofi stream', assets: { smallText: 'Firefox' } };
+  const SPOTIFY: Activity = { type: 'listening', name: 'Song', assets: { smallText: 'Spotify' } };
+
+  it('sends browser media by default', async () => {
+    useActivityStore.getState().pushActivities([TAB, SPOTIFY]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(lastSent()).toEqual([TAB, SPOTIFY]);
+  });
+
+  it('drops browser media but keeps music apps and games once switched on, and remembers it', async () => {
+    useActivityStore.getState().pushActivities([RUNTIME, TAB, SPOTIFY]);
+    await vi.advanceTimersByTimeAsync(5000);
+    useActivityStore.getState().setHideBrowserMedia(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(lastSent()).toEqual([RUNTIME, SPOTIFY]);
+    expect(localStorage.getItem('backspace_hide_browser_media')).toBe('1');
+  });
+
+  it('clears what was already shown when only browser media was playing', async () => {
+    useActivityStore.getState().pushActivities([TAB]);
+    await vi.advanceTimersByTimeAsync(5000);
+    useActivityStore.getState().setHideBrowserMedia(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(lastSent()).toEqual([]);
+  });
+
+  it('is forgotten with the account', () => {
+    useActivityStore.getState().setHideBrowserMedia(true);
+    useActivityStore.getState().reset();
+    expect(useActivityStore.getState().hideBrowserMedia).toBe(false);
+    expect(localStorage.getItem('backspace_hide_browser_media')).toBeNull();
+  });
+});

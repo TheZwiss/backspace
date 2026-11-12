@@ -69,6 +69,10 @@ Settings are split into two API surfaces:
 | maxUploadSizeMb | number | maxUploadSizeBytes | positive integer (>=1 MB), upper bound is JS safe-integer ceiling (~8 EB) — effectively unlimited | Operator-set; no application cap. Stored as bytes; converted on read/write. DB null = use env `MAX_UPLOAD_SIZE` (default 100MB) |
 | federationRelayEnabled | boolean | federationRelayEnabled | boolean | Default: 1 (enabled) |
 | federationRelayTtlDays | number | federationRelayTtlDays | integer 1-365 | Default: 30 days |
+| diskCleanupEnabled | boolean | diskCleanupEnabled | boolean (`400 field_not_boolean`) | Default: false. Automatic cleanup when the disk is nearly full; see Settings > Storage below |
+| diskCleanupThresholdPercent | number | diskCleanupThresholdPercent | integer 50-99 (`400 disk_cleanup_threshold_out_of_range`) | Default: 90 |
+| diskCleanupTargetPercent | number | diskCleanupTargetPercent | integer 10..threshold-5, judged against the threshold in force after the write (`400 disk_cleanup_target_out_of_range`) | Default: 80 |
+| diskCleanupMinAgeDays | number | diskCleanupMinAgeDays | integer 1-3650 (`400 disk_cleanup_age_out_of_range`) | Default: 30 |
 | autoAcceptPeering | boolean | autoAcceptPeering | boolean | Default: true. When false, `peer/accept` rejects unsolicited requests (403 PEERING_REQUIRES_APPROVAL); only requests where a local `pending` record already exists are accepted |
 | directoryEnabled | boolean | directoryEnabled | boolean; `true` needs `discoveryEnabled` on (400 `directory_requires_discovery`) | Default: false. Allows spaces here to be listed in the space directory. Cleared in the same write whenever discovery is switched off, on either PATCH route. See [directory.md](directory.md) |
 | directoryBrowseEnabled | boolean | directoryBrowseEnabled | boolean (400 `field_not_boolean`) | Default: true. Allows people here to see spaces from other instances in Explore. The incoming axis, independent of `directoryEnabled`: nothing clears it and it is not part of the discovery invariant. Gates `GET /api/directory` and `directoryAvailable` on the public instance info. Changing it never marks the directory dirty. See [directory.md](directory.md) |
@@ -237,6 +241,8 @@ All admin-only.
 
 ```
 GET  /api/admin/storage/stats         → StorageStats
+GET  /api/admin/storage/disk          → DiskPressureStatus (live disk usage, the saved cleanup settings, last sweep)
+POST /api/admin/storage/disk/sweep    → { run: DiskPressureRun | null, status } (runs the check now with the saved settings; 409 disk_cleanup_disabled while off; run is null when the disk is under the threshold)
 GET  /api/admin/storage/orphans       → { orphans: OrphanedFile[] }
 POST /api/admin/storage/cleanup       { dryRun?: boolean } → CleanupResult
 POST /api/admin/storage/cleanup-media { maxAgeDays: number, dryRun?: boolean } → CleanupResult
@@ -788,7 +794,7 @@ Manages: the relay settings (`federationRelayEnabled`, `autoAcceptPeering`, `fed
 
 #### StoragePanel
 
-Manages: storage overview, file type breakdown, upload limit, orphan cleanup, media retention cleanup.
+Manages: storage overview, file type breakdown, upload limit, orphan cleanup, media retention cleanup, and the **Automatic cleanup** card (`DiskCleanupSection.tsx`): the owner's switch (saved at once), the start level / clean-down level / age floor (validated in the form with the server's bounds, saved with Save), the live disk usage bar with the start level marked, the last sweep, and **Check now** (disabled while off or while a change is unsaved).
 
 - **Stats grid:** 5 cards (total files, referenced, orphaned, unlinked uploads, dangling records) with byte formatting
 - **File type breakdown:** List of categories (image/video/audio/document/other) with file counts and sizes

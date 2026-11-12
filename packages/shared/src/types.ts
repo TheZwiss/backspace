@@ -1174,6 +1174,17 @@ export interface InstanceAdminSettings {
   federationRelayTtlDays: number;
   defaultAutoRotateIntervalDays: number;
   autoAcceptPeering: boolean;
+  /**
+   * Automatic cleanup when the disk is nearly full (`server/src/utils/diskPressure.ts`).
+   * Off by default: the second stage deletes old chat attachments.
+   */
+  diskCleanupEnabled: boolean;
+  /** Used-space percentage that starts a sweep (50..99). */
+  diskCleanupThresholdPercent: number;
+  /** Old chat attachments are deleted until usage falls below this (10..threshold-5). */
+  diskCleanupTargetPercent: number;
+  /** Chat attachments newer than this many days are never deleted (1..3650). */
+  diskCleanupMinAgeDays: number;
   directoryEnabled: boolean;
   /**
    * The other directory axis: whether people on this instance see spaces from
@@ -1426,6 +1437,35 @@ export interface CleanupResult {
   freedBytes: number;
   deletedAttachmentRecords: number;
   errors: string[];
+}
+
+/** One sweep of the disk-pressure cleanup (`server/src/utils/diskPressure.ts`). */
+export interface DiskPressureRun {
+  /** When the sweep ran (ms since epoch). */
+  at: number;
+  /** Used-space percentage before and after the sweep. */
+  usedPercentBefore: number;
+  usedPercentAfter: number;
+  /** `safe` freed enough with orphans and abandoned uploads; `media` also had to delete old chat attachments. */
+  stage: 'safe' | 'media';
+  deletedFiles: number;
+  freedBytes: number;
+  errors: string[];
+}
+
+/** What `GET /api/admin/storage/disk` reports. */
+export interface DiskPressureStatus {
+  enabled: boolean;
+  /** Null when the filesystem could not be read. */
+  usedPercent: number | null;
+  totalBytes: number | null;
+  usedBytes: number | null;
+  thresholdPercent: number;
+  targetPercent: number;
+  minAgeDays: number;
+  /** How often the worker looks at the disk. */
+  checkIntervalMinutes: number;
+  lastRun: DiskPressureRun | null;
 }
 
 // ─── Admin User Management Types ──────────────────────────────────────────

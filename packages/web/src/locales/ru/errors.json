@@ -244,5 +244,9 @@
   "sticker_limit_out_of_range": "Лимит размера стикера должен быть от {{min}} до {{max}} МБ.",
   "game_icon_invalid_image": "Загрузите изображение PNG, JPEG или WebP размером не более {{max}} МБ.",
   "game_icon_not_found": "Этой иконки игры больше нет.",
-  "game_icon_collection_full": "Коллекция иконок игр заполнена: {{max}} иконок, это максимум."
+  "game_icon_collection_full": "Коллекция иконок игр заполнена: {{max}} иконок, это максимум.",
+  "disk_cleanup_threshold_out_of_range": "Порог начала должен быть целым числом от {{min}} до {{max}}.",
+  "disk_cleanup_target_out_of_range": "Уровень, до которого очищать, должен быть целым числом от {{min}} до {{max}}.",
+  "disk_cleanup_age_out_of_range": "Возраст должен быть целым числом дней от {{min}} до {{max}}.",
+  "disk_cleanup_disabled": "Автоматическая очистка диска выключена."
 }
