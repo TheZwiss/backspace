@@ -6,6 +6,7 @@ import { api } from '../../../api/client';
 import type { StorageStats, CleanupResult } from '@backspace/shared';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
+import { DiskCleanupSection } from './DiskCleanupSection';
 
 type UploadUnit = 'MB' | 'GB';
 
@@ -290,6 +291,8 @@ export function StoragePanel() {
           </div>
         </div>
       )}
+
+      <DiskCleanupSection />
 
       {/* Upload Limit */}
       <div>

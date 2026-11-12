@@ -469,25 +469,17 @@ When `dryRun = true`: counts are computed but no files/records are deleted.
 
 ### Disk-pressure cleanup (`utils/diskPressure.ts`)
 
-When the disk fills up, the instance frees space on its own. **Off unless `DISK_CLEANUP=true`**, because the second stage deletes members' old attachments.
+When the disk fills up, the instance frees space on its own. **The instance owner turns it on in Settings > Storage > Automatic cleanup** (`DiskCleanupSection.tsx`); it is off by default because the second stage deletes members' old attachments. The settings are columns of `instance_settings` (`diskCleanupEnabled`, `diskCleanupThresholdPercent`, `diskCleanupTargetPercent`, `diskCleanupMinAgeDays`; database.md) written through `PATCH /api/settings/instance` (admin.md), so no restart and no environment variable is involved.
 
 `readDiskUsage()` reads `fs.statfsSync` of the data directory (`dirname(DB_PATH)`) and computes the percentage `df` prints (`used / (used + available)`). It measures the **whole filesystem**, so on a small VPS the figure is the server's disk, not only this app's files.
 
-A worker (`startDiskPressureWorker`, started next to the backup worker; first check 30 s after boot, then every `DISK_CLEANUP_INTERVAL_MINUTES`) runs `runDiskPressureSweep`:
+A worker (`startDiskPressureWorker`, started next to the backup worker; first check 30 s after boot, then every 15 minutes, `DISK_CHECK_INTERVAL_MINUTES`) calls `sweepDiskPressure()`, which reads the owner's settings each time (`readDiskCleanupSettings`, made consistent by `resolveDiskPressureSettings`: threshold 50..99, target 10..threshold-5, floor of at least 1 day), does nothing while the switch is off, and otherwise runs `runDiskPressureSweep`:
 
-1. Below `DISK_CLEANUP_THRESHOLD_PERCENT` (default 90): nothing happens.
+1. Below the threshold (default 90): nothing happens.
 2. **Safe stage:** `cleanupStorage(false)` (orphans, unlinked uploads older than 1 h, dangling rows) and `cleanupStaleTusSessions(1 h)`. If usage is back under the threshold, the sweep ends here (`stage: 'safe'`).
-3. **Media stage:** `deleteOldestMedia(minAgeDays, shouldStop)` deletes chat attachments **oldest first** (file, thumbnail and row; the message text stays) until usage is under `DISK_CLEANUP_TARGET_PERCENT` (default 80). `shouldStop` re-reads the disk every 20 files. Nothing newer than `DISK_CLEANUP_MIN_AGE_DAYS` (default 30) is ever touched, files in use as a profile image are skipped, and at most 20 000 candidates are considered per sweep. When nothing old enough is left the sweep stops, so a disk filled by something else (container images, logs) never costs recent content.
+3. **Media stage:** `deleteOldestMedia(minAgeDays, shouldStop)` deletes chat attachments **oldest first** (file, thumbnail and row; the message text stays) until usage is under the target (default 80). `shouldStop` re-reads the disk every 20 files. Nothing newer than the age floor (default 30 days) is ever touched, files in use as a profile image are skipped, and at most 20 000 candidates are considered per sweep. When nothing old enough is left the sweep stops, so a disk filled by something else (container images, logs) never costs recent content.
 
-`resolveDiskPressureSettings` keeps the values consistent: threshold 50..99, target at least 5 points under it, floor of at least 1 day. A sweep in flight is never doubled. The last sweep (`DiskPressureRun`: before/after percentage, stage, files, bytes, errors) is kept in memory and returned by `GET /api/admin/storage/disk` (`DiskPressureStatus`, which also reports the live usage and the effective settings).
-
-| Env var | Default | Meaning |
-|---------|---------|---------|
-| `DISK_CLEANUP` | `false` | Turns the worker on |
-| `DISK_CLEANUP_THRESHOLD_PERCENT` | `90` | Used-space percentage that starts a sweep |
-| `DISK_CLEANUP_TARGET_PERCENT` | `80` | The media stage deletes until usage falls below this |
-| `DISK_CLEANUP_INTERVAL_MINUTES` | `15` | Time between checks |
-| `DISK_CLEANUP_MIN_AGE_DAYS` | `30` | Chat attachments newer than this are never deleted |
+A sweep in flight is never doubled. The last sweep (`DiskPressureRun`: before/after percentage, stage, files, bytes, errors) is kept in memory and returned, with the live usage and the effective settings, by `GET /api/admin/storage/disk` (`DiskPressureStatus`). `POST /api/admin/storage/disk/sweep` is the panel's **Check now**: it runs the same check with the saved settings (409 `disk_cleanup_disabled` while off) and answers `run: null` when the disk is under the threshold.
 
 ### Federation GC (`runFederationJanitor()`)
 
@@ -532,6 +524,7 @@ The admin routes (`routes/admin.ts`) expose the janitor functions via REST:
 | `POST /api/admin/storage/cleanup-media` | POST | `cleanupOldMedia(maxAgeDays, dryRun)` |
 | `POST /api/admin/storage/cleanup-tus` | POST | `cleanupStaleTusSessions(maxAgeHours * 3600 * 1000, dryRun)` |
 | `GET /api/admin/storage/disk` | GET | `getDiskPressureStatus()` (see Disk-pressure cleanup) |
+| `POST /api/admin/storage/disk/sweep` | POST | `sweepDiskPressure()` when `diskCleanupEnabled` |
 
 All require JWT + admin role. See `docs/systems/api.md` for request/response formats.
 

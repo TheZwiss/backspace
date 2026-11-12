@@ -1,5 +1,7 @@
 import fs from 'fs';
 import { dirname } from 'path';
+import { eq } from 'drizzle-orm';
+import { getDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { cleanupStorage, cleanupStaleTusSessions, deleteOldestMedia } from './storageJanitor.js';
 import type { CleanupResult, DiskPressureRun, DiskPressureStatus } from '@backspace/shared';
@@ -20,7 +22,8 @@ import type { CleanupResult, DiskPressureRun, DiskPressureStatus } from '@backsp
  * images, logs) is what filled it, the sweep frees what it can and stops at the
  * age floor rather than deleting recent content.
  *
- * Off unless DISK_CLEANUP=true: it deletes members' files on its own.
+ * Off until the instance owner turns it on (Settings > Storage): it deletes
+ * members' files on its own. The settings live in `instance_settings`.
  */
 
 export interface DiskUsage {
@@ -119,9 +122,32 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+/** How often the worker looks at the disk. A check on a healthy disk is one `statfs` call. */
+export const DISK_CHECK_INTERVAL_MINUTES = 15;
+/** First check after boot, off the startup path. */
+const FIRST_CHECK_DELAY_MS = 30_000;
+
+export interface DiskCleanupSettings extends DiskPressureSettings {
+  enabled: boolean;
+}
+
+/** The owner's settings, made consistent (`resolveDiskPressureSettings`). Off when the row is missing. */
+export function readDiskCleanupSettings(): DiskCleanupSettings {
+  const row = getDb().select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+  const resolved = resolveDiskPressureSettings({
+    thresholdPercent: row?.diskCleanupThresholdPercent ?? 90,
+    targetPercent: row?.diskCleanupTargetPercent ?? 80,
+    minAgeDays: row?.diskCleanupMinAgeDays ?? 30,
+  });
+  return { enabled: row?.diskCleanupEnabled === 1, ...resolved };
+}
+
 // ─── Worker ─────────────────────────────────────────────────────────────────
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let firstCheck: ReturnType<typeof setTimeout> | null = null;
 let lastRun: DiskPressureRun | null = null;
 let sweeping = false;
 
@@ -148,20 +174,18 @@ function liveDeps(): DiskPressureDeps {
   };
 }
 
-function currentSettings(): DiskPressureSettings {
-  return resolveDiskPressureSettings({
-    thresholdPercent: config.diskCleanup.thresholdPercent,
-    targetPercent: config.diskCleanup.targetPercent,
-    minAgeDays: config.diskCleanup.minAgeDays,
-  });
-}
-
-/** Run one sweep now. Exported for the worker's tick; a sweep already running is not doubled. */
+/**
+ * Run one sweep with the owner's current settings. Does nothing while the
+ * feature is off, and a sweep already running is not doubled. Returns the sweep
+ * when the disk was over the threshold and one ran.
+ */
 export function sweepDiskPressure(): DiskPressureRun | null {
   if (sweeping) return null;
   sweeping = true;
   try {
-    const run = runDiskPressureSweep(currentSettings(), liveDeps());
+    const settings = readDiskCleanupSettings();
+    if (!settings.enabled) return null;
+    const run = runDiskPressureSweep(settings, liveDeps());
     if (run) {
       lastRun = run;
       console.log(
@@ -178,24 +202,15 @@ export function sweepDiskPressure(): DiskPressureRun | null {
   }
 }
 
+/** Starts the periodic check. It always runs; each tick reads the owner's switch, so turning it on takes effect without a restart. */
 export function startDiskPressureWorker(): void {
-  if (!config.diskCleanup.enabled) {
-    console.log('[disk-cleanup] disabled (set DISK_CLEANUP=true to enable)');
-    return;
-  }
   if (timer) return;
-  const settings = currentSettings();
-  const intervalMs = Math.max(1, config.diskCleanup.intervalMinutes) * 60 * 1000;
-  timer = setInterval(sweepDiskPressure, intervalMs);
+  timer = setInterval(sweepDiskPressure, DISK_CHECK_INTERVAL_MINUTES * 60 * 1000);
   // Do not keep the event loop alive solely for cleanup.
   if (typeof timer.unref === 'function') timer.unref();
-  console.log(
-    `[disk-cleanup] worker started: sweep at ${settings.thresholdPercent}% used, down to ${settings.targetPercent}%, ` +
-    `never deleting media newer than ${settings.minAgeDays} day(s), every ${config.diskCleanup.intervalMinutes} min`,
-  );
-  // First check shortly after boot, off the startup path
-  const first = setTimeout(sweepDiskPressure, 30_000);
-  if (typeof first.unref === 'function') first.unref();
+  firstCheck = setTimeout(sweepDiskPressure, FIRST_CHECK_DELAY_MS);
+  if (typeof firstCheck.unref === 'function') firstCheck.unref();
+  console.log(`[disk-cleanup] worker started (checks every ${DISK_CHECK_INTERVAL_MINUTES} min; off until the owner enables it in Settings > Storage)`);
 }
 
 export function stopDiskPressureWorker(): void {
@@ -203,20 +218,24 @@ export function stopDiskPressureWorker(): void {
     clearInterval(timer);
     timer = null;
   }
+  if (firstCheck) {
+    clearTimeout(firstCheck);
+    firstCheck = null;
+  }
 }
 
 export function getDiskPressureStatus(): DiskPressureStatus {
-  const settings = currentSettings();
+  const settings = readDiskCleanupSettings();
   const usage = readDiskUsage(dataDir());
   return {
-    enabled: config.diskCleanup.enabled,
+    enabled: settings.enabled,
     usedPercent: usage ? round1(usedPercent(usage)) : null,
     totalBytes: usage ? usage.totalBytes : null,
     usedBytes: usage ? usage.usedBytes : null,
     thresholdPercent: settings.thresholdPercent,
     targetPercent: settings.targetPercent,
     minAgeDays: settings.minAgeDays,
-    intervalMinutes: config.diskCleanup.intervalMinutes,
+    checkIntervalMinutes: DISK_CHECK_INTERVAL_MINUTES,
     lastRun,
   };
 }

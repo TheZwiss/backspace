@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { eq, like, or, and, ne, sql, isNull, isNotNull, gte, lte, asc, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
-import { getDiskPressureStatus } from '../utils/diskPressure.js';
+import { getDiskPressureStatus, readDiskCleanupSettings, sweepDiskPressure } from '../utils/diskPressure.js';
 import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia, cleanupStaleTusSessions } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from '../ws/handler.js';
@@ -56,12 +56,27 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/admin/storage/disk — how full the disk is and what the automatic
-  // disk-pressure cleanup would do (DISK_CLEANUP), with its last sweep
+  // disk-pressure cleanup would do with the owner's saved settings, and its last sweep
   app.get('/api/admin/storage/disk', { preHandler: [authenticate, requireAdmin] }, async (_request, reply) => {
     try {
       return reply.code(200).send(getDiskPressureStatus());
     } catch (err: unknown) {
       return sendError(reply, 500, 'storage_stats_failed', { reason: reasonOf(err) });
+    }
+  });
+
+  // POST /api/admin/storage/disk/sweep — run the disk-pressure check now, with
+  // the saved settings. Refused while the feature is off. A disk under the
+  // threshold is not an error: nothing is deleted and `run` is null.
+  app.post('/api/admin/storage/disk/sweep', { preHandler: [authenticate, requireAdmin] }, async (_request, reply) => {
+    try {
+      if (!readDiskCleanupSettings().enabled) {
+        return sendError(reply, 409, 'disk_cleanup_disabled');
+      }
+      const run = sweepDiskPressure();
+      return reply.code(200).send({ run, status: getDiskPressureStatus() });
+    } catch (err: unknown) {
+      return sendError(reply, 500, 'storage_cleanup_failed', { reason: reasonOf(err) });
     }
   });
 

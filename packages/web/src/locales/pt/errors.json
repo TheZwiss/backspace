@@ -244,5 +244,9 @@
   "sticker_limit_out_of_range": "O limite de tamanho da figurinha deve estar entre {{min}} e {{max}} MB.",
   "game_icon_invalid_image": "Envie uma imagem PNG, JPEG ou WebP de no máximo {{max}} MB.",
   "game_icon_not_found": "Esse ícone de jogo não existe mais.",
-  "game_icon_collection_full": "A coleção de ícones de jogos está cheia com {{max}} ícones."
+  "game_icon_collection_full": "A coleção de ícones de jogos está cheia com {{max}} ícones.",
+  "disk_cleanup_threshold_out_of_range": "O nível de início deve ser um número inteiro entre {{min}} e {{max}}.",
+  "disk_cleanup_target_out_of_range": "O nível até onde limpar deve ser um número inteiro entre {{min}} e {{max}}.",
+  "disk_cleanup_age_out_of_range": "A idade deve ser um número inteiro de dias entre {{min}} e {{max}}.",
+  "disk_cleanup_disabled": "A limpeza automática do disco está desligada."
 }

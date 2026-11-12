@@ -405,10 +405,14 @@ GET   /settings/streaming    (auth)        → { streamingLimits }
 PATCH /settings/streaming    (admin)       → { streamingLimits }
 GET   /settings/instance     (admin)       → { instanceName, registrationOpen, federatedRegistrationOpen, discoveryEnabled,
                                                directoryEnabled, directoryBrowseEnabled, directoryLastPingAt,
-                                               directoryLastError, directoryListedSpaceCount, supportCardEnabled, ... }
+                                               directoryLastError, directoryListedSpaceCount, supportCardEnabled,
+                                               diskCleanupEnabled, diskCleanupThresholdPercent,
+                                               diskCleanupTargetPercent, diskCleanupMinAgeDays, ... }
 PATCH /settings/instance     (admin)       { instanceName?, registrationOpen?, federatedRegistrationOpen?,
                                              discoveryEnabled?, directoryEnabled?, directoryBrowseEnabled?,
                                              supportCardEnabled?,
+                                             diskCleanupEnabled?, diskCleanupThresholdPercent?,
+                                             diskCleanupTargetPercent?, diskCleanupMinAgeDays?,
                                              gifApiKey?, maxUploadSizeMb?,
                                              federationRelayEnabled?, federationRelayTtlDays? } → { settings }
 ```
@@ -442,6 +446,7 @@ Errors: `400 validation_failed` (no known field, or a value of the wrong kind), 
 ```
 GET    /admin/storage/stats                                → StorageStats
 GET    /admin/storage/disk                                 → DiskPressureStatus
+POST   /admin/storage/disk/sweep                           → { run: DiskPressureRun | null, status: DiskPressureStatus } (409 `disk_cleanup_disabled` while the feature is off)
 GET    /admin/storage/orphans                              → { orphans[] }
 POST   /admin/storage/cleanup        { dryRun? }           → CleanupResult
 POST   /admin/storage/cleanup-media  { maxAgeDays, dryRun? } → CleanupResult

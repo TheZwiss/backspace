@@ -515,6 +515,10 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | federationRelayEnabled | integer NOT NULL | 1 | |
 | federationRelayTtlDays | integer NOT NULL | 30 | |
 | autoAcceptPeering | integer NOT NULL | 1 | When 0, `peer/accept` rejects unsolicited requests with 403 |
+| diskCleanupEnabled | integer NOT NULL | 0 | Automatic cleanup when the disk is nearly full (`utils/diskPressure.ts`, [uploads.md](uploads.md) "Disk-pressure cleanup"). Off by default: its second stage deletes old chat attachments. |
+| diskCleanupThresholdPercent | integer NOT NULL | 90 | Used-space percentage that starts a sweep (50..99). |
+| diskCleanupTargetPercent | integer NOT NULL | 80 | Old chat attachments are deleted until usage falls below this (10..threshold-5). |
+| diskCleanupMinAgeDays | integer NOT NULL | 30 | Chat attachments newer than this are never deleted (1..3650). |
 | telemetryEnabled | integer | | Opt-in usage pings. null = never asked, 0 = off, 1 = on. |
 | telemetryId | text | | Random UUID, minted on the first off-to-on transition and kept for the life of the install, through off. Never the federation `instanceId`. |
 | telemetryLastDay | text | | Last UTC day (`YYYY-MM-DD`) successfully reported. |

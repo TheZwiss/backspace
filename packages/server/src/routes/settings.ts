@@ -90,6 +90,10 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     federationRelayTtlDays: row.federationRelayTtlDays,
     defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
     autoAcceptPeering: row.autoAcceptPeering === 1,
+    diskCleanupEnabled: row.diskCleanupEnabled === 1,
+    diskCleanupThresholdPercent: row.diskCleanupThresholdPercent,
+    diskCleanupTargetPercent: row.diskCleanupTargetPercent,
+    diskCleanupMinAgeDays: row.diskCleanupMinAgeDays,
     directoryEnabled: directory.enabled,
     directoryBrowseEnabled: row.directoryBrowseEnabled === 1,
     directoryLastPingAt: directory.lastPingAt,
@@ -97,6 +101,68 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     directoryListedSpaceCount: countListedSpaces(sqlite),
     supportCardEnabled: row.supportCardEnabled,
   };
+}
+
+/** Bounds the disk-cleanup fields are validated against (see utils/diskPressure.ts). */
+const DISK_THRESHOLD_MIN = 50;
+const DISK_THRESHOLD_MAX = 99;
+const DISK_TARGET_MIN = 10;
+const DISK_TARGET_GAP = 5;
+const DISK_AGE_MIN_DAYS = 1;
+const DISK_AGE_MAX_DAYS = 3650;
+
+/**
+ * Validates and applies the disk-cleanup fields. The target is checked against
+ * the threshold that will be in force after this write (the new one when the
+ * body carries it), so raising the target and lowering the threshold in one
+ * request is judged together. Returns false after sending the error reply.
+ */
+function applyDiskCleanup(
+  body: Record<string, unknown>,
+  updateData: SettingsUpdate,
+  currentRow: SettingsRow,
+  reply: FastifyReply,
+): boolean {
+  if (body.diskCleanupEnabled !== undefined) {
+    if (typeof body.diskCleanupEnabled !== 'boolean') {
+      sendError(reply, 400, 'field_not_boolean', { field: 'diskCleanupEnabled' });
+      return false;
+    }
+    updateData.diskCleanupEnabled = body.diskCleanupEnabled ? 1 : 0;
+  }
+
+  let threshold = currentRow.diskCleanupThresholdPercent;
+  if (body.diskCleanupThresholdPercent !== undefined) {
+    const value = Number(body.diskCleanupThresholdPercent);
+    if (!Number.isInteger(value) || value < DISK_THRESHOLD_MIN || value > DISK_THRESHOLD_MAX) {
+      sendError(reply, 400, 'disk_cleanup_threshold_out_of_range', { min: DISK_THRESHOLD_MIN, max: DISK_THRESHOLD_MAX });
+      return false;
+    }
+    threshold = value;
+    updateData.diskCleanupThresholdPercent = value;
+  }
+
+  const maxTarget = threshold - DISK_TARGET_GAP;
+  const target = body.diskCleanupTargetPercent !== undefined
+    ? Number(body.diskCleanupTargetPercent)
+    : currentRow.diskCleanupTargetPercent;
+  if (body.diskCleanupTargetPercent !== undefined || body.diskCleanupThresholdPercent !== undefined) {
+    if (!Number.isInteger(target) || target < DISK_TARGET_MIN || target > maxTarget) {
+      sendError(reply, 400, 'disk_cleanup_target_out_of_range', { min: DISK_TARGET_MIN, max: maxTarget });
+      return false;
+    }
+    updateData.diskCleanupTargetPercent = target;
+  }
+
+  if (body.diskCleanupMinAgeDays !== undefined) {
+    const value = Number(body.diskCleanupMinAgeDays);
+    if (!Number.isInteger(value) || value < DISK_AGE_MIN_DAYS || value > DISK_AGE_MAX_DAYS) {
+      sendError(reply, 400, 'disk_cleanup_age_out_of_range', { min: DISK_AGE_MIN_DAYS, max: DISK_AGE_MAX_DAYS });
+      return false;
+    }
+    updateData.diskCleanupMinAgeDays = value;
+  }
+  return true;
 }
 
 /**
@@ -501,6 +567,10 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     // the pinger owns them, so the body's copies are never read. The same
     // holds for directoryListedSpaceCount, which is counted from `spaces`.
     if (!applyDiscoveryAndDirectory(body, updateData, currentRow, reply)) {
+      return reply;
+    }
+
+    if (!applyDiskCleanup(body as Record<string, unknown>, updateData, currentRow, reply)) {
       return reply;
     }
 

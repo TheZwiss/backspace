@@ -251,6 +251,86 @@ describe('error codes on the settings routes', () => {
   });
 });
 
+describe('disk cleanup settings', () => {
+  const patch = (payload: Record<string, unknown>) =>
+    app.inject({ method: 'PATCH', url: '/api/settings/instance', payload });
+
+  it('is off with 90 / 80 / 30 days by default', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.json()).toMatchObject({
+      diskCleanupEnabled: false,
+      diskCleanupThresholdPercent: 90,
+      diskCleanupTargetPercent: 80,
+      diskCleanupMinAgeDays: 30,
+    });
+  });
+
+  it('saves a valid combination and returns it', async () => {
+    const res = await patch({ diskCleanupEnabled: true, diskCleanupThresholdPercent: 85, diskCleanupTargetPercent: 70, diskCleanupMinAgeDays: 14 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      diskCleanupEnabled: true,
+      diskCleanupThresholdPercent: 85,
+      diskCleanupTargetPercent: 70,
+      diskCleanupMinAgeDays: 14,
+    });
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get()!;
+    expect(row).toMatchObject({ diskCleanupEnabled: 1, diskCleanupThresholdPercent: 85, diskCleanupTargetPercent: 70, diskCleanupMinAgeDays: 14 });
+  });
+
+  it('rejects a non-boolean switch', async () => {
+    const res = await patch({ diskCleanupEnabled: 'yes' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'field_not_boolean', details: { field: 'diskCleanupEnabled' } });
+  });
+
+  it('rejects a threshold outside 50..99', async () => {
+    for (const value of [49, 100, 85.5, 'abc']) {
+      const res = await patch({ diskCleanupThresholdPercent: value });
+      expect(res.statusCode, String(value)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'disk_cleanup_threshold_out_of_range', details: { min: 50, max: 99 } });
+    }
+  });
+
+  it('rejects a target less than 5 points under the threshold, judged against the new threshold', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 80, diskCleanupTargetPercent: 78 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'disk_cleanup_target_out_of_range', details: { min: 10, max: 75 } });
+  });
+
+  it('rejects lowering the threshold under the stored target when the target is not sent along', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 82 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'disk_cleanup_target_out_of_range', details: { max: 77 } });
+  });
+
+  it('accepts lowering both together', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 70, diskCleanupTargetPercent: 60 });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects a target under 10', async () => {
+    const res = await patch({ diskCleanupTargetPercent: 5 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('disk_cleanup_target_out_of_range');
+  });
+
+  it('rejects an age outside 1..3650 days', async () => {
+    for (const value of [0, 3651, 1.5]) {
+      const res = await patch({ diskCleanupMinAgeDays: value });
+      expect(res.statusCode, String(value)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'disk_cleanup_age_out_of_range', details: { min: 1, max: 3650 } });
+    }
+  });
+
+  it('writes nothing when one field is invalid', async () => {
+    const res = await patch({ diskCleanupEnabled: true, diskCleanupMinAgeDays: 0 });
+    expect(res.statusCode).toBe(400);
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get()!;
+    expect(row.diskCleanupEnabled).toBe(0);
+  });
+});
+
 describe('directory fields on GET /api/settings/instance', () => {
   it('returns directoryEnabled, directoryLastPingAt and directoryLastError (defaults)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });

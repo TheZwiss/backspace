@@ -320,6 +320,34 @@
       "deletedToast_many": "{{count}} arquivos excluídos ({{size}})",
       "deletedToast_other": "{{count}} arquivos excluídos ({{size}})",
       "failed": "Falha na limpeza de mídia"
+    },
+    "diskCleanup": {
+      "label": "Limpeza automática",
+      "enable": "Liberar espaço automaticamente quando o disco estiver quase cheio",
+      "enableHint": "Primeiro apaga arquivos que nada usa, depois anexos antigos do chat, do mais antigo ao mais novo. O texto das mensagens fica.",
+      "warning": "Ligada: quando o disco chegar ao limite abaixo, anexos do chat com mais de {{days}} dias podem ser apagados de vez. Os mais novos e as fotos de perfil nunca são tocados.",
+      "usage": "{{percent}}% do disco em uso ({{used}} de {{total}})",
+      "usageLabel": "Uso do disco",
+      "usageUnknown": "Não foi possível ler o uso do disco.",
+      "threshold": "Começar a limpar em",
+      "target": "Limpar até",
+      "minAge": "Nunca apagar arquivos com menos de",
+      "days": "dias",
+      "problemThreshold": "O nível de início deve ser um número inteiro entre {{min}} e {{max}}.",
+      "problemTarget": "O nível até onde limpar deve ser um número inteiro entre {{min}} e {{max}} (pelo menos 5 pontos abaixo do nível de início).",
+      "problemAge": "A idade deve ser um número inteiro de dias entre {{min}} e {{max}}.",
+      "saved": "Configurações de limpeza salvas",
+      "checkNow": "Verificar agora",
+      "checking": "Verificando…",
+      "checkedNothing": "O disco está abaixo do limite, então nada foi apagado.",
+      "neverRan": "Nenhuma limpeza foi executada ainda.",
+      "stage": {
+        "safe": "só arquivos sem uso",
+        "media": "incluindo anexos antigos"
+      },
+      "lastRun_one": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados.",
+      "lastRun_other": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados.",
+      "lastRun_many": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados."
     }
   },
   "streaming": {

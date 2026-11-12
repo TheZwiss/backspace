@@ -306,6 +306,33 @@
       "deletedToast_one": "Deleted {{count}} file ({{size}})",
       "deletedToast_other": "Deleted {{count}} files ({{size}})",
       "failed": "Media cleanup failed"
+    },
+    "diskCleanup": {
+      "label": "Automatic cleanup",
+      "enable": "Free space automatically when the disk is nearly full",
+      "enableHint": "First deletes files nothing uses, then old chat attachments, oldest first. The message text stays.",
+      "warning": "On: when the disk reaches the limit below, chat attachments older than {{days}} days can be deleted for good. Newer ones and profile pictures are never touched.",
+      "usage": "{{percent}}% of the disk used ({{used}} of {{total}})",
+      "usageLabel": "Disk usage",
+      "usageUnknown": "The disk usage could not be read.",
+      "threshold": "Start cleaning at",
+      "target": "Clean down to",
+      "minAge": "Never delete files newer than",
+      "days": "days",
+      "problemThreshold": "The start level must be a whole number between {{min}} and {{max}}.",
+      "problemTarget": "The level to clean down to must be a whole number between {{min}} and {{max}} (at least 5 points under the start level).",
+      "problemAge": "The age must be a whole number of days between {{min}} and {{max}}.",
+      "saved": "Cleanup settings saved",
+      "checkNow": "Check now",
+      "checking": "Checking…",
+      "checkedNothing": "The disk is under the limit, so nothing was deleted.",
+      "neverRan": "No cleanup has run yet.",
+      "stage": {
+        "safe": "unused files only",
+        "media": "including old attachments"
+      },
+      "lastRun_one": "Last cleanup {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} file(s) deleted, {{size}} freed.",
+      "lastRun_other": "Last cleanup {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} file(s) deleted, {{size}} freed."
     }
   },
   "streaming": {

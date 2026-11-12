@@ -56,6 +56,8 @@ import type {
   FederationCredentialResponse,
   DeleteAccountRequest,
   StorageStats,
+  DiskPressureStatus,
+  DiskPressureRun,
   OrphanedFile,
   CleanupResult,
   AdminUserListResponse,
@@ -448,6 +450,8 @@ export class BackspaceApiClient {
     storageStats: () => Promise<StorageStats>;
     storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
     storageCleanup: (dryRun?: boolean) => Promise<CleanupResult>;
+    diskStatus: () => Promise<DiskPressureStatus>;
+    diskSweep: () => Promise<{ run: DiskPressureRun | null; status: DiskPressureStatus }>;
     cleanupOldMedia: (maxAgeDays: number, dryRun?: boolean) => Promise<CleanupResult>;
     cleanupTusSessions: (maxAgeHours: number, dryRun?: boolean) => Promise<CleanupResult>;
     listUsers: (params?: { q?: string; page?: number; pageSize?: number; showDeleted?: boolean; homeInstance?: string; role?: string; joinedAfter?: string; joinedBefore?: string; sort?: string }) => Promise<AdminUserListResponse>;
@@ -1115,6 +1119,8 @@ export class BackspaceApiClient {
       storageStats: () => request<StorageStats>('GET', '/admin/storage/stats'),
       storageOrphans: () => request<{ orphans: OrphanedFile[] }>('GET', '/admin/storage/orphans'),
       storageCleanup: (dryRun = false) => request<CleanupResult>('POST', '/admin/storage/cleanup', { dryRun }),
+      diskStatus: () => request<DiskPressureStatus>('GET', '/admin/storage/disk'),
+      diskSweep: () => request<{ run: DiskPressureRun | null; status: DiskPressureStatus }>('POST', '/admin/storage/disk/sweep'),
       cleanupOldMedia: (maxAgeDays: number, dryRun = false) =>
         request<CleanupResult>('POST', '/admin/storage/cleanup-media', { maxAgeDays, dryRun }),
       cleanupTusSessions: (maxAgeHours: number, dryRun = false) =>

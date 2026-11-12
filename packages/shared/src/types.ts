@@ -1174,6 +1174,17 @@ export interface InstanceAdminSettings {
   federationRelayTtlDays: number;
   defaultAutoRotateIntervalDays: number;
   autoAcceptPeering: boolean;
+  /**
+   * Automatic cleanup when the disk is nearly full (`server/src/utils/diskPressure.ts`).
+   * Off by default: the second stage deletes old chat attachments.
+   */
+  diskCleanupEnabled: boolean;
+  /** Used-space percentage that starts a sweep (50..99). */
+  diskCleanupThresholdPercent: number;
+  /** Old chat attachments are deleted until usage falls below this (10..threshold-5). */
+  diskCleanupTargetPercent: number;
+  /** Chat attachments newer than this many days are never deleted (1..3650). */
+  diskCleanupMinAgeDays: number;
   directoryEnabled: boolean;
   /**
    * The other directory axis: whether people on this instance see spaces from
@@ -1452,7 +1463,8 @@ export interface DiskPressureStatus {
   thresholdPercent: number;
   targetPercent: number;
   minAgeDays: number;
-  intervalMinutes: number;
+  /** How often the worker looks at the disk. */
+  checkIntervalMinutes: number;
   lastRun: DiskPressureRun | null;
 }
 

@@ -1,6 +1,25 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as schema from '../db/schema.js';
 import type { CleanupResult } from '@backspace/shared';
+type TestDb = ReturnType<typeof drizzle<typeof schema>>;
+let sqlite: Database.Database;
+let testDb: TestDb;
+
+vi.mock('../db/index.js', () => ({
+  getDb: () => testDb,
+  getRawDb: () => sqlite,
+  schema,
+}));
+
 import {
+  readDiskCleanupSettings,
+  getDiskPressureStatus,
+  sweepDiskPressure,
   resolveDiskPressureSettings,
   runDiskPressureSweep,
   usedPercent,
@@ -117,5 +136,44 @@ describe('runDiskPressureSweep', () => {
     expect(run.stage).toBe('media');
     expect(run.deletedFiles).toBe(0);
     expect(run.usedPercentAfter).toBe(97);
+  });
+});
+
+function freshDb(): void {
+  sqlite = new Database(':memory:');
+  const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../drizzle');
+  for (const f of fs.readdirSync(dir).filter((name) => name.endsWith('.sql')).sort()) {
+    for (const stmt of fs.readFileSync(path.join(dir, f), 'utf8').split(/-->\s*statement-breakpoint/)) {
+      if (stmt.trim()) sqlite.exec(stmt.trim());
+    }
+  }
+  testDb = drizzle(sqlite, { schema });
+  testDb.insert(schema.instanceSettings).values({ id: 1, updatedAt: Date.now() }).run();
+}
+
+describe('settings stored by the instance owner', () => {
+  beforeEach(freshDb);
+
+  it('is off with 90 / 80 / 30 until the owner changes it', () => {
+    expect(readDiskCleanupSettings()).toEqual({ enabled: false, thresholdPercent: 90, targetPercent: 80, minAgeDays: 30 });
+  });
+
+  it('reads what the owner saved', () => {
+    sqlite.prepare('UPDATE instance_settings SET disk_cleanup_enabled = 1, disk_cleanup_threshold_percent = 85, disk_cleanup_target_percent = 70, disk_cleanup_min_age_days = 14 WHERE id = 1').run();
+    expect(readDiskCleanupSettings()).toEqual({ enabled: true, thresholdPercent: 85, targetPercent: 70, minAgeDays: 14 });
+  });
+
+  it('repairs an inconsistent row instead of trusting it', () => {
+    sqlite.prepare('UPDATE instance_settings SET disk_cleanup_enabled = 1, disk_cleanup_threshold_percent = 80, disk_cleanup_target_percent = 79, disk_cleanup_min_age_days = 1 WHERE id = 1').run();
+    expect(readDiskCleanupSettings()).toMatchObject({ thresholdPercent: 80, targetPercent: 75 });
+  });
+
+  it('reports the settings and live usage in the status', () => {
+    const status = getDiskPressureStatus();
+    expect(status).toMatchObject({ enabled: false, thresholdPercent: 90, targetPercent: 80, minAgeDays: 30, checkIntervalMinutes: 15, lastRun: null });
+  });
+
+  it('does nothing while the owner has it off, even on a full disk', () => {
+    expect(sweepDiskPressure()).toBeNull();
   });
 });
