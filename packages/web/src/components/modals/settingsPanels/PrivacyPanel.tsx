@@ -48,7 +48,7 @@ export function PrivacyPanel() {
                 {t('settings:privacy.discovery.description')}
               </div>
             </div>
-            <Toggle enabled={discoverable} onChange={handleToggle} />
+            <Toggle enabled={discoverable} onChange={handleToggle} ariaLabel={t('settings:privacy.discovery.label')} />
           </div>
           {saving && (
             <div className="text-xs text-txt-tertiary mt-2">{t('common:states.saving')}</div>
@@ -70,6 +70,7 @@ export function PrivacyPanel() {
               </div>
             </div>
             <Toggle
+              ariaLabel={t('settings:privacy.activity.label')}
               enabled={showActivity}
               onChange={async (enabled) => {
                 try {
@@ -90,6 +91,7 @@ export function PrivacyPanel() {
                 </div>
               </div>
               <Toggle
+                ariaLabel={t('settings:privacy.activity.hideBrowserMedia.label')}
                 enabled={hideBrowserMedia}
                 onChange={(enabled) => useActivityStore.getState().setHideBrowserMedia(enabled)}
               />

@@ -337,7 +337,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       {/* Header */}
       {mobile ? (
         <div className="h-12 px-3 flex items-center gap-2 border-b border-border-soft flex-shrink-0 z-10 bg-surface-base">
-          <button data-icon-motion="press" onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
+          <button data-icon-motion="press" onClick={popMobileScreen} aria-label={t('common:actions.back')} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>

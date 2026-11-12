@@ -29,7 +29,7 @@ export function PrivacySetting({ label, description, note, isPrivate, busy, onTo
             <div className="text-xs text-txt-tertiary mt-0.5">{description}</div>
           </div>
           <div className={`flex-shrink-0 ml-4 ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
-            <Toggle enabled={isPrivate} onChange={onToggle} />
+            <Toggle enabled={isPrivate} onChange={onToggle} ariaLabel={label} />
           </div>
         </div>
       </div>

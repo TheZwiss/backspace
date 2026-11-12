@@ -152,7 +152,7 @@ export function DiskCleanupSection() {
             <div className="text-xs text-txt-tertiary mt-0.5">{t('admin:storage.diskCleanup.enableHint')}</div>
           </div>
           <div className={toggling ? 'opacity-50 pointer-events-none' : ''}>
-            <Toggle enabled={enabled} onChange={(next) => void onToggle(next)} />
+            <Toggle enabled={enabled} onChange={(next) => void onToggle(next)} ariaLabel={t('admin:storage.diskCleanup.enable')} />
           </div>
         </div>
 

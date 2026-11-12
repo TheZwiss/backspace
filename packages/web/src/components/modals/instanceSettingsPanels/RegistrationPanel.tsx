@@ -1641,6 +1641,7 @@ export function RegistrationPanel() {
               </div>
             </div>
             <Toggle
+              ariaLabel={t('admin:registration.public.toggleLabel')}
               enabled={draft.registrationOpen}
               onChange={(v) => setDraft({ ...draft, registrationOpen: v })}
             />
@@ -1660,6 +1661,7 @@ export function RegistrationPanel() {
               </div>
             </div>
             <Toggle
+              ariaLabel={t('admin:registration.federated.toggleLabel')}
               enabled={draft.federatedRegistrationOpen}
               onChange={(v) => setDraft({ ...draft, federatedRegistrationOpen: v })}
             />

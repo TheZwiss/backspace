@@ -271,6 +271,7 @@ export function StreamingPanel() {
               <div className="text-xs text-txt-tertiary">{t('admin:streaming.bandwidth.customBitrate.description')}</div>
             </div>
             <Toggle
+              ariaLabel={t('admin:streaming.bandwidth.customBitrate.label')}
               enabled={draft.allowCustomBitrate}
               onChange={(enabled) => setDraft({ ...draft, allowCustomBitrate: enabled })}
             />
@@ -709,6 +710,7 @@ export function StreamingPanel() {
                   <div className="text-xs text-txt-tertiary">{t('admin:streaming.camera.quality.allowCustomHint')}</div>
                 </div>
                 <Toggle
+                  ariaLabel={t('admin:streaming.camera.quality.allowCustom')}
                   enabled={camera.allowCustomBitrate}
                   onChange={(enabled) => setCamera({ allowCustomBitrate: enabled })}
                 />

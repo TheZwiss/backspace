@@ -64,7 +64,7 @@ export function VoicePanel() {
               <div className="text-sm text-txt-primary">{t('settings:voice.processing.noiseSuppression.label')}</div>
               <div className="text-xs text-txt-tertiary">{t('settings:voice.processing.noiseSuppression.description')}</div>
             </div>
-            <Toggle enabled={rnnoiseEnabled} onChange={setRnnoiseEnabled} />
+            <Toggle enabled={rnnoiseEnabled} onChange={setRnnoiseEnabled} ariaLabel={t('settings:voice.processing.noiseSuppression.label')} />
           </div>
 
           <div className="flex items-center justify-between py-2">
@@ -72,7 +72,7 @@ export function VoicePanel() {
               <div className="text-sm text-txt-primary">{t('settings:voice.processing.echoCancellation.label')}</div>
               <div className="text-xs text-txt-tertiary">{t('settings:voice.processing.echoCancellation.description')}</div>
             </div>
-            <Toggle enabled={echoCancellation} onChange={setEchoCancellation} />
+            <Toggle enabled={echoCancellation} onChange={setEchoCancellation} ariaLabel={t('settings:voice.processing.echoCancellation.label')} />
           </div>
 
           <div className="flex items-center justify-between py-2">
@@ -80,7 +80,7 @@ export function VoicePanel() {
               <div className="text-sm text-txt-primary">{t('settings:voice.processing.autoGain.label')}</div>
               <div className="text-xs text-txt-tertiary">{t('settings:voice.processing.autoGain.description')}</div>
             </div>
-            <Toggle enabled={autoGainControl} onChange={setAutoGainControl} />
+            <Toggle enabled={autoGainControl} onChange={setAutoGainControl} ariaLabel={t('settings:voice.processing.autoGain.label')} />
           </div>
         </div>
       </div>
