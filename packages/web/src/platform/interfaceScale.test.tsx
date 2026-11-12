@@ -33,6 +33,53 @@ afterEach(() => {
   useUIStore.setState({ isMobile: false, activeModal: null, mobileStack: [] });
 });
 
+/** A touch device (primary pointer: coarse) or a mouse one, for the landscape-phone rule. */
+function mockPointer(coarse: boolean): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(pointer: coarse)' ? coarse : false,
+    media: query, onchange: null,
+    addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+  }));
+}
+
+describe('phones on their side', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it.each([
+    // [width, height, coarse pointer, expected shell]
+    [915, 412, true, 'mobile'],   // Pixel 7 landscape
+    [844, 390, true, 'mobile'],   // iPhone 14 landscape
+    [932, 430, true, 'mobile'],   // iPhone 14 Pro Max landscape
+    [667, 375, true, 'mobile'],   // iPhone SE landscape (already mobile by width)
+    [1024, 768, true, 'desktop'], // tablet on its side
+    [1180, 820, true, 'desktop'], // larger tablet on its side
+    [915, 499, true, 'mobile'],
+    [915, 500, true, 'desktop'],
+    [1280, 412, false, 'desktop'], // a short desktop window with a mouse
+    [915, 412, false, 'desktop'],
+  ])('%ix%i with a coarse pointer=%s is the %s shell', (width, height, coarse, expected) => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(Number(width));
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(Number(height));
+    mockPointer(Boolean(coarse));
+    expect(isMobileViewport()).toBe(expected === 'mobile');
+  });
+
+  it('does not throw where matchMedia is missing', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(915);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(412);
+    vi.stubGlobal('matchMedia', undefined);
+    expect(isMobileViewport()).toBe(false);
+  });
+
+  it('keeps the data-viewport attribute in step', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(915);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(412);
+    mockPointer(true);
+    startInterfaceScale();
+    expect(document.documentElement.dataset.viewport).toBe('mobile');
+  });
+});
+
 describe('interface scale', () => {
   it.each([
     [390, 50, 'mobile'], [430, 50, 'mobile'], [599, 50, 'mobile'],
