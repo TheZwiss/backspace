@@ -13,6 +13,10 @@ import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
+import { PreparingFileTiles, type PreparingFile } from './PreparingFileTiles';
+import { AttachMenu } from './AttachMenu';
+import { useMediaUploadPreferences } from '../../stores/mediaUploadPreferences';
+import { compressionKind, prepareForUpload, shouldTryCompression } from '../../utils/mediaCompression';
 import { VoiceRecorderBar } from './VoiceRecorderBar';
 import { useVoiceRecorder, type VoiceRecording } from '../../hooks/useVoiceRecorder';
 import { ChatDropOverlay } from './ChatDropOverlay';
@@ -91,6 +95,15 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // the raw File, so previews only exist for files picked in this session
   // (after reload, persisted transfers fall back to the icon placeholder).
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
+
+  // Photos and videos are shrunk on this device before they upload; "Document"
+  // sends the original. `preparing` is the files still being shrunk.
+  const compressMedia = useMediaUploadPreferences((s) => s.compressMedia);
+  const setCompressMedia = useMediaUploadPreferences((s) => s.setCompressMedia);
+  const [preparing, setPreparing] = useState<PreparingFile[]>([]);
+  const preparingControls = useRef<Map<string, { controller: AbortController; action: 'original' | 'cancel' | null }>>(new Map());
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const documentInputRef = useRef<HTMLInputElement>(null);
 
   const sendMessage = useChatStore((s) => s.sendMessage);
   const returnToPresent = useChatStore((s) => s.returnToPresent);
@@ -225,9 +238,40 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
    */
   const enqueueFile = useCallback(
     async (
-      input: { file: File; handle?: FileSystemFileHandle | undefined },
+      input: { file: File; handle?: FileSystemFileHandle | undefined; mode?: 'compress' | 'original' },
     ): Promise<string | null> => {
-      const { file, handle } = input;
+      let { file, handle } = input;
+      const mode = input.mode ?? (useMediaUploadPreferences.getState().compressMedia ? 'compress' : 'original');
+
+      // Shrink photos and videos first. Anything it cannot improve, and any
+      // failure, comes back as the original file.
+      const kind = mode === 'compress' && shouldTryCompression(file) ? compressionKind(file) : null;
+      if (kind) {
+        const prepId = makeFileHandleKey();
+        const controller = new AbortController();
+        preparingControls.current.set(prepId, { controller, action: null });
+        setPreparing((list) => [...list, { id: prepId, name: file.name, kind, progress: null }]);
+        let action: 'original' | 'cancel' | null = null;
+        try {
+          const prepared = await prepareForUpload(file, 'compress', {
+            signal: controller.signal,
+            onProgress: (fraction) => {
+              setPreparing((list) => list.map((entry) => (entry.id === prepId ? { ...entry, progress: fraction } : entry)));
+            },
+          });
+          action = preparingControls.current.get(prepId)?.action ?? null;
+          if (action === 'cancel') return null;
+          if (action !== 'original' && prepared.compressed) {
+            file = prepared.file;
+            // The handle points at the original bytes; a resume would read those
+            handle = undefined;
+          }
+        } finally {
+          preparingControls.current.delete(prepId);
+          setPreparing((list) => list.filter((entry) => entry.id !== prepId));
+        }
+      }
+
       let fileHandleId: string | undefined;
       if (handle && supportsFsHandles()) {
         try {
@@ -268,6 +312,14 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     },
     [channelId, startUpload, attachToComposer, addToast, t],
   );
+
+  /** Stop shrinking a file: upload the original (`original`) or drop it (`cancel`). */
+  const settlePreparing = useCallback((id: string, action: 'original' | 'cancel') => {
+    const entry = preparingControls.current.get(id);
+    if (!entry) return;
+    entry.action = action;
+    entry.controller.abort();
+  }, []);
 
   const removeStagedTransfer = useCallback(
     (transferId: string) => {
@@ -869,6 +921,12 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           />
         )}
 
+        <PreparingFileTiles
+          files={preparing}
+          onSendOriginal={(id) => settlePreparing(id, 'original')}
+          onCancel={(id) => settlePreparing(id, 'cancel')}
+        />
+
         <StagedTransferTiles
           stagedTransfers={stagedTransfers}
           previewUrls={previewUrlsRef.current}
@@ -885,28 +943,53 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           />
         ) : (
         <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
-          {/* File attach button */}
+          {/* File attach button: opens the Photo or video / Document menu */}
           {canAttachFiles && (
             <Tooltip content={t('chat:composer.attachFile')} position="top"><button data-icon-motion="attach"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setAttachMenuOpen((open) => !open)}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
 
               aria-label={t('chat:composer.attachFile')}
+              aria-haspopup="menu"
+              aria-expanded={attachMenuOpen}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
               </svg>
             </button></Tooltip>
           )}
+          {attachMenuOpen && canAttachFiles && (
+            <AttachMenu
+              compressMedia={compressMedia}
+              onCompressMediaChange={setCompressMedia}
+              onPickMedia={() => fileInputRef.current?.click()}
+              onPickDocument={() => documentInputRef.current?.click()}
+              onClose={() => setAttachMenuOpen(false)}
+            />
+          )}
           <input
             ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files ?? []);
+              for (const f of selected) {
+                void enqueueFile({ file: f });
+              }
+              e.target.value = '';
+            }}
+          />
+          <input
+            ref={documentInputRef}
             type="file"
             multiple
             className="hidden"
             onChange={(e) => {
               const selected = Array.from(e.target.files ?? []);
               for (const f of selected) {
-                void enqueueFile({ file: f });
+                void enqueueFile({ file: f, mode: 'original' });
               }
               e.target.value = '';
             }}

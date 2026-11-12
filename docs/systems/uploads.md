@@ -467,6 +467,28 @@ Age-based media cleanup:
 
 When `dryRun = true`: counts are computed but no files/records are deleted.
 
+### Disk-pressure cleanup (`utils/diskPressure.ts`)
+
+When the disk fills up, the instance frees space on its own. **Off unless `DISK_CLEANUP=true`**, because the second stage deletes members' old attachments.
+
+`readDiskUsage()` reads `fs.statfsSync` of the data directory (`dirname(DB_PATH)`) and computes the percentage `df` prints (`used / (used + available)`). It measures the **whole filesystem**, so on a small VPS the figure is the server's disk, not only this app's files.
+
+A worker (`startDiskPressureWorker`, started next to the backup worker; first check 30 s after boot, then every `DISK_CLEANUP_INTERVAL_MINUTES`) runs `runDiskPressureSweep`:
+
+1. Below `DISK_CLEANUP_THRESHOLD_PERCENT` (default 90): nothing happens.
+2. **Safe stage:** `cleanupStorage(false)` (orphans, unlinked uploads older than 1 h, dangling rows) and `cleanupStaleTusSessions(1 h)`. If usage is back under the threshold, the sweep ends here (`stage: 'safe'`).
+3. **Media stage:** `deleteOldestMedia(minAgeDays, shouldStop)` deletes chat attachments **oldest first** (file, thumbnail and row; the message text stays) until usage is under `DISK_CLEANUP_TARGET_PERCENT` (default 80). `shouldStop` re-reads the disk every 20 files. Nothing newer than `DISK_CLEANUP_MIN_AGE_DAYS` (default 30) is ever touched, files in use as a profile image are skipped, and at most 20 000 candidates are considered per sweep. When nothing old enough is left the sweep stops, so a disk filled by something else (container images, logs) never costs recent content.
+
+`resolveDiskPressureSettings` keeps the values consistent: threshold 50..99, target at least 5 points under it, floor of at least 1 day. A sweep in flight is never doubled. The last sweep (`DiskPressureRun`: before/after percentage, stage, files, bytes, errors) is kept in memory and returned by `GET /api/admin/storage/disk` (`DiskPressureStatus`, which also reports the live usage and the effective settings).
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `DISK_CLEANUP` | `false` | Turns the worker on |
+| `DISK_CLEANUP_THRESHOLD_PERCENT` | `90` | Used-space percentage that starts a sweep |
+| `DISK_CLEANUP_TARGET_PERCENT` | `80` | The media stage deletes until usage falls below this |
+| `DISK_CLEANUP_INTERVAL_MINUTES` | `15` | Time between checks |
+| `DISK_CLEANUP_MIN_AGE_DAYS` | `30` | Chat attachments newer than this are never deleted |
+
 ### Federation GC (`runFederationJanitor()`)
 
 Periodic cleanup of federation data (called by background worker):
@@ -509,6 +531,7 @@ The admin routes (`routes/admin.ts`) expose the janitor functions via REST:
 | `POST /api/admin/storage/cleanup` | POST | `cleanupStorage(dryRun)` |
 | `POST /api/admin/storage/cleanup-media` | POST | `cleanupOldMedia(maxAgeDays, dryRun)` |
 | `POST /api/admin/storage/cleanup-tus` | POST | `cleanupStaleTusSessions(maxAgeHours * 3600 * 1000, dryRun)` |
+| `GET /api/admin/storage/disk` | GET | `getDiskPressureStatus()` (see Disk-pressure cleanup) |
 
 All require JWT + admin role. See `docs/systems/api.md` for request/response formats.
 
@@ -539,6 +562,17 @@ The zone is enabled only when the user may send and attach (`SEND_MESSAGES` and 
 3. The orchestrator (`packages/web/src/stores/pendingMessageRehydrate.ts`) polls `listReadyForDeferredSend()`; once every transfer in the bubble is `completed` with an `attachmentId`, it fires `POST /messages` with the collected `attachmentIds` and removes the bubble on success.
 4. WS echo dedup: when a real message arrives in the channel (`chatStore.addMessage` or `addRealtimeMessage`) whose content + sorted attachmentIds match a pending bubble (`pendingMessageStore.matchAndRemove`), the oldest matching bubble is removed (FIFO tiebreaker). The author is not compared: the attachment ids were issued to this client's uploads, so a match is the echo. Until then the bubble renders as the user's row on the channel's instance (`myRowForOrigin`, client-federation.md §5); no bubble renders while that instance has not named the row.
 5. Failure: bubble flips to `state: 'failed'`. Retry re-runs failed transfers only; discard aborts everything and clears the bubble.
+
+### Compression and documents (`utils/mediaCompression.ts`)
+
+Photos and videos are **shrunk on the sender's device before the upload starts** (`MessageInput.enqueueFile`); the server and the tus pipeline only see the smaller file. The default is on (`stores/mediaUploadPreferences.ts`, `backspace-media-upload-preferences`); the composer's attach button opens `AttachMenu` with **Photo or video** (compressed unless the default was turned off) and **Document** (`mode: 'original'`: any file, uploaded byte for byte, no preview-side change), plus the switch for the default. A paste or drop follows the default.
+
+- **Photos** (`image/jpeg|png|webp|bmp`, at least 350 KB): `createImageBitmap` + canvas, longest side capped at 2560 px, quality 0.85. JPEG stays JPEG; PNG, BMP and WebP become WebP (alpha kept). Animated WebP/PNG (VP8X animation flag, `acTL` chunk) and GIF/SVG are never touched. Drawing on a canvas drops EXIF, GPS position included.
+- **Videos** (8 MB to 400 MB, and only above about 2 Mbit/s): WebCodecs through `mediabunny` (MPL-2.0, loaded on first use with a dynamic `import`; `vite.config.ts` puts it under `assets/media-compression/`, which `PRECACHE_EXCLUDED_PREFIXES` keeps out of the service worker's precache, so members who never send a video never download it). Picture capped at 720p, `QUALITY_MEDIUM`; H.264 + AAC in MP4 when the browser can encode them, otherwise VP9 + Opus in WebM. The result is built in memory (`BufferTarget`), which is why the upper bound exists.
+- **Keep-the-original rules:** the re-encoded file replaces the original only if it is under 90 % of its size; any failure, unsupported browser, cancel or unreadable file uploads the original. `shouldTryCompression` decides up front, so small files go straight to the upload with no progress tile.
+- **UI:** a video shows a `PreparingFileTiles` card with progress, **Send original** (aborts the encode, uploads the untouched file) and **Cancel**. A `FileSystemFileHandle` is dropped for a compressed file, since resume would read the original bytes.
+
+No server change: the output is an ordinary photo or video attachment, so thumbnails, `playable` classification and the janitor behave as before.
 
 ### Reload Survival
 

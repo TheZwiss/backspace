@@ -108,6 +108,22 @@
       "denied": "O acesso ao microfone está bloqueado. Permita para o Backspace gravar.",
       "unavailable": "Nenhum microfone pôde ser usado para gravar.",
       "limit": "Limite de gravação atingido. Sua mensagem de voz foi enviada."
+    },
+    "attach": {
+      "menuLabel": "Anexar",
+      "photoVideo": "Foto ou vídeo",
+      "photoVideoCompressed": "Reduzido no seu dispositivo antes de enviar",
+      "photoVideoOriginal": "Enviado como está (a compressão está desligada)",
+      "document": "Documento",
+      "documentHint": "Qualquer arquivo, enviado exatamente como é",
+      "compressDefault": "Comprimir fotos e vídeos",
+      "compressDefaultHint": "Envios menores. Desligue para manter os originais."
+    },
+    "preparing": {
+      "image": "Comprimindo foto…",
+      "video": "Comprimindo vídeo… {{percent}}%",
+      "sendOriginal": "Enviar original",
+      "cancel": "Cancelar"
     }
   },
   "menu": {

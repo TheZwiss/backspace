@@ -105,6 +105,22 @@
       "denied": "Der Mikrofonzugriff ist blockiert. Erlaube ihn für Backspace, um aufzunehmen.",
       "unavailable": "Es konnte kein Mikrofon zum Aufnehmen verwendet werden.",
       "limit": "Aufnahmelimit erreicht. Deine Sprachnachricht wurde gesendet."
+    },
+    "attach": {
+      "menuLabel": "Anhängen",
+      "photoVideo": "Foto oder Video",
+      "photoVideoCompressed": "Wird vor dem Senden auf deinem Gerät verkleinert",
+      "photoVideoOriginal": "Wird unverändert gesendet (Komprimierung ist aus)",
+      "document": "Dokument",
+      "documentHint": "Jede Datei, genau so gesendet, wie sie ist",
+      "compressDefault": "Fotos und Videos komprimieren",
+      "compressDefaultHint": "Kleinere Uploads. Ausschalten, um Originale zu behalten."
+    },
+    "preparing": {
+      "image": "Foto wird komprimiert…",
+      "video": "Video wird komprimiert… {{percent}} %",
+      "sendOriginal": "Original senden",
+      "cancel": "Abbrechen"
     }
   },
   "menu": {
