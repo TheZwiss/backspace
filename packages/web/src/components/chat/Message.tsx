@@ -538,7 +538,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               user={displayIdentity}
               origin={displayOrigin}
               member={authorMember}
-              frameStatus={isDmMessage ? displayIdentity.status : undefined}
+              frameStatus={displayIdentity.status}
               className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
             />
           </div>

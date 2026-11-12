@@ -67,12 +67,14 @@
     "confirmDelete": "Excluir o efeito “{{name}}”?",
     "search": "Buscar efeitos",
     "add": "Adicionar efeito",
-    "uploadHint": "Até 5,2 segundos e arquivo original de até 5 MB. Máximo de 40 efeitos por servidor.",
+    "uploadHint": "Arquivo de até 5 MB; passou de 5 segundos? Corte para um trecho de 5 segundos. Máximo de 40 sons por servidor.",
     "name": "Nome do efeito",
     "audioFile": "Arquivo de áudio",
     "clipVolume": "Volume do efeito",
     "permissionHint": "É necessário um cargo com a permissão Criar efeitos sonoros para adicionar sons.",
-    "invalidAudio": "Escolha um áudio válido de até 5,2 segundos e 5 MB."
+    "invalidAudio": "Escolha um arquivo de áudio válido de até 5 MB.",
+    "cutSummary": "{{file}}: de {{start}} s a {{end}} s",
+    "editCut": "Editar corte"
   },
   "chatPanel": {
     "title": "Chat",
@@ -422,5 +424,26 @@
     "secureContext": "O ditado precisa de acesso ao microfone em HTTPS, localhost ou no cliente Electron atualizado.",
     "callHint": "Para enviar automaticamente, entre em uma chamada e desmute a voz sintetizada. Você ainda pode ditar para preencher a caixa.",
     "gpuError": "A GPU não está disponível para este modelo. Use CPU ou Automático."
+  },
+  "trimmer": {
+    "title": "Cortar efeito sonoro",
+    "tooLong": "{{file}} dura {{total}}. Escolha até {{max}} para manter.",
+    "fits": "{{file}} dura {{total}}. Você pode cortar; até {{max}} são mantidos.",
+    "seconds": "{{value}} s",
+    "start": "Início",
+    "end": "Fim",
+    "length": "Duração",
+    "preview": "Ouvir",
+    "stop": "Parar",
+    "trimSilence": "Cortar silêncio",
+    "trimSilenceHint": "Enquadra a parte audível e remove o silêncio das pontas",
+    "reset": "Redefinir",
+    "fade": "Suavizar pontas",
+    "help": "Arraste as alças para ajustar, arraste o meio ou clique na onda para mover. Com uma alça em foco, use as setas (Shift para passos maiores).",
+    "apply": "Usar este corte",
+    "windowHandle": "Trecho selecionado",
+    "startHandle": "Início do corte",
+    "endHandle": "Fim do corte",
+    "windowValue": "{{start}} a {{end}}"
   }
 }

@@ -11,12 +11,12 @@ const { api, voice, space } = vi.hoisted(() => {
 });
 vi.mock('../../audio/AudioManager', () => ({ AudioManager: { getInstance: () => ({}) } }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../../i18n/formatters', () => ({ useFormatters: () => ({ formatPercent: (n: number) => `${n}%`, formatDuration: String }) }));
+vi.mock('../../i18n/formatters', () => ({ useFormatters: () => ({ formatPercent: (n: number) => `${n}%`, formatDuration: String, formatNumber: String }) }));
 vi.mock('../../stores/voiceStore', () => ({ useVoiceStore: Object.assign((fn: (state: typeof voice) => unknown) => fn(voice), { getState: () => ({ setSoundboardVolume: vi.fn() }) }) }));
 vi.mock('../../stores/spaceStore', () => ({ useSpaceStore: (fn: (state: typeof space) => unknown) => fn(space), getApiForOrigin: () => api, getMyUserIdForOrigin: () => 'user' }));
 vi.mock('../../utils/staticAvatar', () => ({ useStaticAvatar: (src: string) => src ? 'data:image/png;still' : null }));
 vi.mock('../layout/SpaceSidebar', () => ({ SpaceIconImage: () => null }));
-vi.mock('../../utils/soundboard', () => ({ playLocalSoundboard: vi.fn(), encodeSoundboardFile: vi.fn() }));
+vi.mock('../../utils/soundboard', () => ({ playLocalSoundboard: vi.fn(), encodeSoundboardFile: vi.fn(), decodeSoundboardFile: vi.fn(), encodeSoundboardBuffer: vi.fn(), previewSoundboardCut: vi.fn() }));
 vi.mock('../ui/Modal', () => ({ Modal: () => null }));
 import { SoundboardButton, SoundboardLibrary } from './Soundboard';
 import { useSoundboardUsageStore } from '../../stores/soundboardUsageStore';

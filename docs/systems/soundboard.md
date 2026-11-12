@@ -27,6 +27,8 @@ previews do not create a marker; older events without an actor still play.
 - Upload a browser-decodable audio file up to 5 MB. The client converts it to mono,
   48 kHz, 16-bit PCM WAV; the server validates the complete canonical header and
   maximum 499,244-byte payload rather than trusting MIME types or client metadata.
+- A source longer than 5 seconds is cut in the trimmer before upload; shorter
+  files can be trimmed too ("Edit cut" in the upload form). See below.
 - **Create sound effects** allows uploading and deleting one's own effects.
 - **Manage sound effects** allows deleting any effect in the server.
 - **Use sound effects** and **Use external sound effects** support role and channel
@@ -42,6 +44,26 @@ The listener has a persistent soundboard volume slider. Effects use the existing
 audio output device and output volume. Deafening or leaving the receiving call
 stops playback. A new effect replaces the previous one locally. Local previews
 are not broadcast.
+
+## Trimmer
+
+`SoundTrimmer` (`components/voice/SoundTrimmer.tsx`) opens when a file longer than
+5 seconds is chosen, and again from "Edit cut". It draws the file's waveform and a
+highlighted window for the kept part: drag an edge to resize, drag the middle or
+click the waveform to slide, or use the arrow keys on a focused handle (Shift for
+larger steps). The window can never exceed `MAX_CLIP_SECONDS` (5 s, under the
+server's 5.2 s) or fall under 0.1 s, so a confirmed cut is always uploadable.
+"Preview" plays the cut locally on the app's output bus (never to a call), "Trim
+silence" frames the audible part, and "Fade edges" (on by default) ramps the
+first and last 20 ms so a hard cut does not click. The waveform follows the
+theme through `--accent-primary` / `--text-tertiary`.
+
+The selection rules, peak summary and silence detection are pure functions in
+`utils/audioTrim.ts`. `utils/soundboard.ts` splits the old one-step encode into
+`decodeSoundboardFile`, `encodeSoundboardBuffer(buffer, { start, end, fade })`
+(renders just that slice to the canonical WAV) and `previewSoundboardCut`;
+`encodeSoundboardFile` remains for callers that do not trim. The server is
+unchanged and still validates the rendered WAV.
 
 ## Storage and delivery
 

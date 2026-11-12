@@ -65,12 +65,14 @@
     "confirmDelete": "删除音效“{{name}}”？",
     "search": "搜索音效",
     "add": "添加音效",
-    "uploadHint": "最长 5.2 秒，原始文件最大 5 MB。每个服务器最多 40 个音效。",
+    "uploadHint": "源文件最大 5 MB；超过 5 秒？请裁剪为 5 秒的片段。每个服务器最多 40 个音效。",
     "name": "音效名称",
     "audioFile": "音频文件",
     "clipVolume": "音效音量",
     "permissionHint": "添加音效需要角色具有创建音效的权限。",
-    "invalidAudio": "请选择最长 5.2 秒且不超过 5 MB 的有效音频文件。"
+    "invalidAudio": "请选择不超过 5 MB 的有效音频文件。",
+    "cutSummary": "{{file}}：{{start}} 秒至 {{end}} 秒",
+    "editCut": "编辑裁剪"
   },
   "chatPanel": {
     "title": "聊天",
@@ -416,5 +418,26 @@
     "secureContext": "听写需要通过 HTTPS、localhost 或更新的 Electron 客户端访问麦克风。",
     "callHint": "加入通话并取消合成语音静音以自动发送。您仍可听写来填入文字。",
     "gpuError": "此模型无法使用 GPU。请选择 CPU 或自动模式。"
+  },
+  "trimmer": {
+    "title": "裁剪音效",
+    "tooLong": "{{file}} 时长 {{total}}。请选择最多 {{max}} 保留。",
+    "fits": "{{file}} 时长 {{total}}。可以裁剪；最多保留 {{max}}。",
+    "seconds": "{{value}} 秒",
+    "start": "开始",
+    "end": "结束",
+    "length": "时长",
+    "preview": "试听",
+    "stop": "停止",
+    "trimSilence": "裁掉静音",
+    "trimSilenceHint": "只保留有声部分，去掉两端静音",
+    "reset": "重置",
+    "fade": "边缘渐变",
+    "help": "拖动手柄调整大小，拖动中间或点击波形来移动。手柄获得焦点后可用方向键（按住 Shift 步进更大）。",
+    "apply": "使用此裁剪",
+    "windowHandle": "所选部分",
+    "startHandle": "裁剪起点",
+    "endHandle": "裁剪终点",
+    "windowValue": "{{start}} 至 {{end}}"
   }
 }

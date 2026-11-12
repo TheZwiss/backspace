@@ -115,10 +115,10 @@ selected); `platform/theme.ts` mirrors it to `html[data-msn-frames="xp|flat"]`
 and the `flat` block at the end of `theme-msn.css` removes the bevels. Login and
 register carry `data-auth-page` / `data-auth-card` (inert markers) so the theme
 can draw the Messenger sign-in window (sky background, framed display picture)
-around the unchanged form. In direct messages the MSN theme frames each
+around the unchanged form. In chat messages (DMs and server channels) the MSN theme frames each
 contact photo in a translucent glass frame tinted by presence (green online,
 amber idle, red busy, grey offline): `Avatar` takes an optional `frameStatus`
-prop that only sets `data-frame-status` (DM messages and `DmMemberRow` pass it;
+prop that only sets `data-frame-status` (every chat message and `DmMemberRow` pass it;
 the dot is hidden by CSS under that attribute). References: dsn10-theme, msn-js,
 Windows-Live-Messenger.
 `anime` also changes elements, not just colours, all gated on `theme === 'anime'`

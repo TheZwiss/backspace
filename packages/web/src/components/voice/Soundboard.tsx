@@ -8,7 +8,9 @@ import type { SoundboardPack, SoundboardSound } from '@backspace/shared';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getApiForOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { voiceSessionOrigin } from '../../utils/dmCall';
-import { encodeSoundboardFile, playLocalSoundboard } from '../../utils/soundboard';
+import { decodeSoundboardFile, encodeSoundboardBuffer, playLocalSoundboard } from '../../utils/soundboard';
+import { MAX_CLIP_SECONDS, defaultSelection } from '../../utils/audioTrim';
+import { SoundTrimmer, type SoundCut } from './SoundTrimmer';
 import { describeError } from '../../i18n/errors';
 import { useFormatters } from '../../i18n/formatters';
 import { Modal } from '../ui/Modal';
@@ -22,14 +24,16 @@ const icon = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke=
 
 function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: string; origin: string; manageOnly?: boolean }) {
   const { t } = useTranslation(['voice', 'common']);
-  const { formatDuration, formatPercent } = useFormatters();
+  const { formatDuration, formatPercent, formatNumber } = useFormatters();
   const volume = useVoiceStore((state) => state.soundboardVolume);
   const deafened = useVoiceStore((state) => state.isDeafened);
   const connected = useVoiceStore((state) => state.isLiveKitConnected);
   const [packs, setPacks] = useState<SoundboardPack[]>([]);
   const [selected, setSelected] = useState(spaceId ?? '');
   const [name, setName] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  // The chosen file once decoded, and the part of it that will be uploaded.
+  const [clip, setClip] = useState<{ name: string; buffer: AudioBuffer; cut: SoundCut } | null>(null);
+  const [trimming, setTrimming] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const [gain, setGain] = useState(80);
   const [query, setQuery] = useState('');
@@ -71,14 +75,16 @@ function SoundboardManager({ spaceId, origin, manageOnly = false }: { spaceId?: 
         {canDelete(sound) && <button data-icon-motion="press" type="button" disabled={pending} className="mt-2 text-ui-caption text-accent-rose hover:underline" onClick={() => { if (window.confirm(t('voice:soundboard.confirmDelete', { name: sound.name }))) void action(async () => { await client.soundboard.remove(sound.id); await load(); }); }}>{t('common:actions.delete')}</button>}
       </div>)}
     </div>
-    {canCreate && pack && <form className="space-y-3 rounded-xl border border-wash/[0.06] bg-wash/[0.02] p-4" onSubmit={(e) => { e.preventDefault(); if (!file || !pack || pack.sounds.length >= 40) return; void action(async () => { const audio = await encodeSoundboardFile(file); await client.soundboard.upload(pack.spaceId, { name: name.trim(), audio, volume: gain / 100 }); setName(''); setFile(null); if (fileInput.current) fileInput.current.value = ''; await load(); }); }}>
+    {canCreate && pack && <form className="space-y-3 rounded-xl border border-wash/[0.06] bg-wash/[0.02] p-4" onSubmit={(e) => { e.preventDefault(); if (!clip || !pack || pack.sounds.length >= 40) return; void action(async () => { const audio = await encodeSoundboardBuffer(clip.buffer, clip.cut); await client.soundboard.upload(pack.spaceId, { name: name.trim(), audio, volume: gain / 100 }); setName(''); setClip(null); if (fileInput.current) fileInput.current.value = ''; await load(); }); }}>
       <h3 className="text-sm font-semibold text-txt-primary">{t('voice:soundboard.add')}</h3>
       <p className="text-xs text-txt-tertiary">{t('voice:soundboard.uploadHint')}</p>
       <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={32} placeholder={t('voice:soundboard.name')} aria-label={t('voice:soundboard.name')} className="input-standard w-full"/>
-      <input ref={fileInput} type="file" accept="audio/*" aria-label={t('voice:soundboard.audioFile')} onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-xs text-txt-secondary"/>
+      <input ref={fileInput} type="file" accept="audio/*" aria-label={t('voice:soundboard.audioFile')} onChange={(e) => { const chosen = e.target.files?.[0]; setClip(null); if (!chosen) return; void action(async () => { const buffer = await decodeSoundboardFile(chosen); setClip({ name: chosen.name, buffer, cut: { ...defaultSelection(buffer.duration), fade: true } }); if (buffer.duration > MAX_CLIP_SECONDS) setTrimming(true); }); }} className="block w-full text-xs text-txt-secondary"/>
+      {clip && <div className="flex items-center justify-between gap-3 rounded-lg bg-wash/[0.04] px-3 py-2 text-xs text-txt-secondary" data-sound-cut><span className="min-w-0 truncate">{t('voice:soundboard.cutSummary', { file: clip.name, start: formatNumber(Math.round(clip.cut.start * 100) / 100), end: formatNumber(Math.round(clip.cut.end * 100) / 100) })}</span><button data-icon-motion="press" type="button" onClick={() => setTrimming(true)} className="shrink-0 font-medium text-accent-primary hover:underline">{t('voice:soundboard.editCut')}</button></div>}
       <label className="flex items-center gap-3 text-xs text-txt-secondary">{t('voice:soundboard.clipVolume')}<input type="range" min="0" max="100" value={gain} onChange={(e) => setGain(Number(e.target.value))} className="ui-range"/></label>
-      <button data-icon-motion="press" disabled={pending || !file || name.trim().length < 2 || pack.sounds.length >= 40} className="ui-button ui-button-primary disabled:opacity-40">{t('voice:soundboard.add')}</button>
+      <button data-icon-motion="press" disabled={pending || !clip || name.trim().length < 2 || pack.sounds.length >= 40} className="ui-button ui-button-primary disabled:opacity-40">{t('voice:soundboard.add')}</button>
     </form>}
+    {clip && <SoundTrimmer key={clip.name + clip.buffer.length} isOpen={trimming} buffer={clip.buffer} fileName={clip.name} initial={clip.cut} onCancel={() => setTrimming(false)} onConfirm={(cut) => { setClip((current) => current ? { ...current, cut } : current); setTrimming(false); }} />}
     {pack && !canCreate && <p className="text-xs text-txt-tertiary">{t('voice:soundboard.permissionHint')}</p>}
   </div>;
 }

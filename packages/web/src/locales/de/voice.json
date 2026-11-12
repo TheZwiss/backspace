@@ -66,12 +66,14 @@
     "confirmDelete": "Sound „{{name}}“ löschen?",
     "search": "Sounds suchen",
     "add": "Sound hinzufügen",
-    "uploadHint": "Bis zu 5,2 Sekunden und 5 MB Quelldatei. Maximal 40 Sounds pro Server.",
+    "uploadHint": "Quelldatei bis 5 MB; länger als 5 Sekunden? Kürze sie auf einen 5-Sekunden-Ausschnitt. Höchstens 40 Sounds pro Server.",
     "name": "Soundname",
     "audioFile": "Audiodatei",
     "clipVolume": "Effektlautstärke",
     "permissionHint": "Zum Hinzufügen wird die Rollenberechtigung zum Erstellen von Soundeffekten benötigt.",
-    "invalidAudio": "Wähle eine gültige Audiodatei bis 5,2 Sekunden und 5 MB."
+    "invalidAudio": "Wähle eine gültige Audiodatei bis 5 MB.",
+    "cutSummary": "{{file}}: {{start}} s bis {{end}} s",
+    "editCut": "Ausschnitt bearbeiten"
   },
   "chatPanel": {
     "title": "Chat",
@@ -419,5 +421,26 @@
     "secureContext": "Diktieren benötigt Mikrofonzugriff über HTTPS, localhost oder den aktuellen Electron-Client.",
     "callHint": "Für automatisches Senden einem Anruf beitreten und die synthetisierte Stimme aktivieren. Textdiktat bleibt verfügbar.",
     "gpuError": "GPU für dieses Modell nicht verfügbar. Verwende CPU oder Automatisch."
+  },
+  "trimmer": {
+    "title": "Soundeffekt zuschneiden",
+    "tooLong": "{{file}} dauert {{total}}. Wähle bis zu {{max}} zum Behalten.",
+    "fits": "{{file}} dauert {{total}}. Du kannst kürzen; bis zu {{max}} bleiben erhalten.",
+    "seconds": "{{value}} s",
+    "start": "Beginn",
+    "end": "Ende",
+    "length": "Länge",
+    "preview": "Vorhören",
+    "stop": "Stopp",
+    "trimSilence": "Stille entfernen",
+    "trimSilenceHint": "Passt den hörbaren Teil an und entfernt Stille an den Rändern",
+    "reset": "Zurücksetzen",
+    "fade": "Ränder ausblenden",
+    "help": "Zieh die Griffe zum Ändern der Größe, zieh die Mitte oder klick in die Wellenform zum Verschieben. Mit fokussiertem Griff funktionieren die Pfeiltasten (Umschalt für größere Schritte).",
+    "apply": "Diesen Ausschnitt verwenden",
+    "windowHandle": "Ausgewählter Teil",
+    "startHandle": "Ausschnittsbeginn",
+    "endHandle": "Ausschnittsende",
+    "windowValue": "{{start}} bis {{end}}"
   }
 }
