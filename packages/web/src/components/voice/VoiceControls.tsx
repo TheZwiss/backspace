@@ -11,6 +11,7 @@ import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { SoundboardButton } from './Soundboard';
 import { TextVoiceButton } from './TextVoice';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { handleCameraAction, handleDisconnectAction, handleScreenShareAction, handleChangeScreenShareAction, reconnectVoice } from '../../utils/voiceActions';
 
 /**
@@ -21,6 +22,7 @@ export function VoiceControls() {
   const { t } = useTranslation(['voice', 'common']);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const isCameraStarting = useVoiceStore((s) => s.isCameraStarting);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
@@ -198,17 +200,21 @@ export function VoiceControls() {
         {canSpeak && (
           <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button data-icon-motion="toggle" aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
             onClick={handleCameraAction}
+            aria-busy={isCameraStarting || undefined}
+            disabled={isCameraStarting}
             className={`${btnBase} ${
               isCameraOn
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'
                 : btnDefaultStyle
-            }`}
+            } ${isCameraStarting ? 'cursor-progress' : ''}`}
 
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              <StrikeLine active={!isCameraOn} inset={2} />
-            </svg>
+            {isCameraStarting ? <LoadingSpinner size={20} /> : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+                <StrikeLine active={!isCameraOn} inset={2} />
+              </svg>
+            )}
           </button></Tooltip>
         )}
 

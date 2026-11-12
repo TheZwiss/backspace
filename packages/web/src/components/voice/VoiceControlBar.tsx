@@ -12,6 +12,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleScreenShareActionForWindow, handleChangeScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
@@ -30,6 +31,7 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const isCameraStarting = useVoiceStore((s) => s.isCameraStarting);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const voiceChatFocus = useUIStore((s) => s.voiceChatFocus);
@@ -176,13 +178,17 @@ export function VoiceControlBar({ revealed = false, variant = 'floating', detach
         {canSpeak && (
           <Tooltip content={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')} position="top"><button data-icon-motion="toggle" aria-label={isCameraOn ? t('voice:controls.cameraOff') : t('voice:controls.cameraOn')}
             onClick={handleCamera}
-            className={isCameraOn ? btnGreen : btnDefault}
+            aria-busy={isCameraStarting || undefined}
+            disabled={isCameraStarting}
+            className={`${isCameraOn ? btnGreen : btnDefault} ${isCameraStarting ? 'cursor-progress' : ''}`}
 
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              <StrikeLine active={!isCameraOn} inset={2} />
-            </svg>
+            {isCameraStarting ? <LoadingSpinner size={20} /> : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+                <StrikeLine active={!isCameraOn} inset={2} />
+              </svg>
+            )}
           </button></Tooltip>
         )}
 

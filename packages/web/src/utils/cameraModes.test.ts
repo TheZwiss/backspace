@@ -10,11 +10,14 @@ import {
 } from './cameraModes';
 
 /** A camera that delivers only the listed [width, height, maxFps] modes. */
-function fakeTrack(modes: Array<[number, number, number]>): MediaStreamTrack {
+function fakeTrack(
+  modes: Array<[number, number, number]>,
+  caps: { height: { max: number }; frameRate: { max: number } } = { height: { max: 2160 }, frameRate: { max: 120 } },
+): MediaStreamTrack {
   let current = { width: 640, height: 480, frameRate: 30 };
   const track = {
     readyState: 'live',
-    getCapabilities: () => ({ height: { max: 2160 }, frameRate: { max: 120 } }),
+    getCapabilities: () => caps,
     getSettings: () => current,
     applyConstraints: vi.fn(async (c: MediaTrackConstraints) => {
       const w = (c.width as { exact?: number } | undefined)?.exact;
@@ -38,6 +41,22 @@ describe('probeCameraTrack', () => {
       { width: 1920, height: 1080, maxFps: 30 },
       { width: 1280, height: 720, maxFps: 60 },
     ]);
+  });
+
+  it('spends one capture restart per size on a camera that cannot exceed 30 fps', async () => {
+    const track = fakeTrack([[1920, 1080, 30], [1280, 720, 30]], { height: { max: 1080 }, frameRate: { max: 30 } });
+    const modes = await probeCameraTrack(track);
+    expect(modes).toEqual([
+      { width: 1920, height: 1080, maxFps: 30 },
+      { width: 1280, height: 720, maxFps: 30 },
+    ]);
+    // 1080, 720 accepted, 540 and 360 refused: four applies, with no frame-rate probe on top.
+    expect(track.applyConstraints).toHaveBeenCalledTimes(4);
+  });
+
+  it('still probes frame rates downward on a camera that can exceed 30 fps', async () => {
+    const track = fakeTrack([[1280, 720, 60]], { height: { max: 720 }, frameRate: { max: 60 } });
+    expect(await probeCameraTrack(track)).toEqual([{ width: 1280, height: 720, maxFps: 60 }]);
   });
 
   it('returns nothing for a camera with no 16:9 mode', async () => {

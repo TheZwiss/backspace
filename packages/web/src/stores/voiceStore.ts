@@ -229,6 +229,9 @@ export interface VoiceState {
   setPttActive: (active: boolean) => void;
   toggleMic: () => void;
   toggleCamera: () => void;
+  /** True from the camera click until it is published (or failed): the buttons show progress and ignore clicks. */
+  isCameraStarting: boolean;
+  setCameraStarting: (starting: boolean) => void;
   toggleScreenShare: () => void;
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
@@ -327,6 +330,7 @@ export const useVoiceStore = create<VoiceState>()(
       pttActive: false,
       isDeafened: false,
       isCameraOn: false,
+      isCameraStarting: false,
       isScreenSharing: false,
       screenShareAudio: null,
       livekitHostOrigin: '',
@@ -666,6 +670,7 @@ export const useVoiceStore = create<VoiceState>()(
         return { isMuted: true, isDeafened: true };
       }),
       toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
+      setCameraStarting: (starting) => set({ isCameraStarting: starting }),
       toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
