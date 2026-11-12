@@ -422,7 +422,7 @@ someone because a background poll hit a flaky network is noise.
 - `manual` → opens the releases page because there is no in-place install.
 - `external` → does nothing because the package manager owns the entire update
   lifecycle and no in-app action is presented for this capability.
-- otherwise → `autoUpdater.quitAndInstall()`, then a **4-second watchdog**. If the
+- otherwise → `installDownloadedUpdate(autoUpdater)` (`updateInstall.ts`), then a **4-second watchdog**. If the
   app is still alive and still `ready` after it, the status flips to `failed`.
   A successful install takes the app down before the timer fires. This is defence
   in depth against the silent no-op recurring on a platform we did not anticipate.
@@ -435,9 +435,11 @@ suppressed when the window is focused (the in-app toast covers that) and when
 
 | Capability | Title | Body | Click |
 |---|---|---|---|
-| `auto` | Backspace update ready | Click to restart and install version X. | `quitAndInstall()` |
+| `auto` | Backspace update ready | Click to restart and install version X. | `installDownloadedUpdate()` |
 | `manual` | Backspace X is available | Click to open the download page. | `shell.openExternal(RELEASES_URL)` |
 | `external` | — | No in-app notification; the package manager notifies the user. | — |
+
+**Silent install on Windows (`updateInstall.ts`).** Every install the user asks for (Restart in the app, the native notification, the recovery screen) goes through `installDownloadedUpdate()`. On Windows it calls `quitAndInstall(true, true)`: the NSIS installer runs with `/S --force-run`, so there is no installer window and Backspace reopens by itself, the way Discord updates. Without arguments the installer showed its progress window and relaunched through `autoRunAppAfterInstall`. Closing the app with an update already downloaded was always silent (electron-updater's quit handler calls `install(true, false)`: no window, no relaunch). macOS (flags ignored, Squirrel.Mac) and the Linux AppImage keep the updater defaults. The install is per-user (`nsis.perMachine` is unset), so `/S` raises no elevation prompt; an installer that fails while silent leaves no window to say so, which is why the 4-second watchdog and the failure state stay.
 
 Win32 only: `app.setAppUserModelId('com.backspace.desktop')` is set early in
 startup so notifications attribute to "Backspace" in Windows Action Center.
@@ -732,7 +734,7 @@ When the app is launched with `--hidden` (autostart), `enterRecoveryMode()` alwa
 
 ### Force-Kill Fix
 
-The recovery surface's "Restart to Install Update" button — and the native notification's click handler — both call `autoUpdater.quitAndInstall()` **directly**. They do not rely on `autoInstallOnAppQuit`'s on-quit hook.
+The recovery surface's "Restart to Install Update" button — and the native notification's click handler — both call `installDownloadedUpdate()` (which calls `autoUpdater.quitAndInstall()`) **directly**. They do not rely on `autoInstallOnAppQuit`'s on-quit hook.
 
 Why this matters: a user who Task-Manager-kills a broken app never triggers the on-quit hook; the downloaded update sits on disk. On next launch, the app loads the same broken old version. With recovery active, the user lands in recovery → clicks Restart → install applies cleanly via the direct call. The on-quit hook bypass is no longer fatal.
 
@@ -761,7 +763,7 @@ Executed before each release. See `docs/superpowers/specs/2026-05-03-electron-re
 
 - Checks `Notification.isSupported()` before showing
 - `silent: false` (plays system sound)
-- Click handler: defaults to show + focus the main window; an optional `onClick` parameter overrides this (used by the update-ready notification to call `autoUpdater.quitAndInstall()` directly)
+- Click handler: defaults to show + focus the main window; an optional `onClick` parameter overrides this (used by the update-ready notification to call `installDownloadedUpdate()` directly)
 - **Kept referenced until done** (`notificationRetention.ts`, `NotificationRetainer`): each `Notification` is held in a module-level set from just before `show()` until its first `click`, `close` or `failed`. Without the reference the object can be garbage-collected while the toast is still on screen, and on Windows its click handler then never runs, so clicking a chat toast did nothing (#394). Windows does not promise a `close` (a toast that times out into the Action Center may never send one), so the set is capped at 100: past it the oldest is released. A `failed` event is logged (`[notifications]`).
 
 Chat notifications carry optional `{ channelId, spaceId, userId }` context through

@@ -4,6 +4,7 @@ import type { AppUpdater } from 'electron-updater';
 import path from 'path';
 import { loadInstanceUrl, clearInstanceUrl, getPickerPath } from './instanceUrl';
 import { RELEASES_URL } from './updateStatus';
+import { installDownloadedUpdate } from './updateInstall';
 import { getDesktopLanguage, translateDesktop, type DesktopLanguage } from './l10n';
 
 export type RecoveryReasonCode =
@@ -475,7 +476,7 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       // Direct quitAndInstall — does NOT rely on autoInstallOnAppQuit.
       // Force-kill-fix: if user reaches recovery and clicks here, install
       // happens cleanly even if the on-quit hook would otherwise be bypassed.
-      autoUpdaterRef?.quitAndInstall();
+      if (autoUpdaterRef) installDownloadedUpdate(autoUpdaterRef);
       return;
     }
     case 'change-instance': {

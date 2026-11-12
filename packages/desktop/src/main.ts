@@ -67,6 +67,7 @@ import {
   getCurrentMediaActivity,
   type MediaSetupHint,
 } from './mediaDetector';
+import { installDownloadedUpdate, type InstallableUpdater } from './updateInstall';
 import { loadActivitySettings, parseActivitySettingsUpdate, saveActivitySettings } from './activitySettings';
 import { KeybindManager } from './keybindManager';
 import { integrateAppImage } from './appImageIntegration';
@@ -1102,7 +1103,7 @@ function registerIpcHandlers(): void {
 
     try {
       const { autoUpdater } = require('electron-updater');
-      autoUpdater.quitAndInstall();
+      installDownloadedUpdate(autoUpdater);
     } catch {
       store.setStatus({
         phase: 'failed',
@@ -1539,7 +1540,7 @@ function getUpdateStore(): UpdateStatusStore {
  */
 function notifyAboutUpdate(
   snapshot: UpdateSnapshot,
-  updater: { quitAndInstall: () => void },
+  updater: InstallableUpdater,
 ): void {
   if (!shouldPromptForUpdate(snapshot)) return;
   // A focused user can see the in-app toast. Notifying as well is noise.
@@ -1552,7 +1553,7 @@ function notifyAboutUpdate(
     showNotification(
       'Backspace update ready',
       `Click to restart and install version ${version}.`,
-      () => updater.quitAndInstall(),
+      () => installDownloadedUpdate(updater),
     );
     return;
   }
