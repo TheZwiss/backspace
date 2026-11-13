@@ -340,3 +340,11 @@
 {"snapshot_date":"2026-11-11","dimension":"US","title":"","count":7,"uniques":7}
 {"snapshot_date":"2026-11-11","dimension":"FR","title":"","count":5,"uniques":5}
 {"snapshot_date":"2026-11-11","dimension":"TR","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-11-12","dimension":"RU","title":"","count":18,"uniques":18}
+{"snapshot_date":"2026-11-12","dimension":"BR","title":"","count":13,"uniques":13}
+{"snapshot_date":"2026-11-12","dimension":"other","title":"","count":13,"uniques":13}
+{"snapshot_date":"2026-11-12","dimension":"DE","title":"","count":9,"uniques":9}
+{"snapshot_date":"2026-11-12","dimension":"US","title":"","count":6,"uniques":6}
+{"snapshot_date":"2026-11-12","dimension":"FR","title":"","count":5,"uniques":5}
+{"snapshot_date":"2026-11-12","dimension":"NL","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-11-12","dimension":"TR","title":"","count":3,"uniques":3}
