@@ -213,7 +213,7 @@ describe('sticker reaction menu', () => {
   it('offers the image menu a sticker message gets', () => {
     const menu = openMenu(remoteToken);
     expect(menu.position).toEqual({ x: 100, y: 200 });
-    expect(menu.items.map(i => i.key)).toEqual(['collect-sticker', 'save-image', 'copy-image', 'image-sep']);
+    expect(menu.items.map(i => i.key)).toEqual(['collect-sticker', 'favorite-sticker', 'save-image', 'copy-image', 'image-sep']);
   });
 
   it('collects a sticker from this instance by reference', async () => {
@@ -261,5 +261,31 @@ describe('sticker reaction menu', () => {
     fireEvent.contextMenu(screen.getByRole('button'));
     expect(useContextMenuStore.getState().menu).toBeNull();
     expect(outer).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ReactionPill motion', () => {
+  const pill = (reactions: Reaction[], entering?: boolean) =>
+    <ReactionPill emoji="🎉" reactions={reactions} origin="" onToggle={vi.fn()} entering={entering} />;
+
+  it('is simply there when it was on the message from the start', () => {
+    render(pill([reaction(MIRA, 1)]));
+    expect(screen.getByRole('button')).not.toHaveClass('motion-pop-in');
+    expect(document.querySelector('.motion-count-up, .motion-count-down, .motion-bump')).toBeNull();
+  });
+
+  it('pops in when the reaction arrived while the message was on screen', () => {
+    render(pill([reaction(MIRA, 1)], true));
+    expect(screen.getByRole('button')).toHaveClass('motion-pop-in');
+  });
+
+  it('rolls the count the way it moved and bumps the emoji when the viewer joins in', () => {
+    const { rerender } = render(pill([reaction(MIRA, 1)]));
+    rerender(pill([reaction(MIRA, 1), reaction(ME, 2)]));
+    expect(document.querySelector('.motion-count-up')).toHaveTextContent('2');
+    expect(document.querySelector('.motion-bump')).not.toBeNull();
+    rerender(pill([reaction(MIRA, 1)]));
+    expect(document.querySelector('.motion-count-down')).toHaveTextContent('1');
+    expect(document.querySelector('.motion-bump')).toBeNull();
   });
 });

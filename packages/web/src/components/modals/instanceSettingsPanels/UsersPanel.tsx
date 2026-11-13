@@ -1,3 +1,4 @@
+import { Tooltip } from '../../ui/Tooltip';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters } from '../../../i18n/formatters';
@@ -178,7 +179,7 @@ export function UsersPanel() {
         <select
           value={instanceFilter}
           onChange={(e) => { setInstanceFilter(e.target.value); setPage(1); }}
-          className="input-search text-xs py-1"
+          className="ui-select input-search text-xs"
         >
           <option value="">{t('admin:users.filters.allInstances')}</option>
           <option value="local">{t('admin:users.filters.localOnly')}</option>
@@ -190,7 +191,7 @@ export function UsersPanel() {
         <select
           value={roleFilter}
           onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-          className="input-search text-xs py-1"
+          className="ui-select input-search text-xs"
         >
           <option value="">{t('admin:users.filters.allRoles')}</option>
           <option value="admin">{t('admin:users.filters.admin')}</option>
@@ -215,7 +216,7 @@ export function UsersPanel() {
         <select
           value={sortBy}
           onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-          className="input-search text-xs py-1"
+          className="ui-select input-search text-xs"
         >
           <option value="newest">{t('admin:users.filters.newest')}</option>
           <option value="oldest">{t('admin:users.filters.oldest')}</option>
@@ -234,7 +235,7 @@ export function UsersPanel() {
         </label>
 
         {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== 'newest' || showDeleted || query) && (
-          <button
+          <button data-icon-motion="press"
             onClick={() => {
               setQuery(''); setInstanceFilter(''); setRoleFilter('');
               setJoinedAfter(''); setJoinedBefore('');
@@ -273,7 +274,7 @@ export function UsersPanel() {
 
             return (
               <div key={user.id}>
-                <div className={`flex items-center gap-3 rounded-lg bg-white/[0.02] p-3.5 ${hasTempPassword ? 'rounded-b-none' : ''}`}>
+                <div className={`flex items-center gap-3 rounded-lg bg-wash/[0.02] p-3.5 ${hasTempPassword ? 'rounded-b-none' : ''}`}>
                   {/* Avatar */}
                   <div className={isDeleted ? 'opacity-50' : ''}>
                     <Avatar
@@ -296,21 +297,21 @@ export function UsersPanel() {
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {user.isAdmin && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-amber/20 text-accent-amber">
+                        <span className="px-1.5 py-0.5 text-ui-micro font-medium rounded bg-accent-amber/20 text-accent-amber">
                           {t('admin:users.badge.admin')}
                         </span>
                       )}
                       {isFederated && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-sky/20 text-accent-sky truncate max-w-[120px]">
+                        <span className="px-1.5 py-0.5 text-ui-micro font-medium rounded bg-accent-sky/20 text-accent-sky truncate max-w-[120px]">
                           {user.homeInstance}
                         </span>
                       )}
                       {isDeleted && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-rose/20 text-accent-rose">
+                        <span className="px-1.5 py-0.5 text-ui-micro font-medium rounded bg-accent-rose/20 text-accent-rose">
                           {t('admin:users.badge.deleted')}
                         </span>
                       )}
-                      <span className="text-[10px] text-txt-tertiary">
+                      <span className="text-ui-micro text-txt-tertiary">
                         {formatDate(user.createdAt)}
                       </span>
                     </div>
@@ -320,44 +321,44 @@ export function UsersPanel() {
                   {!isDeleted && (
                     <div className="flex items-center gap-1 shrink-0">
                       {/* Toggle admin */}
-                      <button
+                      <Tooltip content={adminButtonTitle(user, isFederated)} position="top"><button data-icon-motion="press" aria-label={adminButtonTitle(user, isFederated)}
                         onClick={() => handleToggleAdmin(user)}
                         disabled={isFederated && !user.isAdmin}
-                        title={adminButtonTitle(user, isFederated)}
+
                         className={`p-1.5 rounded transition-colors ${
                           user.isAdmin
                             ? 'text-accent-amber hover:bg-accent-amber/10'
                             : isFederated
                               ? 'text-txt-tertiary/30 cursor-not-allowed'
-                              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06]'
+                              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.06]'
                         }`}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                         </svg>
-                      </button>
+                      </button></Tooltip>
 
                       {/* Reset password */}
-                      <button
+                      <Tooltip content={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')} position="top"><button data-icon-motion="press" aria-label={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')}
                         onClick={() => handleResetPassword(user)}
                         disabled={isFederated}
-                        title={isFederated ? t('admin:users.actions.federatedNoReset') : t('admin:users.actions.resetPassword')}
+
                         className={`p-1.5 rounded transition-colors ${
                           isFederated
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
-                            : 'text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.06]'
+                            : 'text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.06]'
                         }`}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
                         </svg>
-                      </button>
+                      </button></Tooltip>
 
                       {/* Delete user */}
-                      <button
+                      <Tooltip content={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')} position="top"><button data-icon-motion="press" aria-label={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')}
                         onClick={() => handleDeleteUser(user)}
                         disabled={isSelf}
-                        title={isSelf ? t('admin:users.actions.selfDelete') : t('admin:users.actions.delete')}
+
                         className={`p-1.5 rounded transition-colors ${
                           isSelf
                             ? 'text-txt-tertiary/30 cursor-not-allowed'
@@ -367,7 +368,7 @@ export function UsersPanel() {
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                         </svg>
-                      </button>
+                      </button></Tooltip>
                     </div>
                   )}
                 </div>
@@ -377,7 +378,7 @@ export function UsersPanel() {
                   <div className="p-3 bg-status-online/10 border border-status-online/30 border-t-0 rounded-b-lg">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-xs text-txt-secondary">{t('admin:users.tempPassword.label')}</div>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={() => setTempPassword(null)}
                         className="text-txt-tertiary hover:text-txt-secondary text-xs"
                       >
@@ -388,14 +389,14 @@ export function UsersPanel() {
                       <code className="px-2 py-1 bg-black/30 rounded text-sm font-mono text-status-online select-all">
                         {tempPassword.password}
                       </code>
-                      <button
+                      <button data-icon-motion="press"
                         onClick={() => navigator.clipboard.writeText(tempPassword.password)}
-                        className="px-2 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-xs rounded transition-colors"
+                        className="px-2 py-1 bg-wash/[0.06] hover:bg-wash/[0.1] text-txt-secondary text-xs rounded transition-colors"
                       >
                         {t('common:actions.copy')}
                       </button>
                     </div>
-                    <div className="text-[10px] text-txt-tertiary mt-1">
+                    <div className="text-ui-micro text-txt-tertiary mt-1">
                       {t('admin:users.tempPassword.note')}
                     </div>
                   </div>
@@ -409,20 +410,20 @@ export function UsersPanel() {
       {/* Pagination */}
       {data && totalPages > 1 && (
         <div className="flex items-center justify-between pt-2">
-          <button
+          <button data-icon-motion="press"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {t('common:actions.previous')}
           </button>
           <span className="text-xs text-txt-tertiary">
             {t('admin:users.pagination', { page, total: totalPages, users: userCountLabel })}
           </span>
-          <button
+          <button data-icon-motion="press"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {t('common:actions.next')}
           </button>

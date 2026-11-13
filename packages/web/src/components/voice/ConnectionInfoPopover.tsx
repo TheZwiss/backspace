@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useTrackStats, AudioTrackStat, VideoTrackStat } from '../../hooks/useTrackStats';
@@ -73,15 +73,15 @@ function trackLabel(direction: 'send' | 'recv', source: string, participantName:
 
 const Row = ({ label, value, colorClass }: { label: string; value: string; colorClass?: string }) => (
   <div className="flex items-center justify-between py-[3px]">
-    <span className="text-[12px] text-txt-tertiary">{label}</span>
-    <span className={`text-[12px] font-medium ${colorClass ?? 'text-txt-secondary'}`}>{value}</span>
+    <span className="text-ui-caption text-txt-tertiary">{label}</span>
+    <span className={`text-ui-caption font-medium ${colorClass ?? 'text-txt-secondary'}`}>{value}</span>
   </div>
 );
 
 const Divider = () => <div className="border-t border-border-soft my-1" />;
 
 const SectionHeader = ({ title }: { title: string }) => (
-  <div className="text-[10px] font-bold text-txt-tertiary uppercase tracking-wider pt-1 pb-[2px]">
+  <div className="text-ui-micro font-bold text-txt-tertiary uppercase tracking-wider pt-1 pb-[2px]">
     {title}
   </div>
 );
@@ -90,8 +90,8 @@ function AudioTrackRow({ track }: { track: AudioTrackStat }) {
   const label = trackLabel(track.direction, track.source, track.participantName);
   return (
     <div className="flex items-center justify-between py-[3px]">
-      <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
-      <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
+      <span className="text-ui-caption text-txt-tertiary truncate mr-2">{label}</span>
+      <span className="text-ui-caption font-medium text-txt-secondary whitespace-nowrap">
         {formatBitrate(track.bitrate)}
         {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
       </span>
@@ -106,19 +106,19 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
   return (
     <div className="py-[3px]">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
-        <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
+        <span className="text-ui-caption text-txt-tertiary truncate mr-2">{label}</span>
+        <span className="text-ui-caption font-medium text-txt-secondary whitespace-nowrap">
           {formatBitrate(track.bitrate)}
           {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
         </span>
       </div>
       {(resolution || track.fps !== null || track.qualityLimitation || track.simulcastLayer || track.encoderImpl) && (
         <div className="flex items-center justify-between pl-3">
-          <span className="text-[11px] text-txt-tertiary">
+          <span className="text-ui-caption text-txt-tertiary">
             {resolution && `${resolution}`}
             {track.fps !== null && ` @${track.fps}`}
           </span>
-          <span className="text-[11px] text-txt-tertiary">
+          <span className="text-ui-caption text-txt-tertiary">
             {track.direction === 'send' && (() => {
               const parts: string[] = [];
               if (track.encoderImpl) parts.push(track.encoderImpl);
@@ -135,12 +135,57 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
   );
 }
 
+type NetworkSample = { ping: number | null; packetLoss: number | null; jitter: number | null };
+const HISTORY_LENGTH = 30;
+
+/** Missing samples break the line rather than inventing values. */
+function MiniGraph({ values, floor, colorClass }: { values: Array<number | null>; floor: number; colorClass: string }) {
+  const max = Math.max(floor, ...values.filter((value): value is number => value !== null && Number.isFinite(value)));
+  const segments: string[][] = [];
+  values.forEach((value, index) => {
+    if (value === null || !Number.isFinite(value)) { segments.push([]); return; }
+    if (segments.length === 0) segments.push([]);
+    const x = (index / (HISTORY_LENGTH - 1)) * 100;
+    const y = 30 - Math.min(Math.max(value, 0) / max, 1) * 26;
+    segments[segments.length - 1]!.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+  });
+  return (
+    <svg aria-hidden="true" viewBox="0 0 100 32" preserveAspectRatio="none" className={`h-8 w-full ${colorClass}`}>
+      <path d="M0 10H100 M0 20H100 M0 30H100" stroke="currentColor" strokeOpacity="0.1" strokeWidth="0.5" />
+      {segments.filter((segment) => segment.length > 0).map((segment, index) => segment.length === 1
+        ? <circle key={index} cx={segment[0]!.split(',')[0]} cy={segment[0]!.split(',')[1]} r="1.4" fill="currentColor" />
+        : <polyline key={index} points={segment.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />)}
+    </svg>
+  );
+}
+
+function NetworkGraph({ label, value, values, floor, colorClass }: { label: string; value: string; values: Array<number | null>; floor: number; colorClass?: string }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-black/20 border border-wash/5 px-2 py-2">
+      <div className="text-ui-micro text-txt-tertiary truncate" title={label}>{label}</div>
+      <div className={`text-ui-label font-semibold tabular-nums mt-0.5 ${colorClass ?? 'text-txt-secondary'}`}>{value}</div>
+      <MiniGraph values={values} floor={floor} colorClass={colorClass ?? 'text-txt-tertiary'} />
+    </div>
+  );
+}
+
 export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionInfoPopoverProps) {
   const { t } = useTranslation(['voice', 'common']);
   const popoverRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
   const stats = useTrackStats(open);
   const requestedCodec = useVoiceStore((s) => s.screenShareConfig.codec);
+  const [history, setHistory] = useState<NetworkSample[]>([]);
+  const historyRoom = useRef<ReturnType<typeof getActiveRoom>>(null);
+  useEffect(() => {
+    const room = getActiveRoom();
+    if (!open || !room) { historyRoom.current = null; setHistory([]); return; }
+    if (!stats) return;
+    const sample = { ping: stats.network.ping, packetLoss: stats.network.packetLoss, jitter: stats.network.jitter };
+    const sameRoom = historyRoom.current === room;
+    historyRoom.current = room;
+    setHistory((previous) => [...(sameRoom ? previous : []), sample].slice(-HISTORY_LENGTH));
+  }, [open, stats]);
 
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
     placement: 'top',
@@ -178,33 +223,23 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
       className="w-[300px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
-        <span className="text-[14px] font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
+        <span className="text-ui-body font-bold text-txt-primary">{t('voice:connectionInfo.title')}</span>
       </div>
 
       <div className="px-3 py-2 max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
+          <div className="text-ui-caption text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.notConnected')}</div>
         ) : !stats ? (
-          <div className="text-[12px] text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.gathering')}</div>
+          <div className="text-ui-caption text-txt-tertiary py-2 text-center">{t('voice:connectionInfo.gathering')}</div>
         ) : (
           <>
             {/* Network */}
             <SectionHeader title={t('voice:connectionInfo.section.network')} />
-            <Row
-              label={t('voice:connectionInfo.network.ping')}
-              value={stats.network.ping !== null ? formatMilliseconds(stats.network.ping) : '\u2014'}
-              colorClass={stats.network.ping !== null ? pingColor(stats.network.ping) : undefined}
-            />
-            <Row
-              label={t('voice:connectionInfo.network.packetLoss')}
-              value={stats.network.packetLoss !== null ? formatLossPercent(stats.network.packetLoss) : '\u2014'}
-              colorClass={stats.network.packetLoss !== null ? lossColor(stats.network.packetLoss) : undefined}
-            />
-            <Row
-              label={t('voice:connectionInfo.network.jitter')}
-              value={stats.network.jitter !== null ? formatMilliseconds(stats.network.jitter) : '\u2014'}
-              colorClass={stats.network.jitter !== null ? jitterColor(stats.network.jitter) : undefined}
-            />
+            <div className="grid grid-cols-3 gap-1.5 my-1.5">
+              <NetworkGraph label={t('voice:connectionInfo.network.ping')} value={stats.network.ping !== null ? formatMilliseconds(stats.network.ping) : '—'} values={history.map((sample) => sample.ping)} floor={VOICE_HEALTH.pingBadMs} colorClass={stats.network.ping !== null ? pingColor(stats.network.ping) : undefined} />
+              <NetworkGraph label={t('voice:connectionInfo.network.packetLoss')} value={stats.network.packetLoss !== null ? formatLossPercent(stats.network.packetLoss) : '—'} values={history.map((sample) => sample.packetLoss)} floor={VOICE_HEALTH.lossBadPct} colorClass={stats.network.packetLoss !== null ? lossColor(stats.network.packetLoss) : undefined} />
+              <NetworkGraph label={t('voice:connectionInfo.network.jitter')} value={stats.network.jitter !== null ? formatMilliseconds(stats.network.jitter) : '—'} values={history.map((sample) => sample.jitter)} floor={VOICE_HEALTH.jitterBadMs} colorClass={stats.network.jitter !== null ? jitterColor(stats.network.jitter) : undefined} />
+            </div>
             <Row label={t('voice:connectionInfo.network.server')} value={stats.network.serverAddress ?? '\u2014'} />
             <Row
               label={t('voice:connectionInfo.network.protocol')}

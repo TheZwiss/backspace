@@ -310,7 +310,7 @@ function MemberRolesBody({
   return (
     <div className="flex flex-col h-full">
       {/* Header: who is being edited, plus the way back to the profile card */}
-      <div className="flex items-center gap-3 px-6 py-4 pr-16 border-b border-white/[0.06] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 pr-16 border-b border-wash/[0.06] flex-shrink-0">
         <Avatar
           src={canonical.avatar}
           name={displayName}
@@ -321,7 +321,7 @@ function MemberRolesBody({
         <h2 className="flex-1 min-w-0 text-lg font-semibold text-txt-primary truncate" title={displayName}>
           {t('spaces:memberRoles.title', { name: displayName })}
         </h2>
-        <button
+        <button data-icon-motion="press"
           onClick={handleViewProfile}
           className="flex-shrink-0 px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors"
         >
@@ -331,11 +331,11 @@ function MemberRolesBody({
 
       <div className="flex-1 min-h-0 flex">
         {/* Left pane: membership checkboxes; clicking a row edits that role */}
-        <div className="w-72 flex-shrink-0 border-r border-white/[0.06] overflow-y-auto scrollbar-thin p-4">
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="w-72 flex-shrink-0 border-r border-wash/[0.06] overflow-y-auto scrollbar-thin p-4">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('spaces:roles.listHeading')}
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-2">
+          <div className="rounded-lg bg-wash/[0.02] p-2">
             <div className="space-y-0.5">
               {sortedRoles.map((role) => {
                 const isEveryone = role.id === spaceId;
@@ -344,7 +344,7 @@ function MemberRolesBody({
                 const nameId = `${nameIdPrefix}-${role.id}`;
                 const name = roleName(role);
                 return (
-                  <div
+                  <div data-icon-motion="press"
                     key={role.id}
                     onClick={() => setSelectedRoleId(role.id)}
                     className={`flex items-center gap-2.5 px-2.5 py-2 rounded cursor-pointer transition-colors ${
@@ -410,10 +410,10 @@ function MemberRolesBody({
 
               {PERMISSION_GROUPS.map((group) => (
                 <div key={group.id} className="mb-5">
-                  <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+                  <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
                     {groupTitle(group.id)}
                   </div>
-                  <div className="rounded-lg bg-white/[0.02] p-3.5">
+                  <div className="rounded-lg bg-wash/[0.02] p-3.5">
                     <div className="space-y-1">
                       {group.perms.map((perm) => {
                         const isAdminBit = perm.bit === PermissionBits.ADMINISTRATOR;
@@ -445,7 +445,7 @@ function MemberRolesBody({
                                   <path d={LOCK_ICON} />
                                 </svg>
                               )}
-                              <div
+                              <div data-icon-motion="press"
                                 role="switch"
                                 aria-checked={isOn}
                                 aria-disabled={isLocked}
@@ -497,16 +497,16 @@ function MemberRolesBody({
             <div className="sticky bottom-0 z-10 pointer-events-none">
               <div className="flex justify-center pt-3 pb-1">
                 <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleDiscard}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
                     {t('spaces:settings.discardChanges')}
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {saving ? t('common:states.saving') : t('common:actions.save')}
                   </button>

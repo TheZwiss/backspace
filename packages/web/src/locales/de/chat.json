@@ -21,6 +21,7 @@
       "unknownRole": "Unbekannte Rolle"
     },
     "reactions": {
+      "picker": "Reaktionsauswahl",
       "you": "Du",
       "others_one": "{{count}} weitere Person",
       "others_other": "{{count}} weitere",
@@ -75,6 +76,8 @@
     "cancelReply": "Antwort abbrechen",
     "removeAttachment": "Anhang entfernen",
     "attachFile": "Datei anhängen",
+    "dropTitle": "Datei hochladen",
+    "dropHint": "Zum Anhängen loslassen",
     "uploading": "Wird hochgeladen…",
     "uploadingLabel": "Wird hochgeladen",
     "failedCount_one": "{{count}} fehlgeschlagen",
@@ -92,6 +95,32 @@
       "named_one": "{{names}} schreibt",
       "named_other": "{{names}} schreiben",
       "several": "Mehrere Personen schreiben"
+    },
+    "voice": {
+      "record": "Sprachnachricht aufnehmen",
+      "recording": "Sprachnachricht wird aufgenommen",
+      "cancel": "Aufnahme abbrechen",
+      "send": "Sprachnachricht senden",
+      "tooShort": "Nimm etwas länger auf, um sie zu senden.",
+      "denied": "Der Mikrofonzugriff ist blockiert. Erlaube ihn für Backspace, um aufzunehmen.",
+      "unavailable": "Es konnte kein Mikrofon zum Aufnehmen verwendet werden.",
+      "limit": "Aufnahmelimit erreicht. Deine Sprachnachricht wurde gesendet."
+    },
+    "attach": {
+      "menuLabel": "Anhängen",
+      "photoVideo": "Foto oder Video",
+      "photoVideoCompressed": "Wird vor dem Senden auf deinem Gerät verkleinert",
+      "photoVideoOriginal": "Wird unverändert gesendet (Komprimierung ist aus)",
+      "document": "Dokument",
+      "documentHint": "Jede Datei, genau so gesendet, wie sie ist",
+      "compressDefault": "Fotos und Videos komprimieren",
+      "compressDefaultHint": "Kleinere Uploads. Ausschalten, um Originale zu behalten."
+    },
+    "preparing": {
+      "image": "Foto wird komprimiert…",
+      "video": "Video wird komprimiert… {{percent}} %",
+      "sendOriginal": "Original senden",
+      "cancel": "Abbrechen"
     }
   },
   "menu": {
@@ -129,6 +158,13 @@
       "partialInstance": "der Instanz von {{username}} (Limit: {{limit}})",
       "partialList": "Die Datei konnte auf {{instances}} nicht zwischengespeichert werden. Die Empfänger können sie weiterhin über deine Instanz ansehen.",
       "listPair": "{{first}} und {{second}}"
+    },
+    "voice": {
+      "label": "Sprachnachricht, {{duration}}",
+      "play": "Sprachnachricht abspielen",
+      "pause": "Sprachnachricht pausieren",
+      "speed": "Wiedergabegeschwindigkeit {{speed}}",
+      "seek": "Position in der Sprachnachricht"
     }
   },
   "gif": {
@@ -172,6 +208,14 @@
   },
   "stickers": {
     "title": "Meine Sticker",
+    "collections": "Sticker-Sammlungen",
+    "servers": "Server",
+    "serverEmpty": "Dieser Server hat noch kein Sticker-Paket",
+    "serverEmptyHint": "Ein Server-Administrator kann es in den Servereinstellungen unter Server-Sticker anlegen.",
+    "favoritesTitle": "Favorisierte Sticker",
+    "favorite": "Sticker favorisieren",
+    "favorited": "Sticker zu Favoriten hinzugefügt",
+    "sharePending": "Ein privates Album möchte in dieser Instanz veröffentlicht werden.",
     "upload": "Bild hochladen",
     "limits": "PNG, JPEG, WebP oder GIF · maximal 5 MB",
     "loading": "Wird geladen…",
@@ -189,6 +233,7 @@
     "cancel": "Abbrechen",
     "replace": "Bild ersetzen",
     "name": "Stickername",
+    "invalidName": "Wähle einen sichtbaren Namen mit höchstens 100 Zeichen.",
     "dropImage": "Bild hierher ziehen oder auswählen",
     "pasteHint": "Du kannst auch ein Bild aus der Zwischenablage einfügen",
     "uploading": "Sticker wird hinzugefügt…",
@@ -215,11 +260,148 @@
     "renameNamed": "{{name}} umbenennen",
     "renameTitle": "Sticker umbenennen",
     "search": "Sticker suchen",
-    "noResults": "Keine Sticker gefunden"
+    "noResults": "Keine Sticker gefunden",
+    "store": "Sticker-Store",
+    "myCollection": "Meine Sticker",
+    "packs": "Stickerpakete",
+    "explore": "Sticker entdecken",
+    "myPacks": "Von mir erstellt",
+    "install": "Hinzufügen",
+    "installed": "Hinzugefügt",
+    "uninstall": "Entfernen",
+    "createPack": "Paket erstellen",
+    "editPack": "Paket bearbeiten",
+    "packName": "Paketname",
+    "packDesc": "Beschreibung (optional)",
+    "submitReview": "Zur Überprüfung einreichen",
+    "pendingReview": "Wird überprüft",
+    "approved": "Genehmigt",
+    "rejected": "Abgelehnt",
+    "draft": "Entwurf",
+    "newVersion": "Neue Version",
+    "deletePack": "Paket löschen",
+    "stickersCount_one": "{{count}} Sticker",
+    "stickersCount_other": "{{count}} Sticker",
+    "noPacks": "Keine Stickerpakete gefunden",
+    "replicaBadge": "Föderiert",
+    "viewPack": "Paket ansehen",
+    "saveDraft": "Als Entwurf speichern",
+    "packCreated": "Paket erfolgreich erstellt",
+    "reviewSubmitted": "Zur Überprüfung durch Administratoren eingereicht",
+    "reviews": "Überprüfungen",
+    "noReviews": "Keine Sticker-Pakete zur Überprüfung ausstehend",
+    "approve": "Freigeben",
+    "reject": "Ablehnen",
+    "rejectTitle": "Sticker-Paket ablehnen",
+    "rejectReason": "Ablehnungsgrund",
+    "rejectPlaceholder": "Geben Sie einen Ablehnungsgrund ein",
+    "rejectConfirm": "Ablehnung bestätigen",
+    "approvedSuccess": "Sticker-Paket erfolgreich freigegeben",
+    "rejectedSuccess": "Sticker-Paket abgelehnt",
+    "reviewNotes": "Prüfhinweise",
+    "creator": "Ersteller",
+    "sourceInstance": "Instanz",
+    "localInstance": "Lokale Instanz",
+    "viewStickers": "Sticker ansehen",
+    "pendingReviewHint": "Wartet auf Administrator-Überprüfung"
   },
   "poke": {
     "action": "Anstupsen",
     "received": "{{actor}} hat {{target}} angestupst",
     "disconnected": "Verbindung getrennt. Anstupsen wurde nicht gesendet."
+  },
+  "nudge": {
+    "notice": "Hat dich angestupst!",
+    "title": "Aufmerksamkeit erregen",
+    "cooldown": "Warte 10 Sekunden zwischen Aufmerksamkeitsrufen",
+    "choose": "Aufmerksamkeitseffekt auswählen",
+    "originals": "MSN Messenger · Original-Winks",
+    "footer": "Ein Aufmerksamkeitsruf alle 10 Sekunden.",
+    "effects": {
+      "shake": {
+        "title": "MSN-Rütteln",
+        "description": "Das klassische schnelle Rütteln"
+      },
+      "wave": {
+        "title": "Kleine Welle",
+        "description": "Eine Welle läuft über den Bildschirm"
+      },
+      "jelly": {
+        "title": "Wackelpudding",
+        "description": "Dehnen, wackeln und zurückfedern"
+      },
+      "knock": {
+        "title": "An den Bildschirm klopfen",
+        "description": "Ein Klopfen für deine Aufmerksamkeit"
+      },
+      "confetti": {
+        "title": "Konfetti",
+        "description": "Eine kleine Feier"
+      },
+      "pulse": {
+        "title": "Impuls",
+        "description": "Ein violetter Rand leuchtet auf"
+      },
+      "msn_bouncy_ball": {
+        "title": "Hüpfender Ball",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_bow": {
+        "title": "Verbeugung",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_dancing_pig": {
+        "title": "Tanzendes Schwein",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_eyeball": {
+        "title": "Neugierige Augen",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_frog": {
+        "title": "Frosch",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_guitar_smash": {
+        "title": "Gitarre zertrümmern",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_heart": {
+        "title": "Herz",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_kiss": {
+        "title": "Kuss",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_lipstick_girl": {
+        "title": "Mädchen mit Lippenstift",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_love_letter": {
+        "title": "Liebesbrief",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_notes": {
+        "title": "Musiknoten",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_silly_face": {
+        "title": "Grimasse",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_stars": {
+        "title": "Sterne",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_water_balloon": {
+        "title": "Wasserballon",
+        "description": "Originaler MSN-Wink"
+      },
+      "msn_fart_guy": {
+        "title": "Pupsender Kerl",
+        "description": "Originaler MSN-Wink"
+      }
+    }
   }
 }

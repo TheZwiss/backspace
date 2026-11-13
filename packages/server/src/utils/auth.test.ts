@@ -24,7 +24,7 @@ describe('requireLocalUser', () => {
   });
 
   it('returns 403 for federated users (homeInstance is set)', async () => {
-    const request = mockRequest('nova.ddns.net');
+    const request = mockRequest('nova.example');
     const reply = mockReply();
 
     await requireLocalUser(request, reply);

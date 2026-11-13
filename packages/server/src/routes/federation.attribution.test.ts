@@ -18,7 +18,7 @@ vi.mock('../db/index.js', () => ({ getDb: () => testDb, getRawDb: () => sqlite, 
 // depends on it.
 vi.mock('../utils/federationAuth.js', async (importActual) => {
   const actual = await importActual<typeof import('../utils/federationAuth.js')>();
-  return { ...actual, getOurOrigin: () => 'https://nova.ddns.net' };
+  return { ...actual, getOurOrigin: () => 'https://nova.example' };
 });
 
 import { attributionRefusal, extractDomain } from './federation.js';
@@ -57,7 +57,7 @@ function seedRegistryEntry(userId: string, origin: string): void {
     userId,
     origin,
     label: 'Orbit',
-    username: `${userId}@nova.ddns.net`,
+    username: `${userId}@nova.example`,
     remoteUserId: 'remote-id',
     status: 'connected',
     addedAt: Date.now(),
@@ -66,33 +66,33 @@ function seedRegistryEntry(userId: string, origin: string): void {
 
 describe('attributionRefusal — direct case (peer speaks for its own users)', () => {
   it('accepts when the actor is homed on the signing peer', () => {
-    const actor = { homeUserId: 'u1', homeInstance: 'orbit.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBeNull();
+    const actor = { homeUserId: 'u1', homeInstance: 'orbit.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBeNull();
   });
 
   it('accepts a full-URL homeInstance for the signing peer', () => {
-    const actor = { homeUserId: 'u1', homeInstance: 'https://orbit.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBeNull();
+    const actor = { homeUserId: 'u1', homeInstance: 'https://orbit.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBeNull();
   });
 
   it('rejects an actor homed on a third instance', () => {
     const actor = { homeUserId: 'u1', homeInstance: 'evil.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 });
 
 describe('attributionRefusal — homeward case (peer speaks for one of OUR users)', () => {
   it('accepts when the local user holds a federated account on the signing peer', () => {
     seedNativeUser('erin');
-    seedRegistryEntry('erin', 'https://orbit.ddns.net');
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBeNull();
+    seedRegistryEntry('erin', 'https://orbit.example');
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBeNull();
   });
 
   it('accepts when the peer is recorded in the user replicatedInstances', () => {
-    seedNativeUser('erin', JSON.stringify([{ origin: 'https://orbit.ddns.net', username: 'erin@nova.ddns.net' }]));
-    const actor = { homeUserId: 'erin', homeInstance: 'https://nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBeNull();
+    seedNativeUser('erin', JSON.stringify([{ origin: 'https://orbit.example', username: 'erin@nova.example' }]));
+    const actor = { homeUserId: 'erin', homeInstance: 'https://nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBeNull();
   });
 
   // The two refusals below cannot tell a forgery from a proof that is still on
@@ -102,28 +102,28 @@ describe('attributionRefusal — homeward case (peer speaks for one of OUR users
   // the terminal `attribution_mismatch`.
   it('refuses as unproven when the local user has no recorded presence on the signing peer yet', () => {
     seedNativeUser('erin');
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_unproven');
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_unproven');
   });
 
   it('refuses as unproven when the user is so far only known to be connected to a DIFFERENT peer', () => {
     seedNativeUser('erin');
-    seedRegistryEntry('erin', 'https://orbit.ddns.net');
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://vault.ddns.net', testDb)).toBe('attribution_unproven');
+    seedRegistryEntry('erin', 'https://orbit.example');
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://vault.example', testDb)).toBe('attribution_unproven');
   });
 
   it('accepts once the proof that was missing has arrived', () => {
     seedNativeUser('erin');
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_unproven');
-    seedRegistryEntry('erin', 'https://orbit.ddns.net');
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBeNull();
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_unproven');
+    seedRegistryEntry('erin', 'https://orbit.example');
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBeNull();
   });
 
   it('rejects when the claimed local identity does not exist', () => {
-    const actor = { homeUserId: 'ghost', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    const actor = { homeUserId: 'ghost', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 
   it('does not accept a replicated stub that merely carries the same homeUserId', () => {
@@ -132,17 +132,17 @@ describe('attributionRefusal — homeward case (peer speaks for one of OUR users
     // within one instance.
     testDb.insert(schema.users).values({
       id: 'stub-row',
-      username: 'erin@orbit.ddns.net',
+      username: 'erin@orbit.example',
       passwordHash: '!federation-replicated',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'erin',
       createdAt: Date.now(),
     } as typeof schema.users.$inferInsert).run();
-    seedRegistryEntry('stub-row', 'https://orbit.ddns.net');
+    seedRegistryEntry('stub-row', 'https://orbit.example');
 
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 
   it('rejects a deleted local identity', () => {
@@ -154,34 +154,34 @@ describe('attributionRefusal — homeward case (peer speaks for one of OUR users
       isDeleted: 1,
       createdAt: Date.now(),
     } as typeof schema.users.$inferInsert).run();
-    seedRegistryEntry('erin', 'https://orbit.ddns.net');
+    seedRegistryEntry('erin', 'https://orbit.example');
 
-    const actor = { homeUserId: 'erin', homeInstance: 'nova.ddns.net' };
-    expect(attributionRefusal(actor, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    const actor = { homeUserId: 'erin', homeInstance: 'nova.example' };
+    expect(attributionRefusal(actor, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 });
 
 describe('attributionRefusal — malformed actors', () => {
   it('rejects a missing actor', () => {
-    expect(attributionRefusal(undefined, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    expect(attributionRefusal(undefined, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 
   it('rejects an actor with no homeUserId — a homeInstance alone is not an identity', () => {
-    expect(attributionRefusal({ homeUserId: '', homeInstance: 'orbit.ddns.net' }, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    expect(attributionRefusal({ homeUserId: '', homeInstance: 'orbit.example' }, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 
   it('rejects an actor with no homeInstance — a homeUserId alone is not an identity', () => {
-    expect(attributionRefusal({ homeUserId: 'u1', homeInstance: '' }, 'https://orbit.ddns.net', testDb)).toBe('attribution_mismatch');
+    expect(attributionRefusal({ homeUserId: 'u1', homeInstance: '' }, 'https://orbit.example', testDb)).toBe('attribution_mismatch');
   });
 });
 
 describe('extractDomain', () => {
   it('strips https:// prefix', () => {
-    expect(extractDomain('https://nova.ddns.net')).toBe('nova.ddns.net');
+    expect(extractDomain('https://nova.example')).toBe('nova.example');
   });
 
   it('returns bare domain unchanged', () => {
-    expect(extractDomain('nova.ddns.net')).toBe('nova.ddns.net');
+    expect(extractDomain('nova.example')).toBe('nova.example');
   });
 
   it('strips http:// prefix and port via URL constructor', () => {

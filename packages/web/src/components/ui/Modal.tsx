@@ -1,10 +1,13 @@
-import React, { useEffect, useCallback } from 'react';
+import { useExitMotion } from '../../hooks/useExitMotion';
+import React, { useRef } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ModalProps {
+  targetDocument?: Document;
   isOpen: boolean;
   onClose: () => void;
   title?: string;
@@ -27,35 +30,27 @@ interface ModalProps {
  * appended after it.
  */
 export function Modal(props: ModalProps) {
-  const portalContainer = usePortalContainer();
+  const portalContainer = usePortalContainer(props.targetDocument ?? document);
   if (!props.isOpen) return null;
   return createPortal(<ModalSurface {...props} />, portalContainer);
 }
 
-function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default' }: ModalProps) {
+function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, mobileStyle = 'default', targetDocument = document }: ModalProps) {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  useExitMotion(surfaceRef);
+  useDialogLayer(surfaceRef, { onClose, label: title, document: targetDocument });
   const { t } = useTranslation('common');
   const isMobile = useUIStore((s) => s.isMobile);
   const closeLabel = size === 'settings' ? t('chrome.closeSettings') : t('actions.close');
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
   // Mobile fullscreen style
   if (isMobile && mobileStyle === 'fullscreen') {
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col bg-surface-base animate-fade-in">
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex flex-col bg-surface-base animate-fade-in">
         {(title || size === 'settings') && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0" style={{ paddingTop: 'calc(16px + var(--safe-top))' }}>
-            {title ? <h2 className="text-xl font-bold text-txt-primary">{title}</h2> : <div />}
-            <button
+            {title ? <h2 className="ui-dialog-title">{title}</h2> : <div />}
+            <button data-icon-motion="press"
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
               aria-label={closeLabel}
@@ -76,16 +71,16 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Mobile bottom sheet style
   if (isMobile && mobileStyle === 'sheet') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-end justify-center animate-fade-in">
-        <div
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-end justify-center animate-fade-in">
+        <div data-icon-motion="press"
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
         <div className="relative w-full max-h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-t-2xl animate-slide-up" style={{ paddingBottom: 'var(--safe-bottom)' }}>
           {title && (
             <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
-              <h2 className="text-xl font-bold text-txt-primary">{title}</h2>
-              <button
+              <h2 className="ui-dialog-title">{title}</h2>
+              <button data-icon-motion="press"
                 onClick={onClose}
                 className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
                 aria-label={closeLabel}
@@ -107,14 +102,14 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
   // Settings size variant — large glass overlay for settings screens
   if (size === 'settings') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
-        <div
+      <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
+        <div data-icon-motion="press"
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col glass-modal rounded-xl animate-slide-up overflow-hidden">
+        <div className="relative w-[calc(90*var(--app-vw))] max-w-6xl h-[calc(85*var(--app-vh))] flex flex-col ui-dialog-surface animate-slide-up overflow-hidden">
           {/* Floating close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
             className="absolute top-4 right-4 z-10 p-1.5 rounded-full bg-surface-elevated/50 backdrop-blur-sm text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={closeLabel}
@@ -131,16 +126,16 @@ function ModalSurface({ onClose, title, children, maxWidth = 'max-w-md', size, m
 
   // Default centered dialog (desktop and mobile default)
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
-      <div
+    <div ref={surfaceRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up`}>
+      <div className={`relative ${maxWidth} w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col ui-dialog-surface animate-slide-up`}>
         {title && (
           <div className="flex items-center justify-between px-4 pt-4 flex-shrink-0">
-            <h2 className="text-xl font-bold text-txt-primary">{title}</h2>
-            <button
+            <h2 className="ui-dialog-title">{title}</h2>
+            <button data-icon-motion="press"
               onClick={onClose}
               className="text-txt-tertiary hover:text-txt-primary transition-colors p-1"
               aria-label={closeLabel}

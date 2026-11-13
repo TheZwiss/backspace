@@ -1,3 +1,5 @@
+import { receiveSoundboard } from '../utils/soundboard';
+import { startStreamPreviews, useStreamPreviews } from '../utils/streamPreviews';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Room,
@@ -13,6 +15,7 @@ import {
   LocalTrackPublication,
   DisconnectReason,
   TrackEvent,
+  VideoPresets,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { homeIdentityOf } from '../utils/identity';
@@ -23,14 +26,15 @@ import { myRowForOrigin } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus, clearSpaceVoiceForDmCall } from '../utils/voice';
-import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/voiceActions';
+import { buildCameraOptions, requestCameraQuality } from '../utils/camera';
+import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/cameraFlags';
 import { dmCallChannelId, dmCallOrigin, dmCallRoomKey, voiceSessionOrigin } from '../utils/dmCall';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
-  CAMERA_OVERDRIVE,
   buildScreenShareOptions,
   applyOverdrive,
+  applyScreenCaptureConfig,
   scheduleScreenShareOverdrive,
   republishScreenShare,
   getRequestedPublishedScreenShareCodec,
@@ -45,6 +49,9 @@ import { StreamRepublishTracker } from '../utils/streamRepublish';
 import { StreamResumeMemory, type RememberedStream } from '../utils/streamResume';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
+import { enqueueTrackUpdate } from '../utils/activeTrackUpdates';
+import { applyMicBitrate, audioPresetForKbps } from '../utils/voiceQuality';
+import { DEFAULT_VOICE_BITRATE_KBPS } from '@backspace/shared/src/constants';
 
 let _activeRoom: Room | null = null;
 /**
@@ -55,9 +62,12 @@ let _activeRoom: Room | null = null;
 const _republishTrackers = new WeakMap<Room, StreamRepublishTracker>();
 /** The shares each room's viewer may watch again after a full reconnect (`StreamResumeMemory`). */
 const _resumeMemories = new WeakMap<Room, StreamResumeMemory>();
+const _previewCleanup = new WeakMap<Room, () => void>();
 
 /** Forget a room's per-sharer stream state: the room is being left. */
 function clearRoomStreamState(room: Room): void {
+  _previewCleanup.get(room)?.();
+  _previewCleanup.delete(room);
   _republishTrackers.get(room)?.clear();
   _resumeMemories.get(room)?.clear();
 }
@@ -71,7 +81,6 @@ function clearRoomStreamState(room: Room): void {
  * later config change happens to correct it. Chaining the runs keeps every read
  * of that marker outside the window where it is being rewritten.
  */
-let _activeTrackUpdate: Promise<void> = Promise.resolve();
 
 function toVoiceConnectionQuality(quality: ConnectionQuality): VoiceConnectionQuality {
   switch (quality) {
@@ -97,6 +106,8 @@ export interface ParticipantInfo {
   isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  isScreenShareRepublishing?: boolean;
+  isScreenShareRepublishRevision?: number;
   isLocal: boolean;
   audioTrack: MediaStreamTrack | null;
   videoTrack: MediaStreamTrack | null;
@@ -313,10 +324,20 @@ export function useLiveKit() {
   const switchCameraGenRef = useRef(0);
   
   const isMuted = useVoiceStore((s) => s.isMuted);
+  const textVoiceEnabled = useVoiceStore((s) => s.textVoiceEnabled);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
+  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
+  const voiceUsers = useVoiceStore((s) => s.voiceUsers);
+  const departedVoiceUserIds = useVoiceStore((s) => s.departedVoiceUserIds);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
+  const cameraConfig = useVoiceStore((s) => s.cameraConfig);
+  // The quality the admin set on the channel this client is in. It changes
+  // while connected when an admin edits the channel (channel_updated).
+  const channelVoiceBitrateKbps = useVoiceStore((s) => s.channelVoiceBitrateKbps);
   // The host's limits shape the effective config, so a document that arrives
   // after the share started must reach the running encoder too.
   const { limits: streamHostLimits } = useStreamHostLimits();
@@ -440,6 +461,8 @@ export function useLiveKit() {
           ? localShareLive
           : hasScreenSharePublication || (republish?.isBridging(p.identity) ?? false),
         isLocal,
+        isScreenShareRepublishing: !isLocal && (republish?.isRepublishing(p.identity) ?? false),
+        isScreenShareRepublishRevision: isLocal ? undefined : republish?.revision(p.identity) ?? 0,
         audioTrack,
         videoTrack,
         screenTrack,
@@ -449,8 +472,65 @@ export function useLiveKit() {
       });
     };
     processParticipant(r.localParticipant, true);
-    r.remoteParticipants.forEach((p) => processParticipant(p, false));
+    const voiceState = useVoiceStore.getState();
+    const channelId = voiceState.currentVoiceChannelId;
+    const usesSpaceRoster = !!channelId
+      && connectedChannelRef.current === channelId
+      && r.state === ConnectionState.Connected
+      && voiceState.isLiveKitConnected
+      && !voiceState.activeDmCall;
+    r.remoteParticipants.forEach((p) => {
+      if (usesSpaceRoster && voiceState.departedVoiceUserIds.has(resolveParticipantUserId(p.identity))) return;
+      processParticipant(p, false);
+    });
+
+    // The space voice roster is confirmed by the server before LiveKit's
+    // ParticipantConnected event arrives (some LiveKit versions batch that
+    // event for several seconds). Show those users in the voice grid while
+    // this exact space room is connected. Keep this as presence only: media
+    // tracks and camera/share publications still come exclusively from SDK
+    // participants above.
+    if (usesSpaceRoster && channelId) {
+      const spaceStore = useSpaceStore.getState();
+      const spaceId = spaceStore.channelToSpaceMap.get(channelId);
+      const listedUserIds = new Set(allParticipants.map((participant) => participant.userId));
+      for (const userId of voiceState.voiceUsers.get(channelId) ?? []) {
+        if (listedUserIds.has(userId)) continue;
+
+        const previous = prevParticipants.find((participant) => participant.userId === userId);
+        const member = spaceId
+          ? spaceStore.members.find((candidate) => candidate.spaceId === spaceId && candidate.userId === userId)
+          : undefined;
+        const cachedUser = (member?.user as User | undefined) ?? previous?.cachedUser ?? null;
+        const username = previous?.username ?? member?.user.username ?? userId;
+        const status = voiceState.voiceUserStates.get(userId);
+
+        allParticipants.push({
+          identity: previous?.identity ?? `${userId}:${username}`,
+          userId,
+          username,
+          homeUserId: member?.user.homeUserId ?? previous?.homeUserId ?? null,
+          cachedUser,
+          isMuted: status?.isMuted ?? previous?.isMuted ?? false,
+          isDeafened: status?.isDeafened ?? previous?.isDeafened ?? false,
+          isCameraOn: false,
+          isScreenSharing: false,
+          isLocal: false,
+          audioTrack: null,
+          videoTrack: null,
+          screenTrack: null,
+          screenAudioTrack: null,
+          lkVideoTrack: null,
+          lkScreenTrack: null,
+        });
+        listedUserIds.add(userId);
+      }
+    }
+
     useVoiceStore.getState().setParticipants(allParticipants);
+    if (useStreamPreviews.getState().room === r) {
+      useStreamPreviews.setState({ identities: Object.fromEntries(allParticipants.map((p) => [p.userId, p.identity])) });
+    }
     SpeakingDetector.getInstance().syncTracks(allParticipants);
   }, []);
 
@@ -528,10 +608,11 @@ export function useLiveKit() {
       try {
         if (!isCurrentRoom()) return;
         const audioManager = AudioManager.getInstance();
+        audioManager.setTextInputOnly(textVoiceEnabled);
 
         // Sync voice processing settings to AudioManager
-        audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
-        await audioManager.setRnnoiseEnabled(rnnoiseEnabled);
+        if (!textVoiceEnabled) audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
+        await audioManager.setRnnoiseEnabled(textVoiceEnabled ? false : rnnoiseEnabled);
         if (!isCurrentRoom()) return;
 
         const micPub = r.localParticipant.getTrackPublications()
@@ -543,7 +624,7 @@ export function useLiveKit() {
         // the publish branch entirely. Re-attempt is gated behind the
         // `requestMicPermission` user-gesture path which clears the flag
         // and triggers this effect to re-run via its dep.
-        if (micPermissionDenied) {
+        if (micPermissionDenied && !textVoiceEnabled) {
           if (micPub?.track) {
             await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack).catch(() => {});
           }
@@ -599,7 +680,7 @@ export function useLiveKit() {
       cancelled = true;
       unsubscribeResume();
     };
-  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, micPermissionDenied]);
+  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, micPermissionDenied, textVoiceEnabled]);
 
   // Subscribe to upstream-input-track-end events from AudioManager whenever a
   // room is connected. The published mic track is a clone of a WebAudio
@@ -611,6 +692,7 @@ export function useLiveKit() {
     const subscriberRoom = roomRef.current;
 
     const unsubscribe = am.onInputTrackEnded(async () => {
+      if (useVoiceStore.getState().textVoiceEnabled) return;
       // Room was replaced or torn down between event emission and handler run.
       if (roomRef.current !== subscriberRoom || !subscriberRoom) return;
 
@@ -720,6 +802,20 @@ export function useLiveKit() {
     })();
   }, [cameraDeviceId, isCameraOn, isConnected]);
 
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected || !isCameraOn || !streamHostLimits) return;
+    void requestCameraQuality(r);
+  }, [cameraConfig, isCameraOn, isConnected, streamHostLimits]);
+
+  // An admin changing the channel's voice quality reaches people already in
+  // the call; the join path above covers everyone arriving afterwards.
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected) return;
+    void applyMicBitrate(r, channelVoiceBitrateKbps);
+  }, [channelVoiceBitrateKbps, isConnected]);
+
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
     if (connectedChannelRef.current === storedId && roomRef.current?.state === ConnectionState.Connected) return;
@@ -812,8 +908,25 @@ export function useLiveKit() {
       useVoiceStore.setState({ livekitHostOrigin: hostOrigin });
       // Refreshed per join; home's document arrives with every home `ready`.
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
-      const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
+      // A space voice channel carries the admin's chosen microphone quality;
+      // one from a server that predates the setting gets the same default the
+      // settings dialog shows. A DM call has none, and LiveKit's default stays.
+      const channelBitrateKbps = isDm
+        ? null
+        : useSpaceStore.getState().channels?.find((c) => c.id === channelId)?.voiceBitrateKbps ?? DEFAULT_VOICE_BITRATE_KBPS;
+      useVoiceStore.setState({ channelVoiceBitrateKbps: channelBitrateKbps });
+      const newRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        publishDefaults: { videoCodec: 'h264', simulcast: true, videoSimulcastLayers: [VideoPresets.h360], backupCodec: false, audioPreset: audioPresetForKbps(channelBitrateKbps) },
+      });
       roomRef.current = newRoom;
+      _previewCleanup.set(newRoom, startStreamPreviews(newRoom, {
+        getMode: () => useVoiceStore.getState().screenShareConfig.previewMode ?? 'normal',
+        subscribe: (change) => useVoiceStore.subscribe((state, previous) => {
+          if (state.screenShareConfig.previewMode !== previous.screenShareConfig.previewMode) change();
+        }),
+      }));
       // This room's own tracker. Its handlers use it directly, and act only
       // while the room is current: a replaced room's late events belong to
       // nothing the user still sees.
@@ -822,6 +935,10 @@ export function useLiveKit() {
         if (roomRef.current !== newRoom) return;
         endRemoteStream(identity);
         updateParticipants();
+      }, (identity) => {
+        // An announced swap that never removed its publication expired. Drop
+        // only the transient flag; the share remains live.
+        if (roomRef.current === newRoom && newRoom.remoteParticipants.has(identity)) updateParticipants();
       });
       _republishTrackers.set(newRoom, republish);
       const resume = new StreamResumeMemory();
@@ -1006,8 +1123,15 @@ export function useLiveKit() {
         }
         updateParticipants();
       });
-      newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant) => {
-        if (isCurrent()) handleDataReceived(newRoom, payload, participant, republish, resume);
+      newRoom.on(RoomEvent.DataReceived, (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
+        if (isCurrent() && !participant && topic === 'backspace.soundboard.v1') {
+          void receiveSoundboard(payload, newRoom, hostOrigin, isCurrent);
+          return;
+        }
+        if (isCurrent()) {
+          handleDataReceived(newRoom, payload, participant, republish, resume);
+          guardedUpdate();
+        }
       });
       newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
         const normalizedQuality = toVoiceConnectionQuality(quality);
@@ -1190,20 +1314,25 @@ export function useLiveKit() {
 
   useEffect(() => {
     updateParticipants();
-  }, [voiceUserStates, isMuted, isDeafened, isScreenSharing, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
+  }, [voiceUserStates, voiceUsers, departedVoiceUserIds, currentVoiceChannelId, isLiveKitConnected, activeDmCall, isMuted, isDeafened, isScreenSharing, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
 
+  const previousScreenCodec = useRef(screenShareConfig.codec);
   useEffect(() => {
+    const codecChanged = previousScreenCodec.current !== screenShareConfig.codec;
+    previousScreenCodec.current = screenShareConfig.codec;
     if (!room) return;
     // Superseded by a newer run (config changed again, or the room went away)
     // while this one was still queued behind an in-flight update.
     let superseded = false;
     const updateActiveTracks = async () => {
-      if (superseded) return;
-      if (isScreenSharing) {
+      if (superseded || roomRef.current !== room) return;
+      if (useVoiceStore.getState().isScreenSharing) {
         // System Audio first: a toggle change publishes or withdraws only the
         // audio track, never the video.
         await syncScreenShareAudio(room);
-        const opts = buildScreenShareOptions(screenShareConfig);
+        if (superseded || roomRef.current !== room || !useVoiceStore.getState().isScreenSharing) return;
+        const currentConfig = useVoiceStore.getState().screenShareConfig;
+        const opts = buildScreenShareOptions(currentConfig);
         // Codec changed mid-stream — the codec is baked into SDP negotiation,
         // so republish the same track under the new options (no re-capture).
         const publishedCodec = getRequestedPublishedScreenShareCodec();
@@ -1216,25 +1345,27 @@ export function useLiveKit() {
         if (screenPub?.videoTrack) {
           const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
-            if (opts.capture.width > 0 && opts.capture.height > 0) {
-              // Standard mode: apply resolution + frameRate together
-              await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate, min: 15 } });
-            } else {
-              // Native mode: apply frameRate only — never pass 0 to width/height
-              await mediaTrack.applyConstraints({ frameRate: { ideal: opts.capture.frameRate, min: 15 } });
-            }
-            mediaTrack.contentHint = opts.contentHint;
+            await applyScreenCaptureConfig(mediaTrack, currentConfig);
           }
+          if (superseded || roomRef.current !== room) return;
           // For native mode, recompute overdrive bitrate from actual track dimensions
-          resolveNativeOverdrive(mediaTrack ?? null, screenShareConfig, opts);
+          resolveNativeOverdrive(mediaTrack ?? null, currentConfig, opts);
           await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
       }
-      if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
+      if (isCameraOn) {
+        const cameraOptions = buildCameraOptions(streamHostLimits ?? undefined);
+        await applyOverdrive(room, Track.Source.Camera, cameraOptions.overdrive);
+      }
     };
-    _activeTrackUpdate = _activeTrackUpdate.then(updateActiveTracks).catch(() => {});
-    return () => { superseded = true; };
-  }, [room, screenShareConfig, streamHostLimits, isScreenSharing, isCameraOn]);
+    const enqueue = () => { void enqueueTrackUpdate(updateActiveTracks).catch(error => console.warn('[LiveKit] Could not update active tracks:', error)); };
+    const requested = getRequestedPublishedScreenShareCodec();
+    const timer = isScreenSharing && (codecChanged || (requested !== null && requested !== screenShareConfig.codec))
+      ? setTimeout(enqueue, 150)
+      : undefined;
+    if (timer === undefined) enqueue();
+    return () => { superseded = true; clearTimeout(timer); };
+  }, [room, screenShareConfig.height, screenShareConfig.fps, screenShareConfig.mode, screenShareConfig.cursorMode, screenShareConfig.customBitrateKbps, screenShareConfig.shareAudio, screenShareConfig.codec, streamHostLimits, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,6 @@
 {
   "name": "@backspace/desktop",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "description": "Backspace",
@@ -12,10 +12,10 @@
   "main": "dist/main.js",
   "desktopName": "io.github.TheZwiss.backspace.desktop",
   "scripts": {
-    "build:ts": "tsc",
-    "dev": "tsc && electron .",
-    "build": "tsc && electron-builder",
-    "build:all": "tsc && electron-builder --mac --win --linux --arm64 --x64",
+    "build:ts": "tsc && node scripts/buildTextVoice.mjs",
+    "dev": "pnpm build:ts && electron .",
+    "build": "pnpm build:ts && electron-builder",
+    "build:all": "pnpm build:ts && electron-builder --mac --win --linux --arm64 --x64",
     "clean": "rm -rf dist dist-electron",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -30,11 +30,14 @@
     "@vencord/venmic": "7.2.3"
   },
   "devDependencies": {
+    "@echogarden/espeak-ng-emscripten": "0.3.5",
     "@electron/fuses": "^2.1.3",
     "@electron/rebuild": "^4.2.0",
-    "electron": "^43.7.5",
+    "electron": "^43.8.1",
     "electron-builder": "^26.15.3",
+    "esbuild": "0.28.2",
+    "onnxruntime-web": "1.31.1",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

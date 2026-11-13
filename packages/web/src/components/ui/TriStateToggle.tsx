@@ -1,3 +1,4 @@
+import { Tooltip } from './Tooltip';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -23,7 +24,7 @@ export function TriStateToggle({
     if (!active) return `${base} ${interaction} text-txt-tertiary${disabled ? '' : ' hover:text-txt-secondary'}`;
     switch (v) {
       case 'deny': return `${base} ${interaction} bg-accent-rose/15 text-accent-rose`;
-      case 'neutral': return `${base} ${interaction} bg-white/[0.06] text-txt-tertiary`;
+      case 'neutral': return `${base} ${interaction} bg-wash/[0.06] text-txt-tertiary`;
       case 'allow': return `${base} ${interaction} bg-accent-primary/15 text-accent-primary`;
     }
   };
@@ -35,17 +36,17 @@ export function TriStateToggle({
   };
 
   const button = (v: TriState, glyph: string, next: TriState) => (
-    <button
+    <Tooltip content={names[v]} position="top"><button data-icon-motion="arrow"
       type="button"
       className={btnClass(v, value === v)}
       onClick={() => !disabled && onChange(next)}
       disabled={disabled}
       aria-pressed={value === v}
       aria-label={names[v]}
-      title={names[v]}
+
     >
       {glyph}
-    </button>
+    </button></Tooltip>
   );
 
   return (

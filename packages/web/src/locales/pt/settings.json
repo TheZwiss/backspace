@@ -1,4 +1,64 @@
 {
+  "attentionMutes": {
+    "title": "Pessoas silenciadas",
+    "description": "Silencie sons, animações e avisos de atenção de pessoas específicas neste dispositivo. Mensagens e chamadas continuam disponíveis.",
+    "mute": "Silenciar chamadas de atenção",
+    "muteShort": "Silenciar",
+    "unmute": "Reativar chamadas de atenção",
+    "unmuteShort": "Reativar",
+    "minutes15": "Por 15 minutos",
+    "hour1": "Por 1 hora",
+    "hours8": "Por 8 horas",
+    "hours24": "Por 24 horas",
+    "forever": "Até reativar",
+    "searchLabel": "Adicionar pessoa",
+    "searchPlaceholder": "Buscar por nome de usuário...",
+    "duration": "Duração do silêncio",
+    "noResults": "Nenhuma pessoa encontrada.",
+    "empty": "Ninguém está silenciado.",
+    "until": "Silenciado até {{time}}"
+  },
+  "friendNotifications": {
+    "title": "Solicitações de amizade",
+    "description": "Mostre um cartão com foto e ações rápidas quando alguém quiser adicionar você. O modo Não perturbar é respeitado.",
+    "enabled": "Mostrar solicitações na tela",
+    "sound": "Reproduzir som",
+    "desktop": "Mostrar sobre o desktop em segundo plano"
+  },
+  "theme": {
+    "label": "Tema",
+    "description": "Escolha a aparência do Backspace. Salvo neste navegador ou app, neste dispositivo.",
+    "msnFrames": {
+      "label": "Bordas do Windows XP",
+      "description": "Bordas azuis chanfradas nas janelas, como no Windows XP."
+    },
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "Superfícies foscas e quentes com detalhes de vidro fosco."
+      },
+      "light": {
+        "name": "Claro",
+        "description": "Superfícies de papel quente com texto em tinta escura."
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "Superfícies em preto puro que economizam bateria em telas OLED."
+      },
+      "anime": {
+        "name": "Anime",
+        "description": "Índigo crepuscular com detalhes em rosa sakura."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Azul claro do Live Messenger com botões brilhantes e fonte Segoe."
+      },
+      "msn-dark": {
+        "name": "MSN Escuro",
+        "description": "Azul do Live Messenger sobre marinho profundo, com botões brilhantes."
+      }
+    }
+  },
   "interfaceScale": {
     "label": "Escala da interface",
     "description": "Redimensiona textos, botões e painéis. Salva neste navegador ou app, neste dispositivo.",
@@ -69,7 +129,16 @@
         "fallbackName": "Câmera {{number}}",
         "detectedFallback": "câmera detectada",
         "currentlyUsing": "Em uso: {{label}}",
-        "none": "Nenhuma câmera detectada."
+        "none": "Nenhuma câmera detectada.",
+        "quality": {
+          "label": "Qualidade da webcam",
+          "managed": "A qualidade da webcam é definida pela instância: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Resolução",
+          "framerate": "Taxa de quadros",
+          "bitrate": "Taxa de bits",
+          "useDefault": "Usar padrão",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Testar câmera",
@@ -125,8 +194,10 @@
     "tabs": {
       "account": "Conta",
       "appearance": "Aparência",
+      "notifications": "Notificações",
       "voice": "Voz e vídeo",
       "privacy": "Privacidade",
+      "stickers": "Figurinhas",
       "connections": "Conexões",
       "keybinds": "Atalhos",
       "desktop": "Desktop",
@@ -137,6 +208,26 @@
   },
   "appearance": {
     "title": "Aparência"
+  },
+  "stickers": {
+    "title": "Minha biblioteca de figurinhas",
+    "description": "Álbuns privados que somente você pode ver. Cada álbum aceita até 30 figurinhas animadas ou estáticas.",
+    "packs": "Álbuns privados",
+    "newPack": "Nome do novo álbum",
+    "createPack": "Criar álbum",
+    "favorites": "Favoritas",
+    "favoritesHint": "Clique com o direito em uma figurinha no chat para salvar uma cópia local aqui.",
+    "noFavorites": "Ainda não há figurinhas favoritas.",
+    "share": "Compartilhar álbum",
+    "instance": "Esta instância",
+    "requestShare": "Solicitar aprovação",
+    "shareRequested": "Solicitação enviada para aprovação.",
+    "cropTitle": "Recortar figurinha em formato quadrado",
+    "itemName": "Nome da figurinha",
+    "deletePack": "Apagar álbum",
+    "deletePackTitle": "Apagar “{{name}}”?",
+    "deletePackDescription": "O álbum e as solicitações de compartilhamento pendentes serão removidos. Figurinhas já enviadas continuam disponíveis no chat.",
+    "deletePackSuccess": "Álbum apagado."
   },
   "account": {
     "title": "Minha conta",
@@ -269,7 +360,48 @@
     "activity": {
       "sectionTitle": "Status de atividade",
       "label": "Compartilhar status de atividade",
-      "description": "Permite que outras pessoas vejam o que você está fazendo, como jogos que você está jogando ou músicas que está ouvindo."
+      "description": "Permite que outras pessoas vejam o que você está fazendo, como jogos que você está jogando ou músicas que está ouvindo.",
+      "game": {
+        "label": "Criados manualmente",
+        "description": "Adicione um jogo que não foi detectado. Ele fica visível até você removê-lo.",
+        "placeholder": "Nome do jogo",
+        "set": "Definir",
+        "detectedLabel": "Detectado agora",
+        "detectedDescription": "Mostre um jogo detectado com outro nome. O nome fica salvo para a próxima vez.",
+        "renamePlaceholder": "Mostrar como…",
+        "renameLabel": "Mostrar {{name}} como",
+        "renamedLabel": "Jogos renomeados",
+        "renamedItem": "{{detected}} → {{chosen}}",
+        "restore": "Restaurar",
+        "descriptionBound": "Adicione um jogo que não foi detectado: escolha o programa dele e dê um nome. Ele é exibido enquanto esse programa estiver em execução.",
+        "programLabel": "Programa",
+        "programPlaceholder": "Escolha um programa em execução…",
+        "programHint": "Inicie o jogo primeiro e depois escolha o programa dele na lista.",
+        "clearRename": "Limpar",
+        "unknownLabel": "Programas Wine não reconhecidos",
+        "unknownDescription": "Estes estão em execução, mas não correspondem a nenhum jogo conhecido. Se um deles for o seu jogo, exiba-o como o jogo que você está jogando.",
+        "unknownUse": "Adicionar aos meus jogos",
+        "gamesLabel": "Seus jogos",
+        "gamesDescription": "O primeiro jogo é o que as listas mostram; mova os jogos para definir a prioridade. Um jogo oculto não é exibido para os outros.",
+        "moveUp": "Mover {{name}} para cima",
+        "moveDown": "Mover {{name}} para baixo",
+        "hide": "Ocultar",
+        "show": "Mostrar",
+        "hideGame": "Ocultar {{name}}",
+        "showGame": "Mostrar {{name}}",
+        "add": "Adicionar",
+        "remove": "Remover",
+        "statusName": "exibido pelo nome",
+        "statusRunning": "em execução",
+        "statusWaiting": "aguardando {{program}}",
+        "dragHandle": "Arraste {{name}} para mudar a prioridade",
+        "manualNameLabel": "Nome de {{name}}",
+        "save": "Salvar"
+      },
+      "hideBrowserMedia": {
+        "label": "Ocultar players de navegador",
+        "description": "Abas tocando no Chrome, Firefox, Edge e outros navegadores (um vídeo do YouTube, um player web) não aparecem como ouvindo ou assistindo."
+      }
     }
   },
   "connections": {
@@ -294,6 +426,11 @@
       "pending": "Conectando ao portal da área de trabalho. Se aparecer uma caixa de diálogo do sistema, escolha os atalhos das ações que você quer usar.",
       "ready": "O Backspace está registrado. Abra as configurações de atalhos de teclado do sistema para alterar ou remover atribuições. A lista abaixo é somente leitura e é atualizada quando você volta ao Backspace.",
       "unavailable": "O portal está indisponível, a permissão foi negada ou a sessão terminou. É necessário um backend do portal de Atalhos Globais. Os atalhos locais ficam desativados no Wayland.",
+      "missingDesktopEntry": "O portal não encontrou a entrada do aplicativo Backspace. Instale ou integre o aplicativo ao sistema antes de registrar atalhos globais.",
+      "integrateAppImage": "Integrar AppImage ao sistema",
+      "integrationError": "Não foi possível criar a entrada do aplicativo. Verifique o acesso à pasta de aplicativos do usuário.",
+      "configure": "Configurar atalhos",
+      "configureError": "Não foi possível abrir o editor de atalhos. Abra as configurações de atalhos do sistema e procure Backspace.",
       "retry": "Registrar ou reconectar atalhos",
       "assigned": "Atalho do sistema: {{shortcut}}",
       "notAssigned": "Nenhuma atribuição ativa no sistema"
@@ -311,7 +448,8 @@
       "pushToTalk": "Aperte para falar",
       "toggleCamera": "Alternar câmera",
       "toggleScreenShare": "Alternar compartilhamento de tela",
-      "disconnect": "Desconectar"
+      "disconnect": "Desconectar",
+      "dictationPushToTalk": "Ditar e enviar voz (segurar)"
     },
     "row": {
       "recordingPrompt": "Pressione uma combinação de teclas…",
@@ -430,5 +568,59 @@
     },
     "version": "Versão {{version}}",
     "allReleases": "Todas as versões no GitHub"
+  },
+  "notifications": {
+    "description": "Controle os avisos, sons e animações que você recebe neste dispositivo.",
+    "soundsTitle": "Sons do aplicativo",
+    "soundsDescription": "Mensagens, entrada e saída de chamadas e outros alertas.",
+    "messagesTitle": "Avisos de mensagens",
+    "messagesDescription": "Escolha quais mensagens notificam você pelo sino de cada canal ou pelas configurações do espaço. O status Não perturbe continua controlando os alertas de mensagens e chamadas.",
+    "systemDescription": "Os avisos do sistema também seguem as permissões de notificações do Backspace nas configurações do sistema.",
+    "permissionGranted": "Notificações do navegador permitidas",
+    "permissionDenied": "Notificações bloqueadas no navegador",
+    "permissionUnavailable": "Notificações indisponíveis neste navegador",
+    "permissionDefault": "Notificações do navegador ainda não ativadas",
+    "enable": "Ativar notificações",
+    "attentionTitle": "Chamadas de atenção",
+    "attentionDescription": "Preferências deste dispositivo. Nenhum efeito tira o foco do seu jogo.",
+    "scopeLabel": "Onde receber",
+    "scopeBoth": "Dentro ou fora, conforme o foco do Backspace",
+    "scopeApp": "Somente dentro do Backspace",
+    "scopeDesktop": "Somente fora, com o Backspace em segundo plano",
+    "scopeOff": "Não receber chamadas de atenção",
+    "modeLabel": "Como mostrar",
+    "modeFull": "Animações completas",
+    "modeReduced": "Movimento reduzido (pulso suave)",
+    "modeNotification": "Somente notificação, sem animações",
+    "soundLabel": "Reproduzir o som do efeito",
+    "volumeLabel": "Volume das chamadas de atenção",
+    "monitorLabel": "Monitores para efeitos externos",
+    "monitorAll": "Todos os monitores",
+    "monitorPrimary": "Somente monitor principal",
+    "monitorApp": "Monitor onde está o Backspace",
+    "monitorSecondary": "Somente monitores secundários",
+    "gameTitle": "Modo jogo",
+    "gameDetectionLabel": "Ativar modo jogo",
+    "gameDetectionAuto": "Automaticamente ao detectar um jogo",
+    "gameDetectionOn": "Manter ativado manualmente",
+    "gameDetectionOff": "Desativado",
+    "gameTriggerLabel": "Considerar que estou jogando",
+    "gameTriggerForeground": "Quando o jogo estiver em primeiro plano",
+    "gameTriggerRunning": "Enquanto houver um jogo aberto",
+    "gameActionLabel": "Durante o jogo",
+    "notificationOnly": "Mostrar apenas notificação",
+    "gameOtherDisplays": "Animar somente monitores sem jogo",
+    "gameSuppress": "Silenciar e ocultar todas as chamadas",
+    "gameNormal": "Usar meu comportamento normal",
+    "gameMonitorLabel": "Onde está o jogo",
+    "gameMonitorAuto": "Identificar automaticamente",
+    "gameMonitorPrimary": "No monitor principal",
+    "gameMonitorApp": "No mesmo monitor do Backspace",
+    "gameMonitorSecondary": "Nos monitores secundários",
+    "gameFallbackLabel": "Sem monitor livre ou sem identificar a tela do jogo",
+    "gameFallbackApp": "Mostrar aviso somente dentro do Backspace",
+    "gameFallbackOff": "Não mostrar nem tocar som",
+    "gameHelp": "A identificação de jogos e monitores depende do sistema e do jogo. Se a tela do jogo for desconhecida, a opção acima evita animá-la. Jogos em tela cheia exclusiva podem impedir avisos sobre o jogo.",
+    "appHelp": "Avisos dentro do aplicativo não trazem a janela para frente. Se o Backspace estiver minimizado, eles não são exibidos."
   }
 }

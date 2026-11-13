@@ -31,7 +31,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
   if (!embed.embedUrl) return null;
 
   return (
-    <div className="mt-2 max-w-[400px] rounded-lg overflow-hidden bg-surface-channel border border-white/[0.06]">
+    <div className="mt-2 max-w-[400px] rounded-lg overflow-hidden bg-surface-channel border border-wash/[0.06]">
       {isLoaded ? (
         <iframe
           src={embed.embedUrl}
@@ -44,7 +44,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
           loading="lazy"
         />
       ) : (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => setIsLoaded(true)}
           className="w-full text-left focus:outline-none group"
@@ -63,21 +63,21 @@ export function RichEmbed({ embed }: RichEmbedProps) {
             )}
             <div className="flex-1 min-w-0">
               {providerLabel && (
-                <div className="text-[12px] text-txt-tertiary font-medium mb-1">
+                <div className="text-ui-caption text-txt-tertiary font-medium mb-1">
                   {providerLabel}
                 </div>
               )}
               {embed.title && (
-                <div className="text-[14px] text-sky-400 font-semibold group-hover:underline line-clamp-2">
+                <div className="text-ui-body text-sky-400 font-semibold group-hover:underline line-clamp-2">
                   {embed.title}
                 </div>
               )}
               {embed.description && (
-                <div className="text-[13px] text-txt-secondary mt-1 line-clamp-2">
+                <div className="text-ui-label text-txt-secondary mt-1 line-clamp-2">
                   {embed.description}
                 </div>
               )}
-              <div className="text-[12px] text-txt-secondary group-hover:text-txt-primary transition-colors mt-2 flex items-center gap-1.5">
+              <div className="text-ui-caption text-txt-secondary group-hover:text-txt-primary transition-colors mt-2 flex items-center gap-1.5">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>

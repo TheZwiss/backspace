@@ -1,7 +1,84 @@
 {
+  "textVoice": {
+    "title": "文字语音",
+    "enable": "使用文字语音",
+    "description": "输入或口述你想说的话，由葡萄牙语语音在通话中替你说出来。",
+    "micOff": "通话中你的麦克风保持关闭。只有在你点击“说话转文字”时，才会在本设备上使用。",
+    "voice": "巴西葡萄牙语音色",
+    "speed": "语速",
+    "placeholder": "输入你想说的话…",
+    "enterHint": "Enter 说话 · Shift+Enter 换行",
+    "checking": "正在此设备上准备语音…",
+    "unavailable": "点击「准备语音」下载或加载本地模型。",
+    "speaking": "正在准备或说话…",
+    "muted": "加入通话并取消静音后才能说话，服务器限制仍然适用。",
+    "ready": "输入或说话，然后点击“在通话中说出”。",
+    "speak": "在通话中说话",
+    "preview": "仅自己试听",
+    "stop": "停止说话",
+    "privacy": "一切都在本设备上完成。只有语音音频会进入通话；文字不会发送给任何人。",
+    "quick": {
+      "hello": "大家好！",
+      "wait": "请稍等。",
+      "repeat": "请再说一遍。"
+    },
+    "processing": "处理方式",
+    "automatic": "自动",
+    "prepare": "准备语音",
+    "backendActive": "处理方式：{{backend}}",
+    "gpuUnavailable": "此设备无法使用 GPU，请选择 CPU。",
+    "localError": "无法准备或生成语音，请重试或选择 CPU。",
+    "downloadProgress": "正在下载模型：{{progress}}",
+    "downloadHint": "首次使用：CPU 约 95 MB，GPU 约 330 MB。模型保存在此设备上。",
+    "unsupported": "请使用 HTTPS 或更新后的 Electron 客户端准备语音。此模式下真实麦克风仍保持关闭。",
+    "setupTitle": "准备语音（只需一次）",
+    "setupBody": "需要向本设备下载约 {{size}} MB。之后无需再次下载即可使用。",
+    "setupAction": "下载并准备",
+    "setupError": "无法准备语音。请检查网络和可用空间后重试。",
+    "preparing": "正在准备…可能需要片刻。",
+    "listening": "正在聆听…说完后点击“完成”。",
+    "settings": "设置",
+    "processingHelp": "保持“自动”即可。仅在语音失败或很慢时再更改。",
+    "processingOptions": {
+      "auto": "自动",
+      "cpu": "处理器",
+      "gpu": "显卡"
+    },
+    "removeModels": "删除已下载的语音",
+    "turnOff": "关闭文字转语音",
+    "micStart": "说话转文字",
+    "micStop": "完成"
+  },
+  "soundboard": {
+    "frequentEmpty": "播放声音后，常用声音会显示在这里。",
+    "noResults": "未找到声音。",
+    "frequent": "常用",
+    "title": "音效面板",
+    "description": "为通话中的所有人播放简短音效，可使用你已加入服务器的音效。",
+    "pack": "服务器音效包",
+    "empty": "暂无音效包。",
+    "count_other": "{{count}} / 40 个音效",
+    "refresh": "刷新",
+    "volume": "你听到的音效音量",
+    "play": "在通话中播放",
+    "preview": "仅自己试听",
+    "confirmDelete": "删除音效“{{name}}”？",
+    "search": "搜索音效",
+    "add": "添加音效",
+    "uploadHint": "源文件最大 5 MB；超过 5 秒？请裁剪为 5 秒的片段。每个服务器最多 40 个音效。",
+    "name": "音效名称",
+    "audioFile": "音频文件",
+    "clipVolume": "音效音量",
+    "permissionHint": "添加音效需要角色具有创建音效的权限。",
+    "invalidAudio": "请选择不超过 5 MB 的有效音频文件。",
+    "cutSummary": "{{file}}：{{start}} 秒至 {{end}} 秒",
+    "editCut": "编辑裁剪"
+  },
   "chatPanel": {
     "title": "聊天",
-    "close": "关闭聊天"
+    "close": "关闭聊天",
+    "expand": "展开聊天",
+    "collapse": "收起聊天"
   },
   "badges": {
     "mutedNoPermission": "已静音（无发言权限）",
@@ -73,6 +150,8 @@
     "remoteParticipant": "远端参与者"
   },
   "screenPicker": {
+    "captureReconnecting": "正在重新连接采集…",
+    "streamPaused": "直播已暂停",
     "title": "共享屏幕",
     "tabs": {
       "screens": "屏幕",
@@ -104,13 +183,27 @@
     "kind": {
       "monitor": "屏幕",
       "window": "窗口"
-    }
+    },
+    "audioApplication": "应用音频",
+    "chooseAudioApplication": "选择音频应用",
+    "audioApplicationHint": "在应用中播放声音以显示它，然后选择要共享的窗口。",
+    "allAudioExceptBackspace": "除 Backspace 外的所有系统音频"
   },
   "streamSettings": {
+    "previewLabel": "直播预览",
+    "previewNormal": "正常",
+    "previewBlurred": "模糊",
+    "previewHidden": "无图像",
+    "previewHint": "设置观看前显示的缩略图，不改变直播视频。",
     "title": "推流设置",
     "hostLimits": "限制由 {{host}} 设定",
     "resolution": "分辨率",
     "frameRate": "帧率",
+    "cursorMode": "鼠标光标",
+    "cursorAuto": "自动",
+    "cursorShow": "显示",
+    "cursorHide": "隐藏",
+    "cursorHideUnavailable": "此捕获源无法隐藏 Windows 光标。请启动受支持的 DXGI 捕获以应用此设置。",
     "contentMode": "内容模式",
     "mode": {
       "gaming": "游戏",
@@ -152,6 +245,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "本地预览已暂停以节省资源，直播仍在继续。",
     "quality": "推流画质",
     "qualityValue": "{{height}}p {{fps}} 帧",
     "volume": "直播音量",
@@ -167,6 +261,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "推流端网络不稳定",
+    "publisherBandwidth": "可用带宽正在限制直播画质",
     "publisherCpu": "推流端电脑视频编码速度不足",
     "viewerNetwork": "您的网络连接不稳定",
     "reconnecting": "连接断开 — 正在重新连接…",
@@ -179,6 +274,10 @@
   },
   "channelDuration": "频道已激活 {{duration}}",
   "controls": {
+    "openChannel": "打开 {{channel}}",
+    "callWindowFailed": "无法打开通话窗口。",
+    "callInWindow": "通话位于独立窗口中 — 点击显示",
+    "openCallWindow": "在独立窗口中打开通话",
     "spaceMutedSelfMuted": "空间静音（自身已静音）",
     "unmuteShortcut": "取消静音 (M)",
     "muteShortcut": "静音 (M)",
@@ -199,7 +298,9 @@
     "disconnect": "断开连接",
     "connectionInfo": "连接信息",
     "noiseSuppressionOff": "停用 AI 噪声抑制",
-    "noiseSuppressionOn": "启用 AI 噪声抑制"
+    "noiseSuppressionOn": "启用 AI 噪声抑制",
+    "focusChat": "专注于聊天",
+    "unfocusChat": "显示通话"
   },
   "status": {
     "dmCall": "私信通话",
@@ -268,5 +369,75 @@
     "stillDenied": "麦克风访问仍被拒绝。请在浏览器或设备设置中允许此网站使用麦克风。",
     "notFound": "未检测到麦克风。",
     "failed": "无法访问麦克风。"
+  },
+  "callOngoing": "通话进行中",
+  "callWaiting": "正在等待对方 · 将于 {{remaining}} 后结束",
+  "rejoinCall": "重新加入通话",
+  "history": {
+    "startedBy": "{{actor}} 发起了通话",
+    "from": "开始：",
+    "to": "结束：",
+    "status": {
+      "ringing": "正在呼叫…",
+      "active": "通话进行中",
+      "ended": "通话已结束",
+      "missed": "未接来电",
+      "rejected": "通话已拒绝",
+      "interrupted": "通话中断",
+      "cancelled": "通话已取消"
+    },
+    "duration": "时长"
+  },
+  "dictation": {
+    "title": "语音听写 · 巴西葡萄牙语",
+    "model": "语音识别模型",
+    "size": "下载大小：{{size}} MiB",
+    "installed": "已下载",
+    "delete": "删除模型",
+    "download": "下载模型",
+    "deleteConfirm": "删除 Backspace 下载的 {{model}} 副本？再次使用时需要重新下载。其他模型和文件不会更改。",
+    "cancel": "取消",
+    "dictate": "听写文字",
+    "finish": "结束听写",
+    "hold": "按住说话并发送",
+    "release": "松开后转录并发送",
+    "recording": "正在录音，仅用于转录…",
+    "downloading": "正在下载模型：{{progress}}",
+    "transcribing": "正在您的设备上处理…",
+    "hint": "松开后：转录 → 合成语音 → 发送到通话。不会传输原始麦克风音频。最长 60 秒。",
+    "shortcut": "快捷键：{{shortcut}}。请在设置 → 快捷键中配置“听写并发送语音（按住）”。",
+    "unassigned": "未设置快捷键",
+    "monitor": "在通话中也听到我的声音",
+    "missing": "请先下载所选模型。",
+    "downloadError": "无法下载模型。请检查网络连接和可用存储空间。",
+    "micError": "无法录音。请允许麦克风访问并检查所选设备。",
+    "noSpeech": "未检测到语音，请重新录制。",
+    "limit": "录音已达到 60 秒并已取消。请录制更短的句子。",
+    "storageError": "无法访问本地模型存储。",
+    "failed": "无法完成听写。请尝试 CPU 或较小的模型。已识别的文字将保留在输入框中。",
+    "secureContext": "听写需要通过 HTTPS、localhost 或更新的 Electron 客户端访问麦克风。",
+    "callHint": "加入通话并取消合成语音静音以自动发送。您仍可听写来填入文字。",
+    "gpuError": "此模型无法使用 GPU。请选择 CPU 或自动模式。"
+  },
+  "trimmer": {
+    "title": "裁剪音效",
+    "tooLong": "{{file}} 时长 {{total}}。请选择最多 {{max}} 保留。",
+    "fits": "{{file}} 时长 {{total}}。可以裁剪；最多保留 {{max}}。",
+    "seconds": "{{value}} 秒",
+    "start": "开始",
+    "end": "结束",
+    "length": "时长",
+    "preview": "试听",
+    "stop": "停止",
+    "trimSilence": "裁掉静音",
+    "trimSilenceHint": "只保留有声部分，去掉两端静音",
+    "reset": "重置",
+    "fade": "边缘渐变",
+    "help": "拖动手柄调整大小，拖动中间或点击波形来移动。手柄获得焦点后可用方向键（按住 Shift 步进更大）。",
+    "apply": "使用此裁剪",
+    "windowHandle": "所选部分",
+    "startHandle": "裁剪起点",
+    "endHandle": "裁剪终点",
+    "windowValue": "{{start}} 至 {{end}}"
   }
 }

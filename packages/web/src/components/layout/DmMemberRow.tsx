@@ -1,3 +1,5 @@
+import { attentionMuteMenuItems } from '../../utils/attentionMuteMenu';
+import { userSocialMenuItems } from './memberMenu/memberSocialActions';
 import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '@backspace/shared';
@@ -24,7 +26,7 @@ export interface DmMemberRowProps {
   isSelf: boolean;
   /** True when the viewer is the channel owner (controls transfer/kick visibility). */
   callerIsOwner: boolean;
-  /** True when the viewer and this member are friends (controls Remove Friend visibility). */
+  /** True when the viewer and this member are friends. */
   isFriend: boolean;
   /** Whether to render the kebab "⋮" trigger button (right side of the row). */
   showKebab?: boolean;
@@ -102,7 +104,7 @@ export function DmMemberRow({
   const showGlobe = isFederationGlobeApplicable(canonical);
 
   const buildMenuItems = (): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
+    const items: ContextMenuItem[] = isSelf ? [] : isFriend ? attentionMuteMenuItems(canonical, origin) : userSocialMenuItems(canonical, origin);
 
     items.push({
       key: 'profile',
@@ -125,7 +127,6 @@ export function DmMemberRow({
 
     const showTransfer = callerIsOwner && !isSelf;
     const showKick = callerIsOwner && !isSelf;
-    const showRemoveFriend = isFriend && !isSelf;
 
     if (showTransfer) {
       items.push({
@@ -143,20 +144,6 @@ export function DmMemberRow({
         label: t('dm:memberRow.removeFromGroup'),
         danger: true,
         onClick: () => onMenuAction('kick', canonical),
-      });
-    }
-
-    if ((showTransfer || showKick) && showRemoveFriend) {
-      items.push({ key: 'sep', type: 'separator' });
-    }
-
-    if (showRemoveFriend) {
-      items.push({
-        key: 'remove-friend',
-        type: 'action',
-        label: t('dm:memberRow.removeFriend'),
-        danger: true,
-        onClick: () => onMenuAction('remove-friend', canonical),
       });
     }
 
@@ -191,6 +178,7 @@ export function DmMemberRow({
           name={displayName}
           size={32}
           status={isOffline ? null : canonical.status}
+          frameStatus={canonical.status}
           user={canonical}
           origin={origin}
           placement="left"
@@ -200,7 +188,7 @@ export function DmMemberRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span
-            className={`text-[13.5px] leading-[1.2] font-medium truncate ${
+            className={`text-ui-label leading-[1.2] font-medium truncate ${
               isOffline ? 'text-txt-tertiary' : 'text-txt-primary'
             }`}
           >
@@ -223,20 +211,20 @@ export function DmMemberRow({
         </div>
 
         {showGlobe && domain && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">
             @{domain}
           </div>
         )}
 
         {!isOffline && canonical.customStatus && (
-          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">
+          <div className="text-ui-caption leading-[1.3] text-txt-tertiary truncate">
             {replaceEmojiShortcodes(canonical.customStatus)}
           </div>
         )}
       </div>
 
       {showKebab && (
-        <button
+        <button data-icon-motion="press"
           type="button"
           aria-label={t('dm:memberRow.actions')}
           data-dm-member-kebab

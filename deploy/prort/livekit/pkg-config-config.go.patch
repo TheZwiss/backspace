@@ -1,0 +1,10 @@
+--- a/pkg/config/config.go
++++ b/pkg/config/config.go
+@@ -317,6 +317,7 @@
+ 	CertFile            string   `yaml:"cert_file,omitempty"`
+ 	KeyFile             string   `yaml:"key_file,omitempty"`
+ 	TLSPort             int      `yaml:"tls_port,omitempty"`
++	TCPPort             int      `yaml:"tcp_port,omitempty"`
+ 	UDPPort             int      `yaml:"udp_port,omitempty"`
+ 	RelayPortRangeStart uint16   `yaml:"relay_range_start,omitempty"`
+ 	RelayPortRangeEnd   uint16   `yaml:"relay_range_end,omitempty"`

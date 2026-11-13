@@ -397,7 +397,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
   // (intentional duplication so a tap-target is always reachable above the
   // keyboard).
   const headerRight = editing ? (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={handleCancel}
       className="px-2 py-1 text-sm text-txt-tertiary hover:text-txt-secondary"
@@ -422,7 +422,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         {/* HERO ────────────────────────────────────────────────────────── */}
         <div className="flex flex-col items-center gap-3 px-4 pt-8 pb-6 border-b border-border-soft">
           <div className="relative">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleHeroClick}
               disabled={!editing || !isOwner}
@@ -444,7 +444,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
             {/* Clear (X) — owner-only, edit mode only, only when there's an icon to clear. */}
             {editing && isOwner && previewIconUrl && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleClearIcon}
                 data-mobile-group-icon-clear
@@ -504,7 +504,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {/* Edit toggle — owner-only, hidden during edit (Cancel header action takes its place). */}
           {isOwner && !editing && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => setEditing(true)}
               data-mobile-group-edit
@@ -523,7 +523,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
         {/* ACTIONS ROW ──────────────────────────────────────────────────── */}
         <div className="px-4 py-3 border-b border-border-soft">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => channelId && openModal('addDmMember', { dmChannelId: channelId })}
             disabled={!canAddMembers}
@@ -535,7 +535,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
             </svg>
             {t('dm:groupSettings.addMember')}
             {!canAddMembers && (
-              <span className="text-[11px] text-txt-tertiary">{t('dm:groupSettings.groupFullSuffix')}</span>
+              <span className="text-ui-caption text-txt-tertiary">{t('dm:groupSettings.groupFullSuffix')}</span>
             )}
           </button>
         </div>
@@ -544,7 +544,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
         <div className="p-3">
           {ownerMember && (
             <div data-mobile-group-section="owner" className="mb-4">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.owner')}
               </h3>
               {renderMemberRow(ownerMember, true)}
@@ -553,7 +553,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {onlineMembers.length > 0 && (
             <div data-mobile-group-section="online" className="mb-4">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.sectionCount', { label: t('common:states.online'), total: onlineMembers.length })}
               </h3>
               {onlineMembers.map((m) => renderMemberRow(m, false))}
@@ -562,7 +562,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
           {offlineMembers.length > 0 && (
             <div data-mobile-group-section="offline" className="opacity-60">
-              <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+              <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                 {t('dm:roster.sectionCount', { label: t('common:states.offline'), total: offlineMembers.length })}
               </h3>
               {offlineMembers.map((m) => renderMemberRow(m, false))}
@@ -572,7 +572,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
 
         {/* DESTRUCTIVE FOOTER ────────────────────────────────────────────── */}
         <div className="px-4 py-4 border-t border-border-soft">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setConfirmLeave(true)}
             disabled={leaving}
@@ -592,7 +592,7 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           className="fixed left-0 right-0 z-30 bg-surface-base border-t border-border-hard px-4 py-3 flex items-center justify-end gap-2"
           style={{ bottom: bottomInset }}
         >
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleCancel}
             disabled={saving}
@@ -601,11 +601,11 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
           >
             {t('common:actions.cancel')}
           </button>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={handleSave}
             disabled={!isDirty || saving || !isOwner}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             data-mobile-group-save
           >
             {saving ? t('common:states.saving') : t('common:actions.save')}

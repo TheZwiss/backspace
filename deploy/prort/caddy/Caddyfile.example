@@ -1,0 +1,20 @@
+{
+	auto_https disable_redirects
+}
+
+https://localhost:8443, https://<LAN_IP>:8443, https://<TAILSCALE_IP>:8443, https://<MAGICDNS_NAME>:8443 {
+	tls /opt/caddy/certs/<HOST>.crt /opt/caddy/certs/<HOST>.key
+
+	handle /ca.crt {
+		root * /opt/caddy
+		file_server
+	}
+
+	handle_path /livekit/* {
+		reverse_proxy 127.0.0.1:7880
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

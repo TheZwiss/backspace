@@ -24,9 +24,9 @@ You are the Lead Developer of Backspace, an open-source (AGPL-3.0, commercially 
 - NEVER use placeholder code, TODO comments, `// ...rest of code`, or `// similar to above`. Every function must be FULLY implemented.
 - NEVER skip files or generate partial components. Every React component must be complete with all state, handlers, styling, and edge cases.
 - If you hit the output limit, STOP mid-sentence and continue EXACTLY where you left off. Do NOT summarize or skip ahead.
-- Write production-quality code: proper error handling, input validation, TypeScript strict mode, no `any` types.
+- Write production-quality code: proper error handling, input validation, TypeScript strict mode, no `any` types in new code (`eslint-suppressions.json` counts the violations that predate the lint step).
 - If something fails, FIX IT before moving on.
-- Test changes with `pnpm dev` before considering them done. Both server and frontend must start without errors.
+- Test changes with `pnpm dev` before considering them done. Both server and frontend must start without errors. Desktop changes are verified as described in "Desktop Development & Debugging" below.
 
 ---
 
@@ -121,6 +121,45 @@ Data: `data/` at the repository root (backspace.db + uploads/ + backups/), mount
 
 ---
 
+## Test Environment (ready-made, do not rebuild it)
+
+A persistent local stack (server :3005 + Vite :5173) with a seeded user and space. Never recreate it by hand; use the script:
+
+```bash
+scripts/testenv.sh up       # start (idempotent); seeds on first run
+scripts/testenv.sh status   # running | stopped
+scripts/testenv.sh down     # stop, data kept
+scripts/testenv.sh reset    # stop and delete .testenv/ (next up re-seeds)
+```
+
+- On Windows use `scripts/testenv.ps1` (`up|down|status|reset|client`) with the same commands. It also downloads and starts a local LiveKit (dev keys, `ws://localhost:7880`) so voice works, seeds a second user `bia` (same password) in the space, and `client -Index N [-FakeAudio file.wav]` opens an Electron client with its own profile and CDP port 922N (`http://localhost:9221` for client 1).
+- Open `http://localhost:5173`, login `ana` / `change-me-dev-password`. Space "Teste" has `#general` and a voice channel.
+- State lives in `.testenv/` (gitignored: DB, uploads, `dev.log`, `dev.pid`). Leave the stack running when you finish so the next session can reuse it.
+- Playwright MCP has no microphone permission: stub `navigator.mediaDevices.getUserMedia` with an oscillator `MediaStreamDestination` via `page.evaluate` (a page reload drops the stub). A telemetry prompt may cover the UI on first load: click "Decidir depois".
+- Do not use `pkill -f` to stop it; the pattern matches your own shell. `down` uses the pid file.
+
+---
+
+## Desktop Development & Debugging
+
+**Verify (from `packages/desktop`):**
+- `npx tsc --noEmit` — typecheck; `npx vitest run [file]` — unit tests (one `*.test.ts` per module; keep decisions that depend on `platform`/`env` as pure functions with injectable inputs, like `ozonePlatform.ts`).
+- `pnpm lint` from the root. The repo has pre-existing violations tracked in `eslint-suppressions.json`; a change must not raise the count.
+
+**Run and inspect the real app** (dev builds keep inspection enabled; the packaged build disables it through fuses):
+- `pnpm dev:desktop`, or `npx electron --remote-debugging-port=9222 --inspect=9229 .` after `npx tsc` (renderer via CDP on :9222, main process via the Node inspector on :9229).
+- If the GPU process crashes on a machine (log shows `GPU process isn't usable`), add `--disable-gpu` to keep debugging; fix the environment separately.
+- Do not call `desktopCapturer.getSources` in manual tests on a Wayland session: it opens the screencast portal.
+
+**Linux / Wayland (KDE Plasma, GNOME):**
+- The compositor ignores `x`/`y`, `setPosition()` and `setBounds()` for normal windows, so toasts and overlays land in the screen centre; `desktopCapturer` goes through the portal (slow, partial, opens a dialog).
+- The only measured fix is running under XWayland. `main.ts` re-executes the process once with `--ozone-platform=x11` as a real argument when `shouldForceX11Ozone()` finds an X socket. `app.commandLine.appendSwitch` and `ELECTRON_OZONE_PLATFORM_HINT` are NOT honoured early enough on Wayland sessions; do not rely on them.
+- `XDG_SESSION_TYPE` picks WebRTC's capture backend, not the ozone platform. The relaunch sets it from `captureSessionType()`: `wayland` whenever `WAYLAND_DISPLAY` is set, on every compositor including KDE Plasma 6.8: XWayland sees only X11 clients, so an X11 capture is black with just the cursor and screen share must go through the portal. `x11` only on a real X11 session.
+- Without XWayland, `nudge.ts` falls back to the toast-only mode instead of the full-screen effect.
+- Do not add `setPosition` calls after `showInactive()` to work around this; they were tried and have no effect on Wayland.
+
+---
+
 ## Environment & Deployment
 
 **Env vars:** See `.env.example`. Key vars:
@@ -139,7 +178,7 @@ Data: `data/` at the repository root (backspace.db + uploads/ + backups/), mount
 - Docker Compose: `backspace` + `caddy` (auto-HTTPS) + `livekit` (optional)
 - `./install.sh` — Interactive first-time setup
 - `./deploy.sh [pi|vm|all]` — Rsync + rebuild on target(s)
-- Instances: `nova.ddns.net` (Pi), `orbit.ddns.net` (VM)
+- Instances: `nova.example` (Pi), `orbit.example` (VM)
 - First registered user becomes admin (no default credentials). DB auto-backups to data/backups/; restore via ./restore.sh. See docs/systems/deployment.md.
 
 ---
@@ -162,6 +201,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [dm-system.md](docs/systems/dm-system.md) | DM lifecycle (1-on-1 + group), soft-close/reopen, ownership transfer, federation relay, deterministic federatedId, system messages | DM features, group DM management, DM federation |
 | [spaces.md](docs/systems/spaces.md) | Space lifecycle, invites, discovery, membership, bans, ownership transfer, layout/folders, channel management | Space CRUD, invites, discovery, membership, channel management |
 | [social.md](docs/systems/social.md) | Friend requests, friendships, mutuals, user discovery, friend relay, socialStore cross-instance loading | Friends, social graph, user discovery, mutual calculations |
+| [bookmarks.md](docs/systems/bookmarks.md) | Personal saved messages: the copy-plus-link model, why no FKs to messages, create and its read-access rule, the four statuses worked out on read, metadata-only attachments and the seam for keeping copies, file lifecycle (`purgeUserBookmarks`, referenced filenames), keyset paging, `keys` per conversation, no limit | Bookmarks, saved messages, anything that deletes users or counts referenced upload files |
 | [sounds.md](docs/systems/sounds.md) | System-sound inventory: every file in `packages/web/public/sounds/` mapped to its event + audience, viewer-detection data-channel protocol, message-sound filter, settings hooks | Any sound-effect change, viewer-tracking work, message-sound semantics |
 | [admin.md](docs/systems/admin.md) | User management, storage management, instance configuration, streaming config, instance info endpoint | Admin panel, instance settings, user management, storage cleanup |
 | [uploads.md](docs/systems/uploads.md) | Upload pipeline, thumbnails, storage janitor, file serving (cache/Range/security headers), client upload/crop | File uploads, media processing, storage management, file serving |
@@ -186,16 +226,4 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 
 ## Feature Status
 
-All core features are implemented and deployed:
-
-**Communication:** Text channels, voice/video (LiveKit), screen sharing (VP9, configurable), DMs (1-on-1 + group up to 10), DM calls (ring/accept/reject), reactions, replies, typing indicators, read states, embeds (YouTube/Vimeo/Spotify/generic), GIF search (Klipy)
-
-**Organization:** Spaces, channel categories, role-based permissions (bitwise RBAC with category+channel overrides), space folders, user sidebar layout, space discovery (public/request/private)
-
-**Social:** Friend requests, user search, user discovery, mutual friends/spaces, user profiles (banner, bio, accent color)
-
-**Moderation:** Bans (with reason/audit), voice restrictions (space mute/deafen, persisted), member move/disconnect, join request approval
-
-**Federation:** Multi-instance peering (HMAC-signed), DM relay (messages, reactions, membership), file replication with size validation, friend relay, identity resolution, background workers (outbox delivery, file download, health check, janitor)
-
-**Platform:** File uploads (with thumbnails via sharp), full-text search (from/has/before/after filters), admin panel (user management, storage, streaming config), Electron desktop app, mobile-responsive UI, account management (password change, deletion with safeguards)
+The feature inventory lives in the subsystem specs above (`docs/systems/`) and in the README; check them instead of this file, which does not track what is implemented.

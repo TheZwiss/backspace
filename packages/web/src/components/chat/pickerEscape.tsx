@@ -15,6 +15,7 @@ const PickerEscapeContext = createContext<PickerEscape | null>(null);
  */
 function leaveToTarget(event: KeyboardEvent): boolean {
   if (event.isComposing) return true;
+  if (document.querySelector('[aria-modal="true"]')) return true;
   const origin = event.composedPath()[0];
   return origin instanceof Element && isInEmojiMartSkinMenu(origin);
 }

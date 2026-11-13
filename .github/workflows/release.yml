@@ -210,9 +210,39 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @backspace/shared build
 
+      - name: Build Windows native helpers
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($target in @(@{Name='x64';Platform='x64'}, @{Name='arm64';Platform='ARM64'})) {
+            $dir = "packages/desktop/native/process-audio/build-$($target.Name)"
+            cmake -S packages/desktop/native/process-audio -B $dir -A $target.Platform
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build $dir --config Release
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            New-Item -ItemType Directory -Force "packages/desktop/native/process-audio/bin/$($target.Name)"
+            Copy-Item "$dir/Release/backspace-process-audio.exe" "packages/desktop/native/process-audio/bin/$($target.Name)/"
+
+            $probeDir = "packages/desktop/native/dxgi-output-probe/build-$($target.Name)"
+            cmake -S packages/desktop/native/dxgi-output-probe -B $probeDir -A $target.Platform
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build $probeDir --config Release
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            New-Item -ItemType Directory -Force "packages/desktop/native/dxgi-output-probe/bin/$($target.Name)"
+            Copy-Item "$probeDir/Release/backspace-dxgi-output-probe.exe" "packages/desktop/native/dxgi-output-probe/bin/$($target.Name)/"
+
+            $textureDir = "packages/desktop/native/shared-texture/build-$($target.Name)"
+            cmake -S packages/desktop/native/shared-texture -B $textureDir -A $target.Platform
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            cmake --build $textureDir --config Release
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            New-Item -ItemType Directory -Force "packages/desktop/native/shared-texture/bin/$($target.Name)"
+            Copy-Item "$textureDir/Release/backspace-shared-texture.exe" "packages/desktop/native/shared-texture/bin/$($target.Name)/"
+          }
+
       - name: Compile desktop TypeScript
         working-directory: packages/desktop
-        run: pnpm exec tsc
+        run: pnpm build:ts
 
       - name: Build and publish desktop app
         working-directory: packages/desktop

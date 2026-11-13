@@ -37,7 +37,9 @@ export function findVersionedManifests(root = REPO_ROOT) {
 
     for (const entry of readdirSync(parentDir, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name === 'node_modules') continue;
-      const relative = path.join(parent, entry.name, 'package.json');
+      // Always forward slashes, so callers and tests see the same paths on
+      // Windows as on Linux.
+      const relative = [parent, entry.name, 'package.json'].join('/');
       if (existsSync(path.join(root, relative))) found.push(relative);
     }
   }

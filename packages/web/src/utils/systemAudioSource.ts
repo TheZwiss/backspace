@@ -1,3 +1,4 @@
+import { openWindowsProcessAudio } from './windowsProcessAudio';
 import { getElectronAPI } from '../platform/platform';
 
 /**
@@ -78,8 +79,11 @@ export async function acquireAppExcludedSystemAudio(): Promise<MediaStreamTrack 
     const result = await starting;
     if (!result.ok) {
       drop(false);
+      if (api.platform === 'linux' || api.platform === 'win32' || result.reason === 'audio-target-required' || result.reason === 'process-capture-failed') throw new Error(result.reason);
       return null;
     }
+
+    if (result.pcm) return await openWindowsProcessAudio(() => drop(true));
 
     const deviceId = await waitForDevice(result.label);
     if (!deviceId) {
@@ -114,6 +118,7 @@ export async function acquireAppExcludedSystemAudio(): Promise<MediaStreamTrack 
     console.warn('[ScreenShare] The system-audio source could not be started or opened:', err);
     // A start that threw may or may not have linked: take it down if nothing else holds it.
     drop(true);
+    if (api.platform === 'linux' || api.platform === 'win32' || (err instanceof Error && err.message === 'audio-target-required')) throw err;
     return null;
   }
 }

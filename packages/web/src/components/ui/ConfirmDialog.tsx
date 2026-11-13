@@ -1,4 +1,6 @@
-import React, { useEffect, useCallback } from 'react';
+import { Button } from './Button';
+import React, { useRef } from 'react';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { usePortalContainer } from '../../hooks/usePortalContainer';
@@ -27,54 +29,41 @@ export function ConfirmDialog({
   loading = false,
 }: ConfirmDialogProps) {
   const { t } = useTranslation(['common']);
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !loading) {
-      e.stopPropagation();
-      onClose();
-    }
-  }, [onClose, loading]);
-
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown, true);
-      return () => document.removeEventListener('keydown', handleKeyDown, true);
-    }
-  }, [isOpen, handleKeyDown]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogLayer(dialogRef, { open: isOpen, onClose, dismissible: !loading, label: title });
 
   const portalContainer = usePortalContainer();
 
   if (!isOpen) return null;
 
-  const isDanger = variant === 'danger';
-  const confirmBg = isDanger
-    ? 'bg-accent-rose hover:bg-accent-rose/80'
-    : 'bg-accent-amber hover:bg-accent-amber/80';
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
-      <div
+    <div ref={dialogRef} className="fixed inset-0 z-confirm flex items-center justify-center animate-fade-in">
+      <div data-icon-motion="press"
         className="absolute inset-0 bg-black/50"
         onClick={() => { if (!loading) onClose(); }}
       />
-      <div className="relative max-w-[440px] w-full mx-4 glass-modal rounded-xl animate-slide-up">
+      <div className="relative max-w-md w-full mx-4 ui-dialog-surface animate-slide-up">
         <div className="p-5">
-          <h3 className="text-lg font-semibold text-txt-primary mb-2">{title}</h3>
+          <h3 className="ui-dialog-title mb-2">{title}</h3>
           <div className="text-sm text-txt-secondary mb-5 leading-relaxed">{description}</div>
           <div className="flex gap-3">
-            <button
+            <Button data-icon-motion="press"
+              variant="secondary"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
+              className="flex-1"
             >
               {cancelLabel ?? t('common:actions.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button data-icon-motion="pulse"
+              variant={variant}
               onClick={onConfirm}
               disabled={loading}
-              className={`flex-1 py-2.5 ${confirmBg} text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50`}
+              className="flex-1"
             >
               {loading ? t('common:states.pleaseWait') : (confirmLabel ?? t('common:actions.confirm'))}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

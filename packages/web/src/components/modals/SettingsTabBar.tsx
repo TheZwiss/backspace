@@ -11,7 +11,7 @@ export function SettingsTabBar() {
   if (!ctx || ctx.sections.length === 0) return null;
 
   return (
-    <div className="flex gap-4 border-b border-white/[0.06] -mt-2 mb-4">
+    <div className="flex gap-4 border-b border-wash/[0.06] -mt-2 mb-4">
       {ctx.sections.map((s) => (
         s.invite === true ? (
           // The invitation wears the answer button's material so it reads as
@@ -20,7 +20,7 @@ export function SettingsTabBar() {
             <HiButton onClick={() => ctx.scrollToSection(s.id)}>{s.label}</HiButton>
           </div>
         ) : (
-        <button
+        <button data-icon-motion="press"
           key={s.id}
           onClick={() => ctx.scrollToSection(s.id)}
           className={`pb-2.5 text-sm transition-colors relative ${
@@ -31,7 +31,7 @@ export function SettingsTabBar() {
         >
           {s.label}
           {s.badgeCount !== undefined && s.badgeCount > 0 && (
-            <span className="ml-1.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+            <span className="ml-1.5 text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
               {s.badgeCount}
             </span>
           )}

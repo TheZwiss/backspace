@@ -344,7 +344,7 @@ export function processDmCallAcceptEvent(
     // just goes away; an acceptor from a peer up to 1.8.0, or in a 1-on-1,
     // is not seated, so the call ends with its last seated participant as
     // in 1.8.0.
-    const acceptor = meta.group && event.call.perMember === true
+    const acceptor = (!meta.group || event.call.perMember === true)
       ? resolveRelayActor(event.call.acceptor, db)
       : undefined;
     if (acceptor?.kind === 'found' && isDmMember(dmChannelId!, acceptor.user.id)) {
@@ -511,6 +511,13 @@ export function processDmCallEndEvent(
       if (applyRelayedGroupLeave('end', localDmId, event.call.endedBy, event.call.perMember === true, normalizedSource, db)) {
         connectionManager.fanOutCallEnd(localDmId, hostCallerId);
       }
+      accepted.push(event.messageId);
+      return;
+    }
+
+    if (meta.state === 'active') {
+      const actorId = localActorId(event.call.endedBy, db);
+      if (connectionManager.leaveGroupDmCall(localDmId, actorId) === 'ended') connectionManager.fanOutCallEnd(localDmId, hostCallerId);
       accepted.push(event.messageId);
       return;
     }

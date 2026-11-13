@@ -251,6 +251,86 @@ describe('error codes on the settings routes', () => {
   });
 });
 
+describe('disk cleanup settings', () => {
+  const patch = (payload: Record<string, unknown>) =>
+    app.inject({ method: 'PATCH', url: '/api/settings/instance', payload });
+
+  it('is off with 90 / 80 / 30 days by default', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
+    expect(res.json()).toMatchObject({
+      diskCleanupEnabled: false,
+      diskCleanupThresholdPercent: 90,
+      diskCleanupTargetPercent: 80,
+      diskCleanupMinAgeDays: 30,
+    });
+  });
+
+  it('saves a valid combination and returns it', async () => {
+    const res = await patch({ diskCleanupEnabled: true, diskCleanupThresholdPercent: 85, diskCleanupTargetPercent: 70, diskCleanupMinAgeDays: 14 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      diskCleanupEnabled: true,
+      diskCleanupThresholdPercent: 85,
+      diskCleanupTargetPercent: 70,
+      diskCleanupMinAgeDays: 14,
+    });
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get()!;
+    expect(row).toMatchObject({ diskCleanupEnabled: 1, diskCleanupThresholdPercent: 85, diskCleanupTargetPercent: 70, diskCleanupMinAgeDays: 14 });
+  });
+
+  it('rejects a non-boolean switch', async () => {
+    const res = await patch({ diskCleanupEnabled: 'yes' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'field_not_boolean', details: { field: 'diskCleanupEnabled' } });
+  });
+
+  it('rejects a threshold outside 50..99', async () => {
+    for (const value of [49, 100, 85.5, 'abc']) {
+      const res = await patch({ diskCleanupThresholdPercent: value });
+      expect(res.statusCode, String(value)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'disk_cleanup_threshold_out_of_range', details: { min: 50, max: 99 } });
+    }
+  });
+
+  it('rejects a target less than 5 points under the threshold, judged against the new threshold', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 80, diskCleanupTargetPercent: 78 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'disk_cleanup_target_out_of_range', details: { min: 10, max: 75 } });
+  });
+
+  it('rejects lowering the threshold under the stored target when the target is not sent along', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 82 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'disk_cleanup_target_out_of_range', details: { max: 77 } });
+  });
+
+  it('accepts lowering both together', async () => {
+    const res = await patch({ diskCleanupThresholdPercent: 70, diskCleanupTargetPercent: 60 });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects a target under 10', async () => {
+    const res = await patch({ diskCleanupTargetPercent: 5 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('disk_cleanup_target_out_of_range');
+  });
+
+  it('rejects an age outside 1..3650 days', async () => {
+    for (const value of [0, 3651, 1.5]) {
+      const res = await patch({ diskCleanupMinAgeDays: value });
+      expect(res.statusCode, String(value)).toBe(400);
+      expect(res.json()).toMatchObject({ code: 'disk_cleanup_age_out_of_range', details: { min: 1, max: 3650 } });
+    }
+  });
+
+  it('writes nothing when one field is invalid', async () => {
+    const res = await patch({ diskCleanupEnabled: true, diskCleanupMinAgeDays: 0 });
+    expect(res.statusCode).toBe(400);
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get()!;
+    expect(row.diskCleanupEnabled).toBe(0);
+  });
+});
+
 describe('directory fields on GET /api/settings/instance', () => {
   it('returns directoryEnabled, directoryLastPingAt and directoryLastError (defaults)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/settings/instance' });
@@ -605,5 +685,108 @@ describe('PATCH /api/settings/streaming directory invariant', () => {
     const other = await app.inject({ method: 'PATCH', url: '/api/settings/streaming', payload: { maxFramerate: 30 } });
     expect(other.statusCode).toBe(200);
     expect(markDirectoryDirty).not.toHaveBeenCalled();
+  });
+});
+
+describe('camera streaming limits', () => {
+  it('ships the fixed preset by default on GET', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera).toEqual({
+      mode: 'fixed',
+      defaultResolution: 720,
+      defaultFramerate: 30,
+      defaultBitrateKbps: 2000,
+      allowedResolutions: [540, 720, 1080],
+      allowedFramerates: [30, 60],
+      minBitrateKbps: 300,
+      maxBitrateKbps: 4000,
+      allowCustomBitrate: true,
+    });
+  });
+
+  it('round-trips a user-choice policy and clamps nothing silently', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: {
+        camera: {
+          mode: 'user-choice',
+          defaultResolution: 1080,
+          defaultFramerate: 60,
+          defaultBitrateKbps: 3000,
+          allowedResolutions: [720, 1080],
+          allowedFramerates: [30, 60],
+          minBitrateKbps: 500,
+          maxBitrateKbps: 6000,
+          allowCustomBitrate: false,
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera).toMatchObject({
+      mode: 'user-choice',
+      defaultResolution: 1080,
+      defaultFramerate: 60,
+      defaultBitrateKbps: 3000,
+      allowedResolutions: [720, 1080],
+      allowCustomBitrate: false,
+    });
+
+    const again = await app.inject({ method: 'GET', url: '/api/settings/streaming' });
+    expect(again.json().camera.defaultBitrateKbps).toBe(3000);
+  });
+
+  it('accepts a partial camera patch and keeps the other fields', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { mode: 'user-choice' } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().camera.mode).toBe('user-choice');
+    expect(res.json().camera.defaultResolution).toBe(720);
+  });
+
+  it('rejects an unknown mode with camera_mode_invalid', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { mode: 'anything' } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_mode_invalid');
+  });
+
+  it('refuses a default resolution outside the allowlist', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: {
+        camera: { allowedResolutions: [540, 720], defaultResolution: 1080 },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'camera_default_not_allowed', details: { field: 'resolution' } });
+  });
+
+  it('refuses a default bitrate outside the range', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { defaultBitrateKbps: 9000 } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_bitrate_out_of_range');
+  });
+
+  it('refuses an empty resolution allowlist', async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/settings/streaming',
+      payload: { camera: { allowedResolutions: [] } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('camera_resolutions_invalid');
   });
 });

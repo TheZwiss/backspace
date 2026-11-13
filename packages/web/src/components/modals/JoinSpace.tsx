@@ -253,11 +253,11 @@ export function JoinSpaceModal() {
                   ))}
                 </div>
               ) : discoveryError ? (
-                <div className="p-2.5 rounded-lg bg-surface-channel border border-border-soft text-[13px] text-txt-tertiary">
+                <div className="p-2.5 rounded-lg bg-surface-channel border border-border-soft text-ui-label text-txt-tertiary">
                   {t('spaces:join.discoverError')}
                 </div>
               ) : previewSpaces.length === 0 ? (
-                <div className="p-3 rounded-lg bg-surface-channel border border-border-soft text-[13px] text-txt-tertiary text-center">
+                <div className="p-3 rounded-lg bg-surface-channel border border-border-soft text-ui-label text-txt-tertiary text-center">
                   {t('spaces:join.discoverEmpty')}
                 </div>
               ) : (
@@ -272,7 +272,7 @@ export function JoinSpaceModal() {
                 </div>
               )}
 
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleBrowseExplore}
                 className="mt-3 w-full py-2 flex items-center justify-center gap-1.5 text-sm font-medium text-accent-primary hover:bg-accent-primary/10 rounded-lg transition-colors"
@@ -284,18 +284,18 @@ export function JoinSpaceModal() {
               </button>
             </div>
           ) : (
-            <div className="mb-1 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-[13px] text-accent-amber">
+            <div className="mb-1 p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/30 text-ui-label text-accent-amber">
               {t('spaces:join.discoveryOff')}
             </div>
           )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">
+            <div className="flex-1 h-px bg-wash/[0.06]" />
+            <span className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">
               {t('spaces:join.inviteDivider')}
             </span>
-            <div className="flex-1 h-px bg-white/[0.06]" />
+            <div className="flex-1 h-px bg-wash/[0.06]" />
           </div>
 
           {/* ── Invite-code section (secondary) ── */}
@@ -312,17 +312,17 @@ export function JoinSpaceModal() {
             <div className="sticky bottom-0 z-10 pointer-events-none">
               <div className="flex justify-center pt-3 pb-1">
                 <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                  <button
+                  <button data-icon-motion="press"
                     type="button"
                     onClick={closeModal}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
                     {t('common:actions.cancel')}
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     type="submit"
                     disabled={isLoading || !inviteCode.trim()}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {isLoading ? t('spaces:join.submitting') : t('spaces:join.submit')}
                   </button>
@@ -368,7 +368,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setPhase('input'); setPassword(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -378,18 +378,18 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
-                <button
+                <div className="w-px h-5 bg-wash/10" />
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading || !password}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.connect.submitting') : t('spaces:join.connect.submit')}
                 </button>
@@ -417,7 +417,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => { setPhase('input'); setRequestTarget(null); setRequestMessage(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -427,18 +427,18 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
-                <button
+                <div className="w-px h-5 bg-wash/10" />
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:explore.sendingRequest') : t('spaces:explore.sendRequest')}
                 </button>
@@ -455,10 +455,10 @@ export function JoinSpaceModal() {
             {requestOutcome === 'sent' ? t('spaces:join.request.sent') : t('spaces:join.request.pending')}
           </p>
           <div className="flex justify-end">
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={closeModal}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('common:actions.done')}
             </button>
@@ -500,7 +500,7 @@ export function JoinSpaceModal() {
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
               <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-                <button
+                <button data-icon-motion="arrow"
                   type="button"
                   onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
@@ -510,18 +510,18 @@ export function JoinSpaceModal() {
                   </svg>
                   {t('common:actions.back')}
                 </button>
-                <div className="w-px h-5 bg-white/10" />
-                <button
+                <div className="w-px h-5 bg-wash/10" />
+                <button data-icon-motion="press"
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                 >
                   {t('common:actions.cancel')}
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="submit"
                   disabled={isLoading || !fallbackUsername || !fallbackPassword}
-                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                 >
                   {isLoading ? t('spaces:join.fallback.submitting') : t('spaces:join.fallback.submit')}
                 </button>

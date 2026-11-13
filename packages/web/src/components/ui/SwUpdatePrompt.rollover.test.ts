@@ -9,19 +9,44 @@ const SOURCE = readFileSync(path.resolve(import.meta.dirname, '../../../public/s
 
 type LifecycleHandler = (event: { waitUntil: (promise: Promise<unknown>) => void }) => void;
 
+class FakeCache {
+  readonly entries = new Map<string, { contentType: string }>();
+
+  keys(): Promise<{ url: string }[]> {
+    return Promise.resolve([...this.entries.keys()].map((url) => ({ url })));
+  }
+
+  match(request: { url: string }): Promise<{ headers: { get: (name: string) => string | null } } | undefined> {
+    const entry = this.entries.get(request.url);
+    return Promise.resolve(entry && { headers: { get: () => entry.contentType } });
+  }
+}
+
 class FakeCacheStorage {
   names = new Set<string>();
+  stores = new Map<string, FakeCache>();
   failWith: Error | null = null;
+
+  keys(): Promise<string[]> {
+    return Promise.resolve([...this.names]);
+  }
+
+  delete(name: string): Promise<boolean> {
+    this.stores.delete(name);
+    return Promise.resolve(this.names.delete(name));
+  }
 
   has(name: string): Promise<boolean> {
     if (this.failWith) return Promise.reject(this.failWith);
     return Promise.resolve(this.names.has(name));
   }
 
-  open(name: string): Promise<object> {
+  open(name: string): Promise<FakeCache> {
     if (this.failWith) return Promise.reject(this.failWith);
     this.names.add(name);
-    return Promise.resolve({});
+    const store = this.stores.get(name) ?? new FakeCache();
+    this.stores.set(name, store);
+    return Promise.resolve(store);
   }
 }
 
@@ -110,5 +135,46 @@ describe('sw-rollover', () => {
     await expect(scope.dispatch('activate')).resolves.toBeUndefined();
     expect(scope.skipWaiting).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  describe('poisoned precache', () => {
+    const URL_JS = 'https://host.example/assets/index-abc.js';
+
+    async function seed(contentType: string): Promise<void> {
+      const store = await caches.open('backspace-precache-v2-https://host.example/');
+      store.entries.set(URL_JS, { contentType });
+    }
+
+    it('skips waiting when the active worker cached HTML under a script URL', async () => {
+      const first = new FakeWorkerScope(caches, { active: {} });
+      await first.dispatch('activate');
+      await seed('text/html; charset=UTF-8');
+
+      const next = new FakeWorkerScope(caches, { active: {} });
+      await next.dispatch('install');
+      expect(next.skipWaiting).toHaveBeenCalledTimes(1);
+    });
+
+    it('deletes the poisoned cache when it activates and keeps the marker', async () => {
+      const first = new FakeWorkerScope(caches, { active: {} });
+      await first.dispatch('activate');
+      await seed('text/html; charset=UTF-8');
+
+      const next = new FakeWorkerScope(caches, { active: {} });
+      await next.dispatch('activate');
+      expect([...caches.names]).toEqual(['backspace-sw-protocol-prompt-v1']);
+    });
+
+    it('leaves a healthy precache alone', async () => {
+      const first = new FakeWorkerScope(caches, { active: {} });
+      await first.dispatch('activate');
+      await seed('text/javascript');
+
+      const next = new FakeWorkerScope(caches, { active: {} });
+      await next.dispatch('install');
+      await next.dispatch('activate');
+      expect(next.skipWaiting).not.toHaveBeenCalled();
+      expect(caches.names.size).toBe(2);
+    });
   });
 });

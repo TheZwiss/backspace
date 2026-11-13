@@ -23,6 +23,10 @@ import { getSpaceGradient } from '../../utils/gradients';
 import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { describeCodedError } from '../../i18n/errors';
+import { useStaticAvatar } from '../../utils/staticAvatar';
+import { isMsnTheme, useThemeStore } from '../../stores/themeStore';
+import { SakuraMark } from '../ui/SakuraMark';
+import { MsnMark } from '../ui/MsnMark';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
@@ -38,6 +42,14 @@ const FOLDER_COLORS = [
   { name: 'rose', value: '#fda4af', labelKey: 'common:colors.rose' },
   { name: 'coral', value: '#fb7185', labelKey: 'common:colors.coral' },
 ] as const;
+
+export function SpaceIconImage({ icon, alt, className, animate = false }: { icon: string; alt: string; className: string; animate?: boolean }) {
+  const [hovered, setHovered] = useState(false);
+  const src = icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`;
+  const displaySrc = useStaticAvatar(src, animate || hovered);
+  return <img src={displaySrc ?? undefined} alt={alt} className={className}
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} />;
+}
 
 // ─── SidebarItem ─────────────────────────────────────────────────────────
 
@@ -66,8 +78,10 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
+  const isAnimeTheme = useThemeStore(state => state.theme === 'anime');
+  const isMsnFamily = useThemeStore(state => isMsnTheme(state.theme));
   const firstLetter = name.charAt(0).toUpperCase();
 
   const getPillHeight = () => {
@@ -115,9 +129,13 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   };
 
   const buttonContent = (
-    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name} aria-current={active ? 'page' : undefined}>
+    <Tooltip content={tooltipText ? undefined : name} position="top"><button data-icon-motion="press" aria-label={name} onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle}  aria-current={active ? 'page' : undefined}>
       {type === 'dm' ? (
-        <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
+        isAnimeTheme
+          ? <SakuraMark size={24} />
+          : isMsnFamily
+          ? <MsnMark size={24} />
+          : <img src="/icons/logo-mark.svg" alt={t('common:appName')} className="w-5 h-auto" />
       ) : type === 'action' ? (
         actionType === 'add' ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -133,15 +151,11 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
           </svg>
         )
       ) : icon ? (
-        <img
-          src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-          alt={name}
-          className="w-full h-full object-cover"
-        />
+        <SpaceIconImage icon={icon} alt={name} animate={isHovered} className="w-full h-full object-cover" />
       ) : (
-        <span className="text-[15px] font-bold">{firstLetter}</span>
+        <span className="text-ui-message font-bold">{firstLetter}</span>
       )}
-    </button>
+    </button></Tooltip>
   );
 
   const innerContent = (
@@ -205,15 +219,11 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
 // ─── Mini space icon for collapsed folder ──────────────────────────────────
 
-function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
+function MiniSpaceIcon({ space, animate }: { space: TaggedSpace; animate: boolean }) {
   const icon = space.icon;
   if (icon) {
     return (
-      <img
-        src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-        alt=""
-        className="w-full h-full object-cover rounded-[3px]"
-      />
+      <SpaceIconImage icon={icon} alt="" animate={animate} className="w-full h-full object-cover rounded-[3px]" />
     );
   }
   const grad = getSpaceGradient(space.id, space.name, space.avatarColor);
@@ -222,7 +232,7 @@ function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
       className="w-full h-full rounded-[3px] flex items-center justify-center text-white"
       style={{ background: grad.gradient }}
     >
-      <span className="text-[7px] font-bold leading-none">{space.name.charAt(0).toUpperCase()}</span>
+      <span className="text-ui-micro font-bold leading-none">{space.name.charAt(0).toUpperCase()}</span>
     </div>
   );
 }
@@ -243,15 +253,15 @@ function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpac
       <div className="grid grid-cols-2 gap-[2px] w-[28px] h-[28px] relative z-[1]">
         {display.map((s) => (
           <div key={s.id} className="w-[13px] h-[13px]">
-            <MiniSpaceIcon space={s} />
+            <MiniSpaceIcon space={s} animate={isHovered} />
           </div>
         ))}
         {display.length < 4 && Array.from({ length: 4 - display.length }).map((_, i) => (
-          <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-white/[0.04]" />
+          <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-wash/[0.04]" />
         ))}
       </div>
       {remaining > 0 && (
-        <div className="absolute bottom-0 right-0 text-[7px] font-bold text-txt-tertiary bg-surface-base rounded-tl-sm px-0.5">
+        <div className="absolute bottom-0 right-0 text-ui-micro font-bold text-txt-tertiary bg-surface-base rounded-tl-sm px-0.5">
           +{remaining}
         </div>
       )}
@@ -300,6 +310,8 @@ function FolderFlyout({
     placement: 'right',
     offset: 12,
   });
+
+  const [hoveredSpaceId, setHoveredSpaceId] = useState<string | null>(null);
 
   // Intra-folder DnD state
   const [flyoutDrop, setFlyoutDrop] = useState<{
@@ -410,7 +422,7 @@ function FolderFlyout({
           {isRenaming ? (
             <input
               autoFocus
-              className="input-search w-full px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary"
+              className="input-search w-full px-1.5 py-0.5 text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary"
               defaultValue={folder.name || ''}
               onBlur={(e) => onRename(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -419,7 +431,7 @@ function FolderFlyout({
               }}
             />
           ) : (
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">
+            <span className="text-ui-caption font-semibold uppercase tracking-wider text-txt-tertiary">
               {folder.name}
             </span>
           )}
@@ -443,12 +455,14 @@ function FolderFlyout({
               <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
             )}
 
-            <button
+            <button data-icon-motion="press"
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
                 isDimmed ? 'opacity-40 saturate-50' : ''
-              } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
+              } ${isActive ? 'bg-wash/[0.10]' : 'hover:bg-wash/[0.06]'}`}
               style={{ width: 'calc(100% - 8px)' }}
               draggable
+              onMouseEnter={() => setHoveredSpaceId(space.id)}
+              onMouseLeave={() => setHoveredSpaceId(null)}
               onDragStart={(e) => onDragStart(e, space.id)}
               onDragOver={(e) => handleFlyoutDragOver(e, space.id)}
               onDrop={handleFlyoutDrop}
@@ -466,13 +480,9 @@ function FolderFlyout({
                 <SpaceUnreadBadge spaceId={space.id} />
                 <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
                   {icon ? (
-                    <img
-                      src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
+                    <SpaceIconImage icon={icon} alt="" animate={hoveredSpaceId === space.id} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
+                    <span className="text-ui-label font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
               </div>
@@ -538,7 +548,7 @@ function FolderSlot({
   onDrop: (e: React.DragEvent) => void;
   anchorRef: (el: HTMLDivElement | null) => void;
 }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [isHovered, setIsHovered] = useState(false);
 
   const getPillHeight = () => {
@@ -549,7 +559,7 @@ function FolderSlot({
   };
 
   const iconContent = (
-    <button onClick={onToggleFlyout}>
+    <button data-icon-motion="press" onClick={onToggleFlyout}>
       <FolderIcon spaces={folderSpaces} color={folder.color} isActive={isActive || isFlyoutOpen} isHovered={isHovered} />
     </button>
   );
@@ -599,7 +609,7 @@ function FolderSlot({
 // ─── SpaceSidebar (main component) ────────────────────────────────────────
 
 export function SpaceSidebar() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
@@ -646,6 +656,9 @@ export function SpaceSidebar() {
     const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
 
     const items: ContextMenuItem[] = [
+      { key: 'profile', type: 'action', label: t('spaces:profile.view'), onClick: () => useUIStore.getState().openModal('spaceProfile', { spaceId }) },
+      { key: 'soundboard', type: 'action', label: t('voice:soundboard.title'), onClick: () => useUIStore.getState().openModal('soundboard', { spaceId }) },
+      { type: 'separator', key: 'profile-divider' },
       {
         key: 'invite',
         type: 'action',
@@ -1093,7 +1106,7 @@ export function SpaceSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
+      <div className="w-8 h-[2px] bg-wash/[0.06] rounded-full mb-1.5 shrink-0" />
 
       {/* Unified space list (ordered by user layout) */}
       {resolvedLayout.map((item) => {
@@ -1165,17 +1178,17 @@ export function SpaceSidebar() {
                   type: 'custom',
                   render: () => (
                     <div className="px-3 py-1.5">
-                      <p className="text-[11px] text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
+                      <p className="text-ui-caption text-txt-tertiary mb-1.5">{t('spaces:sidebar.folder.color')}</p>
                       <div className="flex gap-1.5">
-                        <button
-                          className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
+                        <button data-icon-motion="press"
+                          className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-wash/40' : 'border-transparent'} bg-wash/10`}
                           onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
                           title={t('common:states.default')}
                         />
                         {FOLDER_COLORS.map((c) => (
-                          <button
+                          <button data-icon-motion="press"
                             key={c.name}
-                            className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-white/40' : 'border-transparent'}`}
+                            className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-wash/40' : 'border-transparent'}`}
                             style={{ background: c.value }}
                             onClick={() => { handleFolderColorChange(folderRef.id, c.value); useContextMenuStore.getState().close(); }}
                             title={t(c.labelKey)}
@@ -1216,7 +1229,7 @@ export function SpaceSidebar() {
         );
       })}
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
+      <div className="w-8 h-[2px] bg-wash/[0.06] rounded-full mb-1.5 shrink-0" />
 
       <SidebarItem
         id="add-space"

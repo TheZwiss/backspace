@@ -1,7 +1,85 @@
 {
+  "textVoice": {
+    "title": "Textstimme",
+    "enable": "Textstimme verwenden",
+    "description": "Tippe oder diktiere, was du sagen willst, und eine portugiesische Stimme spricht für dich im Anruf.",
+    "micOff": "Dein Mikrofon bleibt im Anruf aus. Es wird nur auf diesem Gerät genutzt, wenn du „Sprechen und schreiben“ wählst.",
+    "voice": "Brasilianische Stimme",
+    "speed": "Geschwindigkeit",
+    "placeholder": "Schreibe, was du sagen möchtest…",
+    "enterHint": "Enter zum Sprechen · Shift+Enter für eine neue Zeile",
+    "checking": "Stimme wird auf diesem Gerät vorbereitet…",
+    "unavailable": "Klicke auf Stimme vorbereiten, um das lokale Modell zu laden.",
+    "speaking": "Wird vorbereitet oder gesprochen…",
+    "muted": "Tritt einem Anruf bei und hebe die Stummschaltung auf. Serverbeschränkungen gelten ebenfalls.",
+    "ready": "Tippe oder sprich und klicke dann auf „Im Anruf sprechen“.",
+    "speak": "Im Anruf sprechen",
+    "preview": "Nur selbst anhören",
+    "stop": "Sprechen stoppen",
+    "privacy": "Alles passiert auf diesem Gerät. Nur das Stimmen-Audio geht in den Anruf; der Text wird an niemanden gesendet.",
+    "quick": {
+      "hello": "Hallo zusammen!",
+      "wait": "Einen Moment bitte.",
+      "repeat": "Kannst du das bitte wiederholen?"
+    },
+    "processing": "Verarbeitung",
+    "automatic": "Automatisch",
+    "prepare": "Stimme vorbereiten",
+    "backendActive": "Verarbeitung: {{backend}}",
+    "gpuUnavailable": "GPU ist auf diesem Gerät nicht verfügbar. Wähle CPU.",
+    "localError": "Stimme konnte nicht vorbereitet oder erzeugt werden. Versuche es erneut oder wähle CPU.",
+    "downloadProgress": "Modell wird geladen: {{progress}}",
+    "downloadHint": "Erste Nutzung: etwa 95 MB für CPU oder 330 MB für GPU. Das Modell bleibt auf diesem Gerät.",
+    "unsupported": "Nutze HTTPS oder den aktuellen Electron-Client. Dein echtes Mikrofon bleibt in diesem Modus ausgeschaltet.",
+    "setupTitle": "Stimmen vorbereiten (nur einmal)",
+    "setupBody": "Wir müssen etwa {{size}} MB auf dieses Gerät laden. Danach funktioniert alles ohne erneuten Download.",
+    "setupAction": "Herunterladen und vorbereiten",
+    "setupError": "Die Stimmen konnten nicht vorbereitet werden. Prüfe Verbindung und freien Speicher und versuche es erneut.",
+    "preparing": "Wird vorbereitet … das kann einen Moment dauern.",
+    "listening": "Ich höre zu … klicke auf „Fertig“, wenn du aufgehört hast.",
+    "settings": "Einstellungen",
+    "processingHelp": "Lass es auf Automatisch. Ändere es nur, wenn die Stimme ausfällt oder langsam ist.",
+    "processingOptions": {
+      "auto": "Automatisch",
+      "cpu": "Prozessor",
+      "gpu": "Grafikkarte"
+    },
+    "removeModels": "Heruntergeladene Stimmen löschen",
+    "turnOff": "Text-Stimme ausschalten",
+    "micStart": "Sprechen zum Schreiben",
+    "micStop": "Fertig"
+  },
+  "soundboard": {
+    "frequentEmpty": "Spiele Sounds ab, um deine Favoriten hier zu sehen.",
+    "noResults": "Keine Sounds gefunden.",
+    "frequent": "Häufig verwendet",
+    "title": "Soundeffekte",
+    "description": "Spiele einen kurzen Effekt für alle im Anruf ab. Nutze Sounds deiner Server.",
+    "pack": "Server-Paket",
+    "empty": "Noch keine Sound-Pakete.",
+    "count_one": "{{count}} von 40 Sounds",
+    "count_other": "{{count}} von 40 Sounds",
+    "refresh": "Aktualisieren",
+    "volume": "Deine Effektlautstärke",
+    "play": "Im Anruf abspielen",
+    "preview": "Nur selbst anhören",
+    "confirmDelete": "Sound „{{name}}“ löschen?",
+    "search": "Sounds suchen",
+    "add": "Sound hinzufügen",
+    "uploadHint": "Quelldatei bis 5 MB; länger als 5 Sekunden? Kürze sie auf einen 5-Sekunden-Ausschnitt. Höchstens 40 Sounds pro Server.",
+    "name": "Soundname",
+    "audioFile": "Audiodatei",
+    "clipVolume": "Effektlautstärke",
+    "permissionHint": "Zum Hinzufügen wird die Rollenberechtigung zum Erstellen von Soundeffekten benötigt.",
+    "invalidAudio": "Wähle eine gültige Audiodatei bis 5 MB.",
+    "cutSummary": "{{file}}: {{start}} s bis {{end}} s",
+    "editCut": "Ausschnitt bearbeiten"
+  },
   "chatPanel": {
     "title": "Chat",
-    "close": "Chat schließen"
+    "close": "Chat schließen",
+    "expand": "Chat erweitern",
+    "collapse": "Chat verkleinern"
   },
   "badges": {
     "mutedNoPermission": "Stummgeschaltet (keine Sprechberechtigung)",
@@ -73,6 +151,8 @@
     "remoteParticipant": "Gegenstelle"
   },
   "screenPicker": {
+    "captureReconnecting": "Aufnahme wird neu verbunden…",
+    "streamPaused": "Übertragung pausiert",
     "title": "Bildschirm teilen",
     "tabs": {
       "screens": "Bildschirme",
@@ -104,13 +184,27 @@
     "kind": {
       "monitor": "Bildschirm",
       "window": "Fenster"
-    }
+    },
+    "audioApplication": "Anwendungsaudio",
+    "chooseAudioApplication": "Audioanwendung auswählen",
+    "audioApplicationHint": "Spiele Audio in der Anwendung ab und wähle anschließend das zu teilende Fenster.",
+    "allAudioExceptBackspace": "Gesamtes System außer Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Stream-Vorschau",
+    "previewNormal": "Normal",
+    "previewBlurred": "Unscharf",
+    "previewHidden": "Kein Bild",
+    "previewHint": "Legt das Vorschaubild vor dem Zuschauen fest. Das Stream-Video bleibt unverändert.",
     "title": "Stream-Einstellungen",
     "hostLimits": "Vorgaben von {{host}}",
     "resolution": "Auflösung",
     "frameRate": "Framerate",
+    "cursorMode": "Mauszeiger",
+    "cursorAuto": "Automatisch",
+    "cursorShow": "Anzeigen",
+    "cursorHide": "Ausblenden",
+    "cursorHideUnavailable": "Diese Aufnahmequelle kann den Windows-Cursor nicht ausblenden. Starte eine unterstützte DXGI-Aufnahme, um diese Einstellung anzuwenden.",
     "contentMode": "Inhaltsmodus",
     "mode": {
       "gaming": "Gaming",
@@ -152,6 +246,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Lokale Vorschau pausiert, um Ressourcen zu sparen. Dein Stream läuft weiter.",
     "quality": "Stream-Qualität",
     "qualityValue": "{{height}}p {{fps}} fps",
     "volume": "Stream-Lautstärke",
@@ -167,6 +262,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "Das Netzwerk des Streamers ist instabil",
+    "publisherBandwidth": "Die verfügbare Bandbreite begrenzt die Streamqualität",
     "publisherCpu": "Der Computer des Streamers kann das Video nicht schnell genug codieren",
     "viewerNetwork": "Deine Verbindung ist instabil",
     "reconnecting": "Verbindung verloren — Verbindung wird wiederhergestellt…",
@@ -179,6 +275,10 @@
   },
   "channelDuration": "Kanal seit {{duration}} aktiv",
   "controls": {
+    "openChannel": "{{channel}} öffnen",
+    "callWindowFailed": "Das Anruffenster konnte nicht geöffnet werden.",
+    "callInWindow": "Der Anruf ist in einem separaten Fenster – zum Anzeigen klicken",
+    "openCallWindow": "Anruf in einem separaten Fenster öffnen",
     "spaceMutedSelfMuted": "Im Space stummgeschaltet (auch selbst stummgeschaltet)",
     "unmuteShortcut": "Stummschaltung aufheben (M)",
     "muteShortcut": "Stummschalten (M)",
@@ -199,7 +299,9 @@
     "disconnect": "Trennen",
     "connectionInfo": "Verbindungsinfo",
     "noiseSuppressionOff": "KI-Rauschunterdrückung ausschalten",
-    "noiseSuppressionOn": "KI-Rauschunterdrückung einschalten"
+    "noiseSuppressionOn": "KI-Rauschunterdrückung einschalten",
+    "focusChat": "Chat fokussieren",
+    "unfocusChat": "Anruf anzeigen"
   },
   "status": {
     "dmCall": "Direktanruf",
@@ -270,5 +372,75 @@
     "stillDenied": "Der Mikrofonzugriff ist weiterhin verweigert. Erlaube ihn für diese Seite in den Browser- oder Geräteeinstellungen.",
     "notFound": "Kein Mikrofon gefunden.",
     "failed": "Auf das Mikrofon konnte nicht zugegriffen werden."
+  },
+  "callOngoing": "Anruf läuft",
+  "callWaiting": "Warten auf die andere Person · endet in {{remaining}}",
+  "rejoinCall": "Wieder beitreten",
+  "history": {
+    "startedBy": "{{actor}} hat den Anruf gestartet",
+    "from": "Beginn:",
+    "to": "Ende:",
+    "status": {
+      "ringing": "Anruf läuft…",
+      "active": "Gespräch läuft",
+      "ended": "Anruf beendet",
+      "missed": "Verpasster Anruf",
+      "rejected": "Anruf abgelehnt",
+      "interrupted": "Anruf unterbrochen",
+      "cancelled": "Anruf abgebrochen"
+    },
+    "duration": "Dauer"
+  },
+  "dictation": {
+    "title": "Sprachdiktat · Brasilianisches Portugiesisch",
+    "model": "Erkennungsmodell",
+    "size": "Downloadgröße: {{size}} MiB",
+    "installed": "Heruntergeladen",
+    "delete": "Modell löschen",
+    "download": "Modell herunterladen",
+    "deleteConfirm": "Die von Backspace heruntergeladene Kopie von {{model}} löschen? Zur erneuten Nutzung ist ein neuer Download nötig. Andere Modelle und Dateien bleiben erhalten.",
+    "cancel": "Abbrechen",
+    "dictate": "Text diktieren",
+    "finish": "Diktat beenden",
+    "hold": "Zum Sprechen und Senden gedrückt halten",
+    "release": "Zum Transkribieren und Senden loslassen",
+    "recording": "Aufnahme nur zur Transkription…",
+    "downloading": "Modell wird geladen: {{progress}}",
+    "transcribing": "Verarbeitung auf deinem Gerät…",
+    "hint": "Beim Loslassen: transkribieren → Stimme erzeugen → in den Anruf senden. Das Originalmikrofon wird nicht übertragen. Höchstens 60 Sekunden.",
+    "shortcut": "Tastatur: {{shortcut}}. „Diktieren und Stimme senden (halten)“ unter Einstellungen → Tastenkürzel einrichten.",
+    "unassigned": "kein Tastenkürzel festgelegt",
+    "monitor": "Meine Stimme im Anruf auch selbst hören",
+    "missing": "Lade zuerst das ausgewählte Modell herunter.",
+    "downloadError": "Modell konnte nicht geladen werden. Prüfe Verbindung und freien Speicher.",
+    "micError": "Aufnahme fehlgeschlagen. Erlaube den Mikrofonzugriff und prüfe das gewählte Gerät.",
+    "noSpeech": "Keine Sprache erkannt. Nimm erneut auf.",
+    "limit": "Die Aufnahme wurde nach 60 Sekunden abgebrochen. Nimm einen kürzeren Satz auf.",
+    "storageError": "Kein Zugriff auf den lokalen Modellspeicher.",
+    "failed": "Diktat fehlgeschlagen. Versuche CPU oder ein kleineres Modell. Bereits erkannter Text bleibt im Feld.",
+    "secureContext": "Diktieren benötigt Mikrofonzugriff über HTTPS, localhost oder den aktuellen Electron-Client.",
+    "callHint": "Für automatisches Senden einem Anruf beitreten und die synthetisierte Stimme aktivieren. Textdiktat bleibt verfügbar.",
+    "gpuError": "GPU für dieses Modell nicht verfügbar. Verwende CPU oder Automatisch."
+  },
+  "trimmer": {
+    "title": "Soundeffekt zuschneiden",
+    "tooLong": "{{file}} dauert {{total}}. Wähle bis zu {{max}} zum Behalten.",
+    "fits": "{{file}} dauert {{total}}. Du kannst kürzen; bis zu {{max}} bleiben erhalten.",
+    "seconds": "{{value}} s",
+    "start": "Beginn",
+    "end": "Ende",
+    "length": "Länge",
+    "preview": "Vorhören",
+    "stop": "Stopp",
+    "trimSilence": "Stille entfernen",
+    "trimSilenceHint": "Passt den hörbaren Teil an und entfernt Stille an den Rändern",
+    "reset": "Zurücksetzen",
+    "fade": "Ränder ausblenden",
+    "help": "Zieh die Griffe zum Ändern der Größe, zieh die Mitte oder klick in die Wellenform zum Verschieben. Mit fokussiertem Griff funktionieren die Pfeiltasten (Umschalt für größere Schritte).",
+    "apply": "Diesen Ausschnitt verwenden",
+    "windowHandle": "Ausgewählter Teil",
+    "startHandle": "Ausschnittsbeginn",
+    "endHandle": "Ausschnittsende",
+    "windowValue": "{{start}} bis {{end}}"
   }
 }

@@ -639,7 +639,7 @@ Source: `packages/web/src/utils/identity.ts`
 
 ### `parseFederatedUsername(username)`
 
-Splits `"erin@nova.ddns.net"` into `{ baseName: "erin", domain: "nova.ddns.net" }`. Uses `indexOf('@')` (first occurrence). Returns `{ baseName: username, domain: null }` for non-federated usernames.
+Splits `"erin@nova.example"` into `{ baseName: "erin", domain: "nova.example" }`. Uses `indexOf('@')` (first occurrence). Returns `{ baseName: username, domain: null }` for non-federated usernames.
 
 ### Matching people
 

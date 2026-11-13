@@ -59,7 +59,7 @@ function AutoLaunchSettings() {
             {t('desktop.autoLaunch.openAtLogin.description')}
           </div>
         </div>
-        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} />
+        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} ariaLabel={t('desktop.autoLaunch.openAtLogin.label')} />
       </div>
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4">
@@ -68,7 +68,7 @@ function AutoLaunchSettings() {
             {t('desktop.autoLaunch.startMinimized.description')}
           </div>
         </div>
-        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} />
+        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} ariaLabel={t('desktop.autoLaunch.startMinimized.label')} />
       </div>
     </>
   );
@@ -180,18 +180,18 @@ function UpdateSettings() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {action && (
-            <button
+            <button data-icon-motion="press"
               onClick={action.onClick}
-              className="px-3 py-1.5 text-sm font-medium text-white bg-accent-primary hover:bg-accent-primary/80 rounded-lg transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {action.label}
             </button>
           )}
           {capability !== 'external' && (
-            <button
+            <button data-icon-motion="press"
               onClick={checkNow}
               disabled={busy}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors disabled:opacity-50"
             >
               {status.phase === 'checking' ? t('desktop.updates.checkingShort') : t('desktop.updates.checkNow')}
             </button>
@@ -200,7 +200,7 @@ function UpdateSettings() {
       </div>
 
       {status.phase === 'downloading' && (
-        <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden" role="progressbar" aria-valuenow={status.percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-1 rounded-full bg-wash/[0.06] overflow-hidden" role="progressbar" aria-valuenow={status.percent} aria-valuemin={0} aria-valuemax={100}>
           <div
             className="h-full bg-accent-primary transition-[width] duration-300"
             style={{ width: `${status.percent}%` }}
@@ -243,20 +243,20 @@ export function DesktopPanel() {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('desktop.title')}</h2>
 
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+      <div className="settings-section space-y-3">
         {sandboxed === false && <AutoLaunchSettings />}
         <UpdateSettings />
 
-        <div className="border-t border-white/[0.04]" />
+        <div className="border-t border-wash/[0.04]" />
 
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-txt-primary font-medium">{window.location.origin}</div>
             <div className="text-xs text-txt-tertiary mt-0.5">{t('desktop.instance.current')}</div>
           </div>
-          <button
+          <button data-icon-motion="arrow"
             onClick={() => window.backspace?.clearInstanceUrl()}
-            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
+            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors"
           >
             {t('desktop.instance.change')}
           </button>

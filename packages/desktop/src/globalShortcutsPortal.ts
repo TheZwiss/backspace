@@ -8,6 +8,7 @@ const SERVICE = 'org.freedesktop.portal.Desktop';
 const PATH = '/org/freedesktop/portal/desktop';
 const INTERFACE = 'org.freedesktop.portal.GlobalShortcuts';
 const ACTIONS: Record<string, string> = {
+  dictationPushToTalk: 'Dictation to voice (hold)',
   toggleMute: 'Toggle microphone', toggleDeafen: 'Toggle deafen', pushToTalk: 'Push to talk',
   toggleCamera: 'Toggle camera', toggleScreenShare: 'Toggle screen sharing', disconnect: 'Disconnect from voice',
 };
@@ -99,6 +100,18 @@ export class GlobalShortcutsPortal {
       (token) => [this.session, { handle_token: new Variant('s', token) }]);
     if (!Array.isArray(result.shortcuts?.value)) throw new Error('Portal returned invalid shortcuts');
     return result.shortcuts.value;
+  }
+
+  /** Ask the desktop to open its shortcut editor (portal version 2). */
+  async configure(): Promise<boolean> {
+    if (this.closed || !this.bound || !this.session) return false;
+    try {
+      await this.call(INTERFACE, 'ConfigureShortcuts', 'osa{sv}', [this.session, '', {}]);
+      return true;
+    } catch (error) {
+      console.warn('[GlobalShortcutsPortal] Could not open shortcut settings:', error);
+      return false;
+    }
   }
 
   /** Signals can describe only changed entries; re-read the authoritative full list. */
@@ -215,7 +228,8 @@ export class GlobalShortcutsPortal {
   private fail(error: unknown): void {
     console.warn('[GlobalShortcutsPortal]', error);
     this.stop();
-    this.status({ state: 'unavailable', shortcuts: {} });
+    const missingDesktopEntry = error instanceof Error && /App info not found/i.test(error.message);
+    this.status({ state: 'unavailable', shortcuts: {}, ...(missingDesktopEntry ? { reason: 'missingDesktopEntry' as const } : {}) });
   }
 
   stop(): void {

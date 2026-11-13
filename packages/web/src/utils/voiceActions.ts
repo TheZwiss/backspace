@@ -1,4 +1,4 @@
-import type { VideoCaptureOptions } from 'livekit-client';
+import { ConnectionState } from 'livekit-client';
 import { useVoiceStore, type ActiveDmCall } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
@@ -6,27 +6,10 @@ import { wsSend } from '../hooks/useWebSocket';
 import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit, preArmMicrophone } from './voice';
 import { dmCallOrigin, dmCallRoomKey, sendDmCallEnd } from './dmCall';
-import { CAMERA_PRESET, stopScreenShare } from './screenShare';
+import { stopScreenShare } from './screenShare';
+import { buildCameraCaptureOptions, buildCameraOptions } from './camera';
+import { consumeIntentionalCameraOff, markIntentionalCameraOff } from './cameraFlags';
 import { openScreenShareSetup } from '../stores/screenShareSetupStore';
-
-/**
- * One-shot flag used to distinguish user-initiated camera-off from unexpected
- * track-end events (hardware unplug, OS permission revoke). Set right before
- * `setCameraEnabled(false)` in any deliberate disable path; consumed-and-cleared
- * by the camera-track `ended` handler in useLiveKit. Module-level by design:
- * never persisted, never on the store, single producer + single consumer.
- */
-let _intentionalCameraOff = false;
-
-export function markIntentionalCameraOff(): void {
-  _intentionalCameraOff = true;
-}
-
-export function consumeIntentionalCameraOff(): boolean {
-  const v = _intentionalCameraOff;
-  _intentionalCameraOff = false;
-  return v;
-}
 
 /**
  * Toggle mute. Respects space-mute/deafen guards.
@@ -90,25 +73,19 @@ export function toggleDeafenFromControl(): void {
 export async function handleCameraAction(): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
-  const isCameraOn = useVoiceStore.getState().isCameraOn;
+  const voice = useVoiceStore.getState();
+  // A start is in flight: a second click would publish the camera twice.
+  if (voice.isCameraStarting) return;
+  const isCameraOn = voice.isCameraOn;
+  const willEnable = !isCameraOn;
+  if (willEnable) voice.setCameraStarting(true);
   try {
-    const willEnable = !isCameraOn;
     if (willEnable) {
       const cameraDeviceId = useVoiceStore.getState().cameraDeviceId;
-      const captureOpts: VideoCaptureOptions = {
-        resolution: CAMERA_PRESET.resolution,
-        frameRate: CAMERA_PRESET.encoding.maxFramerate,
-      };
-      if (cameraDeviceId) captureOpts.deviceId = cameraDeviceId;
-      await room.localParticipant.setCameraEnabled(
-        true,
-        captureOpts,
-        {
-          videoCodec: CAMERA_PRESET.codec,
-          videoEncoding: CAMERA_PRESET.encoding,
-          simulcast: true,
-        }
-      );
+      const options = buildCameraOptions();
+      // Never measure the camera on the click path: see buildCameraCaptureOptions.
+      const { capture: captureOpts } = await buildCameraCaptureOptions(options, cameraDeviceId, { measure: false });
+      await room.localParticipant.setCameraEnabled(true, captureOpts, options.publish);
     } else {
       // Mark this disable as intentional so the track-`ended` handler skips
       // its unplug/permission-revoke probe + toast.
@@ -126,6 +103,8 @@ export async function handleCameraAction(): Promise<void> {
     broadcastVoiceStatus();
   } catch (err) {
     console.error('[voiceActions] Failed to toggle camera:', err);
+  } finally {
+    if (willEnable) useVoiceStore.getState().setCameraStarting(false);
   }
 }
 
@@ -137,10 +116,14 @@ export async function handleCameraAction(): Promise<void> {
  * new voice status itself, so neither is repeated here.
  */
 export async function handleScreenShareAction(): Promise<void> {
+  return handleScreenShareActionForWindow();
+}
+
+export async function handleScreenShareActionForWindow(targetDocument?: Document): Promise<void> {
   const room = getActiveRoom();
   if (!room) return;
   if (!useVoiceStore.getState().isScreenSharing) {
-    openScreenShareSetup();
+    openScreenShareSetup(targetDocument);
     return;
   }
   try {
@@ -148,6 +131,18 @@ export async function handleScreenShareAction(): Promise<void> {
   } catch (err) {
     console.error('[voiceActions] Failed to stop screen share:', err);
   }
+}
+
+/**
+ * Switch a live share to another screen or window without stopping it: opens
+ * the setup screen in `replace` mode, whose Start swaps the published track in
+ * place (`replaceScreenShare`). No-op unless a share is live in a connected room.
+ */
+export function handleChangeScreenShareAction(targetDocument?: Document): void {
+  const room = getActiveRoom();
+  if (!room || room.state === ConnectionState.Disconnected) return;
+  if (!useVoiceStore.getState().isScreenSharing) return;
+  openScreenShareSetup(targetDocument, 'replace');
 }
 
 /**

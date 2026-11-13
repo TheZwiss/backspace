@@ -242,8 +242,8 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
   if (expired && expanded) {
     return (
       <li className="w-full">
-        <div className="w-full max-w-[22rem] p-3 rounded-xl bg-surface-elevated border border-white/[0.06] shadow-elevation-low space-y-2.5">
-          <div className="text-[13px] leading-5">
+        <div className="w-full max-w-[22rem] p-3 rounded-xl bg-surface-elevated border border-wash/[0.06] shadow-elevation-low space-y-2.5">
+          <div className="text-ui-label leading-5">
             <ChipIdentity label={label} stateWord={stateWord} expired dimmed={false} />
           </div>
           <ReauthForm
@@ -258,10 +258,10 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
   }
 
   return (
-    <li className="glass-pill text-[13px] leading-5 rounded-full pl-2.5 pr-3 py-1 inline-flex items-center gap-2 max-w-full">
+    <li className="glass-pill text-ui-label leading-5 rounded-full pl-2.5 pr-3 py-1 inline-flex items-center gap-2 max-w-full">
       <ChipIdentity label={label} stateWord={stateWord} expired={expired} dimmed={retrying} />
       {expired ? (
-        <button
+        <button data-icon-motion="expand"
           ref={actionRef}
           type="button"
           onClick={() => onExpand(entry.origin)}
@@ -271,7 +271,7 @@ function ConnectionChip({ entry, retrying, expanded, onExpand, onCollapse, onRet
           {reconnectWord}
         </button>
       ) : (
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => onRetry(entry.origin)}
           disabled={retrying}

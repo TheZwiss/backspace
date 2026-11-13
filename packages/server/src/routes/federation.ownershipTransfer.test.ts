@@ -5,9 +5,9 @@
 //   On a federated back-and-forth — A transfers ownership to B (federated), B
 //   transfers it back to A — the second event was rejected at the receiver
 //   with `unauthorized_source` because `dm_channels.ownerHomeInstance` was
-//   written as a bare host (`orbit.ddns.net`) by
+//   written as a bare host (`orbit.example`) by
 //   `transferGroupDmOwnership` (which copies `users.homeInstance`) while
-//   `sourceInstance` always arrives as a full URL (`https://orbit.ddns.net`).
+//   `sourceInstance` always arrives as a full URL (`https://orbit.example`).
 //   The strict-string-equality check fired, the event went back into the
 //   outbox, and every retry hit the same mismatch — divergent ownership
 //   between the two instances stuck until manual repair.

@@ -96,7 +96,7 @@ function applyMigrations(db: Database.Database): void {
   }
 }
 
-const HOME = 'orbit.ddns.net';
+const HOME = 'orbit.example';
 const HOME_ORIGIN = `https://${HOME}`;
 
 function answer(homeUserId: string, username: string, profile: Record<string, unknown>): LookupResult {

@@ -1,4 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useDocumentActive } from '../../hooks/useDocumentActive';
+import { shouldRenderLocalScreenPreview } from '../../utils/localScreenPreview';
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { useStreamFullscreen } from '../../hooks/useStreamFullscreen';
+import { useStreamPreviews } from '../../utils/streamPreviews';
+import { StreamLiveBadge } from './StreamLiveBadge';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { Avatar } from '../ui/Avatar';
@@ -24,10 +30,13 @@ interface StreamTileProps {
   tile: StreamTileType;
   large?: boolean;
   stats: TrackStatsSnapshot | null;
+  borderless?: boolean;
+  chromeRevealed?: boolean;
 }
 
 const STREAM_HEALTH_KEYS = {
   publisherNetwork: 'voice:streamDiagnostics.publisherNetwork',
+  publisherBandwidth: 'voice:streamDiagnostics.publisherBandwidth',
   publisherCpu: 'voice:streamDiagnostics.publisherCpu',
   viewerNetwork: 'voice:streamDiagnostics.viewerNetwork',
   reconnecting: 'voice:streamDiagnostics.reconnecting',
@@ -56,7 +65,7 @@ function StreamQualityItem() {
         {t('voice:stream.quality')}
       </div>
       <div className="relative">
-        <button
+        <button data-icon-motion="press"
           ref={btnRef}
           onClick={() => {
             const n = !open;
@@ -107,7 +116,7 @@ function StreamVolumeItem({ userId }: { userId: string }) {
           max="200"
           value={streamVolume}
           onChange={(e) => setStreamVolume(userId, parseInt(e.target.value))}
-          className="flex-1 min-w-0 accent-accent-primary h-1"
+          className="ui-range"
         />
         <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
           {f.formatPercent(streamVolume)}
@@ -129,7 +138,7 @@ function StreamAttenuationItem() {
   return (
     <div>
       <div className="py-1.5">
-        <button
+        <button data-icon-motion="press"
           onClick={() => setAttenuationEnabled(!streamAttenuationEnabled)}
           className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
           style={{ width: 'calc(100% - 12px)' }}
@@ -162,7 +171,7 @@ function StreamAttenuationItem() {
               max="100"
               value={streamAttenuationStrength}
               onChange={(e) => setAttenuationStrength(parseInt(e.target.value))}
-              className="flex-1 min-w-0 accent-accent-primary h-1"
+              className="ui-range"
             />
             <span className="text-xs text-txt-secondary min-w-[32px] flex-shrink-0 text-right">
               {f.formatPercent(streamAttenuationStrength)}
@@ -201,25 +210,98 @@ function handleViewerWatchToggle(sharer: StreamWatchTarget, watching: boolean): 
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
-export function StreamTile({ tile, large, stats }: StreamTileProps) {
+/**
+ * The poster behind the placeholder. It is replaced every 30 s
+ * (streamPreviews' PREVIEW_INTERVAL), and swapping an <img> src flashes the
+ * tile for a frame on each refresh — very visible while the share shows the
+ * paused card. A background layer that decodes the replacement first keeps the
+ * old image on screen until the new one is ready, so the refresh is invisible.
+ */
+function PreviewBackdrop({ src }: { src: string }) {
+  const [shown, setShown] = useState(src);
+  useEffect(() => {
+    if (src === shown) return;
+    let cancelled = false;
+    const image = new Image();
+    const swap = (): void => { if (!cancelled) setShown(src); };
+    image.onload = swap;
+    image.onerror = swap;
+    image.src = src;
+    if (typeof image.decode === 'function') void image.decode().then(swap).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [src, shown]);
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 bg-cover bg-center"
+      style={{ backgroundImage: `url("${shown}")` }}
+    />
+  );
+}
+
+export function StreamTile({ tile, large, stats, borderless = false, chromeRevealed = true }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const documentActive = useDocumentActive(containerRef);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const streamFullscreen = useStreamFullscreen(videoRef);
+  const frozenCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [frozenFrame, setFrozenFrame] = useState<HTMLCanvasElement | null>(null);
 
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
 
   const { participant } = tile;
   const isLocal = participant.isLocal;
+  const preview = useStreamPreviews((state) => state.images[participant.identity]?.image);
   const userId = participant.userId;
   const avatarUserId = participant.homeUserId ?? userId;
-  const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
+  const { displayName, avatar, user, origin: userOrigin } = useVoiceParticipantMeta(participant);
 
   const isWatching = watchingStreams.has(userId);
+  const isShareActive = participant.isScreenSharing;
+  const isRepublishing = (participant as typeof participant & { isScreenShareRepublishing?: boolean }).isScreenShareRepublishing === true;
+  const republishRevision = (participant as typeof participant & { isScreenShareRepublishRevision?: number }).isScreenShareRepublishRevision ?? 0;
   const voiceConnectionStatus = useVoiceStore((s) => s.voiceConnectionStatus);
   const localConnectionQuality = useVoiceStore((s) => s.connectionQuality);
   const publisherConnectionQuality = useVoiceStore((s) => s.connectionQualities.get(participant.identity) ?? 'unknown');
 
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
-  const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
+  const localPreviewSuspended = isLocal && !shouldRenderLocalScreenPreview(liveScreenTrack, documentActive);
+  const liveLkScreenTrack = liveScreenTrack && !localPreviewSuspended ? tile.lkScreenTrack : null;
+  const isWatchingRef = useRef(isWatching);
+  const isShareActiveRef = useRef(isShareActive);
+  const hasLiveTrackRef = useRef(!!liveLkScreenTrack);
+  const isRepublishingRef = useRef(isRepublishing);
+  const seenRepublishRevisionRef = useRef(republishRevision);
+  const frozenRepublishRevisionRef = useRef(0);
+  const pendingRepublishRevisionRef = useRef(0);
+  const attachedTrackHasFrameRef = useRef(false);
+  const sawTrackGapRef = useRef(false);
+  const hasFrozenFrameRef = useRef(!!frozenFrame);
+  const republishSourceTrackRef = useRef<typeof liveLkScreenTrack>(null);
+  isWatchingRef.current = isWatching;
+  isShareActiveRef.current = isShareActive;
+  hasLiveTrackRef.current = !!liveLkScreenTrack;
+  isRepublishingRef.current = isRepublishing;
+  hasFrozenFrameRef.current = !!frozenFrame;
+  if (!liveLkScreenTrack && (isRepublishing || frozenFrame)) sawTrackGapRef.current = true;
+
+  const snapshotVideoFrame = useCallback((videoEl: HTMLVideoElement, track: typeof liveLkScreenTrack, revision: number) => {
+    if (videoEl.videoWidth <= 0 || videoEl.videoHeight <= 0) return false;
+    const snapshot = document.createElement('canvas');
+    snapshot.width = videoEl.videoWidth;
+    snapshot.height = videoEl.videoHeight;
+    const context = snapshot.getContext('2d');
+    if (!context) return false;
+    context.drawImage(videoEl, 0, 0, snapshot.width, snapshot.height);
+    sawTrackGapRef.current = false;
+    republishSourceTrackRef.current = track;
+    frozenRepublishRevisionRef.current = revision;
+    pendingRepublishRevisionRef.current = 0;
+    hasFrozenFrameRef.current = true;
+    setFrozenFrame(snapshot);
+    return true;
+  }, []);
 
   // Quality badge state: the raw dimensions, rendered through the catalog so a language switch relabels them.
   const [qualityBadge, setQualityBadge] = useState<{ height: number; fps: number | null } | null>(null);
@@ -240,7 +322,9 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
     isLocal,
     publisherConnectionQuality,
     localConnectionQuality,
-    outboundReason: isLocal ? screenStat?.qualityLimitation ?? null : null,
+    outboundReason: isLocal && ((screenStat?.bitrate ?? 0) > 0 || (screenStat?.fps ?? 0) > 0)
+      ? screenStat?.qualityLimitation ?? null
+      : null,
     packetLoss: screenStat?.packetLoss ?? null,
     jitter: screenStat?.jitter ?? null,
     freezeCountDelta: screenStat?.freezeCountDelta ?? null,
@@ -249,16 +333,95 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
 
   // --- VIDEO --- use LiveKit's track.attach() to register the element
   // with the adaptive stream observer (enables SFU layer switching by viewport size)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
+    const attachedTrack = liveLkScreenTrack;
+    const releaseFrozenFrame = () => {
+      if (videoEl.videoWidth <= 0 || videoEl.videoHeight <= 0) return;
+      attachedTrackHasFrameRef.current = true;
+      if (pendingRepublishRevisionRef.current > frozenRepublishRevisionRef.current) {
+        snapshotVideoFrame(videoEl, attachedTrack, pendingRepublishRevisionRef.current);
+      } else if (attachedTrack !== republishSourceTrackRef.current) {
+        sawTrackGapRef.current = false;
+        hasFrozenFrameRef.current = false;
+        republishSourceTrackRef.current = null;
+        setFrozenFrame(null);
+      }
+    };
+    videoEl.addEventListener('loadeddata', releaseFrozenFrame);
+    let videoFrameCallback: number | null = null;
     if (liveLkScreenTrack) {
+      attachedTrackHasFrameRef.current = false;
       liveLkScreenTrack.attach(videoEl);
-      return () => { liveLkScreenTrack.detach(videoEl); };
+      if ('requestVideoFrameCallback' in videoEl) {
+        videoFrameCallback = videoEl.requestVideoFrameCallback(() => releaseFrozenFrame());
+      }
     } else {
       videoEl.srcObject = null;
     }
-  }, [liveLkScreenTrack]);
+    return () => {
+      videoEl.removeEventListener('loadeddata', releaseFrozenFrame);
+      if (videoFrameCallback !== null && 'cancelVideoFrameCallback' in videoEl) {
+        videoEl.cancelVideoFrameCallback(videoFrameCallback);
+      }
+      if (!isLocal && !hasFrozenFrameRef.current && isWatchingRef.current && isShareActiveRef.current && !hasLiveTrackRef.current
+        && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+        const snapshot = document.createElement('canvas');
+        snapshot.width = videoEl.videoWidth;
+        snapshot.height = videoEl.videoHeight;
+        const context = snapshot.getContext('2d');
+        if (context) {
+          context.drawImage(videoEl, 0, 0, snapshot.width, snapshot.height);
+          hasFrozenFrameRef.current = true;
+          setFrozenFrame(snapshot);
+        }
+      }
+      if (liveLkScreenTrack) liveLkScreenTrack.detach(videoEl);
+      else videoEl.srcObject = null;
+    };
+  }, [liveLkScreenTrack, isWatching, isLocal, snapshotVideoFrame]);
+
+  useLayoutEffect(() => {
+    const isNewRevision = republishRevision > seenRepublishRevisionRef.current;
+    if (isNewRevision) seenRepublishRevisionRef.current = republishRevision;
+    if (!isNewRevision || !isRepublishing || !isWatching || !isShareActive) return;
+
+    if (!liveLkScreenTrack || !attachedTrackHasFrameRef.current) {
+      pendingRepublishRevisionRef.current = republishRevision;
+      return;
+    }
+    const videoEl = videoRef.current;
+    if (!videoEl || !snapshotVideoFrame(videoEl, liveLkScreenTrack, republishRevision)) {
+      pendingRepublishRevisionRef.current = republishRevision;
+    }
+  }, [republishRevision, isRepublishing, isWatching, isShareActive, liveLkScreenTrack, snapshotVideoFrame]);
+
+  useLayoutEffect(() => {
+    const overlay = frozenCanvasRef.current;
+    const context = overlay?.getContext('2d');
+    if (!overlay || !context || !frozenFrame) return;
+    overlay.width = frozenFrame.width;
+    overlay.height = frozenFrame.height;
+    context.drawImage(frozenFrame, 0, 0);
+  }, [frozenFrame]);
+
+  useLayoutEffect(() => {
+    if (!isWatching || !isShareActive || localPreviewSuspended) {
+      hasFrozenFrameRef.current = false;
+      sawTrackGapRef.current = false;
+      pendingRepublishRevisionRef.current = 0;
+      republishSourceTrackRef.current = null;
+      setFrozenFrame(null);
+      return;
+    }
+    if (!isRepublishing && !sawTrackGapRef.current) {
+      hasFrozenFrameRef.current = false;
+      pendingRepublishRevisionRef.current = 0;
+      republishSourceTrackRef.current = null;
+      setFrozenFrame(null);
+    }
+  }, [isWatching, isShareActive, isRepublishing, localPreviewSuspended]);
 
   // Quality badge (poll every 3s)
   useEffect(() => {
@@ -298,7 +461,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       e.preventDefault();
       e.stopPropagation();
 
-      const items: ContextMenuItem[] = [];
+      const items: ContextMenuItem[] = user ? userSocialMenuItems(user, userOrigin) : [];
 
       if (isLocal) {
         // Local stream: stop, change, quality
@@ -406,7 +569,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, userId, participant.identity, openContextMenu, t],
+    [user, userOrigin, isLocal, userId, participant.identity, openContextMenu, t],
   );
 
   const handleWatch = useCallback(() => {
@@ -416,26 +579,40 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
   }, [userId, participant.identity]);
 
   const hasVideo = liveScreenTrack !== null;
+  const keepVideoElement = isWatching && isShareActive && !localPreviewSuspended;
+  const showPlaceholder = localPreviewSuspended || !isWatching || (!hasVideo && !frozenFrame);
 
   return (
     <div
+      ref={containerRef}
       data-context-menu
-      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
+      style={streamFullscreen.expanded ? { position: 'fixed', inset: 0, width: 'calc(100 * var(--app-vw))', height: 'calc(100 * var(--app-dvh))', zIndex: 'var(--layer-fullscreen)' } : undefined}
+      className={`relative bg-surface-base ${borderless ? '' : 'rounded-xl ring-1 ring-wash/[0.06] hover:ring-wash/10'} overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         'h-full w-full'
       }`}
       onContextMenu={handleContextMenu}
     >
-      {hasVideo && isWatching ? (
+      {keepVideoElement ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-contain bg-black"
+          className={`w-full h-full object-contain bg-black ${hasVideo ? '' : 'invisible'}`}
         />
-      ) : (
-        <div data-testid="stream-tile-placeholder" className={`w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
-          <div className={large ? 'flex flex-col items-center gap-3 min-w-0' : 'flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
+      ) : null}
+      {frozenFrame && isWatching && isShareActive && !localPreviewSuspended && (
+        <canvas
+          ref={frozenCanvasRef}
+          data-testid="stream-tile-frozen-frame"
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-contain bg-black pointer-events-none"
+        />
+      )}
+      {showPlaceholder && (
+        <div data-testid="stream-tile-placeholder" className={`relative w-full h-full min-h-0 flex items-center justify-center bg-surface-channel ${large ? 'px-4 py-6' : 'px-4 pt-9 pb-3'}`}>
+          {preview && !localPreviewSuspended && <><PreviewBackdrop src={preview} /><div className="absolute inset-0 bg-black/65" /></>}
+          <div className={large ? 'relative flex flex-col items-center gap-3 min-w-0' : 'relative flex w-full max-w-[280px] min-w-0 items-center gap-3'}>
             <div className="relative flex-shrink-0">
               <Avatar src={avatar} name={displayName} size={large ? 80 : 44} userId={avatarUserId} user={user ?? undefined} />
             </div>
@@ -443,11 +620,12 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
               <p className={`text-txt-primary font-semibold ${large ? 'text-sm' : 'text-xs leading-tight line-clamp-2'}`}>
                 {t('voice:stream.isStreaming', { name: displayName })}
               </p>
+              {localPreviewSuspended && <p className="mt-1 text-xs text-txt-tertiary">{t('voice:stream.localPreviewPaused')}</p>}
               {!isLocal && (
-                <button
+                <button data-icon-motion="press"
                   onClick={handleWatch}
                   aria-label={t('voice:stream.watch')}
-                  className={`${large ? 'mt-2 px-4 py-1.5' : 'mt-2 w-full min-h-7 px-3 py-1 text-[11px]'} whitespace-nowrap bg-accent-primary hover:bg-accent-primary/80 rounded text-white font-semibold transition-colors`}
+                  className={`${large ? 'mt-2 px-4 py-1.5' : 'mt-2 w-full min-h-7 px-3 py-1 text-ui-caption'} whitespace-nowrap bg-accent-primary hover:bg-accent-primary-hover rounded text-white font-semibold transition-colors`}
                 >
                   {t(large ? 'voice:stream.watch' : 'voice:stream.watchShort')}
                 </button>
@@ -458,21 +636,21 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* LIVE badge — top left */}
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
-        {t('voice:badges.live')}
-      </div>
+      {(!borderless || chromeRevealed) && <div className="absolute top-2 left-2">
+        <StreamLiveBadge userId={userId} large />
+      </div>}
 
       {/* Stream status — in focus mode this is the visual peer of the Grid
           action: same top edge, height, radius, and surface treatment. */}
-      {(healthWarning || (qualityBadge && hasVideo)) && (
+      {(!borderless || chromeRevealed) && (healthWarning || (qualityBadge && hasVideo)) && (
         <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none`}>
           {healthWarning && (
-            <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-[10px] leading-[15px] text-white/90 truncate`}>
+            <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-ui-micro leading-[15px] text-white/90 truncate`}>
               {t(STREAM_HEALTH_KEYS[healthWarning])}
             </div>
           )}
           {qualityBadge && hasVideo && (
-            <div data-testid="stream-quality-badge" className={`${large ? 'h-7 px-3 rounded-lg' : 'px-1.5 py-0.5 rounded'} flex-shrink-0 bg-black/60 flex items-center text-[10px] font-bold text-white/70 uppercase tracking-wide`}>
+            <div data-testid="stream-quality-badge" className={`${large ? 'h-7 px-3 rounded-lg' : 'px-1.5 py-0.5 rounded'} flex-shrink-0 bg-black/60 flex items-center text-ui-micro font-bold text-white/70 uppercase tracking-wide`}>
               {qualityBadge.fps !== null
                 ? t('voice:stream.qualityValue', { height: qualityBadge.height, fps: qualityBadge.fps })
                 // i18n-check: allow-literal "720p" is the format's name and reads the same in every language
@@ -482,8 +660,18 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
         </div>
       )}
 
+      {hasVideo && isWatching && <button data-icon-motion="expand"
+        type="button"
+        aria-label={t(streamFullscreen.active ? 'voice:controls.exitFullscreen' : 'voice:controls.fullscreen')}
+        onClick={(event) => { event.stopPropagation(); streamFullscreen.toggle(); }}
+        className="absolute bottom-2 right-2 z-20 w-11 h-11 rounded-lg bg-black/70 text-white flex items-center justify-center"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d={streamFullscreen.active ? 'M4 9h5V4m11 5h-5V4M4 15h5v5m11-5h-5v5' : 'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5'} />
+        </svg>
+      </button>}
       {/* Bottom overlay */}
-      {hasVideo && isWatching && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      {(hasVideo || !!frozenFrame) && isWatching && (!borderless || chromeRevealed) && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
         <div className="flex items-center gap-1.5 min-w-0">
           {/* Screen icon */}
           <svg
@@ -496,12 +684,12 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
             <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" />
           </svg>
           <span
-            className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
+            className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-ui-label'}`}
           >
             {displayName}
           </span>
           {isLocal && (
-            <span className="text-[10px] text-white/40 font-medium">{t('voice:badges.you')}</span>
+            <span className="text-ui-micro text-white/40 font-medium">{t('voice:badges.you')}</span>
           )}
         </div>
       </div>}

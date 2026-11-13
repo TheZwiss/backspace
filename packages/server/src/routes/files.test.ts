@@ -383,6 +383,42 @@ describe('POST /api/files — tus upload endpoint', () => {
     expect(fs.existsSync(path.join(tmpDir, json.filename))).toBe(true);
   });
 
+  it.each([
+    ['voice-message-20261107-120000.weba', 'audio/webm'],
+    ['voice-message-20261107-120000.m4a', 'audio/mp4'],
+    ['voice-message-20261107-120000.ogg', 'audio/ogg'],
+  ])('stores a recorded voice message %s as %s', async (originalName, expected) => {
+    const token = signJwt({ userId: USER_A_ID, username: 'user_a' });
+    const body = Buffer.from('not really opus, only the type is under test');
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/files',
+      headers: {
+        'authorization': `Bearer ${token}`,
+        'tus-resumable': '1.0.0',
+        'upload-length': String(body.length),
+        'upload-metadata': tusMetadata({ originalName }),
+        'content-length': '0',
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const uploadPath = (createRes.headers['location'] as string).replace(/^https?:\/\/[^/]+/, '');
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: uploadPath,
+      headers: {
+        'authorization': `Bearer ${token}`,
+        'tus-resumable': '1.0.0',
+        'upload-offset': '0',
+        'content-type': 'application/offset+octet-stream',
+        'content-length': String(body.length),
+      },
+      payload: body,
+    });
+    expect([200, 204]).toContain(patchRes.statusCode);
+    expect((JSON.parse(patchRes.body) as { mimetype: string }).mimetype).toBe(expected);
+  });
+
   it('oversize Upload-Length returns 413', async () => {
     // Set the instance limit to a small value
     testDb.update(schema.instanceSettings)

@@ -4,6 +4,7 @@ import { VOICE_HEALTH } from '../utils/voiceHealth';
 
 export type StreamHealthWarning =
   | 'publisherNetwork'
+  | 'publisherBandwidth'
   | 'publisherCpu'
   | 'viewerNetwork'
   | 'reconnecting'
@@ -23,9 +24,11 @@ interface StreamHealthSample {
 export function classifyStreamHealth(sample: StreamHealthSample): StreamHealthWarning | null {
   if (sample.reconnecting) return 'reconnecting';
 
-  const publisherBad = sample.publisherConnectionQuality === 'poor'
-    || sample.publisherConnectionQuality === 'lost'
-    || sample.outboundReason === 'bandwidth'
+  const publisherNetworkBad = sample.publisherConnectionQuality === 'poor'
+    || sample.publisherConnectionQuality === 'lost';
+  const publisherBandwidthLimited = sample.outboundReason === 'bandwidth';
+  const publisherBad = publisherNetworkBad
+    || publisherBandwidthLimited
     || sample.outboundReason === 'cpu';
   const viewerBad = !sample.isLocal && (
     sample.localConnectionQuality === 'poor'
@@ -37,7 +40,8 @@ export function classifyStreamHealth(sample: StreamHealthSample): StreamHealthWa
 
   if (publisherBad && viewerBad) return 'unknown';
   if (sample.outboundReason === 'cpu') return 'publisherCpu';
-  if (publisherBad) return 'publisherNetwork';
+  if (publisherNetworkBad) return 'publisherNetwork';
+  if (publisherBandwidthLimited) return 'publisherBandwidth';
   if (viewerBad) return 'viewerNetwork';
   return null;
 }

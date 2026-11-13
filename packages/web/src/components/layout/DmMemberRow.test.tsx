@@ -93,12 +93,12 @@ function openMenuByContextMenu(target: HTMLElement) {
 function getMenuLabels(): string[] {
   // Menu items render as <button> elements inside the portal.
   // Use the action-button class fingerprint via role lookup.
-  const buttons = document.querySelectorAll<HTMLButtonElement>('div.fixed.z-\\[200\\] button');
+  const buttons = document.querySelectorAll<HTMLButtonElement>('[role="menu"] button');
   return Array.from(buttons).map((b) => b.textContent?.trim() ?? '');
 }
 
 describe('DmMemberRow — menu visibility', () => {
-  it('owner caller, friend non-self → Profile + Transfer + Remove from Group + (sep) Remove Friend', () => {
+  it('keeps group management separate from friendship management', () => {
     const { container } = renderRow({
       callerIsOwner: true,
       isSelf: false,
@@ -110,11 +110,9 @@ describe('DmMemberRow — menu visibility', () => {
       'View Profile',
       'Transfer Ownership',
       'Remove from Group',
-      'Remove Friend',
     ]);
-    // Separator should be present between kick and remove-friend.
-    const separators = document.querySelectorAll('div.fixed.z-\\[200\\] > div.h-px');
-    expect(separators.length).toBe(1);
+    const separators = document.querySelectorAll('[role="menu"] [role="separator"]');
+    expect(separators.length).toBe(0);
   });
 
   it('owner caller, viewing self → Profile only', () => {
@@ -139,19 +137,19 @@ describe('DmMemberRow — menu visibility', () => {
       'Transfer Ownership',
       'Remove from Group',
     ]);
-    const separators = document.querySelectorAll('div.fixed.z-\\[200\\] > div.h-px');
+    const separators = document.querySelectorAll('[role="menu"] [role="separator"]');
     expect(separators.length).toBe(0);
   });
 
-  it('non-owner caller, friend non-self → Profile + Remove Friend (no Transfer, no Kick, no separator)', () => {
+  it('offers the profile without friendship removal for a friend in the roster', () => {
     const { container } = renderRow({
       callerIsOwner: false,
       isSelf: false,
       isFriend: true,
     });
     openMenuByContextMenu(container.querySelector('[data-dm-member-row]')!);
-    expect(getMenuLabels()).toEqual(['View Profile', 'Remove Friend']);
-    const separators = document.querySelectorAll('div.fixed.z-\\[200\\] > div.h-px');
+    expect(getMenuLabels()).toEqual(['View Profile']);
+    const separators = document.querySelectorAll('[role="menu"] [role="separator"]');
     expect(separators.length).toBe(0);
   });
 
@@ -182,7 +180,7 @@ describe('DmMemberRow — visual markers', () => {
   it('shows a display name that contains "@" in full, without a globe', () => {
     const { container } = renderRow({ member: makeUser({ displayName: 'kai@work' }) });
     expect(container.textContent).toContain('kai@work');
-    expect(container.querySelector('svg')).toBeNull();
+    expect(container.querySelector('[data-federation-globe]')).toBeNull();
   });
 
   it('does NOT render the globe for native members', () => {
@@ -241,7 +239,6 @@ describe('DmMemberRow — kebab', () => {
       'View Profile',
       'Transfer Ownership',
       'Remove from Group',
-      'Remove Friend',
     ]);
   });
 });

@@ -6,6 +6,7 @@ export default {
   ],
   theme: {
     extend: {
+      zIndex: { modal: 'var(--layer-modal)', menu: 'var(--layer-menu)', 'menu-backdrop': 'var(--layer-menu-backdrop)', tooltip: 'var(--layer-tooltip)', confirm: 'var(--layer-confirm)', toast: 'var(--layer-toast)' },
       height: { screen: 'calc(100 * var(--app-vh))' },
       minHeight: { screen: 'calc(100 * var(--app-vh))' },
       colors: {
@@ -63,6 +64,9 @@ export default {
           border:    'var(--glass-border)',
           highlight: 'var(--glass-highlight)',
         },
+        // Neutral translucent wash for hover/inset/divider tints: white on dark
+        // themes, ink on light ones (never use white/NN for these).
+        wash: 'rgb(var(--wash) / <alpha-value>)',
         notification: 'rgb(var(--notification) / <alpha-value>)',
       },
       boxShadow: {

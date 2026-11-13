@@ -386,7 +386,7 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
 });
 
 describe('healResetIncarnation — real-account detach (Phase 2)', () => {
-  const QORIGIN = 'orbit.ddns.net';
+  const QORIGIN = 'orbit.example';
   let uidCounter = 0;
 
   beforeEach(() => {
@@ -428,13 +428,13 @@ describe('healResetIncarnation — real-account detach (Phase 2)', () => {
 
   it('detaches a flagged real account with NO owned spaces (flag only, username kept)', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
-    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.example', healPending: 1 });
 
     const { healResetIncarnation } = await import('./federationReset.js');
     healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
-    expect(row.username).toBe('carol@orbit.ddns.net'); // username PRESERVED — no rename
+    expect(row.username).toBe('carol@orbit.example'); // username PRESERVED — no rename
     expect(row.federationHomeOrphaned).toBe(1);         // detached
     expect(row.federationHealPending).toBe(0);          // processed
     expect(row.isDeleted).toBe(0);                      // NOT deleted (content preserved)
@@ -442,14 +442,14 @@ describe('healResetIncarnation — real-account detach (Phase 2)', () => {
 
   it('detaches a space-OWNER identically to a non-owner (flag set, username kept)', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
-    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'dave@orbit.ddns.net', healPending: 1 });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'dave@orbit.example', healPending: 1 });
     seedSpace({ ownerId: uid, name: 'Dave HQ' }); // owns a space — no special case
 
     const { healResetIncarnation } = await import('./federationReset.js');
     healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
-    expect(row.username).toBe('dave@orbit.ddns.net'); // username PRESERVED (owner treated same as non-owner)
+    expect(row.username).toBe('dave@orbit.example'); // username PRESERVED (owner treated same as non-owner)
     expect(row.federationHomeOrphaned).toBe(1);        // detached
     expect(row.federationHealPending).toBe(0);         // processed
     expect(row.isDeleted).toBe(0);
@@ -460,8 +460,8 @@ describe('healResetIncarnation — real-account detach (Phase 2)', () => {
   });
 
   it('detaches ALL flagged real accounts and quarantineOrphanedAccounts returns the count', async () => {
-    const uid1 = seedRealAccount({ homeInstance: QORIGIN, username: 'erin@orbit.ddns.net', healPending: 1 });
-    const uid2 = seedRealAccount({ homeInstance: QORIGIN, username: 'frank@orbit.ddns.net', healPending: 1 });
+    const uid1 = seedRealAccount({ homeInstance: QORIGIN, username: 'erin@orbit.example', healPending: 1 });
+    const uid2 = seedRealAccount({ homeInstance: QORIGIN, username: 'frank@orbit.example', healPending: 1 });
 
     const { quarantineOrphanedAccounts } = await import('./federationReset.js');
     const count = quarantineOrphanedAccounts(QORIGIN);
@@ -477,13 +477,13 @@ describe('healResetIncarnation — real-account detach (Phase 2)', () => {
   it('counts accounts an earlier reset of the origin detached in the refreshed journal count', async () => {
     // An account detached by an earlier reset: homed here, former home kept aside.
     testDb.insert(schema.users).values({
-      id: 'earlier', username: 'gina@orbit.ddns.net', passwordHash: '$2b$10$realbcrypthash',
+      id: 'earlier', username: 'gina@orbit.example', passwordHash: '$2b$10$realbcrypthash',
       homeInstance: null, homeUserId: null,
       detachedHomeInstance: QORIGIN, detachedHomeUserId: 'gina-old',
       federationHomeOrphaned: 1, isDeleted: 0, createdAt: Date.now(),
     }).run();
     seedJournal({ origin: QORIGIN, deadEpoch: 'E1' });
-    seedRealAccount({ homeInstance: QORIGIN, username: 'hank@orbit.ddns.net', healPending: 1 });
+    seedRealAccount({ homeInstance: QORIGIN, username: 'hank@orbit.example', healPending: 1 });
 
     const { healResetIncarnation } = await import('./federationReset.js');
     healResetIncarnation(QORIGIN, 'E2', 'initiate_accepted');
@@ -498,13 +498,13 @@ describe('healResetIncarnation — real-account detach (Phase 2)', () => {
 
   it('false-positive branch (same incarnation) does NOT detach real accounts', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
-    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.example', healPending: 1 });
 
     const { healResetIncarnation } = await import('./federationReset.js');
     healResetIncarnation(QORIGIN, 'E0', 'accept_new'); // newEpoch == deadEpoch → false alarm
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
-    expect(row.username).toBe('carol@orbit.ddns.net'); // untouched
+    expect(row.username).toBe('carol@orbit.example'); // untouched
     expect(row.federationHomeOrphaned ?? 0).toBe(0);    // NOT detached
     expect(row.federationHealPending).toBe(0);          // flags cleared (false-alarm path)
   });

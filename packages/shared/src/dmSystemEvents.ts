@@ -1,4 +1,4 @@
-import { AVATAR_COLORS, type AvatarColor, type SpaceInviteSystemPayload } from './types.js';
+import { AVATAR_COLORS, MSN_WINK_EFFECTS, type NudgeEffect, type AvatarColor, type SpaceInviteSystemPayload } from './types.js';
 
 /**
  * The content of a DM system message (`dm_messages.type = 'system'`), stored
@@ -12,7 +12,11 @@ import { AVATAR_COLORS, type AvatarColor, type SpaceInviteSystemPayload } from '
  *   receiver stores it only as `parseDmSystemEvent` returns it.
  * - System messages cannot be edited.
  */
+export type CallHistoryEvent = { event: 'call_history'; startedAt: number; connectedAt: number | null; endedAt: number | null; status: 'ringing' | 'active' | 'ended' | 'missed' | 'rejected' | 'cancelled' | 'interrupted' };
+
 export type DmSystemEvent =
+  | CallHistoryEvent
+  | { event: 'nudge'; effect: NudgeEffect }
   | { event: 'member_added'; targetUserId: string; targetDisplayName: string }
   | { event: 'member_removed'; targetUserId: string; targetDisplayName: string; reason: 'leave' | 'kick' }
   | { event: 'owner_changed'; newOwnerId: string; newOwnerDisplayName: string }
@@ -120,6 +124,20 @@ export function parseDmSystemEvent(content: string | null | undefined): DmSystem
   if (!isFields(data)) return null;
 
   switch (data.event) {
+    case 'nudge':
+      return typeof data.effect === 'string' && ['shake', 'wave', 'jelly', 'knock', 'confetti', 'pulse', ...MSN_WINK_EFFECTS].includes(data.effect)
+        ? { event: 'nudge', effect: data.effect as NudgeEffect } : null;
+    case 'call_history': {
+      const timestamp = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+      if (!timestamp(data.startedAt) || !(data.connectedAt === null || timestamp(data.connectedAt)) || !(data.endedAt === null || timestamp(data.endedAt))) return null;
+      if (data.connectedAt !== null && data.connectedAt < data.startedAt) return null;
+      if (data.endedAt !== null && data.endedAt < (data.connectedAt ?? data.startedAt)) return null;
+      if (!['ringing', 'active', 'ended', 'missed', 'rejected', 'cancelled', 'interrupted'].includes(String(data.status))) return null;
+      if (data.status === 'active' && data.connectedAt === null) return null;
+      if (['ended', 'missed', 'rejected', 'cancelled'].includes(String(data.status)) && data.endedAt === null) return null;
+      if (['ringing', 'active'].includes(String(data.status)) && data.endedAt !== null) return null;
+      return { event: 'call_history', startedAt: data.startedAt, connectedAt: data.connectedAt, endedAt: data.endedAt, status: data.status as CallHistoryEvent['status'] };
+    }
     case 'member_added': {
       const targetUserId = text(data.targetUserId);
       const targetDisplayName = text(data.targetDisplayName);

@@ -138,6 +138,7 @@ export function PictureInPicture() {
   const pipEnabled = useVoiceStore((s) => s.pipEnabled);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
+  const callWindowOpen = useUIStore((s) => s.callWindowOpen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
   const setPipCollapsed = useUIStore((s) => s.setPipCollapsed);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
@@ -166,7 +167,7 @@ export function PictureInPicture() {
   // Visibility — split into wouldShow (ignores collapsed) and shouldShow (full check)
   const isInServerVoice = currentVoiceChannelId !== null && currentChannelId !== currentVoiceChannelId;
   const isInDmCall = activeDmCall !== null && currentChannelId !== dmCallChannel;
-  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && pipEnabled;
+  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && !callWindowOpen && pipEnabled;
   const shouldShow = wouldShow && !pipCollapsed;
 
   // Reset pipCollapsed when wouldShow transitions false → true
@@ -402,7 +403,7 @@ export function PictureInPicture() {
   return (
     <div
       ref={containerRef}
-      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-surface-base select-none ${
+      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-wash/10 bg-surface-base select-none ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
       style={{
@@ -455,13 +456,13 @@ export function PictureInPicture() {
 
       {/* LIVE badge */}
       {isScreen && (
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-ui-caption font-bold text-white uppercase tracking-wide">
           {t('badges.live')}
         </div>
       )}
 
       {/* Close button */}
-      <button
+      <button data-icon-motion="press"
         data-pip-action="close"
         onClick={handleClose}
         className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center text-white/80 hover:text-white transition-colors"
@@ -479,7 +480,7 @@ export function PictureInPicture() {
             <div className="w-2 h-2 rounded-full bg-status-online flex-shrink-0 animate-pulse" />
           )}
         </div>
-        <div className="text-white/50 text-[10px] truncate">{channelName}</div>
+        <div className="text-white/50 text-ui-micro truncate">{channelName}</div>
       </div>
 
       {/* Expand icon hint (bottom-right) */}

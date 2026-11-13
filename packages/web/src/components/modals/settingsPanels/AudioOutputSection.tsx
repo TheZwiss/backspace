@@ -130,12 +130,12 @@ function AudioOutputSectionInner() {
       <div className="space-y-3">
         {showPicker ? (
           <div ref={dropdownRef}>
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => setListOpen((v) => !v)}
               className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
             >
-              <span className="text-[13px] text-txt-primary truncate text-left">{selectedLabel}</span>
+              <span className="text-ui-label text-txt-primary truncate text-left">{selectedLabel}</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
                 className={`text-txt-tertiary flex-shrink-0 ml-2 transition-transform ${listOpen ? 'rotate-90' : ''}`}>
                 <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
@@ -164,9 +164,9 @@ function AudioOutputSectionInner() {
             <div className="text-xs text-txt-tertiary">
               {t('voice.output.permissionPrompt.description')}
             </div>
-            <button
+            <button data-icon-motion="press"
               onClick={() => { requestPermission().catch(() => {}); }}
-              className="text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white font-medium transition-colors"
+              className="ui-button ui-button-primary transition-colors"
             >
               {t('voice.output.permissionPrompt.enable')}
             </button>
@@ -175,7 +175,7 @@ function AudioOutputSectionInner() {
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-txt-primary">{t('voice.output.volume.label')}</div>
+            <div className="text-ui-label font-medium text-txt-primary">{t('voice.output.volume.label')}</div>
             <div className="text-xs text-txt-tertiary tabular-nums">{t('common:units.percent', { value: outputVolume })}</div>
           </div>
           <input
@@ -184,16 +184,16 @@ function AudioOutputSectionInner() {
             max={200}
             value={outputVolume}
             onChange={(e) => setOutputVolume(Number(e.target.value))}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+            className="ui-range"
             style={{
               background: `linear-gradient(to right, rgb(var(--accent-primary)) 0%, rgb(var(--accent-primary)) ${outputVolume / 2}%, rgb(var(--interactive-muted)) ${outputVolume / 2}%, rgb(var(--interactive-muted)) 100%)`,
             }}
           />
         </div>
 
-        <button
+        <button data-icon-motion="press"
           onClick={handleTestTone}
-          className="w-full text-[13px] px-3 py-2 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-primary transition-colors flex items-center justify-center gap-2"
+          className="w-full text-ui-label px-3 py-2 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-primary transition-colors flex items-center justify-center gap-2"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />

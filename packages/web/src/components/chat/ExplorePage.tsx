@@ -252,7 +252,7 @@ export function ExplorePage() {
             className="input-search w-full"
           />
           {searchQuery && (
-            <button
+            <button data-icon-motion="press"
               onClick={() => handleSearchChange('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary"
               aria-label={t('common:actions.clear')}
@@ -278,7 +278,7 @@ export function ExplorePage() {
               <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary">
                 {t('spaces:explore.inner.title')}
               </span>
-              <p className="text-[13px] text-txt-tertiary">{t('spaces:explore.inner.subtitle')}</p>
+              <p className="text-ui-label text-txt-tertiary">{t('spaces:explore.inner.subtitle')}</p>
             </div>
 
             {/* Connections that are out, with the way back in; nothing when all are healthy */}
@@ -296,7 +296,7 @@ export function ExplorePage() {
                 renders the survivors' spaces and says nothing, and a user who
                 knows a space is on the missing instance reads it as deleted. */}
             {unansweredHosts.length > 0 && (
-              <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+              <div className="mb-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber">
                 {t('spaces:explore.inner.unreachable', {
                   // One host or several is the only distinction the forms
                   // make, and none of them interpolates `count`, so the
@@ -350,7 +350,7 @@ export function ExplorePage() {
                 {/* Joined spaces section */}
                 {hasJoined && (
                   <div>
-                    <button
+                    <button data-icon-motion="arrow"
                       onClick={() => setJoinedCollapsed(!joinedCollapsed)}
                       className="flex items-center gap-2 mb-3 group"
                     >

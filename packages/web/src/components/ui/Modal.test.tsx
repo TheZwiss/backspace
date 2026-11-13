@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import React from 'react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Modal } from './Modal';
 import { useUIStore } from '../../stores/uiStore';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
 
 // A `fixed inset-0` overlay is sized to the nearest ancestor that sets
 // `transform`, `filter` or `backdrop-filter`, not to the window. jsdom does
@@ -86,6 +88,139 @@ describe('Modal', () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus();
   });
 
+  it('makes background inert and restores its exact prior attributes', () => {
+    const background = document.createElement('main');
+    background.setAttribute('inert', '');
+    background.setAttribute('aria-hidden', 'false');
+    document.body.appendChild(background);
+    const view = render(<Modal isOpen onClose={() => {}} title="Dialog"><button>Inside</button></Modal>);
+    const overlay = overlayOf(screen.getByRole('heading', { name: 'Dialog' }));
+    expect(background).toHaveAttribute('inert');
+    expect(background).toHaveAttribute('aria-hidden', 'true');
+    view.unmount();
+    expect(background).toHaveAttribute('inert', '');
+    expect(background).toHaveAttribute('aria-hidden', 'false');
+    background.remove();
+    expect(overlay).not.toBeInTheDocument();
+  });
+
+  it('cleans up correctly when mounted under StrictMode', () => {
+    const background = document.createElement('main');
+    document.body.appendChild(background);
+    const view = render(<React.StrictMode><Modal isOpen onClose={() => {}} title="Strict dialog"><button>Inside</button></Modal></React.StrictMode>);
+    expect(background).toHaveAttribute('inert');
+    view.unmount();
+    expect(background).not.toHaveAttribute('inert');
+    expect(background).not.toHaveAttribute('aria-hidden');
+    background.remove();
+    fireEvent.keyDown(document, { key: 'Escape' });
+  });
+
+  it('returns focus to its opener after closing', () => {
+    function Example() {
+      const [open, setOpen] = useState(false);
+      return <><button onClick={() => setOpen(true)}>Open</button><Modal isOpen={open} onClose={() => setOpen(false)} title="Dialog"><button>Inside</button></Modal></>;
+    }
+    render(<Example />);
+    const opener = screen.getByRole('button', { name: 'Open' });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(opener).toHaveFocus();
+  });
+
+  it('traps focus in the top nested dialog and Escape closes only that layer', () => {
+    const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{ width: 20, height: 20 } as DOMRect]);
+    function Example() {
+      const [inner, setInner] = useState(false);
+      return <Modal isOpen onClose={() => {}} title="Outer"><button onClick={() => setInner(true)}>Open inner</button><Modal isOpen={inner} onClose={() => setInner(false)} title="Inner"><button>Inner action</button></Modal></Modal>;
+    }
+    render(<Example />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open inner' }));
+    const inner = overlayOf(screen.getByRole('heading', { name: 'Inner' }));
+    const action = within(inner).getByRole('button', { name: 'Inner action' });
+    action.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(within(inner).getByRole('button', { name: /close/i })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('heading', { name: 'Inner' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Outer' })).toBeInTheDocument();
+    rects.mockRestore();
+  });
+
+  it('blocks Escape on a non-dismissible top dialog without closing its parent', () => {
+    function Child({ onClose }: { onClose: () => void }) {
+      const ref = React.useRef<HTMLDivElement>(null);
+      useDialogLayer(ref, { onClose, dismissible: false });
+      return <div ref={ref}><button>Busy</button></div>;
+    }
+    function Example() {
+      const [inner, setInner] = useState(false);
+      return <Modal isOpen onClose={() => {}} title="Outer"><button onClick={() => setInner(true)}>Open busy</button>{inner && <Child onClose={() => setInner(false)} />}</Modal>;
+    }
+    render(<Example />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open busy' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[aria-label="Outer"]')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Busy' })).toBeInTheDocument();
+  });
+
+  it('allows focus and keyboard interaction in a portaled menu', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.zIndex = '201';
+    menu.innerHTML = '<button role="menuitem">Menu item</button>';
+    Object.defineProperty(menu, 'getClientRects', { value: () => [{ width: 20, height: 20 }] });
+    Object.defineProperty(menu.firstElementChild, 'getClientRects', { value: () => [{ width: 20, height: 20 }] });
+    document.body.appendChild(menu);
+    const close = vi.fn();
+    const view = render(<Modal isOpen onClose={close} title="Dialog"><button>Inside</button></Modal>);
+    const item = within(menu).getByRole('menuitem');
+    item.focus();
+    expect(item).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(close).not.toHaveBeenCalled();
+    view.unmount();
+    menu.remove();
+  });
+
+  it('inerts an earlier equal-z menu when a modal opens and lets Escape close the modal', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.zIndex = '200';
+    menu.innerHTML = '<button role="menuitem">Earlier item</button>';
+    Object.defineProperty(menu, 'getClientRects', { value: () => [{ width: 20, height: 20 }] });
+    document.body.appendChild(menu);
+    const menuItem = menu.querySelector('button')!;
+    menuItem.focus();
+
+    const originalGetComputedStyle = window.getComputedStyle.bind(window);
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+      const style = originalGetComputedStyle(element);
+      if (element === menu || (element instanceof HTMLElement && element.getAttribute('aria-label') === 'Dialog')) {
+        return { zIndex: '200', visibility: style.visibility } as CSSStyleDeclaration;
+      }
+      return style;
+    });
+
+    function Example() {
+      const [open, setOpen] = useState(true);
+      return <Modal isOpen={open} onClose={() => setOpen(false)} title="Dialog"><button>Inside</button></Modal>;
+    }
+    const view = render(<Example />);
+    const dialog = document.querySelector<HTMLElement>('[aria-label="Dialog"]')!;
+    expect(menu).toHaveAttribute('inert');
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(document.querySelector('[aria-label="Dialog"]')).toBeNull();
+    expect(menuItem).not.toHaveAttribute('inert');
+    view.unmount();
+    getComputedStyle.mockRestore();
+    menu.remove();
+  });
+
   it('appends a dialog opened from inside an open dialog after it', () => {
     function Outer() {
       const [innerOpen, setInnerOpen] = useState(false);
@@ -100,9 +235,10 @@ describe('Modal', () => {
     }
     render(<Outer />);
     fireEvent.click(screen.getByRole('button', { name: 'Open inner' }));
-    const outer = overlayOf(screen.getByRole('heading', { name: 'Outer' }));
+    const outer = document.querySelector<HTMLElement>('[aria-label="Outer"]')!;
+    const outerHeading = outer.querySelector('h2')!;
     const inner = overlayOf(screen.getByRole('heading', { name: 'Inner' }));
-    expect(outer).not.toContainElement(inner);
+    expect(outerHeading).not.toContainElement(inner);
     expect(inner.parentElement).toBe(document.body);
     // Both overlays share one z-index, so document order puts the inner on top.
     expect(outer.compareDocumentPosition(inner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

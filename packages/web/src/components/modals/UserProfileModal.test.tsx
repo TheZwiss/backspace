@@ -28,6 +28,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { api, HttpError } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
+import { useActivityStore } from '../../stores/activityStore';
 
 function makeUser(overrides: Partial<User>): User {
   return {
@@ -61,6 +62,28 @@ describe('UserProfileModal', () => {
     expect(screen.getByText('Christus aeternus est. ❤️‍🔥')).toBeInTheDocument();
   });
 
+  it('lists every game the person is playing, with its own time, in the About tab', () => {
+    const user = makeUser({});
+    useActivityStore.getState().setUserActivities(user, '', [
+      { type: 'playing', name: 'Honkai: Star Rail', timestamps: { start: Date.now() - 90_000 } },
+      { type: 'playing', name: 'Stardew Valley', timestamps: { start: Date.now() - 3_600_000 } },
+    ]);
+    useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
+
+    render(
+      <MemoryRouter>
+        <UserProfileModal />
+      </MemoryRouter>,
+    );
+
+    // One card per game, each headed by the activity type (the old single
+    // "Playing now" section header was replaced by ProfileActivities).
+    expect(screen.getAllByText('Playing a Game')).toHaveLength(2);
+    expect(screen.getByText('Honkai: Star Rail')).toBeInTheDocument();
+    expect(screen.getByText('Stardew Valley')).toBeInTheDocument();
+    expect(document.querySelectorAll('.tabular-nums')).toHaveLength(2);
+  });
+
   it('Add Friend on a federated user sends their home identity, not only the stub username (issue #339)', async () => {
     // A stub minted without a name hint is called <homeUserId>@<domain>; the
     // peer cannot find anyone by that name.
@@ -88,6 +111,25 @@ describe('UserProfileModal', () => {
       homeUserId: '342939417492520960',
       homeInstance: 'orbit.test',
     });
+  });
+
+  it('requires confirmation to remove a friend and supports cancellation', async () => {
+    const viewer = makeUser({ id: 'viewer', username: 'viewer' });
+    const user = makeUser({ id: 'friend' });
+    const removeFriend = vi.fn().mockResolvedValue(undefined);
+    useAuthStore.setState({ user: viewer, myRowIds: new Map() });
+    useSocialStore.setState({ friends: [{ ...user, addedAt: 1, _instanceOrigin: '' }], requests: [], removeFriend });
+    useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
+    render(<MemoryRouter><UserProfileModal /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Friend' }));
+    expect(removeFriend).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(removeFriend).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Friend' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove', exact: true }));
+    await waitFor(() => expect(removeFriend).toHaveBeenCalledOnce());
+    expect(removeFriend).toHaveBeenCalledWith(expect.objectContaining({ id: user.id }), '');
+    useAuthStore.setState({ user: null, myRowIds: new Map() });
   });
 
   it('tells the user why Send Message failed', async () => {

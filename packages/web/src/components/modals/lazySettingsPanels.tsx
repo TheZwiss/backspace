@@ -43,8 +43,10 @@ export function lazyPanel<M, P extends object>(
 
 export const AccountPanel = lazyPanel(() => import('./settingsPanels/AccountPanel'), (m) => m.AccountPanel);
 export const AppearancePanel = lazyPanel(() => import('./settingsPanels/AppearancePanel'), (m) => m.AppearancePanel);
+export const NotificationsPanel = lazyPanel(() => import('./settingsPanels/NotificationsPanel'), (m) => m.NotificationsPanel);
 export const VoicePanel = lazyPanel(() => import('./settingsPanels/VoicePanel'), (m) => m.VoicePanel);
 export const PrivacyPanel = lazyPanel(() => import('./settingsPanels/PrivacyPanel'), (m) => m.PrivacyPanel);
+export const StickerLibraryPanel = lazyPanel(() => import('./settingsPanels/StickerLibraryPanel'), (m) => m.StickerLibraryPanel);
 export const ConnectionsPanel = lazyPanel(() => import('./settingsPanels/ConnectionsPanel'), (m) => m.ConnectionsPanel);
 export const KeybindsPanel = lazyPanel(() => import('./settingsPanels/KeybindsPanel'), (m) => m.KeybindsPanel);
 export const DesktopPanel = lazyPanel(() => import('./settingsPanels/DesktopPanel'), (m) => m.DesktopPanel);
@@ -64,6 +66,7 @@ export const OverviewPanel = lazyPanel(() => import('./spaceSettingsPanels/Overv
 export const MembersPanel = lazyPanel(() => import('./spaceSettingsPanels/MembersPanel'), (m) => m.MembersPanel);
 export const RolesPanel = lazyPanel(() => import('./spaceSettingsPanels/RolesPanel'), (m) => m.RolesPanel);
 export const BansPanel = lazyPanel(() => import('./spaceSettingsPanels/BansPanel'), (m) => m.BansPanel);
+export const StickerPackPanel = lazyPanel(() => import('./spaceSettingsPanels/StickerPackPanel'), (m) => m.StickerPackPanel);
 
 /**
  * Holds the panel's place while its chunk loads. The block has a fixed height
@@ -92,7 +95,7 @@ function SettingsPanelLoadFailed() {
   return (
     <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm flex flex-wrap items-center gap-3">
       <span>{t('states.loadSettingsFailed')}</span>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={() => window.location.reload()}
         className="font-medium underline underline-offset-2 hover:no-underline transition-all"
@@ -132,7 +135,9 @@ class PanelLoadBoundary extends Component<{ children: ReactNode }, { failed: boo
 export function SettingsPanelSuspense({ children }: { children: ReactNode }) {
   return (
     <PanelLoadBoundary>
-      <Suspense fallback={<SettingsPanelFallback />}>{children}</Suspense>
+      <Suspense fallback={<SettingsPanelFallback />}><div className="motion-settings-panel">{children}</div></Suspense>
     </PanelLoadBoundary>
   );
 }
+
+export const SoundboardPanel = lazyPanel(() => import('../voice/Soundboard'), (m) => m.SoundboardPanel);

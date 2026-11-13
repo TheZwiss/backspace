@@ -1,3 +1,4 @@
+import { RELEASES_URL } from '../../platform/desktopDownload';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceInfoResponse, User } from '@backspace/shared';
@@ -97,6 +98,7 @@ vi.mock('../../api/client', () => ({
 vi.mock('./TransferIndicator', () => ({ TransferIndicator: () => null }));
 vi.mock('../modals/settingsPanels/AccountPanel', () => ({ AccountPanel: () => null }));
 vi.mock('../modals/settingsPanels/AppearancePanel', () => ({ AppearancePanel: () => null }));
+vi.mock('../modals/settingsPanels/NotificationsPanel', () => ({ NotificationsPanel: () => <p>NotificationsPanel stub</p> }));
 vi.mock('../modals/settingsPanels/VoicePanel', () => ({ VoicePanel: () => null }));
 vi.mock('../modals/settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => null }));
 vi.mock('../modals/settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => null }));
@@ -139,6 +141,13 @@ afterEach(() => {
 });
 
 describe('MobileSettingsScreen Desktop entry', () => {
+  it('opens the notifications section from the mobile settings menu', async () => {
+    render(<MobileSettingsScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(mocks.ui.pushMobileScreen).toHaveBeenCalledWith('settings-notifications');
+    cleanup(); render(<MobileSettingsScreen initialPanel="notifications" />);
+    expect(await screen.findByText('NotificationsPanel stub')).toBeInTheDocument();
+  });
   it('opens the download offer in the browser', async () => {
     render(<MobileSettingsScreen />);
 
@@ -152,7 +161,7 @@ describe('MobileSettingsScreen Desktop entry', () => {
     // The version reaches the panel, so the links name release assets.
     expect(await screen.findByRole('link', { name: 'Download for Windows' })).toHaveAttribute(
       'href',
-      'https://github.com/TheZwiss/backspace/releases/download/v1.2.1/Backspace-1.2.1-win-x64.exe',
+      `${RELEASES_URL}/download/v1.2.1/Backspace-1.2.1-win-x64.exe`,
     );
     // The Electron-only panel stays out of the browser.
     expect(screen.queryByRole('button', { name: 'Change Instance' })).not.toBeInTheDocument();

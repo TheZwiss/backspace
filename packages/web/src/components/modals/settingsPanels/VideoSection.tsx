@@ -1,9 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Track } from 'livekit-client';
-import { useVoiceStore } from '../../../stores/voiceStore';
+import { useVoiceStore, type CameraConfig } from '../../../stores/voiceStore';
+import type { CameraStreamingLimits } from '@backspace/shared';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { getActiveRoom } from '../../../hooks/useLiveKit';
+import { useStreamHostLimits } from '../../../utils/streamHostLimits';
+import { effectiveCameraConfig, resolveCameraLimits } from '../../../utils/camera';
+import type { CameraMode } from '../../../utils/cameraModes';
+import { RESOLUTION_LABELS, type Resolution } from '@backspace/shared/src/constants';
 import { isElectron, getElectronAPI } from '../../../platform/platform';
+import {
+  getCachedCameraModes,
+  openCameraPreview,
+  subscribeCameraModes,
+  supportedCameraChoices,
+} from '../../../utils/cameraModes';
 
 /**
  * Permission state machine for the Video section.
@@ -77,10 +89,24 @@ function buildDisplayLabels(
 }
 
 export function VideoSection() {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation(['settings', 'common']);
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const cameraConfig = useVoiceStore((s) => s.cameraConfig);
+  const setCameraConfig = useVoiceStore((s) => s.setCameraConfig);
+  const { limits: hostLimits } = useStreamHostLimits();
+  const homeLimits = useSettingsStore((s) => s.streamingLimits);
+
+  const policyLimits = hostLimits ?? homeLimits;
+  const cameraLimits = policyLimits ? resolveCameraLimits(policyLimits) : null;
+  const effectiveCamera = policyLimits ? effectiveCameraConfig(cameraConfig, policyLimits) : null;
+  const effectiveHeight = effectiveCamera?.height ?? cameraConfig.height;
+  const effectiveFps = effectiveCamera?.fps ?? cameraConfig.fps;
+  const measuredModes = useSyncExternalStore(
+    subscribeCameraModes,
+    () => getCachedCameraModes(cameraDeviceId),
+  );
 
   const [permState, setPermState] = useState<PermissionStatus>('unknown');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -324,9 +350,7 @@ export function VideoSection() {
 
     const start = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : true,
-        });
+        const stream = await openCameraPreview(cameraDeviceId, effectiveHeight, effectiveFps);
         if (gen !== startGenRef.current || !mountedRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -358,7 +382,7 @@ export function VideoSection() {
       // Bumping gen invalidates the in-flight start; actual track stop happens
       // when the user clicks Stop preview or via the unmount cleanup below.
     };
-  }, [cameraDeviceId, previewActive, isCameraOn, permState]);
+  }, [cameraDeviceId, previewActive, isCameraOn, permState, effectiveHeight, effectiveFps]);
 
   // Component-unmount cleanup: stop any live preview stream so the LED goes off
   // when the modal closes / settings tab changes / route changes.
@@ -384,9 +408,7 @@ export function VideoSection() {
     setPreviewActive(true);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : true,
-      });
+      const stream = await openCameraPreview(cameraDeviceId, effectiveHeight, effectiveFps);
       if (gen !== startGenRef.current || !mountedRef.current) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -433,13 +455,22 @@ export function VideoSection() {
 
   // ── Render ────────────────────────────────────────────────────────────
 
+  const qualityControls = cameraLimits && effectiveCamera && (
+    <CameraQualityControls
+      cameraLimits={cameraLimits}
+      effectiveCamera={effectiveCamera}
+      setCameraConfig={setCameraConfig}
+      measuredModes={measuredModes}
+    />
+  );
+
   if (permState === 'unknown') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 text-sm text-txt-tertiary">
+        <div className="settings-section text-sm text-txt-tertiary">
           {t('voice.video.checkingAccess')}
         </div>
       </div>
@@ -449,23 +480,24 @@ export function VideoSection() {
   if (permState === 'denied' || permState === 'hard-blocked') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-2">
+        <div className="settings-section space-y-2">
           <div className="text-sm text-txt-primary">⚠ {t('voice.video.accessDenied.title')}</div>
           <div className="text-xs text-txt-tertiary">
             {permState === 'hard-blocked'
               ? t(`voice.video.blocked.${getHardBlockedPlatform()}`)
               : t('voice.video.accessDenied.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
             {t('voice.video.accessDenied.retry')}
           </button>
         </div>
+        {qualityControls}
       </div>
     );
   }
@@ -473,10 +505,10 @@ export function VideoSection() {
   if (permState === 'prompt') {
     return (
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('voice.video.title')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+        <div className="settings-section space-y-3">
           <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative flex flex-col items-center justify-center text-center px-6">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-2">
               <path d="M17 10.5V7a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1v-3.5l4 4v-11l-4 4z" />
@@ -485,13 +517,14 @@ export function VideoSection() {
               {t('voice.video.permissionPrompt.description')}
             </div>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={startPreviewFromUser}
-            className="w-full text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover active:bg-accent-primary-active text-white font-medium transition-colors"
+            className="ui-button ui-button-primary w-full transition-colors"
           >
             {t('voice.video.permissionPrompt.enable')}
           </button>
         </div>
+        {qualityControls}
       </div>
     );
   }
@@ -516,10 +549,10 @@ export function VideoSection() {
 
   return (
     <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+      <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         {t('voice.video.title')}
       </div>
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+      <div className="settings-section">
         <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative mb-3 group">
           <video
             ref={previewVideoRef}
@@ -530,11 +563,11 @@ export function VideoSection() {
             style={{ transform: 'scaleX(-1)' }}
           />
           {isDormant && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={startPreviewFromUser}
               aria-label={t('voice.video.preview.testAria')}
-              className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-white/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
+              className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary hover:text-txt-secondary hover:bg-wash/[0.02] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
             >
               <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" className="mb-2">
                 <path d="M8 5v14l11-7z" />
@@ -543,14 +576,14 @@ export function VideoSection() {
             </button>
           )}
           {previewActive && !previewError && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={stopPreviewFromUser}
               // Mobile: always visible (no hover state) and 44 px tap target
               // per iOS HIG. Desktop: original hover-reveal compact pill.
               className="absolute top-2 right-2 rounded-md bg-black/60 hover:bg-black/75 text-white/90 transition-colors focus-visible:opacity-100
                          min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
-                         desktop:min-h-0 desktop:min-w-0 desktop:text-[11px] desktop:px-2 desktop:py-1 desktop:opacity-0 desktop:group-hover:opacity-100"
+                         desktop:min-h-0 desktop:min-w-0 desktop:text-ui-caption desktop:px-2 desktop:py-1 desktop:opacity-0 desktop:group-hover:opacity-100"
             >
               {t('voice.video.preview.stop')}
             </button>
@@ -558,24 +591,24 @@ export function VideoSection() {
           {previewError && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-base/90 text-xs text-txt-tertiary text-center px-4 gap-2">
               <div>{t(`voice.video.previewError.${previewError}`)}</div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
-                className="text-[11px] px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
+                className="text-ui-caption px-2 py-1 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
               >
                 {t('voice.video.preview.retry')}
               </button>
             </div>
           )}
         </div>
-        <div className="text-[13px] font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
+        <div className="text-ui-label font-medium text-txt-primary mb-1.5">{t('voice.video.camera.label')}</div>
         <div ref={dropdownRef}>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setListOpen((v) => !v)}
             className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
           >
-            <span className="text-[13px] text-txt-primary truncate text-left">{selectedLabel}</span>
+            <span className="text-ui-label text-txt-primary truncate text-left">{selectedLabel}</span>
             <svg
               width="16"
               height="16"
@@ -618,7 +651,126 @@ export function VideoSection() {
         {devices.length === 0 && (
           <div className="text-xs text-txt-tertiary mt-1">{t('voice.video.camera.none')}</div>
         )}
+        {qualityControls}
       </div>
+    </div>
+  );
+}
+
+function CameraQualityControls({ cameraLimits, effectiveCamera, setCameraConfig, measuredModes }: {
+  cameraLimits: CameraStreamingLimits;
+  effectiveCamera: CameraConfig;
+  setCameraConfig: (config: Partial<CameraConfig>) => void;
+  measuredModes: readonly CameraMode[] | null;
+}) {
+  const { t } = useTranslation(['settings', 'common']);
+  // Once the camera has been measured, offer only what it delivers; before
+  // that (no preview or call yet) every host-allowed choice is shown.
+  const choices = measuredModes ? supportedCameraChoices(measuredModes) : null;
+  const heights = choices
+    ? cameraLimits.allowedResolutions.filter((h) => choices.heights.has(h))
+    : cameraLimits.allowedResolutions;
+  const shownHeights = heights.length > 0 ? heights : cameraLimits.allowedResolutions;
+  const fpsCeiling = choices ? choices.maxFpsByHeight.get(effectiveCamera.height) : undefined;
+  const framerates = fpsCeiling
+    ? cameraLimits.allowedFramerates.filter((f) => f <= fpsCeiling)
+    : cameraLimits.allowedFramerates;
+  const shownFramerates = framerates.length > 0 ? framerates : cameraLimits.allowedFramerates;
+  return (
+    <div className="mt-4 pt-3 border-t border-wash/[0.06]">
+      <div className="text-ui-label font-medium text-txt-primary mb-1.5">
+        {t('voice.video.camera.quality.label')}
+      </div>
+      {cameraLimits.mode === 'fixed' ? (
+        <div className="text-xs text-txt-tertiary">
+          {t('voice.video.camera.quality.managed', {
+            resolution: RESOLUTION_LABELS[effectiveCamera.height as Resolution],
+            fps: effectiveCamera.fps,
+            bitrate: t('common:units.kbps', { value: cameraLimits.defaultBitrateKbps }),
+          })}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              {t('voice.video.camera.quality.resolution')}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {shownHeights.map((height) => (
+                <button data-icon-motion="toggle"
+                  key={height}
+                  type="button"
+                  onClick={() => setCameraConfig({ height })}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    effectiveCamera.height === height
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-base text-txt-secondary hover:bg-interactive-hover'
+                  }`}
+                >
+                  {RESOLUTION_LABELS[height as Resolution]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              {t('voice.video.camera.quality.framerate')}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {shownFramerates.map((fps) => (
+                <button data-icon-motion="toggle"
+                  key={fps}
+                  type="button"
+                  onClick={() => setCameraConfig({ fps })}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    effectiveCamera.fps === fps
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-base text-txt-secondary hover:bg-interactive-hover'
+                  }`}
+                >
+                  {t('voice.video.camera.quality.fps', { value: fps })}
+                </button>
+              ))}
+            </div>
+          </div>
+          {cameraLimits.allowCustomBitrate ? (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-txt-secondary">
+                  {t('voice.video.camera.quality.bitrate')}
+                </span>
+                <span className="text-xs text-txt-tertiary">
+                  {t('common:units.kbps', {
+                    value: effectiveCamera.customBitrateKbps ?? cameraLimits.defaultBitrateKbps,
+                  })}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={cameraLimits.minBitrateKbps}
+                max={cameraLimits.maxBitrateKbps}
+                step={100}
+                value={effectiveCamera.customBitrateKbps ?? cameraLimits.defaultBitrateKbps}
+                onChange={(e) => setCameraConfig({ customBitrateKbps: Number(e.target.value) })}
+                className="ui-range"
+              />
+              {effectiveCamera.customBitrateKbps != null && (
+                <button data-icon-motion="toggle"
+                  type="button"
+                  onClick={() => setCameraConfig({ customBitrateKbps: null })}
+                  className="mt-1 text-ui-caption text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  {t('voice.video.camera.quality.useDefault')}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="text-xs text-txt-tertiary">
+              {t('common:units.kbps', { value: cameraLimits.defaultBitrateKbps })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -631,10 +783,10 @@ interface DropdownItemProps {
 
 function DropdownItem({ label, active, onClick }: DropdownItemProps) {
   return (
-    <button
+    <button data-icon-motion="press"
       type="button"
       onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
+      className={`w-full px-3 py-2 text-left text-ui-label hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
         active ? 'text-txt-primary' : 'text-txt-secondary'
       }`}
     >

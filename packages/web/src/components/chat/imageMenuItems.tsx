@@ -86,11 +86,43 @@ function collectStickerItem(source: string, name: string): ContextMenuAction | n
   };
 }
 
+function favoriteStickerItem(source: string, name: string): ContextMenuAction | null {
+  const sticker = stickerUrl(source);
+  if (!sticker) return null;
+  return {
+    key: 'favorite-sticker',
+    type: 'action',
+    label: i18n.t('chat:stickers.favorite'),
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>,
+    onClick: async () => {
+      const { addToast } = useUIStore.getState();
+      addToast(i18n.t('chat:stickers.uploading'), 'info');
+      try {
+        const blob = await readRemoteSticker(sticker);
+        await api.stickerLibrary.favorite({
+          name,
+          image: await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+          }),
+        });
+        addToast(i18n.t('chat:stickers.favorited'), 'success');
+      } catch (err) {
+        addToast(describeError(err), 'warning');
+      }
+    },
+  };
+}
+
 export function buildImageMenuItems({ imageUrl, sourceUrl, stickerSource, stickerName }: ImageMenuParams): ContextMenuItem[] {
   if (!imageUrl) return [];
   const items: ContextMenuItem[] = [];
   const collect = stickerSource ? collectStickerItem(stickerSource, stickerName || i18n.t('chat:stickers.sticker')) : null;
   if (collect) items.push(collect);
+  const favorite = stickerSource ? favoriteStickerItem(stickerSource, stickerName || i18n.t('chat:stickers.sticker')) : null;
+  if (favorite) items.push(favorite);
   items.push({
     key: 'save-image', type: 'action', label: i18n.t('chat:menu.saveImage'),
     icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>,

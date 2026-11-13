@@ -4,6 +4,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { isElectron } from '../platform/platform';
 import { toggleMuteFromControl, toggleDeafenFromControl, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../utils/voiceActions';
 import { broadcastVoiceStatus } from '../utils/voice';
+import { pressDictation, releaseDictation, cancelDictation } from '../utils/dictation';
 import { useKeybindPortalStatus } from './useKeybindPortalStatus';
 
 // ---------------------------------------------------------------------------
@@ -15,13 +16,14 @@ const lastDispatch: Record<string, number> = {};
 
 /** Dispatch a keybind action to the appropriate voice handler */
 function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate = true): void {
+  if (actionId === 'dictationPushToTalk') deduplicate = false; // Recorder owns idempotent holds/releases.
   const now = Date.now();
   const key = `${actionId}:${pressed}`;
   if (deduplicate && now - (lastDispatch[key] || 0) < 100) return;
   lastDispatch[key] = now;
 
   const voice = useVoiceStore.getState();
-  if (!voice.currentVoiceChannelId) return;
+  const inCall = !!voice.currentVoiceChannelId || !!voice.activeDmCall;
 
   switch (actionId) {
     case 'toggleMute':
@@ -31,17 +33,22 @@ function dispatchKeybindAction(actionId: string, pressed: boolean, deduplicate =
       if (pressed) toggleDeafenFromControl();
       break;
     case 'toggleCamera':
-      if (pressed) handleCameraAction();
+      if (pressed && inCall) handleCameraAction();
       break;
     case 'toggleScreenShare':
-      if (pressed) handleScreenShareAction();
+      if (pressed && inCall) handleScreenShareAction();
       break;
     case 'disconnect':
-      if (pressed) handleDisconnectAction();
+      if (pressed && inCall) handleDisconnectAction();
+      break;
+    case 'dictationPushToTalk':
+      if (pressed) { if (inCall) void pressDictation(true); } else releaseDictation();
       break;
     case 'pushToTalk':
-      voice.setMuted(!pressed); // pressed=true → unmute, pressed=false → mute
-      broadcastVoiceStatus();
+      if (inCall) {
+        voice.setMuted(!pressed); // pressed=true → unmute, pressed=false → mute
+        broadcastVoiceStatus();
+      }
       break;
   }
 }
@@ -161,7 +168,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, dedupl
     pressedKeys.clear();
   };
   const onBlur = () => {
-    if (!hookRunningRef.current) releaseAll();
+    if (!hookRunningRef.current) { if (activeActions.has('dictationPushToTalk')) cancelDictation(); releaseAll(); }
     // Native keyup owns the release outside the window. Forget local state so
     // it cannot suppress the next press after focus returns.
     activeActions.clear();
@@ -186,6 +193,7 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>, dedupl
 export function useKeybinds(): void {
   const keybinds = useKeybindStore((s) => s.keybinds);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const portalStatus = useKeybindPortalStatus();
   const portalRef = useRef(portalStatus);
   portalRef.current = portalStatus;
@@ -198,7 +206,7 @@ export function useKeybinds(): void {
 
   // --- PTT activation lifecycle ---
   useEffect(() => {
-    const inVoice = !!currentVoiceChannelId;
+    const inVoice = !!currentVoiceChannelId || !!activeDmCall;
     const voice = useVoiceStore.getState();
 
     if (hasPtt && inVoice) {
@@ -208,7 +216,7 @@ export function useKeybinds(): void {
     } else if (voice.pttActive) {
       voice.setPttActive(false);
     }
-  }, [hasPtt, currentVoiceChannelId]);
+  }, [hasPtt, currentVoiceChannelId, activeDmCall]);
 
   // Subscribe before syncing. Portal actions have a single source, so rapid PTT
   // press/release cycles must not pass through the legacy hook's time-based dedup.

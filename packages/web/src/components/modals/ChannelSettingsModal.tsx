@@ -12,8 +12,9 @@ import { describeError } from '../../i18n/errors';
 import { useEntityOverrides } from '../../hooks/useEntityOverrides';
 import { PrivacySetting } from './PrivacySetting';
 import { ChannelTopicEditor } from './ChannelTopicEditor';
+import { VoiceQualitySetting } from './VoiceQualitySetting';
 import { LOCK_ICON } from '../ui/LockNote';
-import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName } from '@backspace/shared/src/constants';
+import { CHANNEL_NAME_MAX_LENGTH, normalizeChannelName, type VoiceBitrateKbps } from '@backspace/shared/src/constants';
 
 // ─── Permission Definitions for Channel Overrides ──────────────────────────────
 
@@ -32,6 +33,8 @@ const VOICE_CHANNEL_PERMISSIONS: PermissionDef[] = [
   { key: 'CONNECT', bit: PermissionBits.CONNECT },
   { key: 'SPEAK', bit: PermissionBits.SPEAK },
   { key: 'STREAM', bit: PermissionBits.STREAM },
+  { key: 'USE_SOUNDBOARD', bit: PermissionBits.USE_SOUNDBOARD },
+  { key: 'USE_EXTERNAL_SOUNDS', bit: PermissionBits.USE_EXTERNAL_SOUNDS },
   { key: 'MUTE_MEMBERS', bit: PermissionBits.MUTE_MEMBERS },
   { key: 'DEAFEN_MEMBERS', bit: PermissionBits.DEAFEN_MEMBERS },
   { key: 'MOVE_MEMBERS', bit: PermissionBits.MOVE_MEMBERS },
@@ -47,6 +50,7 @@ function OverviewTab({
   channelName,
   channelType,
   channelTopic,
+  voiceBitrateKbps,
   isPrivate,
   isFetching,
   isLoading,
@@ -57,11 +61,13 @@ function OverviewTab({
   onDeleteChannel,
   onRename,
   onSaveTopic,
+  onSaveVoiceQuality,
 }: {
   channelId: string;
   channelName: string;
   channelType: string;
   channelTopic: string | null;
+  voiceBitrateKbps: number | undefined;
   isPrivate: boolean;
   isFetching: boolean;
   isLoading: boolean;
@@ -72,6 +78,7 @@ function OverviewTab({
   onDeleteChannel: () => void;
   onRename: (name: string) => Promise<void>;
   onSaveTopic: (topic: string | null) => Promise<void>;
+  onSaveVoiceQuality: (kbps: VoiceBitrateKbps) => Promise<void>;
 }) {
   const { t } = useTranslation(['spaces', 'common']);
   return (
@@ -102,6 +109,11 @@ function OverviewTab({
         <ChannelTopicEditor key={channelId} topic={channelTopic} canEdit={canManageChannels} onSave={onSaveTopic} />
       )}
 
+      {/* The microphone bitrate is the channel's own, so only voice channels have it. */}
+      {channelType === 'voice' && (
+        <VoiceQualitySetting key={channelId} value={voiceBitrateKbps} canEdit={canManageChannels} onSave={onSaveVoiceQuality} />
+      )}
+
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
           {error}
@@ -124,7 +136,7 @@ function OverviewTab({
       {canManageChannels && (
         <div className="pt-4 border-t border-border-soft">
           <label className="block text-xs font-bold text-accent-rose uppercase mb-2">{t('common:labels.dangerZone')}</label>
-          <button
+          <button data-icon-motion="press"
             onClick={onDeleteChannel}
             className="w-full px-3 py-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-accent-rose text-sm font-medium hover:bg-accent-rose/20 transition-colors"
           >
@@ -232,6 +244,16 @@ export function ChannelSettingsModal() {
     }
   };
 
+  const handleSaveVoiceQuality = async (kbps: VoiceBitrateKbps): Promise<void> => {
+    setError('');
+    try {
+      await useSpaceStore.getState().updateChannel(channelId, { voiceBitrateKbps: kbps });
+    } catch (err) {
+      setError(describeError(err));
+      throw err;
+    }
+  };
+
   const showTabs = canManageRoles;
 
   const tabClass = (target: typeof tab) =>
@@ -247,10 +269,10 @@ export function ChannelSettingsModal() {
             {/* Tabs */}
             <div className="w-32 flex-shrink-0 self-start z-10">
               <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
-                <button onClick={() => setTab('overview')} className={tabClass('overview')}>
+                <button data-icon-motion="press" onClick={() => setTab('overview')} className={tabClass('overview')}>
                   {t('spaces:settings.nav.tabs.overview')}
                 </button>
-                <button onClick={() => setTab('permissions')} className={tabClass('permissions')}>
+                <button data-icon-motion="press" onClick={() => setTab('permissions')} className={tabClass('permissions')}>
                   {t('spaces:permissions.title')}
                 </button>
               </div>
@@ -264,6 +286,7 @@ export function ChannelSettingsModal() {
                   channelName={channel.name}
                   channelType={channel.type}
                   channelTopic={channel.topic}
+                  voiceBitrateKbps={channel.voiceBitrateKbps}
                   isPrivate={isPrivate}
                   isFetching={isFetching}
                   isLoading={isLoading}
@@ -274,6 +297,7 @@ export function ChannelSettingsModal() {
                   onDeleteChannel={() => setShowDeleteConfirm(true)}
                   onRename={handleRenameChannel}
                   onSaveTopic={handleSaveTopic}
+                  onSaveVoiceQuality={handleSaveVoiceQuality}
                 />
               )}
               {tab === 'permissions' && (
@@ -297,6 +321,7 @@ export function ChannelSettingsModal() {
             channelName={channel.name}
             channelType={channel.type}
             channelTopic={channel.topic}
+                  voiceBitrateKbps={channel.voiceBitrateKbps}
             isPrivate={isPrivate}
             isFetching={isFetching}
             isLoading={isLoading}
@@ -307,6 +332,7 @@ export function ChannelSettingsModal() {
             onDeleteChannel={() => setShowDeleteConfirm(true)}
             onRename={handleRenameChannel}
             onSaveTopic={handleSaveTopic}
+                  onSaveVoiceQuality={handleSaveVoiceQuality}
           />
         )}
       </Modal>

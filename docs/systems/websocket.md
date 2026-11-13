@@ -32,12 +32,12 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### DM Messages
 | type | fields | notes |
 |------|--------|-------|
-| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel; 5 per 5 seconds per client address, as `POST /api/dm/:id/messages` (`rate_limited`) |
+| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member; `replyToId` must name a message in the same DM channel; 5 per 5 seconds per account, shared with `POST /api/dm/:id/messages` (`rate_limited`) |
 | `dm_message_edit` | messageId, content | member, author only; a system message cannot be edited |
 | `dm_message_delete` | messageId | member, author only |
 | `dm_typing_start` | dmChannelId | 5s auto-expire |
 
-`dm_message_create` first counts against its rate limit: the REST route's numbers (`utils/dmMessageRateLimit.ts`), keyed on the address the socket connected from (`request.ip` of the upgrade, recorded in `ws/socketAddress.ts`, so it follows `TRUSTED_PROXY_HOPS` as the HTTP limiter does), in a counter of its own. `DISABLE_RATE_LIMITS` switches it off. The three DM message events run the REST routes' checks (`utils/dmMessageRules.ts`), so they refuse what the routes refuse, in the same order and with the same codes (dm-system.md, "Message Operations"), `recipient_deleted` in a 1-on-1 whose partner was deleted included. A missing `dmChannelId` or `messageId` is `validation_failed`. Each refusal is an `error` with its code, and `details` where the code has placeholders, sent to the socket that sent the event and not to the user's other sessions (they did not act, and the client shows a coded error as a toast); nothing is stored, broadcast or relayed. The web client sends these actions over REST, not over these events.
+`dm_message_create` first counts against its rate limit: the REST route's numbers (`utils/dmMessageRateLimit.ts`), keyed on the authenticated account and shared with the REST route so switching transport does not multiply the budget. `DISABLE_RATE_LIMITS` switches it off. The three DM message events run the REST routes' checks (`utils/dmMessageRules.ts`), so they refuse what the routes refuse, in the same order and with the same codes (dm-system.md, "Message Operations"), `recipient_deleted` in a 1-on-1 whose partner was deleted included. A missing `dmChannelId` or `messageId` is `validation_failed`. Each refusal is an `error` with its code, and `details` where the code has placeholders, sent to the socket that sent the event and not to the user's other sessions (they did not act, and the client shows a coded error as a toast); nothing is stored, broadcast or relayed. The web client sends these actions over REST, not over these events.
 
 ### Reactions (space + DM, auto-detected)
 | type | fields | notes |
@@ -55,7 +55,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | type | fields | notes |
 |------|--------|-------|
 | `presence_update` | status: online/idle/dnd | stored as the user's chosen status and published while connected; same path as `PATCH /api/users/@me { status }` (activity-presence.md "DB Persistence") |
-| `activity_update` | activities: Activity[] | rate-limited 3s, respects showActivity |
+| `activity_update` | activities: Activity[] | rate-limited 3s (an update publishing fewer activities than held is exempt), respects showActivity; optional `playback` per activity; the server advances stored `playback.positionMs` by the time held when it builds `ready` / friendship snapshots |
 
 ### Voice (Space Channels)
 | type | fields | notes |
@@ -291,7 +291,7 @@ its next follow-up or the next `ready`; its unread dot shows meanwhile.
 | `member_left` | spaceId, userId | space |
 | `member_banned` | spaceId, reason | user (banned) |
 | `channel_created` | channel, spaceId | space |
-| `channel_updated` | channel, spaceId | space |
+| `channel_updated` | channel, spaceId | space (a voice `channel` carries `voiceBitrateKbps`; clients in that call apply a change to their live microphone) |
 | `channel_deleted` | channelId, spaceId | space |
 | `category_created` | category, spaceId | space |
 | `category_updated` | category, spaceId | space |
@@ -300,6 +300,8 @@ its next follow-up or the next `ready`; its unread dot shows meanwhile.
 | `space_access_changed` | spaceId | space; one user for an instance admin change |
 | `space_layout_updated` | layout[], folders[], updatedAt? | user |
 | `notification_settings_updated` | setting: NotificationSetting | user (all of their sockets on this instance) |
+| `bookmark_added` | bookmark: Bookmark | user (all of their sockets on this instance) |
+| `bookmark_removed` | kind, channelId, messageId | user (all of their sockets on this instance) |
 
 `notification_settings_updated` follows every successful
 `PATCH /spaces/:spaceId/notification-settings` and
@@ -314,6 +316,14 @@ an old client ignores them. Clients load the full list with `GET /users/@me/noti
 when each instance's `ready` arrives; the `ready` payload itself does not
 carry it. Mixed versions: an old client ignores the event; a new client on an
 old server gets a 404 from the list route, logs it and uses the defaults.
+
+`bookmark_added` follows a `PUT /api/bookmarks/:kind/:messageId` that created
+the bookmark (a repeat that found it sends nothing); its `bookmark` is the
+object the route returns. `bookmark_removed` follows a `DELETE` that removed
+one, and carries the conversation (`kind`, `channelId`) so a client keeps its
+"is bookmarked" set per conversation. Both go to the caller's own sockets on
+the instance that serves the message and are never relayed (bookmarks.md).
+An old client ignores them.
 
 `member_updated` follows every successful `PATCH /spaces/:id/members/:uid`
 (a nickname, a role set or both) and carries the member row the route

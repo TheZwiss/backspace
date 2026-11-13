@@ -52,6 +52,7 @@ describe('buildExcludeNodes', () => {
       { 'application.process.id': '10' },
       { 'application.process.id': '11' },
       { 'application.process.binary': 'backspace' },
+      { 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' },
     ]);
   });
 
@@ -59,14 +60,16 @@ describe('buildExcludeNodes', () => {
     expect(buildExcludeNodes([10, 10, 0, -3, 1.5, Number.NaN], '/x/app')).toEqual([
       { 'application.process.id': '10' },
       { 'application.process.binary': 'app' },
+      { 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' },
     ]);
   });
 
   it('reads the binary name from a Windows-style path and omits it when there is none', () => {
     expect(buildExcludeNodes([], 'C:\\Program Files\\Backspace\\Backspace.exe')).toEqual([
       { 'application.process.binary': 'Backspace.exe' },
+      { 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' },
     ]);
-    expect(buildExcludeNodes([7], '')).toEqual([{ 'application.process.id': '7' }]);
+    expect(buildExcludeNodes([7], '')).toEqual([{ 'application.process.id': '7' }, { 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' }]);
   });
 });
 
@@ -77,13 +80,17 @@ describe('createSystemAudioController', () => {
     expect(ctl.start()).toEqual({ ok: true, label: SYSTEM_AUDIO_SOURCE_LABEL });
     expect(link).toHaveBeenCalledTimes(1);
     expect(link).toHaveBeenCalledWith({
+      include: [{ 'media.class': 'Stream/Output/Audio' }],
       exclude: [
         { 'application.process.id': '4100' },
         { 'application.process.id': '4101' },
         { 'application.process.id': '4102' },
         { 'application.process.binary': 'backspace' },
+      { 'node.virtual': 'true' }, { 'media.class': 'Stream/Input/Audio' },
       ],
-      only_speakers: true,
+      only_speakers: false,
+      only_default_speakers: false,
+      mute: false,
       ignore_devices: true,
     });
   });
@@ -223,5 +230,35 @@ describe('withSystemAudioSource', () => {
     expect(withSystemAudioSource('included', false, available)).toBe('included');
     expect(withSystemAudioSource('included', 'true', available)).toBe('included');
     expect(available).not.toHaveBeenCalled();
+  });
+});
+
+describe('application-only PipeWire capture', () => {
+  it('includes only the selected audio process while retaining Backspace exclusions', () => {
+    const { ctl, link } = controller();
+    expect(ctl.start('1234').ok).toBe(true);
+    expect(link).toHaveBeenCalledWith(expect.objectContaining({
+      include: [{ 'media.class': 'Stream/Output/Audio', 'application.process.id': '1234' }],
+      mute: false,
+      only_default_speakers: false,
+      exclude: expect.arrayContaining([{ 'application.process.id': '4100' }]),
+    }));
+    ctl.stop();
+  });
+});
+
+describe('native PipeWire applications without a process ID', () => {
+  it('lists a Haruna-style stream by serial and captures only that stream', () => {
+    const list = vi.fn(() => [{ 'object.serial': '393173', 'application.name': 'haruna', 'node.name': 'haruna', 'media.class': 'Stream/Output/Audio' }]);
+    const link = vi.fn(() => true);
+    class Bay {
+      static hasPipeWire() { return true; }
+      list = list; link = link; unlink = vi.fn();
+    }
+    const ctl = createSystemAudioController({ platform: 'linux', loadModule: () => ({ PatchBay: Bay }), getPids: () => [1], executablePath: '/app/Backspace' });
+    expect(ctl.targets()).toEqual([{ id: 'node:393173', name: 'haruna' }]);
+    expect(ctl.start('node:393173').ok).toBe(true);
+    expect(link).toHaveBeenCalledWith(expect.objectContaining({ include: [{ 'media.class': 'Stream/Output/Audio', 'object.serial': '393173' }] }));
+    ctl.stop();
   });
 });

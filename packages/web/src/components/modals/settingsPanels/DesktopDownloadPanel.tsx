@@ -169,7 +169,7 @@ function SegmentedPicker<T extends string>({
       {segments.map((segment) => {
         const checked = segment.value === value;
         return (
-          <button
+          <button data-icon-motion="press"
             key={segment.value}
             type="button"
             role="radio"
@@ -186,7 +186,7 @@ function SegmentedPicker<T extends string>({
             // levels of the hero background and the selection showed only in
             // the text colour.
             className={`px-3 py-1 text-xs rounded-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/60 ${
-              checked ? 'bg-white/[0.12] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+              checked ? 'bg-wash/[0.12] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
           >
             {segment.label}
@@ -250,7 +250,7 @@ function HeroTile({
     <section
       aria-labelledby={nameId}
       data-tile="hero"
-      className="rounded-2xl border border-accent-primary/30 bg-white/[0.05] p-5"
+      className="rounded-2xl border border-accent-primary/30 bg-wash/[0.05] p-5"
     >
       <div className="flex items-center justify-between gap-3">
         <PlatformName platform={platform} id={nameId} hero />
@@ -265,7 +265,7 @@ function HeroTile({
       {pickers && <div className="mt-4 flex flex-wrap gap-2">{pickers}</div>}
 
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <a
+        <a data-icon-motion="press"
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -301,12 +301,12 @@ function QuietTile({
     <section
       aria-labelledby={nameId}
       data-tile="quiet"
-      className="min-w-0 rounded-2xl border border-white/[0.04] bg-white/[0.03] p-4"
+      className="min-w-0 rounded-2xl border border-wash/[0.04] bg-wash/[0.03] p-4"
     >
       <PlatformName platform={platform} id={nameId} hero={false} />
       <p className="mt-2 text-xs text-txt-tertiary">{t(COVERS_KEYS[platform])}</p>
       {pickers && <div className="mt-3 flex flex-wrap gap-2">{pickers}</div>}
-      <a
+      <a data-icon-motion="press"
         href={href}
         target="_blank"
         rel="noopener noreferrer"
@@ -464,7 +464,7 @@ export function DesktopDownloadPanel({ version }: { version: string | null }) {
 
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <p className="text-xs text-txt-tertiary">{t('desktopDownload.intro')}</p>
-        <a
+        <a data-icon-motion="press"
           href={links?.allReleasesUrl ?? RELEASES_URL}
           target="_blank"
           rel="noopener noreferrer"

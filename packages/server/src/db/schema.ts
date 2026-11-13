@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, blob, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
@@ -107,6 +107,8 @@ export const channels = sqliteTable('channels', {
   topic: text('topic'),
   position: integer('position').default(0),
   categoryId: text('category_id'),
+  /** Ceiling of the microphone bitrate in kbps; only voice channels use it. */
+  voiceBitrateKbps: integer('voice_bitrate_kbps').notNull().default(128),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   spaceIdx: index('idx_channels_space_id').on(table.spaceId),
@@ -118,6 +120,8 @@ export const messages = sqliteTable('messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  /** SHA-256 named by a sticker token in `content`; NULL for ordinary text. */
+  stickerAssetId: text('sticker_asset_id'),
   type: text('type', { enum: ['user', 'system'] }).notNull().default('user'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
@@ -128,6 +132,7 @@ export const messages = sqliteTable('messages', {
   }).onDelete('set null'),
   channelIdx: index('idx_messages_channel_id').on(table.channelId),
   userIdx: index('idx_messages_user_id').on(table.userId),
+  stickerAssetIdx: index('idx_messages_sticker_asset_id').on(table.stickerAssetId),
   // Unread counts (ws/channelUnreadCounts.ts): the messages of a channel after
   // a read cursor, compared as numbers, with the author to leave out the
   // reader's own and the type to leave out system rows, so a count reads the
@@ -220,6 +225,8 @@ export const dmMessages = sqliteTable('dm_messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  /** SHA-256 named by a sticker token in `content`; NULL for ordinary text. */
+  stickerAssetId: text('sticker_asset_id'),
   type: text('type').notNull().default('user'),
   editedAt: integer('edited_at'),
   sourceInstance: text('source_instance'),
@@ -233,6 +240,7 @@ export const dmMessages = sqliteTable('dm_messages', {
   }).onDelete('set null'),
   channelIdx: index('idx_dm_messages_dm_channel_id').on(table.dmChannelId),
   userIdx: index('idx_dm_messages_user_id').on(table.userId),
+  stickerAssetIdx: index('idx_dm_messages_sticker_asset_id').on(table.stickerAssetId),
   // Unread counts, as idx_messages_channel_unread above.
   unreadIdx: index('idx_dm_messages_channel_unread').on(table.dmChannelId, sql`CAST(id AS INTEGER)`, table.userId),
   sourceUniqueIdx: uniqueIndex('idx_dm_messages_source_unique')
@@ -268,9 +276,12 @@ export const reactions = sqliteTable('reactions', {
   messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
+  /** SHA-256 when `emoji` is a sticker token; NULL for a native emoji reaction. */
+  stickerAssetId: text('sticker_asset_id'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   messageIdx: index('idx_reactions_message_id').on(table.messageId),
+  stickerAssetIdx: index('idx_reactions_sticker_asset_id').on(table.stickerAssetId),
   // One reaction per user, emoji and message. A repeat insert is refused.
   messageUserEmojiIdx: uniqueIndex('idx_reactions_message_user_emoji').on(table.messageId, table.userId, table.emoji),
 }));
@@ -280,9 +291,12 @@ export const dmReactions = sqliteTable('dm_reactions', {
   dmMessageId: text('dm_message_id').notNull().references(() => dmMessages.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
+  /** SHA-256 when `emoji` is a sticker token; NULL for a native emoji reaction. */
+  stickerAssetId: text('sticker_asset_id'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   dmMessageIdx: index('idx_dm_reactions_dm_message_id').on(table.dmMessageId),
+  stickerAssetIdx: index('idx_dm_reactions_sticker_asset_id').on(table.stickerAssetId),
   // One reaction per user, emoji and message. A repeat insert is refused.
   dmMessageUserEmojiIdx: uniqueIndex('idx_dm_reactions_message_user_emoji').on(table.dmMessageId, table.userId, table.emoji),
 }));
@@ -399,6 +413,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   workerId: integer('worker_id'),
   instanceId: text('instance_id'),
   discoveryEnabled: integer('discovery_enabled').notNull().default(1),
+  peopleDiscoveryMode: text('people_discovery_mode').notNull().default('search'),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
   bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),
@@ -411,11 +426,32 @@ export const instanceSettings = sqliteTable('instance_settings', {
   gifApiKey: text('gif_api_key'),
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   allowCustomBitrate: integer('allow_custom_bitrate').notNull().default(1),
+  cameraMode: text('camera_mode').notNull().default('fixed'),
+  cameraDefaultResolution: integer('camera_default_resolution').notNull().default(720),
+  cameraDefaultFramerate: integer('camera_default_framerate').notNull().default(30),
+  cameraDefaultBitrateKbps: integer('camera_default_bitrate_kbps').notNull().default(2000),
+  cameraAllowedResolutions: text('camera_allowed_resolutions').notNull().default('540,720,1080'),
+  cameraAllowedFramerates: text('camera_allowed_framerates').notNull().default('30,60'),
+  cameraMinBitrateKbps: integer('camera_min_bitrate_kbps').notNull().default(300),
+  cameraMaxBitrateKbps: integer('camera_max_bitrate_kbps').notNull().default(4000),
+  cameraAllowCustomBitrate: integer('camera_allow_custom_bitrate').notNull().default(1),
   maxUploadSizeBytes: integer('max_upload_size_bytes'),
+  maxStickerSizeBytes: integer('max_sticker_size_bytes'),
   federationRelayEnabled: integer('federation_relay_enabled').notNull().default(1),
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   defaultAutoRotateIntervalDays: integer('default_auto_rotate_interval_days').notNull().default(90),
   autoAcceptPeering: integer('auto_accept_peering').notNull().default(1),
+  /**
+   * Automatic cleanup when the disk is nearly full (utils/diskPressure.ts).
+   * Off by default: it deletes old chat attachments.
+   */
+  diskCleanupEnabled: integer('disk_cleanup_enabled').notNull().default(0),
+  /** Used-space percentage that starts a sweep. */
+  diskCleanupThresholdPercent: integer('disk_cleanup_threshold_percent').notNull().default(90),
+  /** The media stage deletes old chat attachments until usage falls below this. */
+  diskCleanupTargetPercent: integer('disk_cleanup_target_percent').notNull().default(80),
+  /** Chat attachments newer than this many days are never deleted by a sweep. */
+  diskCleanupMinAgeDays: integer('disk_cleanup_min_age_days').notNull().default(30),
   /** null = never asked, 0 = off, 1 = on. */
   telemetryEnabled: integer('telemetry_enabled'),
   /** Random UUID, minted on the first off-to-on transition and kept through off. Never the federation instance_id. */
@@ -807,3 +843,204 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+export const soundboardAssets = sqliteTable('soundboard_assets', {
+  id: text('id').primaryKey(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  durationMs: integer('duration_ms').notNull(),
+});
+export const soundboardSounds = sqliteTable('soundboard_sounds', {
+  id: text('id').primaryKey(),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => soundboardAssets.id),
+  creatorId: text('creator_id').notNull(),
+  name: text('name').notNull(),
+  volume: real('volume').notNull().default(1),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ spaceIdx: index('idx_soundboard_space').on(table.spaceId) }));
+
+/**
+ * A user's personal bookmarks (docs/systems/bookmarks.md). Each row is a copy of
+ * one message (its text and where it was written) plus the ids needed to open the
+ * original. It lives on the instance that serves the message and is never
+ * relayed. The copy is frozen at bookmark time: whether the original was edited,
+ * deleted or became unreadable is worked out when the list is read, never stored.
+ *
+ * `message_id` and `channel_id` are plain text, not foreign keys: `messages` and
+ * `dm_messages` are two tables, and a bookmark must outlive its original so it can
+ * say that the original is gone. `author_id` is plain text for the same reason.
+ * The `users` cascade does not fire for a tombstoned account (the row stays), so
+ * `tombstoneUser` removes the bookmarks explicitly.
+ */
+export const messageBookmarks = sqliteTable('message_bookmarks', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['channel', 'dm'] }).notNull(),
+  messageId: text('message_id').notNull(),
+  channelId: text('channel_id').notNull(),
+  spaceId: text('space_id'),
+  content: text('content'),
+  authorId: text('author_id').notNull(),
+  authorName: text('author_name').notNull(),
+  spaceName: text('space_name'),
+  channelName: text('channel_name'),
+  instanceOrigin: text('instance_origin').notNull(),
+  messageCreatedAt: integer('message_created_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  // One bookmark per message per user: a second save of the same message is the same bookmark.
+  uniqueMessage: uniqueIndex('idx_message_bookmarks_user_message').on(table.userId, table.kind, table.messageId),
+  // The list: newest first, keyset-paged on (created_at, id), so a read touches the index only.
+  listIdx: index('idx_message_bookmarks_user_created').on(table.userId, sql`created_at DESC`, sql`id DESC`),
+  // "Which messages of this channel are bookmarked": bounded by the channel, not by the user's total.
+  channelIdx: index('idx_message_bookmarks_user_channel').on(table.userId, table.kind, table.channelId),
+}));
+
+/**
+ * The attachments of a bookmarked message. `source_*` name the original's files,
+ * which belong to the original message and may no longer exist. `filename` and
+ * `thumbnail_filename` are the bookmark's own copy: NULL while `copy_status` is
+ * 'reference' (files are not copied yet), set when a copy exists. Only the own
+ * copy is ever deleted with a bookmark.
+ */
+export const bookmarkAttachments = sqliteTable('bookmark_attachments', {
+  id: text('id').primaryKey(),
+  bookmarkId: text('bookmark_id').notNull().references(() => messageBookmarks.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  originalName: text('original_name').notNull(),
+  mimetype: text('mimetype').notNull(),
+  size: integer('size').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  duration: real('duration'),
+  playable: integer('playable', { mode: 'boolean' }),
+  sourceFilename: text('source_filename').notNull(),
+  sourceThumbnailFilename: text('source_thumbnail_filename'),
+  filename: text('filename'),
+  thumbnailFilename: text('thumbnail_filename'),
+  copyStatus: text('copy_status', { enum: ['reference', 'copied', 'unavailable'] }).notNull().default('reference'),
+}, (table) => ({
+  bookmarkIdx: index('idx_bookmark_attachments_bookmark_id').on(table.bookmarkId),
+}));
+
+export const stickerPacks = sqliteTable('sticker_packs', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  scopeType: text('scope_type', { enum: ['user', 'space', 'instance'] }).notNull().default('instance'),
+  spaceId: text('space_id').references(() => spaces.id, { onDelete: 'cascade' }),
+  creatorId: text('creator_id').references(() => users.id, { onDelete: 'set null' }),
+  creatorName: text('creator_name'),
+  coverAssetId: text('cover_asset_id').references(() => stickerAssets.id, { onDelete: 'set null' }),
+  originType: text('origin_type').notNull().default('source'),
+  sourceInstance: text('source_instance'),
+  sourcePackId: text('source_pack_id'),
+  currentVersion: integer('current_version').notNull().default(1),
+  status: text('status').notNull().default('draft'),
+  reviewNotes: text('review_notes'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: integer('reviewed_at'),
+  syncedAt: integer('synced_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  statusIdx: index('idx_sticker_packs_status').on(table.status),
+  creatorIdx: index('idx_sticker_packs_creator').on(table.creatorId),
+  sourceIdx: index('idx_sticker_packs_source').on(table.sourceInstance, table.sourcePackId),
+  scopeIdx: index('idx_sticker_packs_scope').on(table.scopeType, table.spaceId, table.creatorId),
+  spacePackUnique: uniqueIndex('idx_sticker_packs_one_space_pack')
+    .on(table.spaceId)
+    .where(sql`${table.scopeType} = 'space'`),
+}));
+
+export const stickerPackVersions = sqliteTable('sticker_pack_versions', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  name: text('name').notNull(),
+  description: text('description'),
+  coverAssetId: text('cover_asset_id').references(() => stickerAssets.id, { onDelete: 'set null' }),
+  status: text('status').notNull().default('draft'),
+  reviewNotes: text('review_notes'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: integer('reviewed_at'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  packVersionIdx: uniqueIndex('idx_pack_versions_unique').on(table.packId, table.version),
+}));
+
+export const stickerPackItems = sqliteTable('sticker_pack_items', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  versionId: text('version_id').notNull().references(() => stickerPackVersions.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => stickerAssets.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  status: text('status').notNull().default('active'),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  packIdx: index('idx_sticker_pack_items_pack').on(table.packId),
+  versionIdx: index('idx_sticker_pack_items_version').on(table.versionId),
+  assetIdx: index('idx_sticker_pack_items_asset').on(table.assetId),
+}));
+
+export const userInstalledPacks = sqliteTable('user_installed_packs', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  installedAt: integer('installed_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.packId] }),
+  userIdx: index('idx_user_installed_packs_user').on(table.userId),
+}));
+
+export const stickerPeerPolicies = sqliteTable('sticker_peer_policies', {
+  id: text('id').primaryKey(),
+  peerOrigin: text('peer_origin').notNull().unique(),
+  policy: text('policy').notNull().default('allow'),
+  autoSync: integer('auto_sync').notNull().default(0),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  peerOriginIdx: index('idx_sticker_peer_policies_peer').on(table.peerOrigin),
+}));
+
+export const stickerFavorites = sqliteTable('sticker_favorites', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  assetId: text('asset_id').notNull().references(() => stickerAssets.id),
+  name: text('name').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.assetId] }),
+}));
+
+export const stickerPackShares = sqliteTable('sticker_pack_shares', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  targetType: text('target_type', { enum: ['instance', 'space'] }).notNull(),
+  targetId: text('target_id'),
+  requestedBy: text('requested_by').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewNotes: text('review_notes'),
+  createdAt: integer('created_at').notNull(),
+  reviewedAt: integer('reviewed_at'),
+}, (table) => ({
+  uniqueTarget: uniqueIndex('idx_sticker_share_target').on(table.packId, table.targetType, table.targetId),
+  targetIdx: index('idx_sticker_share_target_status').on(table.targetType, table.targetId, table.status),
+}));
+
+// Game icon assets: content-addressed WebP the desktop client extracted from
+// the player's own machine and uploaded so an activity can carry an icon URL
+// the uploader's own instance hosts. No third-party CDN is ever contacted.
+export const gameIconAssets = sqliteTable('game_icon_assets', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at').notNull(),
+});
+
+// The per-uploader rows the quota counts; the asset file is shared across
+// uploaders when two machines extracted the very same bytes.
+export const gameIcons = sqliteTable('game_icons', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  iconId: text('icon_id').notNull().references(() => gameIconAssets.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.iconId] }) }));

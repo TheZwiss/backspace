@@ -81,19 +81,19 @@ describe('verifyPeerSignature', () => {
 
 describe('normalizeOriginForCompare', () => {
   it('canonicalizes a bare host', () => {
-    expect(normalizeOriginForCompare('nova.ddns.net')).toBe('nova.ddns.net');
+    expect(normalizeOriginForCompare('nova.example')).toBe('nova.example');
   });
   it('strips https:// scheme', () => {
-    expect(normalizeOriginForCompare('https://nova.ddns.net')).toBe('nova.ddns.net');
+    expect(normalizeOriginForCompare('https://nova.example')).toBe('nova.example');
   });
   it('strips http:// scheme', () => {
     expect(normalizeOriginForCompare('http://localhost:3005')).toBe('localhost:3005');
   });
   it('strips trailing slash', () => {
-    expect(normalizeOriginForCompare('https://nova.ddns.net/')).toBe('nova.ddns.net');
+    expect(normalizeOriginForCompare('https://nova.example/')).toBe('nova.example');
   });
   it('lowercases the host', () => {
-    expect(normalizeOriginForCompare('HTTPS://Nova.DDNS.net')).toBe('nova.ddns.net');
+    expect(normalizeOriginForCompare('HTTPS://Nova.DDNS.net')).toBe('nova.example');
   });
   it('returns null for null input', () => {
     expect(normalizeOriginForCompare(null)).toBeNull();
@@ -105,7 +105,7 @@ describe('normalizeOriginForCompare', () => {
     expect(normalizeOriginForCompare('')).toBeNull();
   });
   it('treats bare and full-URL forms as equal', () => {
-    expect(normalizeOriginForCompare('nova.ddns.net'))
-      .toBe(normalizeOriginForCompare('https://nova.ddns.net'));
+    expect(normalizeOriginForCompare('nova.example'))
+      .toBe(normalizeOriginForCompare('https://nova.example'));
   });
 });

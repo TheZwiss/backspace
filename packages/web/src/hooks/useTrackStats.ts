@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Track } from 'livekit-client';
 import { getActiveRoom } from './useLiveKit';
 import { discoverPeerConnections } from '../utils/livekitInternals';
@@ -125,19 +125,24 @@ function inferSimulcastLayer(width: number | null, height: number | null): strin
 
 // ── Hook ──
 
-export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
-  const [snapshot, setSnapshot] = useState<TrackStatsSnapshot | null>(null);
-  const prevSampleRef = useRef<Map<string, PrevSample>>(new Map());
+type StatsListener = (snapshot: TrackStatsSnapshot | null) => void;
+const statsListeners = new Set<StatsListener>();
+let sharedSnapshot: TrackStatsSnapshot | null = null;
+let stopSharedStats: (() => void) | undefined;
 
-  useEffect(() => {
-    if (!enabled) {
-      prevSampleRef.current.clear();
-      setSnapshot(null);
-      return;
-    }
-
-    const poll = async () => {
+function startStatsCollector(): () => void {
+  const prevSampleRef = { current: new Map<string, PrevSample>() };
+  let stopped = false;
+  let polling = false;
+  let previousRoom: ReturnType<typeof getActiveRoom> = null;
+  const setSnapshot = (snapshot: TrackStatsSnapshot | null) => {
+    if (stopped) return;
+    sharedSnapshot = snapshot;
+    for (const listener of statsListeners) listener(snapshot);
+  };
+    const collect = async () => {
       const room = getActiveRoom();
+      if (room !== previousRoom) { prevSampleRef.current.clear(); previousRoom = room; }
       if (!room) {
         setSnapshot(null);
         return;
@@ -593,10 +598,30 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
       setSnapshot({ network, audioTracks, videoTracks: filteredVideoTracks });
     };
 
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => clearInterval(interval);
-  }, [enabled]);
+  const poll = async () => {
+    if (stopped || polling) return;
+    polling = true;
+    try { await collect(); }
+    finally { polling = false; }
+  };
+  void poll().catch(() => {});
+  const interval = setInterval(() => { void poll().catch(() => {}); }, 2000);
+  return () => { stopped = true; clearInterval(interval); };
+}
 
+export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
+  const [snapshot, setSnapshot] = useState<TrackStatsSnapshot | null>(null);
+  useEffect(() => {
+    if (!enabled) { setSnapshot(null); return; }
+    statsListeners.add(setSnapshot);
+    setSnapshot(sharedSnapshot);
+    if (!stopSharedStats) stopSharedStats = startStatsCollector();
+    return () => {
+      statsListeners.delete(setSnapshot);
+      if (statsListeners.size === 0) {
+        stopSharedStats?.(); stopSharedStats = undefined; sharedSnapshot = null;
+      }
+    };
+  }, [enabled]);
   return snapshot;
 }

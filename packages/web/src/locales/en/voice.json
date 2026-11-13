@@ -1,7 +1,85 @@
 {
+  "textVoice": {
+    "title": "Text voice",
+    "enable": "Use text voice",
+    "description": "Type or dictate what you want to say and a Portuguese voice speaks for you in the call.",
+    "micOff": "Your microphone stays off in the call. It is only used, on this device, when you ask to speak and write.",
+    "voice": "Brazilian voice",
+    "speed": "Speed",
+    "placeholder": "Type what you want to say…",
+    "enterHint": "Enter to speak · Shift+Enter for a new line",
+    "checking": "Preparing speech on this device…",
+    "unavailable": "Click Prepare voice to download or load the local model.",
+    "speaking": "Preparing or speaking…",
+    "muted": "Join a call and unmute to speak. Server restrictions also apply.",
+    "ready": "Type or speak, then click “Speak in call”.",
+    "speak": "Speak in call",
+    "preview": "Listen privately",
+    "stop": "Stop speaking",
+    "privacy": "Everything happens on this device. Only the voice audio goes to the call; the text is sent to no one.",
+    "quick": {
+      "hello": "Hello, everyone!",
+      "wait": "One moment, please.",
+      "repeat": "Could you repeat that?"
+    },
+    "processing": "Processing",
+    "automatic": "Automatic",
+    "prepare": "Prepare voice",
+    "backendActive": "Processing: {{backend}}",
+    "gpuUnavailable": "GPU is unavailable on this device. Select CPU.",
+    "localError": "Could not prepare or generate speech. Try again or select CPU.",
+    "downloadProgress": "Downloading model: {{progress}}",
+    "downloadHint": "First use: approximately 95 MB for CPU or 330 MB for GPU. The model stays on this device.",
+    "unsupported": "To prepare speech, use HTTPS or the updated Electron client. Your real microphone remains off in this mode.",
+    "setupTitle": "Let’s get the voices ready (one time only)",
+    "setupBody": "We need to download about {{size}} MB to this device. After that everything works without downloading again.",
+    "setupAction": "Download and prepare",
+    "setupError": "The voices could not be prepared. Check your connection and free space, then try again.",
+    "preparing": "Getting ready… this can take a moment.",
+    "listening": "Listening… click “Finish” when you are done speaking.",
+    "settings": "Settings",
+    "processingHelp": "Leave it on Automatic. Change it only if the voice fails or is slow.",
+    "processingOptions": {
+      "auto": "Automatic",
+      "cpu": "Processor",
+      "gpu": "Graphics card"
+    },
+    "removeModels": "Delete downloaded voices",
+    "turnOff": "Turn off text voice",
+    "micStart": "Speak to write",
+    "micStop": "Finish"
+  },
+  "soundboard": {
+    "frequentEmpty": "Play sounds to see your favorites here.",
+    "noResults": "No sounds found.",
+    "frequent": "Frequently used",
+    "title": "Soundboard",
+    "description": "Play a short effect for everyone in your call. Choose sounds from servers you belong to.",
+    "pack": "Server pack",
+    "empty": "No sound packs yet.",
+    "count_one": "{{count}} of 40 sounds",
+    "count_other": "{{count}} of 40 sounds",
+    "refresh": "Refresh",
+    "volume": "Your soundboard volume",
+    "play": "Play in call",
+    "preview": "Listen locally",
+    "confirmDelete": "Delete the sound “{{name}}”?",
+    "search": "Search sounds",
+    "add": "Add sound",
+    "uploadHint": "Source file up to 5 MB; longer than 5 seconds? Trim it to a 5-second clip. Maximum 40 sounds per server.",
+    "name": "Sound name",
+    "audioFile": "Audio file",
+    "clipVolume": "Effect volume",
+    "permissionHint": "A role with Create soundboard sounds permission is required to add effects.",
+    "invalidAudio": "Choose a valid audio file up to 5 MB.",
+    "cutSummary": "{{file}}: {{start}} s to {{end}} s",
+    "editCut": "Edit cut"
+  },
   "chatPanel": {
     "title": "Chat",
-    "close": "Close Chat"
+    "close": "Close Chat",
+    "expand": "Expand chat",
+    "collapse": "Collapse chat"
   },
   "badges": {
     "mutedNoPermission": "Muted (No Speak Permission)",
@@ -73,6 +151,8 @@
     "remoteParticipant": "Remote"
   },
   "screenPicker": {
+    "captureReconnecting": "Reconnecting capture…",
+    "streamPaused": "Stream paused",
     "title": "Share Your Screen",
     "tabs": {
       "screens": "Screens",
@@ -104,13 +184,27 @@
     "kind": {
       "monitor": "Screen",
       "window": "Window"
-    }
+    },
+    "audioApplication": "Application audio",
+    "chooseAudioApplication": "Select the audio application",
+    "audioApplicationHint": "Play audio in the application to list it, then select the window to share.",
+    "allAudioExceptBackspace": "All system audio except Backspace"
   },
   "streamSettings": {
+    "previewLabel": "Stream preview",
+    "previewNormal": "Normal",
+    "previewBlurred": "Blurred",
+    "previewHidden": "No image",
+    "previewHint": "Controls the thumbnail shown before watching. Does not change the stream video.",
     "title": "Stream Settings",
     "hostLimits": "Limits set by {{host}}",
     "resolution": "Resolution",
     "frameRate": "Frame Rate",
+    "cursorMode": "Mouse cursor",
+    "cursorAuto": "Automatic",
+    "cursorShow": "Show",
+    "cursorHide": "Hide",
+    "cursorHideUnavailable": "This capture source cannot hide the Windows cursor. Start a supported DXGI capture to apply this setting.",
     "contentMode": "Content Mode",
     "mode": {
       "gaming": "Gaming",
@@ -152,6 +246,7 @@
     "summary": "{{bitrate}} · {{degradation}}"
   },
   "stream": {
+    "localPreviewPaused": "Local preview paused to save resources. Your stream is still live.",
     "quality": "Stream Quality",
     "qualityValue": "{{height}}p {{fps}}fps",
     "volume": "Stream Volume",
@@ -167,6 +262,7 @@
   },
   "streamDiagnostics": {
     "publisherNetwork": "The streamer's network is unstable",
+    "publisherBandwidth": "Available bandwidth is limiting stream quality",
     "publisherCpu": "The streamer's computer cannot encode video fast enough",
     "viewerNetwork": "Your connection is unstable",
     "reconnecting": "Connection lost — reconnecting…",
@@ -179,6 +275,10 @@
   },
   "channelDuration": "Channel active for {{duration}}",
   "controls": {
+    "openChannel": "Open {{channel}}",
+    "callWindowFailed": "Could not open the call window.",
+    "callInWindow": "Call is in a separate window — click to show",
+    "openCallWindow": "Open call in a separate window",
     "spaceMutedSelfMuted": "Space Muted (self-muted)",
     "unmuteShortcut": "Unmute (M)",
     "muteShortcut": "Mute (M)",
@@ -199,7 +299,9 @@
     "disconnect": "Disconnect",
     "connectionInfo": "Connection Info",
     "noiseSuppressionOff": "Disable AI Noise Suppression",
-    "noiseSuppressionOn": "Enable AI Noise Suppression"
+    "noiseSuppressionOn": "Enable AI Noise Suppression",
+    "focusChat": "Focus chat",
+    "unfocusChat": "Show the call"
   },
   "status": {
     "dmCall": "DM Call",
@@ -270,5 +372,75 @@
     "stillDenied": "Microphone access is still denied. Allow it for this site in your browser or device settings.",
     "notFound": "No microphone detected.",
     "failed": "Could not access the microphone."
+  },
+  "callOngoing": "Call in progress",
+  "callWaiting": "Waiting for the other person · ends in {{remaining}}",
+  "rejoinCall": "Rejoin call",
+  "history": {
+    "startedBy": "{{actor}} started the call",
+    "from": "From:",
+    "to": "To:",
+    "status": {
+      "ringing": "Calling…",
+      "active": "Call in progress",
+      "ended": "Call ended",
+      "missed": "Missed call",
+      "rejected": "Call declined",
+      "interrupted": "Call interrupted",
+      "cancelled": "Call cancelled"
+    },
+    "duration": "Duration"
+  },
+  "dictation": {
+    "title": "Voice dictation · Brazilian Portuguese",
+    "model": "Recognition model",
+    "size": "Download: {{size}} MiB",
+    "installed": "Downloaded",
+    "delete": "Delete model",
+    "download": "Download model",
+    "deleteConfirm": "Delete the copy of {{model}} downloaded by Backspace? You will need to download it again to use it. Other models and files will remain untouched.",
+    "cancel": "Cancel",
+    "dictate": "Dictate text",
+    "finish": "Finish dictation",
+    "hold": "Hold to speak and send",
+    "release": "Release to transcribe and send",
+    "recording": "Recording for transcription only…",
+    "downloading": "Downloading model: {{progress}}",
+    "transcribing": "Processing on your device…",
+    "hint": "On release: transcribe → generate voice → send to call. Your original microphone audio is never transmitted. Maximum 60 seconds.",
+    "shortcut": "Keyboard: {{shortcut}}. Configure “Dictate and send voice (hold)” in Settings → Keybinds.",
+    "unassigned": "no shortcut assigned",
+    "monitor": "Also hear my voice in the call",
+    "missing": "Download the selected model before dictating.",
+    "downloadError": "Could not download the model. Check your connection and available storage, then try again.",
+    "micError": "Could not record. Allow microphone access and check the selected device.",
+    "noSpeech": "No speech detected. Try recording again.",
+    "limit": "Recording reached 60 seconds and was cancelled. Record a shorter phrase.",
+    "storageError": "Could not access local model storage.",
+    "failed": "Could not complete dictation. Try CPU or a smaller model. Any recognized text remains in the box.",
+    "secureContext": "Dictation needs microphone access over HTTPS, localhost, or the updated Electron client.",
+    "callHint": "Join a call and unmute synthesized voice to send automatically. You can still dictate to fill the text box.",
+    "gpuError": "GPU unavailable for this model. Use CPU or Automatic."
+  },
+  "trimmer": {
+    "title": "Trim sound effect",
+    "tooLong": "{{file}} lasts {{total}}. Choose up to {{max}} to keep.",
+    "fits": "{{file}} lasts {{total}}. You can trim it; up to {{max}} is kept.",
+    "seconds": "{{value}} s",
+    "start": "Start",
+    "end": "End",
+    "length": "Length",
+    "preview": "Preview",
+    "stop": "Stop",
+    "trimSilence": "Trim silence",
+    "trimSilenceHint": "Frame the audible part and drop silence at the edges",
+    "reset": "Reset",
+    "fade": "Fade edges",
+    "help": "Drag the handles to resize, drag the middle or click the waveform to move. With a handle focused, use the arrow keys (Shift for larger steps).",
+    "apply": "Use this cut",
+    "windowHandle": "Selected part",
+    "startHandle": "Cut start",
+    "endHandle": "Cut end",
+    "windowValue": "{{start}} to {{end}}"
   }
 }

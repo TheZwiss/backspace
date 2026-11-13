@@ -22,7 +22,7 @@ afterEach(() => {
 
 function seedOld(): void {
   fs.mkdirSync(oldDir, { recursive: true });
-  fs.writeFileSync(path.join(oldDir, 'instance-url.json'), '{"url":"https://nova.ddns.net"}');
+  fs.writeFileSync(path.join(oldDir, 'instance-url.json'), '{"url":"https://nova.example"}');
   fs.mkdirSync(path.join(oldDir, 'IndexedDB'));
   fs.writeFileSync(path.join(oldDir, 'IndexedDB', 'leveldb.log'), 'data');
 }
@@ -47,7 +47,7 @@ describe('migrateUserData', () => {
     expect(fs.existsSync(oldDir)).toBe(false);
     expect(fs.existsSync(oldParent)).toBe(false);
     expect(fs.readFileSync(path.join(newDir, 'instance-url.json'), 'utf-8'))
-      .toBe('{"url":"https://nova.ddns.net"}');
+      .toBe('{"url":"https://nova.example"}');
     expect(fs.existsSync(path.join(newDir, 'IndexedDB', 'leveldb.log'))).toBe(true);
   });
 
@@ -57,7 +57,7 @@ describe('migrateUserData', () => {
     const result = migrateUserData({ oldDir, newDir, oldParent });
     expect(result.kind).toBe('migrated');
     expect(fs.readFileSync(path.join(newDir, 'instance-url.json'), 'utf-8'))
-      .toBe('{"url":"https://nova.ddns.net"}');
+      .toBe('{"url":"https://nova.example"}');
   });
 
   it('returns no-op:new-populated and leaves both folders intact', () => {

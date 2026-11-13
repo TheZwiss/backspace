@@ -1,3 +1,5 @@
+import { soundboardRoutes } from './routes/soundboard.js';
+import { recoverInterruptedDmCalls } from './utils/dmCallHistory.js';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -13,6 +15,10 @@ import { spaceRoutes } from './routes/spaces.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { stickerRoutes } from './routes/stickers.js';
+import { bookmarkRoutes } from './routes/bookmarks.js';
+import { stickerStoreRoutes } from './routes/stickerStore.js';
+import { stickerLibraryRoutes } from './routes/stickerLibrary.js';
+import { gameIconRoutes } from './routes/gameIcons.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { filesRoutes } from './routes/files.js';
 import { dmRoutes } from './routes/dm.js';
@@ -35,6 +41,7 @@ import { cspReportRoutes } from './routes/cspReport.js';
 import { buildCspHeaderValue, CSP_REPORT_GROUP, CSP_REPORT_PATH } from './utils/csp.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
+import { startDiskPressureWorker, stopDiskPressureWorker } from './utils/diskPressure.js';
 import { startTelemetryReporter, stopTelemetryReporter } from './telemetry/reporter.js';
 import { startDirectoryPinger, stopDirectoryPinger } from './directory/pinger.js';
 import { errorBody } from './utils/httpErrors.js';
@@ -187,18 +194,58 @@ async function main(): Promise<void> {
 
   await app.register(websocket);
 
+  // Opening the app directly on the plain-HTTP backend port (for example
+  // http://100.64.0.10:3000) gives the browser a non-secure context, so
+  // getUserMedia and getDisplayMedia are blocked. Navigation requests are sent
+  // to the HTTPS edge on 8443; API, asset and WebSocket traffic is untouched.
+  // Requests arriving through Caddy/Tailscale Serve keep the public Host, so no loop.
+  app.addHook('onRequest', async (request, reply) => {
+    const host = request.headers.host;
+    const accept = request.headers.accept ?? '';
+    if (
+      request.method === 'GET' &&
+      host?.endsWith(':3000') &&
+      request.headers['x-forwarded-proto'] === undefined &&
+      accept.includes('text/html')
+    ) {
+      const target = `https://${host.slice(0, -5)}:8443${request.raw.url ?? '/'}`;
+      return reply.redirect(target, 302);
+    }
+  });
+
   // Serve built frontend in production
   const webDistPath = path.resolve(import.meta.dirname ?? '.', '../../web/dist');
   if (fs.existsSync(webDistPath)) {
     await app.register(fastifyStatic, {
       root: webDistPath,
       prefix: '/',
-      wildcard: false,
+      // Resolve files per request, not from a list taken at boot. With
+      // wildcard:false a route exists only for files present at startup, so a
+      // web bundle swapped in by the auto-updater without a restart had its new
+      // hashed chunks answered with index.html: the main module failed to load,
+      // React never mounted and the desktop app reported render-stalled.
+      wildcard: true,
     });
   }
 
+  // CA download over plain HTTP: devices cannot fetch it over HTTPS before
+  // they trust the CA. The file is the Caddy local root, not a secret.
+  const caCertPath = process.env.CA_CERT_PATH ?? '/opt/caddy/ca.crt';
+  app.get('/ca.crt', async (_request, reply) => {
+    try {
+      const cert = fs.readFileSync(caCertPath);
+      return reply
+        .header('Content-Type', 'application/x-x509-ca-cert')
+        .header('Content-Disposition', 'attachment; filename="backspace-ca.crt"')
+        .send(cert);
+    } catch {
+      return reply.code(404).send({ error: 'ca_not_found', statusCode: 404 });
+    }
+  });
+
   // Initialize database
   getDb();
+  recoverInterruptedDmCalls();
 
   // Reset orphaned `users.status` rows this instance owns (native and detached
   // accounts). The previous process's in-memory disconnect timers are gone, so
@@ -216,6 +263,11 @@ async function main(): Promise<void> {
   await app.register(messageRoutes);
   await app.register(uploadRoutes);
   await app.register(stickerRoutes);
+  await app.register(soundboardRoutes);
+  await app.register(bookmarkRoutes);
+  await app.register(stickerStoreRoutes);
+  await app.register(stickerLibraryRoutes);
+  await app.register(gameIconRoutes);
   await app.register(filesRoutes);
   await app.register(dmRoutes);
   await app.register(livekitRoutes);
@@ -247,6 +299,11 @@ async function main(): Promise<void> {
   if (fs.existsSync(webDistPath)) {
     app.setNotFoundHandler((request, reply) => {
       if (request.url.startsWith('/api/') || request.url.startsWith('/ws')) {
+        return reply.code(404).send({ error: 'Not found', statusCode: 404 });
+      }
+      // A missing built asset must be a real 404. Answering it with index.html
+      // turns a stale chunk reference into a module that fails to parse.
+      if (/^\/assets\//.test(request.url)) {
         return reply.code(404).send({ error: 'Not found', statusCode: 404 });
       }
       return reply.sendFile('index.html');
@@ -284,6 +341,7 @@ async function main(): Promise<void> {
   }
 
   startBackupWorker();
+  startDiskPressureWorker();
 
   // The space directory pinger stays outside the workers guard on purpose:
   // the two-instance harness disables the workers and still needs the pinger,
@@ -296,6 +354,7 @@ async function main(): Promise<void> {
     stopTelemetryReporter();
     stopDirectoryPinger();
     stopBackupWorker();
+    stopDiskPressureWorker();
     await app.close();
     closeDatabase(); // checkpoints WAL — leaves a complete on-disk file
     process.exit(0);

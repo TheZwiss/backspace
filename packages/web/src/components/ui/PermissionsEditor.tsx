@@ -429,16 +429,16 @@ export function PermissionsEditor({
 
   const savePill = (
     <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto animate-slide-up">
-      <button
+      <button data-icon-motion="press"
         onClick={handleDiscard}
         className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
       >
         {t('spaces:settings.discardChanges')}
       </button>
-      <button
+      <button data-icon-motion="press"
         onClick={handleSave}
         disabled={saving}
-        className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+        className="ui-button ui-button-primary transition-colors disabled:opacity-50"
       >
         {saving ? t('common:states.saving') : t('common:actions.save')}
       </button>
@@ -456,11 +456,11 @@ export function PermissionsEditor({
 
       {/* Role Overrides */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.roleOverrides')}
         </div>
         {roleOverrides.length === 0 && (
-          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noRoleOverrides')}</p>
+          <p className="text-ui-label text-txt-tertiary">{t('spaces:permissions.noRoleOverrides')}</p>
         )}
         <div className="space-y-1.5">
           {roleOverrides.map(({ key, role }) => {
@@ -486,9 +486,9 @@ export function PermissionsEditor({
         {/* Add Role */}
         <div className="mt-2 relative">
           {!showAddRole ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setShowAddRole(true)}
-              className="flex items-center gap-1.5 text-[13px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+              className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -502,7 +502,7 @@ export function PermissionsEditor({
                   <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('spaces:permissions.noMoreRoles')}</div>
                 ) : (
                   availableRoles.map(role => (
-                    <button
+                    <button data-icon-motion="press"
                       key={role.id}
                       onClick={() => handleAddRole(role.id)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover rounded transition-colors"
@@ -516,8 +516,8 @@ export function PermissionsEditor({
                   ))
                 )}
               </div>
-              <div className="border-t border-white/[0.04] p-1.5">
-                <button
+              <div className="border-t border-wash/[0.04] p-1.5">
+                <button data-icon-motion="press"
                   onClick={() => setShowAddRole(false)}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >
@@ -531,11 +531,11 @@ export function PermissionsEditor({
 
       {/* Member Overrides */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
           {t('spaces:permissions.memberOverrides')}
         </div>
         {memberOverrides.length === 0 && (
-          <p className="text-[12.5px] text-txt-tertiary">{t('spaces:permissions.noMemberOverrides')}</p>
+          <p className="text-ui-label text-txt-tertiary">{t('spaces:permissions.noMemberOverrides')}</p>
         )}
         <div className="space-y-1.5">
           {memberOverrides.map(({ key, member }) => {
@@ -560,9 +560,9 @@ export function PermissionsEditor({
         {/* Add Member */}
         <div className="mt-2 relative">
           {!showAddMember ? (
-            <button
+            <button data-icon-motion="press"
               onClick={() => setShowAddMember(true)}
-              className="flex items-center gap-1.5 text-[13px] text-txt-tertiary hover:text-txt-secondary transition-colors"
+              className="flex items-center gap-1.5 text-ui-label text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -586,7 +586,7 @@ export function PermissionsEditor({
                   <div className="px-2.5 py-1.5 text-xs text-txt-tertiary">{t('common:labels.noMembersFound')}</div>
                 ) : (
                   availableMembers.map(member => (
-                    <button
+                    <button data-icon-motion="press"
                       key={member.userId}
                       onClick={() => handleAddMember(member.userId)}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 text-sm text-txt-secondary hover:text-txt-primary hover:bg-interactive-hover rounded transition-colors"
@@ -599,8 +599,8 @@ export function PermissionsEditor({
                   ))
                 )}
               </div>
-              <div className="border-t border-white/[0.04] p-1.5">
-                <button
+              <div className="border-t border-wash/[0.04] p-1.5">
+                <button data-icon-motion="press"
                   onClick={() => { setShowAddMember(false); setMemberSearch(''); }}
                   className="w-full text-xs text-txt-tertiary hover:text-txt-secondary px-2.5 py-1 transition-colors"
                 >

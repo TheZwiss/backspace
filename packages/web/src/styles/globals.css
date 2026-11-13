@@ -54,6 +54,7 @@
     --bg-elevated: 37 37 48;
     --bg-input: 17 17 24;
     --bg-overlay: rgba(0, 0, 0, 0.85);
+    --wash: 255 255 255;
 
     /* ── Borders ── */
     --border-hard: 34 34 44;
@@ -69,15 +70,15 @@
     --accent-coral: 251 146 60;
 
     /* ── Primary Action (replaces blurple) ── */
-    --accent-primary: 124 108 246;
-    --accent-primary-hover: 107 92 224;
-    --accent-primary-active: 95 79 208;
+    --accent-primary: 107 92 224;
+    --accent-primary-hover: 95 79 208;
+    --accent-primary-active: 83 67 188;
 
     /* ── Text Hierarchy ── */
     --text-primary: 239 239 239;
     --text-secondary: 160 160 170;
-    --text-tertiary: 92 92 104;
-    --text-category: 72 72 84;
+    --text-tertiary: 145 145 158;
+    --text-category: 145 145 158;
     --text-message: 216 216 222;
     --text-link: 125 211 252;
     --text-positive: 134 239 172;
@@ -104,11 +105,186 @@
 
     /* ── Notification ── */
     --notification: 253 164 175;
+    --layer-modal: 200;
+    --layer-menu-backdrop: 399;
+    --layer-menu: 400;
+    --layer-menu-submenu: 401;
+    --layer-tooltip: 500;
+    --layer-confirm: 600;
+    --layer-toast: 700;
+    --layer-nudge: 800;
+    --layer-fullscreen: 100;
+    --control-radius: 8px;
+    --control-height: 36px;
+    --control-touch-height: 44px;
+  }
+
+  /* ── OLED theme ──
+     Discord's Midnight/AMOLED look: true black on every structural surface so
+     OLED pixels switch off, with hairline borders and slightly lifted
+     elevated/input tiers carrying the separation instead of fill contrast.
+     Only the tokens that differ are overridden; accents and status colours
+     keep their Aether Drift values. */
+  :root[data-theme="oled"] {
+    --bg-base: 0 0 0;
+    --bg-channel: 0 0 0;
+    --bg-chat: 0 0 0;
+    --bg-members: 0 0 0;
+    --bg-elevated: 20 20 20;
+    --bg-input: 12 12 12;
+    --bg-overlay: rgba(0, 0, 0, 0.92);
+
+    --border-hard: 30 30 30;
+    --border-soft: 38 38 38;
+
+    --text-secondary: 168 168 168;
+    --text-tertiary: 148 148 148;
+    --text-category: 148 148 148;
+    --text-message: 222 222 222;
+
+    --interactive-hover: rgba(255, 255, 255, 0.07);
+    --interactive-active: rgba(255, 255, 255, 0.13);
+    --interactive-selected: rgba(255, 255, 255, 0.17);
+    --interactive-muted: 52 52 52;
+    --status-offline: 52 52 52;
+
+    --glass-bg: rgba(8, 8, 8, 0.78);
+    --glass-modal-bg: rgba(6, 6, 6, 0.94);
+    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-highlight: rgba(255, 255, 255, 0.04);
+    color-scheme: dark;
+  }
+
+  :root[data-theme="oled"] input:-webkit-autofill,
+  :root[data-theme="oled"] input:-webkit-autofill:hover,
+  :root[data-theme="oled"] input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #0c0c0c inset;
+  }
+
+  /* ── Light theme ──
+     Warm paper surfaces (the Aether Drift hue, lightened) with ink text. The
+     pastel accents are re-pitched to mid-tone so they read as text and as
+     fills on a light ground; the primary keeps its value (white label on it
+     still passes). `--wash` flips the neutral hover/divider tint from white to
+     ink, which is what every `bg-wash/N` and `border-wash/N` class resolves to. */
+  :root[data-theme="light"] {
+    --bg-base: 228 226 236;
+    --bg-channel: 242 241 247;
+    --bg-chat: 252 251 254;
+    --bg-members: 242 241 247;
+    --bg-elevated: 255 255 255;
+    --bg-input: 234 232 242;
+    --bg-overlay: rgba(24, 20, 40, 0.5);
+    --wash: 30 24 60;
+
+    --border-hard: 222 219 233;
+    --border-soft: 210 207 224;
+
+    --accent-mint: 22 148 84;
+    --accent-peach: 205 84 84;
+    --accent-lavender: 112 92 220;
+    --accent-sky: 18 124 196;
+    --accent-amber: 176 112 0;
+    --accent-rose: 208 62 92;
+    --accent-coral: 214 92 20;
+    --accent-primary: 107 92 224;
+    --accent-primary-hover: 92 76 208;
+    --accent-primary-active: 78 62 188;
+
+    --text-primary: 24 22 36;
+    --text-secondary: 78 76 98;
+    --text-tertiary: 104 102 124;
+    --text-category: 104 102 124;
+    --text-message: 40 38 56;
+    --text-link: 0 112 200;
+    --text-positive: 18 132 72;
+    --text-warning: 160 100 0;
+    --text-danger: 200 48 62;
+
+    --interactive-hover: rgba(30, 24, 60, 0.06);
+    --interactive-active: rgba(30, 24, 60, 0.11);
+    --interactive-selected: rgba(107, 92, 224, 0.14);
+    --interactive-muted: 190 187 208;
+
+    --status-online: 35 165 90;
+    --status-idle: 214 150 0;
+    --status-dnd: 218 62 74;
+    --status-offline: 160 158 180;
+
+    --glass-bg: rgba(255, 255, 255, 0.66);
+    --glass-modal-bg: rgba(255, 255, 255, 0.9);
+    --glass-border: rgba(30, 24, 60, 0.1);
+    --glass-highlight: rgba(255, 255, 255, 0.7);
+    --notification: 218 62 74;
+    color-scheme: light;
+  }
+
+  :root[data-theme="light"] ::selection {
+    background: rgba(107, 92, 224, 0.28);
+  }
+
+  :root[data-theme="light"] input:-webkit-autofill,
+  :root[data-theme="light"] input:-webkit-autofill:hover,
+  :root[data-theme="light"] input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #18162a;
+    -webkit-box-shadow: 0 0 0px 1000px #eae8f2 inset;
+  }
+
+  /* ── Anime theme ("Sakura Night") ──
+     Twilight indigo-violet surfaces with a sakura-pink primary and a rosy
+     glass edge. Surfaces stay matte; the personality comes from the hue
+     shift, the pink primary and the petal-tinted selection and glass. */
+  :root[data-theme="anime"] {
+    --bg-base: 14 10 28;
+    --bg-channel: 24 17 44;
+    --bg-chat: 19 14 37;
+    --bg-members: 24 17 44;
+    --bg-elevated: 38 28 66;
+    --bg-input: 12 8 24;
+    --bg-overlay: rgba(8, 4, 20, 0.88);
+
+    --border-hard: 44 33 74;
+    --border-soft: 56 42 92;
+
+    --accent-primary: 219 61 135;
+    --accent-primary-hover: 201 48 120;
+    --accent-primary-active: 178 38 103;
+    --accent-lavender: 207 186 255;
+    --accent-sky: 140 205 255;
+
+    --text-primary: 246 240 255;
+    --text-secondary: 178 166 210;
+    --text-tertiary: 158 146 194;
+    --text-category: 158 146 194;
+    --text-message: 230 223 247;
+    --text-link: 140 205 255;
+
+    --interactive-hover: rgba(255, 190, 225, 0.08);
+    --interactive-active: rgba(255, 190, 225, 0.14);
+    --interactive-selected: rgba(255, 190, 225, 0.19);
+    --interactive-muted: 66 52 104;
+    --status-offline: 66 52 104;
+
+    --glass-bg: rgba(24, 16, 46, 0.56);
+    --glass-modal-bg: rgba(22, 14, 42, 0.86);
+    --glass-border: rgba(255, 190, 225, 0.13);
+    --glass-highlight: rgba(255, 190, 225, 0.07);
+    color-scheme: dark;
+  }
+
+  :root[data-theme="anime"] ::selection {
+    background: rgba(255, 143, 199, 0.35);
+  }
+
+  :root[data-theme="anime"] input:-webkit-autofill,
+  :root[data-theme="anime"] input:-webkit-autofill:hover,
+  :root[data-theme="anime"] input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px #0c0818 inset;
   }
 
   * {
     @apply border-0;
-    outline: none !important;
+
   }
 
   ::selection {
@@ -260,13 +436,22 @@
   .glass-pill {
     -webkit-backdrop-filter: blur(12px) saturate(110%);
     backdrop-filter: blur(12px) saturate(110%);
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    background: rgb(var(--wash) / 0.06);
+    border: 1px solid rgb(var(--wash) / 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgb(var(--wash) / 0.03);
   }
   .glass-pill:hover {
-    background: rgba(255, 255, 255, 0.10);
-    border-color: rgba(255, 255, 255, 0.14);
+    background: rgb(var(--wash) / 0.10);
+    border-color: rgb(var(--wash) / 0.14);
+  }
+
+  /* Drop scrim — blurred, tinted veil over a chat region while files are
+     dragged onto it. A scrim, not a surface: it carries no border or shadow,
+     the dashed frame and the glass-bubble label inside it are the controls. */
+  .drop-scrim {
+    -webkit-backdrop-filter: blur(12px) saturate(110%);
+    backdrop-filter: blur(12px) saturate(110%);
+    background: var(--glass-bg);
   }
   .glass-pill-mine {
     background: rgba(134, 239, 172, 0.10);
@@ -281,14 +466,14 @@
   .input-standard {
     @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
            placeholder:text-txt-tertiary outline-none
-           border border-white/[0.06] shadow-input
+           border border-wash/[0.06] shadow-input
            focus:ring-2 focus:ring-accent-primary focus:border-accent-primary/30
            transition-colors;
   }
   .input-search {
     @apply bg-surface-input rounded px-3 py-1.5 text-sm text-txt-primary
            placeholder:text-txt-tertiary outline-none
-           border border-white/[0.06] shadow-input
+           border border-wash/[0.06] shadow-input
            focus:ring-1 focus:ring-accent-primary focus:border-accent-primary/30
            transition-colors;
   }
@@ -299,7 +484,7 @@
   .input-danger {
     @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
            placeholder:text-txt-tertiary outline-none
-           border border-white/[0.06] shadow-input
+           border border-wash/[0.06] shadow-input
            focus:ring-2 focus:ring-accent-rose focus:border-accent-rose/30
            transition-colors;
   }
@@ -384,6 +569,11 @@
     backdrop-filter: none;
     background: rgb(var(--bg-elevated));
   }
+  .drop-scrim {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgb(var(--bg-elevated) / 0.92);
+  }
 }
 
 @layer utilities {
@@ -392,16 +582,16 @@
     -webkit-backdrop-filter: blur(20px) saturate(120%);
     backdrop-filter: blur(20px) saturate(120%);
     background: var(--glass-bg);
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgb(var(--wash) / 0.05);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      inset 0 1px 0 rgb(var(--wash) / 0.03),
       2px 0 12px rgba(0, 0, 0, 0.20);
   }
 
   .rounded-inherit {
     border-radius: inherit;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
   }
@@ -411,7 +601,7 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: rgb(var(--wash) / 0.15);
     border-radius: 100px;
   }
 }
@@ -421,8 +611,8 @@
   --em-rgb-background: 20, 20, 26;
   --em-rgb-input: 17, 17, 24;
   --em-rgb-color: 216, 216, 222;
-  --em-color-border: rgba(255, 255, 255, 0.07);
-  --em-color-border-over: rgba(255, 255, 255, 0.12);
+  --em-color-border: rgb(var(--wash) / 0.07);
+  --em-color-border-over: rgb(var(--wash) / 0.12);
   --rgb-accent: var(--accent-primary);
   --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   border: none !important;
@@ -451,6 +641,229 @@
   width: 100%;
 }
 
+/* Motion rhythm: small distances, short durations, no layout animation. */
+:root {
+  --motion-fast: 120ms;
+  --motion-enter: 180ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes menuEnter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.motion-menu-enter {
+  animation: menuEnter var(--motion-fast) var(--motion-ease);
+}
+
+/* Settings can contain fixed overlays. Keep their containing block intact. */
+.motion-settings-panel {
+  animation: fadeIn var(--motion-enter) var(--motion-ease);
+}
+
+/* ── State motion ──
+   Something changed and the interface acknowledges it once. Transform and
+   opacity only, one shot, never on what was already there at mount
+   (`useChangeSignal` decides when a change is live). */
+:root {
+  --motion-spring: cubic-bezier(0.3, 1.35, 0.5, 1);
+}
+
+/* An element that just arrived: an unread badge, a reaction someone added. */
+@keyframes motionPopIn {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.motion-pop-in { animation: motionPopIn 240ms var(--motion-ease) both; }
+
+/* An element that is already visible and grew: a count went up, a toggle turned on. */
+@keyframes motionBump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.motion-bump { animation: motionBump 260ms var(--motion-ease); }
+
+/* A number rolling to its new value, in the direction it moved. Transforms
+   need a box: give the element `inline-block` (or flex) yourself. */
+@keyframes motionCountUp {
+  from { opacity: 0; transform: translateY(55%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes motionCountDown {
+  from { opacity: 0; transform: translateY(-55%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.motion-count-up { animation: motionCountUp var(--motion-enter) var(--motion-ease); }
+.motion-count-down { animation: motionCountDown var(--motion-enter) var(--motion-ease); }
+
+/* The diagonal "off" stroke of a mute, deafen or camera icon (`StrikeLine`).
+   It draws from the top-left corner when the state turns off and retracts when
+   it turns back on. Hidden once retracted: a round cap would leave a dot. */
+.strike-line {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition: stroke-dashoffset var(--motion-enter) var(--motion-ease), opacity 0s linear var(--motion-enter);
+}
+.strike-line[data-active="true"] {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset var(--motion-enter) var(--motion-ease), opacity 0s;
+}
+
+/* A floating surface (tooltip) arrives from its anchor's side. `translate`
+   rather than `transform`, so it never fights a positioning transform. */
+@keyframes floatingEnter {
+  from { opacity: 0; translate: var(--floating-from-x, 0) var(--floating-from-y, 0); }
+  to { opacity: 1; translate: 0 0; }
+}
+.motion-floating-enter { animation: floatingEnter var(--motion-fast) var(--motion-ease); }
+.motion-floating-enter[data-side="top"] { --floating-from-y: 3px; }
+.motion-floating-enter[data-side="bottom"] { --floating-from-y: -3px; }
+.motion-floating-enter[data-side="left"] { --floating-from-x: 3px; }
+.motion-floating-enter[data-side="right"] { --floating-from-x: -3px; }
+
+/* A control that rises into view from below, like "Jump to present". Uses
+   `translate`, so it composes with a centring `transform`. */
+@keyframes riseIn {
+  from { opacity: 0; translate: 0 8px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.motion-rise-in { animation: riseIn var(--motion-enter) var(--motion-ease); }
+
+/* ── Attention-effect previews (NudgeEffectPreview) ──
+   A miniature screen with the real effect running on it. At rest every
+   animation is paused on a telling frame; the menu entry being hovered or
+   focused sets `data-active` and they run. */
+.nudge-preview { display: block; flex: none; width: 56px; height: 42px; }
+.nudge-mini {
+  position: relative; display: block; width: 100%; height: 100%; overflow: hidden;
+  border-radius: 6px; background: rgb(var(--bg-elevated)); border: 1px solid rgb(var(--wash) / 0.16);
+}
+.nudge-mini-content { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 4px; padding: 5px 6px; }
+.nudge-mini-bar { height: 6px; width: 100%; border-radius: 2px; background: rgb(var(--accent-primary)); }
+.nudge-mini-line { display: block; height: 4px; border-radius: 2px; background: rgb(var(--wash) / 0.42); }
+.nudge-mini *, .nudge-mini { animation-play-state: paused; }
+.nudge-preview[data-active="true"] .nudge-mini,
+.nudge-preview[data-active="true"] .nudge-mini * { animation-play-state: running; }
+
+/* Shake: the whole picture jitters, like the real effect's position table. */
+@keyframes nudgeMiniShake {
+  0%, 100% { transform: translate(0, 0); }
+  12% { transform: translate(-4px, 1px); } 25% { transform: translate(4px, -2px); }
+  37% { transform: translate(-3px, -2px); } 50% { transform: translate(4px, 2px); }
+  62% { transform: translate(-4px, 1px); } 75% { transform: translate(3px, -1px); }
+  87% { transform: translate(-2px, 1px); }
+}
+.nudge-mini[data-effect="shake"] .nudge-mini-content { animation: nudgeMiniShake 0.45s linear infinite; animation-delay: -0.055s; }
+
+/* Wave: columns of the picture ride a sine wave, so the lines ripple. */
+@keyframes nudgeMiniWave {
+  0%, 100% { transform: translateY(0); } 25% { transform: translateY(-3px); } 75% { transform: translateY(3px); }
+}
+.nudge-mini-wave-column { position: absolute; top: 0; bottom: 0; overflow: hidden; animation: nudgeMiniWave 0.9s ease-in-out infinite; }
+.nudge-mini-wave-content { position: absolute; top: 0; bottom: 0; }
+
+/* Jelly: the picture stretches, wobbles and settles. */
+@keyframes nudgeMiniJelly {
+  0%, 100% { transform: scale(1) skewX(0deg); }
+  20% { transform: scale(1.1, 0.9) skewX(4deg); } 40% { transform: scale(0.93, 1.07) skewX(-3deg); }
+  60% { transform: scale(1.05, 0.95) skewX(2deg); } 80% { transform: scale(0.98, 1.02) skewX(-1deg); }
+}
+.nudge-mini[data-effect="jelly"] .nudge-mini-content { animation: nudgeMiniJelly 0.8s ease-in-out infinite; animation-delay: -0.17s; transform-origin: 50% 100%; }
+
+/* Confetti: pieces burst from the top right corner and fall. */
+@keyframes nudgeMiniConfetti {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translate(var(--confetti-x), calc(var(--confetti-y) + 26px)) rotate(300deg); opacity: 0; }
+}
+.nudge-mini-confetti { position: absolute; right: 6px; top: 4px; width: 4px; height: 8px; border-radius: 1px; animation: nudgeMiniConfetti 1.2s ease-out infinite; }
+
+/* Pulse: a coloured border breathes around the screen. */
+@keyframes nudgeMiniPulse {
+  0%, 100% { opacity: 0.15; } 50% { opacity: 1; }
+}
+.nudge-mini[data-effect="pulse"]::after {
+  content: ''; position: absolute; inset: 0; border-radius: 5px; border: 2px solid rgb(var(--accent-primary));
+  box-shadow: inset 0 0 8px rgb(var(--accent-primary) / 0.6); animation: nudgeMiniPulse 1s ease-in-out infinite; animation-delay: -0.5s;
+}
+
+/* ── Voice messages ── */
+/* The recording bar replaces the composer row: it slides in from the mic's side. */
+@keyframes voiceBarIn {
+  from { opacity: 0; translate: 16px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+.voice-rec-enter { animation: voiceBarIn var(--motion-enter) var(--motion-ease); }
+
+/* The red "recording" dot breathes, with a ring that widens and fades. */
+@keyframes voiceRecRing {
+  0% { transform: scale(0.6); opacity: 0.55; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+@keyframes voiceRecDot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
+}
+.voice-rec-dot { animation: voiceRecDot 1.4s ease-in-out infinite; }
+.voice-rec-ring { animation: voiceRecRing 1.4s ease-out infinite; }
+
+/* One bar of the live spectrum or of a player's waveform. The recorder sets
+   `transform: scaleY()` from the microphone every frame; the transition only
+   smooths the fall. */
+.voice-bar { transform-origin: center; transition: transform 90ms linear; will-change: transform; }
+
+/* The send button arrives with a pop while recording. */
+@keyframes voiceSendPop {
+  0% { transform: scale(0.5); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); }
+}
+.voice-send-pop { animation: voiceSendPop 240ms var(--motion-ease) both; }
+
+/* Waveform bars of a played voice message fill from the left as it plays. */
+.voice-wave-bar { transition: background-color 120ms linear, transform 160ms var(--motion-ease); }
+
+/* A presence symbol changing shape (online, idle, dnd, offline). */
+@keyframes presenceSwap {
+  from { opacity: 0; transform: scale(0.55); }
+  to { opacity: 1; transform: scale(1); }
+}
+.motion-presence-swap { transform-box: fill-box; transform-origin: center; animation: presenceSwap var(--motion-enter) var(--motion-spring); }
+
+/* The check mark of a confirmed copy, drawn stroke-first (`CopiedCheck`). */
+@keyframes checkDraw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.check-draw { stroke-dasharray: 1 2; animation: checkDraw 260ms var(--motion-ease) both; }
+
+/* The bookmark mark fills in rather than switching. */
+.bookmark-fill { transition: fill-opacity var(--motion-enter) var(--motion-ease); }
+
+/* Typing dots: a slow wave, not a bounce. */
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.4; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+.typing-dot { animation: typingDot 1.2s ease-in-out infinite; }
+
+/* The ring around a participant's avatar while they speak. Always mounted so
+   it fades with the voice instead of blinking on every syllable. */
+@keyframes speakingBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+.speaking-halo {
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease-out;
+}
+.speaking-halo[data-active="true"] {
+  opacity: 1;
+  animation: speakingBreathe 1.6s ease-in-out infinite;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -458,26 +871,26 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(10px); opacity: 0; }
+  from { transform: translateY(6px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn var(--motion-fast) var(--motion-ease);
 }
 
 .animate-slide-up {
-  animation: slideUp 0.15s ease-out;
+  animation: slideUp var(--motion-enter) var(--motion-ease);
 }
 
 /* Slides into place from above — used for popovers that open upward */
 @keyframes slideDown {
-  from { transform: translateY(-10px); opacity: 0; }
+  from { transform: translateY(-6px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
 .animate-slide-down {
-  animation: slideDown 0.15s ease-out;
+  animation: slideDown var(--motion-enter) var(--motion-ease);
 }
 
 @keyframes typingFadeIn {
@@ -505,9 +918,9 @@
 
 .skeleton {
   background: linear-gradient(90deg,
-    rgba(255,255,255,0.04) 0%,
-    rgba(255,255,255,0.08) 40%,
-    rgba(255,255,255,0.04) 80%
+    rgb(var(--wash) / 0.04) 0%,
+    rgb(var(--wash) / 0.08) 40%,
+    rgb(var(--wash) / 0.04) 80%
   );
   background-size: 400px 100%;
   animation: shimmer 1.8s ease-in-out infinite;
@@ -648,6 +1061,238 @@
   transition: transform 200ms ease-out;
 }
 
+/* ── Activity Height & Content Smooth Transitions (Zero Visual Pollution) ── */
+.activity-card-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition: grid-template-rows 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out;
+}
+
+.activity-card-expand[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.activity-card-expand-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@keyframes activityFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-activity-fade {
+  animation: activityFadeIn 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-card-expand {
+    transition: opacity 120ms ease-out;
+  }
+  .animate-activity-fade {
+    animation: none;
+  }
+}
+
 /* ── Electron window drag regions ── */
 .titlebar-drag { -webkit-app-region: drag; }
 .titlebar-no-drag { -webkit-app-region: no-drag; }
+
+/* Apply the OS preference to navigation, popovers, hover transitions and
+   decorative loops, including surfaces rendered in Electron's call window. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+@layer components {
+  :where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid rgb(var(--accent-primary));
+    outline-offset: 3px;
+  }
+  .ui-button {
+    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+    @apply focus-visible:ring-2 focus-visible:ring-accent-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .ui-button:focus-visible, .ui-select:focus-visible, .input-standard:focus-visible, .input-search:focus-visible, .input-danger:focus-visible { outline: none; }
+  .input-embedded:focus-visible { outline: none; box-shadow: inset 0 -2px 0 rgb(var(--accent-primary)); }
+  .ui-button-primary { @apply bg-accent-primary text-white hover:bg-accent-primary-hover active:bg-accent-primary-active; }
+  .ui-button-secondary { @apply bg-interactive-hover text-txt-primary hover:bg-interactive-selected active:bg-interactive-active; }
+  .ui-button-danger { @apply bg-accent-rose text-surface-base hover:bg-accent-rose/90 active:bg-accent-rose/80; }
+  .ui-button-warning { @apply bg-accent-amber text-surface-base hover:bg-accent-amber/90 active:bg-accent-amber/80; }
+  .settings-section { @apply rounded-lg border border-wash/[0.06] bg-wash/[0.03] p-4; }
+  .ui-select {
+    @apply input-standard w-full min-h-9 pr-9;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 12px center;
+    background-repeat: no-repeat;
+  }
+  .ui-range { width: 100%; height: 6px; border-radius: 9999px; appearance: none; cursor: pointer; accent-color: rgb(var(--accent-primary)); }
+  .ui-range::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border: 2px solid rgb(var(--accent-primary)); border-radius: 50%; background: rgb(var(--text-primary)); }
+  .ui-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid rgb(var(--accent-primary)); border-radius: 50%; background: rgb(var(--text-primary)); }
+  .ui-range::-moz-range-track { background: transparent; }
+  .ui-range:disabled { cursor: not-allowed; opacity: .5; }
+  .ui-dialog-surface { @apply glass-modal rounded-lg; }
+  .ui-dialog-title { @apply text-lg font-semibold text-txt-primary; }
+  .ui-notice { @apply border-b border-border-soft bg-surface-channel; }
+}
+
+@layer utilities {
+
+  html[data-viewport="mobile"] :where(button, [role="button"], [role="switch"]) { min-height: var(--control-touch-height); min-width: var(--control-touch-height); }
+  html[data-viewport="mobile"] button:has(> svg:only-child) { min-width: var(--control-touch-height); }
+  html[data-viewport="mobile"] .ui-range { height: 8px; margin-block: 18px; }
+  html[data-viewport="mobile"] .ui-range::-webkit-slider-thumb { width: 24px; height: 24px; }
+  html[data-viewport="mobile"] .ui-range::-moz-range-thumb { width: 20px; height: 20px; }
+  html[data-viewport="mobile"] select.ui-select { appearance: auto; background-image: none; }
+}
+
+button.bg-accent-rose, button.bg-accent-amber, button.bg-accent-mint, button.bg-status-online, button.bg-status-dnd { color: rgb(var(--bg-base)); }
+
+@layer utilities {
+  .z-modal { z-index: var(--layer-modal); }
+  .z-menu-backdrop { z-index: var(--layer-menu-backdrop); }
+  .z-menu { z-index: var(--layer-menu); }
+  .z-menu-submenu { z-index: var(--layer-menu-submenu); }
+  .z-tooltip { z-index: var(--layer-tooltip); }
+  .z-confirm { z-index: var(--layer-confirm); }
+  .z-toast { z-index: var(--layer-toast); }
+}
+
+@layer utilities {
+  .text-ui-title { font-size: 18px; line-height: 1.4; }
+  .text-ui-lead { font-size: 16px; line-height: 1.5; }
+  .text-ui-message { font-size: 15px; line-height: 1.5; }
+  .text-ui-body { font-size: 14px; line-height: 1.5; }
+  .text-ui-label { font-size: 13px; line-height: 1.4; }
+  .text-ui-caption { font-size: 12px; line-height: 1.4; }
+  .text-ui-micro { font-size: 10px; line-height: 1.4; }
+}
+
+/* ── Unlayered theme overrides ──
+   Component-layer rules (.glass, .glass-modal, ...) beat anything written in
+   @layer base, so the per-theme tweaks to them live outside every layer. */
+
+/* Anime extras: rounder controls, a soft glow on primary actions, pink
+   scrollbars, twinkling sparkles and falling petals. Everything animated is
+   switched off under prefers-reduced-motion. */
+:root[data-theme="anime"] {
+  --control-radius: 12px;
+}
+
+:root[data-theme="anime"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(219, 61, 135, 0.45);
+}
+
+:root[data-theme="anime"] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(240, 100, 166, 0.7);
+}
+
+:root[data-theme="anime"] :is(button, a).bg-accent-primary {
+  box-shadow: 0 0 16px rgb(var(--accent-primary) / 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+:root[data-theme="anime"] .glass-modal {
+  border-color: rgba(255, 190, 225, 0.2);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.30),
+    0 12px 40px rgba(219, 61, 135, 0.14),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.sakura-petals {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sakura-petal {
+  position: absolute;
+  top: -24px;
+  border-radius: 150% 0 150% 0;
+  background: linear-gradient(135deg, #ffd6ea 0%, #ff8fc7 100%);
+  opacity: 0;
+  animation: sakura-fall linear infinite;
+}
+
+@keyframes sakura-fall {
+  0%   { opacity: 0;    transform: translate3d(0, 0, 0) rotate(0deg); }
+  8%   { opacity: 0.55; }
+  85%  { opacity: 0.45; }
+  100% { opacity: 0;    transform: translate3d(var(--petal-drift), calc(105 * var(--app-vh)), 0) rotate(var(--petal-spin)); }
+}
+
+.anime-twinkle {
+  animation: anime-twinkle 2.6s ease-in-out infinite;
+}
+
+@keyframes anime-twinkle {
+  0%, 100% { opacity: 1;   transform: scale(1)    rotate(0deg); }
+  50%      { opacity: 0.4; transform: scale(0.65) rotate(45deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sakura-petals { display: none; }
+  .anime-twinkle { animation: none; }
+}
+
+/* Light theme: the dark drop shadows are far too heavy on a light ground, the
+   scrollbar thumb needs real contrast, and the emoji picker takes its own
+   palette variables. */
+:root[data-theme="light"] .glass,
+:root[data-theme="light"] .glass-bubble {
+  box-shadow:
+    0 2px 8px rgba(40, 30, 90, 0.10),
+    0 8px 24px rgba(40, 30, 90, 0.08),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+:root[data-theme="light"] .glass-modal {
+  box-shadow:
+    0 4px 16px rgba(40, 30, 90, 0.14),
+    0 12px 40px rgba(40, 30, 90, 0.12),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+:root[data-theme="light"] .glass-pill {
+  background: rgba(30, 24, 60, 0.05);
+  border-color: rgba(30, 24, 60, 0.1);
+  box-shadow: 0 1px 3px rgba(40, 30, 90, 0.08);
+}
+
+:root[data-theme="light"] .glass-pill:hover {
+  background: rgba(30, 24, 60, 0.09);
+  border-color: rgba(30, 24, 60, 0.16);
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(30, 24, 60, 0.22);
+}
+
+:root[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(30, 24, 60, 0.36);
+}
+
+:root[data-theme="light"] .emoji-picker-wrapper em-emoji-picker {
+  --em-rgb-background: 255, 255, 255;
+  --em-rgb-input: 234, 232, 242;
+  --em-rgb-color: 40, 38, 56;
+}

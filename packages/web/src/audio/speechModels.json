@@ -1,0 +1,149 @@
+[
+  {
+    "id": "base",
+    "label": "Whisper Base",
+    "repo": "onnx-community/whisper-base",
+    "revision": "1846881b6b3a3024392c1eea3ad983695bc23925",
+    "assets": [
+      {
+        "path": "onnx/decoder_model_merged_quantized.onnx",
+        "bytes": 53693315,
+        "hash": "fa3ef9902734ce5ae6f9ef2bdb2ba9a6c4b5785b09f4f420ce036573dc9d090b"
+      },
+      {
+        "path": "onnx/encoder_model_quantized.onnx",
+        "bytes": 23201314,
+        "hash": "5862993336bf33acd23736071aae2b32261d3b1b2f37780194460d4ef974dd46"
+      },
+      {
+        "path": "config.json",
+        "bytes": 2243,
+        "hash": "f4d0608f7d918166da7edb3e188de5ef1bfe70d9802e785d271fd88111e9cf4b"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 3832,
+        "hash": "61070cf8de25b1e9256e8e102ded49d8d24a8369ed36ef84fdf21549e68125a0"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "bytes": 339,
+        "hash": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 2480466,
+        "hash": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 282682,
+        "hash": "2e036e4dbacfdeb7242c7d4ec4149f4a16e86026048f94d1637e3a8ee9c6a573"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "bytes": 2194,
+        "hash": "e67ae3a0aaa99abcd9f187138e12db1f65c16a14761c50ef10eef2c174a7a691"
+      }
+    ],
+    "dtype": "q8"
+  },
+  {
+    "id": "large-v3-turbo",
+    "label": "Whisper large-v3-turbo",
+    "repo": "onnx-community/whisper-large-v3-turbo",
+    "revision": "360ebcde2559d60bb474678be3c1de9ef347d01a",
+    "assets": [
+      {
+        "path": "onnx/decoder_model_merged_quantized.onnx",
+        "bytes": 439936716,
+        "hash": "61481bd3be3a445d5a4b9070e8f8b2c6cc4fbbbbdc9f0e7ed048a132b8b84e0d"
+      },
+      {
+        "path": "onnx/encoder_model_quantized.onnx",
+        "bytes": 644822195,
+        "hash": "d2f853dc3254fdc0079f55dd4433ea716ac98ec5574d3b475f288f2a77cebba9"
+      },
+      {
+        "path": "config.json",
+        "bytes": 1332,
+        "hash": "35cd83669f75bc2867f3b3a4461850392d5e308cd6ea951c3700539883c28df1"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 3897,
+        "hash": "16f95291d2f47c944d3c2b19390bba7965666555c1ea2a0bdc850d1fab45612f"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "bytes": 340,
+        "hash": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 2480617,
+        "hash": "6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 282843,
+        "hash": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "bytes": 2186,
+        "hash": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"
+      }
+    ],
+    "dtype": "q8"
+  },
+  {
+    "id": "large-v3",
+    "label": "Whisper large-v3",
+    "repo": "onnx-community/whisper-large-v3-ONNX",
+    "revision": "3b6257ad5e67aa523c7c07f4fea04d445eecc4a6",
+    "assets": [
+      {
+        "path": "onnx/decoder_model_merged_q4.onnx",
+        "bytes": 797258751,
+        "hash": "d02d5453f8dd09f7c5d34cb0c7432131c4e151f4797387282a59ad82db388655"
+      },
+      {
+        "path": "onnx/encoder_model_q4.onnx",
+        "bytes": 424915933,
+        "hash": "0042c87ca689b2503689d2ec2d6c0a0d9bb8ead5cbe5180ff70fbbf0b21f4902"
+      },
+      {
+        "path": "config.json",
+        "bytes": 1288,
+        "hash": "a306bdf86d5f79595082755649214d8ba2b4e2cb2a7c124c6325c3acb7abf303"
+      },
+      {
+        "path": "generation_config.json",
+        "bytes": 3896,
+        "hash": "33ff6901e35fd6ff9d7ac219a7c88118d383dac59f4a48c1bca46b86a11e20c9"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "bytes": 340,
+        "hash": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+      },
+      {
+        "path": "tokenizer.json",
+        "bytes": 3930645,
+        "hash": "5c1bf30c9e716e1477bedef846b01be0013daecb89e9e3ef7ab89b23c178df1b"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "bytes": 282873,
+        "hash": "3c75940dfce3a294fca7041a5faff011677f1b68fa85e47511bb8cf6dccaded6"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "bytes": 2186,
+        "hash": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74"
+      }
+    ],
+    "dtype": "q4"
+  }
+]

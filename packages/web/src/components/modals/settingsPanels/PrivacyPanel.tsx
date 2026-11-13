@@ -4,12 +4,14 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useActivityStore } from '../../../stores/activityStore';
 import { api } from '../../../api/client';
 import { Toggle } from '../../ui/Toggle';
+import { ActivityGameSection } from './ActivityGameSection';
 
 export function PrivacyPanel() {
   const { t } = useTranslation(['settings', 'common']);
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const showActivity = useActivityStore((s) => s.showActivity);
+  const hideBrowserMedia = useActivityStore((s) => s.hideBrowserMedia);
   const [discoverable, setDiscoverable] = useState(user?.discoverable !== false);
   const [saving, setSaving] = useState(false);
 
@@ -35,10 +37,10 @@ export function PrivacyPanel() {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('settings:privacy.title')}</h2>
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:privacy.discovery.sectionTitle')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="settings-section">
           <div className="flex items-center justify-between py-1">
             <div className="flex-1 mr-4">
               <div className="text-sm text-txt-primary">{t('settings:privacy.discovery.label')}</div>
@@ -46,7 +48,7 @@ export function PrivacyPanel() {
                 {t('settings:privacy.discovery.description')}
               </div>
             </div>
-            <Toggle enabled={discoverable} onChange={handleToggle} />
+            <Toggle enabled={discoverable} onChange={handleToggle} ariaLabel={t('settings:privacy.discovery.label')} />
           </div>
           {saving && (
             <div className="text-xs text-txt-tertiary mt-2">{t('common:states.saving')}</div>
@@ -56,10 +58,10 @@ export function PrivacyPanel() {
 
       {/* Activity Status */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('settings:privacy.activity.sectionTitle')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="settings-section">
           <div className="flex items-center justify-between py-1">
             <div className="flex-1 mr-4">
               <div className="text-sm text-txt-primary">{t('settings:privacy.activity.label')}</div>
@@ -68,6 +70,7 @@ export function PrivacyPanel() {
               </div>
             </div>
             <Toggle
+              ariaLabel={t('settings:privacy.activity.label')}
               enabled={showActivity}
               onChange={async (enabled) => {
                 try {
@@ -79,6 +82,22 @@ export function PrivacyPanel() {
               }}
             />
           </div>
+          {showActivity && (
+            <div className="flex items-center justify-between py-1 mt-2 border-t border-border-soft pt-3">
+              <div className="flex-1 mr-4">
+                <div className="text-sm text-txt-primary">{t('settings:privacy.activity.hideBrowserMedia.label')}</div>
+                <div className="text-xs text-txt-tertiary mt-0.5">
+                  {t('settings:privacy.activity.hideBrowserMedia.description')}
+                </div>
+              </div>
+              <Toggle
+                ariaLabel={t('settings:privacy.activity.hideBrowserMedia.label')}
+                enabled={hideBrowserMedia}
+                onChange={(enabled) => useActivityStore.getState().setHideBrowserMedia(enabled)}
+              />
+            </div>
+          )}
+          {showActivity && <ActivityGameSection />}
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
-import { Fragment, useState, useEffect, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
+import { SettingsSectionIcon } from './SettingsSectionIcon';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
@@ -10,8 +11,10 @@ import { useAuthStore } from '../../stores/authStore';
 import {
   AccountPanel,
   AppearancePanel,
+  NotificationsPanel,
   VoicePanel,
   PrivacyPanel,
+  StickerLibraryPanel,
   ConnectionsPanel,
   DesktopPanel,
   DesktopDownloadPanel,
@@ -31,14 +34,16 @@ import { HiButton } from '../telemetry/answers/HiButton';
  * missing from another. `admin` tabs are shown and reachable only for admins.
  */
 const USER_SETTINGS_TABS = [
-  { id: 'account', group: 'user', label: 'settings:nav.tabs.account' },
-  { id: 'appearance', group: 'user', label: 'settings:nav.tabs.appearance' },
-  { id: 'voice', group: 'user', label: 'settings:nav.tabs.voice' },
-  { id: 'privacy', group: 'user', label: 'settings:nav.tabs.privacy' },
-  { id: 'connections', group: 'app', label: 'settings:nav.tabs.connections' },
-  { id: 'keybinds', group: 'app', label: 'settings:nav.tabs.keybinds' },
-  { id: 'desktop', group: 'app', label: 'settings:nav.tabs.desktop' },
-  { id: 'instance', group: 'admin', label: 'settings:nav.tabs.instance' },
+  { id: 'account', group: 'user', label: 'settings:nav.tabs.account', icon: 'account' },
+  { id: 'appearance', group: 'user', label: 'settings:nav.tabs.appearance', icon: 'appearance' },
+  { id: 'notifications', group: 'user', label: 'settings:nav.tabs.notifications', icon: 'notifications' },
+  { id: 'voice', group: 'user', label: 'settings:nav.tabs.voice', icon: 'voice' },
+  { id: 'privacy', group: 'user', label: 'settings:nav.tabs.privacy', icon: 'privacy' },
+  { id: 'stickers', group: 'user', label: 'settings:nav.tabs.stickers', icon: 'stickers' },
+  { id: 'connections', group: 'app', label: 'settings:nav.tabs.connections', icon: 'connections' },
+  { id: 'keybinds', group: 'app', label: 'settings:nav.tabs.keybinds', icon: 'keybinds' },
+  { id: 'desktop', group: 'app', label: 'settings:nav.tabs.desktop', icon: 'desktop' },
+  { id: 'instance', group: 'admin', label: 'settings:nav.tabs.instance', icon: 'instance' },
 ] as const;
 
 export type UserSettingsTab = (typeof USER_SETTINGS_TABS)[number]['id'];
@@ -52,6 +57,27 @@ const GROUP_HEADINGS = {
 
 const GROUP_ORDER: readonly TabGroup[] = ['user', 'app', 'admin'];
 
+type SettingsIconName = (typeof USER_SETTINGS_TABS)[number]['icon'] | 'logout';
+
+function SettingsNavIcon({ name }: { name: SettingsIconName }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="w-[18px] h-[18px] shrink-0 opacity-75 group-hover:opacity-100 group-focus-visible:opacity-100 group-aria-[current=page]:opacity-100" {...common}>
+      {name === 'account' && <><circle cx="12" cy="8" r="3.25" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></>}
+      {name === 'appearance' && <><path d="M12 3a9 9 0 1 0 0 18h1.2a2 2 0 0 0 1.45-3.38 1.5 1.5 0 0 1 1.1-2.52H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z" /><circle cx="7.5" cy="11" r=".8" /><circle cx="10" cy="7.5" r=".8" /><circle cx="15" cy="7.5" r=".8" /></>}
+      {name === 'voice' && <><path d="M12 3v18M8 7v10M4 10v4M16 7v10M20 10v4" /></>}
+      {name === 'notifications' && <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>}
+      {name === 'privacy' && <><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>}
+      {name === 'stickers' && <><rect x="3" y="4" width="18" height="16" rx="4" /><path d="M8 9h.01M16 9h.01M8 15c1.2 1.3 2.5 2 4 2s2.8-.7 4-2" /></>}
+      {name === 'connections' && <><path d="M9.5 14.5 14.5 9.5M7.5 16.5l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.5 7.5l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" transform="translate(1 1) scale(.92)" /></>}
+      {name === 'keybinds' && <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 9h.01M11 9h.01M15 9h.01M7 13h.01M11 13h.01M15 13h2M8 16h8" /></>}
+      {name === 'desktop' && <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></>}
+      {name === 'instance' && <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M9 7h6M8 11h8m-8 4h3" /></>}
+      {name === 'logout' && <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></>}
+    </svg>
+  );
+}
+
 function isUserSettingsTab(value: unknown): value is UserSettingsTab {
   return typeof value === 'string' && USER_SETTINGS_TABS.some((tab) => tab.id === value);
 }
@@ -62,10 +88,25 @@ function tabVisible(tab: UserSettingsTab, isAdmin: boolean): boolean {
 
 export function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
+  const listRef = useRef<HTMLDivElement>(null);
+  const sectionCount = ctx?.sections.length ?? 0;
+  const activeSection = ctx?.activeSection;
+
+  // The links are the last thing in a scrolling sidebar: when they appear or
+  // grow, bring them into view, and keep the section being read in view as the
+  // content scrolls. `nearest` moves the sidebar only as far as needed.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || sectionCount === 0) return;
+    const reduced = list.ownerDocument.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const target = list.querySelector<HTMLElement>('[aria-current="true"]') ?? list;
+    target.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
+  }, [sectionCount, activeSection]);
+
   if (!ctx || ctx.sections.length === 0) return null;
 
   return (
-    <div className="overflow-hidden">
+    <div ref={listRef} className="overflow-hidden">
       {ctx.sections.map((section) => (
         section.invite === true ? (
           // Same invitation as the tab strip, sized for the narrow column.
@@ -73,19 +114,20 @@ export function SidebarSubLinks() {
             <HiButton onClick={() => ctx.scrollToSection(section.id)}>{section.label}</HiButton>
           </div>
         ) : (
-        <button
+        <button data-icon-motion="press"
           key={section.id}
           onClick={() => ctx.scrollToSection(section.id)}
-          className={`w-full flex items-center gap-1.5 text-left pl-6 pr-2 py-1 text-xs rounded-md transition-colors ${
+          className={`group w-full flex items-center gap-2 text-left pl-4 pr-2 py-1 text-xs rounded-md transition-colors ${
             ctx.activeSection === section.id
               ? 'text-txt-primary'
               : 'text-txt-tertiary hover:text-txt-secondary'
           }`}
           aria-current={ctx.activeSection === section.id ? 'true' : undefined}
         >
+          {section.icon && <SettingsSectionIcon name={section.icon} />}
           <span className="flex-1 min-w-0 truncate">{section.label}</span>
           {section.badgeCount !== undefined && section.badgeCount > 0 && (
-            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+            <span className="shrink-0 text-ui-micro font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
               {section.badgeCount}
             </span>
           )}
@@ -154,7 +196,7 @@ export function UserSettingsModal() {
   };
 
   const tabClass = (target: UserSettingsTab) =>
-    `w-full min-w-0 truncate text-left px-3 py-2 rounded-md text-sm transition-colors ${
+    `group w-full min-w-0 text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2.5 ${
       tab === target ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
@@ -166,29 +208,31 @@ export function UserSettingsModal() {
   const renderNav = (layout: 'desktop' | 'mobile'): ReactNode =>
     GROUP_ORDER.filter((group) => group !== 'admin' || isAdmin).map((group, index) => (
       <Fragment key={group}>
-        {index > 0 && <div className="border-t border-white/[0.04] my-2 mx-2" />}
-        <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
+        {index > 0 && <div className="border-t border-wash/[0.04] my-2 mx-2" />}
+        <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t(GROUP_HEADINGS[group])}</div>
         {USER_SETTINGS_TABS.filter((entry) => entry.group === group).map((entry) => (
           entry.id === 'instance' && layout === 'desktop' ? (
             <Fragment key={entry.id}>
-              <button
+              <button data-icon-motion="press"
                 onClick={() => handleTabClick(entry.id)}
-                className={`${tabClass(entry.id)} flex items-center gap-1.5`}
+                className={tabClass(entry.id)}
                 aria-current={tab === entry.id ? 'page' : undefined}
               >
+                <SettingsNavIcon name={entry.icon} />
                 <span className="flex-1 min-w-0 truncate">{t(entry.label)}</span>
                 {updateBadge && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-accent-amber" />}
               </button>
               {tab === 'instance' && <SidebarSubLinks />}
             </Fragment>
           ) : (
-            <button
+            <button data-icon-motion="press"
               key={entry.id}
               onClick={() => handleTabClick(entry.id)}
               className={tabClass(entry.id)}
               aria-current={tab === entry.id ? 'page' : undefined}
             >
-              {t(entry.label)}
+              <SettingsNavIcon name={entry.icon} />
+              <span className="min-w-0 truncate">{t(entry.label)}</span>
             </button>
           )
         ))}
@@ -198,8 +242,10 @@ export function UserSettingsModal() {
   const panels: Record<UserSettingsTab, () => ReactNode> = {
     account: () => <AccountPanel />,
     appearance: () => <AppearancePanel />,
+    notifications: () => <NotificationsPanel />,
     voice: () => <VoicePanel />,
     privacy: () => <PrivacyPanel />,
+    stickers: () => <StickerLibraryPanel />,
     connections: () => <ConnectionsPanel />,
     keybinds: () => <KeybindsPanel />,
     desktop: () => (isElectron()
@@ -230,21 +276,23 @@ export function UserSettingsModal() {
           </div>
 
           {/* Nav list */}
-          <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            {renderNav('desktop')}
+          {/* The tabs scroll when the window is short; log out and the source link stay pinned below. */}
+          <div className="glass-bubble rounded-lg p-2 flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+              {renderNav('desktop')}
+            </div>
 
-            <div className="flex-1" />
-
-            <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <button
+            <div className="border-t border-wash/[0.04] my-2 mx-2 shrink-0" />
+            <button data-icon-motion="press"
               onClick={handleLogout}
-              className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
+              className="group w-full shrink-0 text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
             >
+              <SettingsNavIcon name="logout" />
               {t('settings:nav.logOut')}
             </button>
 
             {instanceInfo && (
-              <div className="px-3 pt-2">
+              <div className="px-3 pt-2 shrink-0">
                 <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
               </div>
             )}
@@ -272,11 +320,12 @@ export function UserSettingsModal() {
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               {renderNav('mobile')}
 
-              <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <button
+              <div className="border-t border-wash/[0.04] my-2 mx-2" />
+              <button data-icon-motion="press"
                 onClick={handleLogout}
-                className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
+                className="group w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors flex items-center gap-2.5"
               >
+                <SettingsNavIcon name="logout" />
                 {t('settings:nav.logOut')}
               </button>
 
@@ -295,7 +344,7 @@ export function UserSettingsModal() {
             <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
-                <button
+                <button data-icon-motion="arrow"
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
                   aria-label={t('settings:nav.backToMenu')}

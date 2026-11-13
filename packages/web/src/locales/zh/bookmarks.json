@@ -1,0 +1,31 @@
+{
+  "message": {
+    "add": "添加书签",
+    "remove": "移除书签"
+  },
+  "menu": {
+    "add": "将消息加入书签",
+    "remove": "移除书签"
+  },
+  "toast": {
+    "addFailed": "无法保存书签：{{reason}}",
+    "removeFailed": "无法移除书签：{{reason}}"
+  },
+  "title": "书签",
+  "list": {
+    "loading": "加载中…",
+    "empty": "还没有书签",
+    "emptyHint": "通过消息的悬浮栏或菜单添加书签后，会显示在这里。",
+    "showMore": "显示更多",
+    "open": "打开 {{name}} 的消息",
+    "remove": "移除书签"
+  },
+  "status": {
+    "edited": "原消息已被编辑，这是保存的副本。",
+    "deleted": "原消息已被删除，这是保存的副本。",
+    "unavailable": "你已无法访问原消息，这是保存的副本。"
+  },
+  "attachment": {
+    "gone": "文件已删除"
+  }
+}

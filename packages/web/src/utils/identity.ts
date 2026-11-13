@@ -2,7 +2,7 @@ import type { User } from '@backspace/shared';
 
 /**
  * Splits a potentially federated username into base name and domain.
- * "erin@nova.ddns.net" → { baseName: "erin", domain: "nova.ddns.net" }
+ * "erin@nova.example" → { baseName: "erin", domain: "nova.example" }
  * "erin"                → { baseName: "erin", domain: null }
  */
 export function parseFederatedUsername(username: string): { baseName: string; domain: string | null } {
@@ -13,7 +13,7 @@ export function parseFederatedUsername(username: string): { baseName: string; do
 
 /**
  * The name a user is shown by: their display name, else the base of their
- * username ("erin@nova.ddns.net" is shown as "erin"). One rule for every
+ * username ("erin@nova.example" is shown as "erin"). One rule for every
  * place a person is named, so a row, its header and a mention of it agree.
  * Callers that need a placeholder for an empty result add their own.
  */
@@ -72,9 +72,9 @@ export function homeHostOf(value: string): string {
  * The host an origin or `homeInstance` value names, as written (port kept):
  *
  *   null / undefined / ''   → ''
- *   'https://nova.ddns.net' → 'nova.ddns.net'
+ *   'https://nova.example' → 'nova.example'
  *   'http://localhost:3000' → 'localhost:3000'
- *   'nova.ddns.net'         → 'nova.ddns.net'
+ *   'nova.example'         → 'nova.example'
  *
  * For request payloads and display. Compare hosts with {@link homeHostOf}.
  */
@@ -209,7 +209,7 @@ export function personRequest(
  *
  * True iff the user is genuinely remote: their username carries an `@domain`
  * suffix AND that domain is NOT our own host. Catches the bug where a stub
- * delivered by a sibling instance (e.g. orbit-side `frank@nova.ddns.net`
+ * delivered by a sibling instance (e.g. orbit-side `frank@nova.example`
  * viewed from a session logged in to nova) would otherwise show the globe.
  *
  * Compose with {@link useCanonicalUserView} at render sites: resolve the

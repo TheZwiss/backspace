@@ -1,4 +1,9 @@
 {
+  "friendNotification": {
+    "title": "好友请求",
+    "body": "想添加你为好友。",
+    "open": "打开与{{name}}的聊天"
+  },
   "tabs": {
     "all": "全部",
     "pending": "待处理",
@@ -50,7 +55,7 @@
     "sendRequest": "发送申请",
     "discover": "发现用户",
     "noSearchResults": "没有匹配您搜索的用户。",
-    "noDiscoverable": "暂无可发现的用户 — 快邀请大家加入吧！"
+    "noDiscoverable": "按用户名搜索或从空间添加好友。"
   },
   "mutuals": {
     "friends_other": "{{count}} 位共同好友",
@@ -70,14 +75,37 @@
     "sendMessage": "发送消息",
     "editRoles": "编辑身份组",
     "viewFull": "查看完整个人资料",
-    "addFriend": "添加好友"
+    "addFriend": "添加好友",
+    "playingNow": "正在玩"
   },
   "activity": {
+    "openSpace": "打开服务器",
+    "joinChannel": "加入频道",
+    "channelOptions": "{{channel}}的选项",
+    "friendsInVoice": "语音频道中的好友",
+    "moreFriends": "另有 {{n}} 位好友",
     "title": "当前活跃",
     "quietTitle": "目前很安静…",
     "quietDescription": "当好友开始活动时（例如玩游戏或进行语音通话），我们将在此处展示！",
     "online": "在线 — {{n}}",
-    "offline": "离线 — {{n}}"
+    "offline": "离线 — {{n}}",
+    "types": {
+      "playing": "正在游玩",
+      "listening": "正在收听",
+      "streaming": "正在直播",
+      "watching": "正在观看",
+      "custom": "自定义状态"
+    },
+    "players": {
+      "cloudmusic": "网易云音乐",
+      "qqmusic": "QQ音乐",
+      "kugou": "酷狗音乐",
+      "kuwo": "酷我音乐",
+      "spotify": "Spotify",
+      "applemusic": "Apple Music",
+      "yandexmusic": "Yandex Music"
+    },
+    "openTrack": "打开歌曲"
   },
   "instanceNotConnected": "未连接到 {{host}}。请重新连接后再试。"
 }

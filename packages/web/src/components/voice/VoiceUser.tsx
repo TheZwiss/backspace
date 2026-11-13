@@ -1,3 +1,5 @@
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
+import { useSoundboardPlaybackStore } from '../../stores/soundboardPlaybackStore';
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
@@ -21,6 +23,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const isSoundboardPlaying = useSoundboardPlaybackStore((s) => s.identities.has(participant.identity));
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -40,7 +43,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   // --- VIDEO & UI ---
 
   const activeVideoTrack = tile.videoTrack;
-  const hasVideo = activeVideoTrack !== null;
+  const hasVideo = activeVideoTrack !== null && !unwatchedCameras.has(participant.userId);
 
   // Force re-render when tracks end/mute
   useEffect(() => {
@@ -55,19 +58,19 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    const lkTrack = tile.lkVideoTrack;
+    const lkTrack = unwatchedCameras.has(participant.userId) ? null : tile.lkVideoTrack;
     if (lkTrack) {
       lkTrack.attach(videoEl);
       return () => { lkTrack.detach(videoEl); };
     } else {
       videoEl.srcObject = null;
     }
-  }, [tile.lkVideoTrack]);
+  }, [tile.lkVideoTrack, unwatchedCameras, participant.userId]);
 
   // Context Menu
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (isLocal || !currentVoiceChannelId) return;
+      if (isLocal) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -75,9 +78,9 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       const channelId = currentVoiceChannelId;
 
       // Build moderation items
-      const modItems = buildVoiceModMenuItems(targetUserId, channelId);
+      const modItems = channelId ? buildVoiceModMenuItems(targetUserId, channelId) : [];
 
-      const items: ContextMenuItem[] = [...modItems];
+      const items: ContextMenuItem[] = [...modItems, ...(user ? userSocialMenuItems(user, userOrigin) : [])];
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -86,7 +89,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       // Camera watch/unwatch
       const targetParticipant = useVoiceStore.getState().participants.find((p) => p.userId === targetUserId);
-      const targetHasCamera = targetParticipant?.isCameraOn ?? false;
+      const targetHasCamera = targetParticipant?.isCameraOn ?? participant.isCameraOn;
       const isCameraUnwatched = useVoiceStore.getState().unwatchedCameras.has(targetUserId);
 
       if (targetHasCamera) {
@@ -104,7 +107,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           ),
           onClick: () => {
             const room = getActiveRoom();
-            const identity = targetParticipant?.identity;
+            const identity = targetParticipant?.identity ?? participant.identity;
             if (isCameraUnwatched) {
               useVoiceStore.getState().rewatchCamera(targetUserId);
               if (identity) setCameraSubscription(room, identity, true);
@@ -138,14 +141,16 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal, currentVoiceChannelId, participant.userId, openContextMenu, t],
+    [user, userOrigin, isLocal, currentVoiceChannelId, participant.userId, participant.identity, participant.isCameraOn, openContextMenu, t],
   );
 
   return (
     <div
       data-context-menu
       className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
-        isSpeaking
+        isSoundboardPlaying
+          ? 'ring-[3px] ring-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.25)]'
+          : isSpeaking
           ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
       } h-full w-full`}
@@ -157,7 +162,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full ${large ? 'object-contain bg-black' : 'object-cover'}`}
+          className="w-full h-full object-contain bg-black"
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
@@ -169,11 +174,20 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               userId={avatarUserId}
               user={user ?? undefined}
               origin={userOrigin}
+              animate={isSpeaking}
             />
-            {isSpeaking && (
-              <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
-            )}
+            <div
+              aria-hidden="true"
+              data-active={isSoundboardPlaying || isSpeaking}
+              className={`speaking-halo pointer-events-none absolute -inset-1.5 rounded-full ring-[3px] ${isSoundboardPlaying ? 'ring-blue-500' : 'ring-status-online'}`}
+            />
           </div>
+          {!isLocal && participant.isCameraOn && unwatchedCameras.has(participant.userId) && (
+            <button data-icon-motion="toggle" type="button" className="ui-button ui-button-primary transition-colors"
+              onClick={() => { useVoiceStore.getState().rewatchCamera(participant.userId); setCameraSubscription(getActiveRoom(), participant.identity, true); }}>
+              {t('voice:participantMenu.watchCamera')}
+            </button>
+          )}
         </div>
       )}
 
@@ -181,12 +195,12 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
-              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
+              className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-ui-label'}`}
             >
               {displayName}
             </span>
             {isLocal && (
-              <span className="text-[10px] text-white/40 font-medium">
+              <span className="text-ui-micro text-white/40 font-medium">
                 {t('voice:badges.you')}
               </span>
             )}

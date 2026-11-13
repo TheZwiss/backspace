@@ -61,7 +61,7 @@ function AddDmFriendRow({
   const { baseName } = parseFederatedUsername(canonical.username);
   const friendDisplayName = canonical.displayName ?? baseName;
   return (
-    <button
+    <button data-icon-motion="press"
       onClick={() => onToggle(friendKey(friend))}
       disabled={isInDm || isAdding || atCapacity}
       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
@@ -81,10 +81,10 @@ function AddDmFriendRow({
         avatarColor={canonical.avatarColor}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-txt-primary truncate">
+        <div className="text-ui-label font-medium text-txt-primary truncate">
           {friendDisplayName}
         </div>
-        <div className="text-[11px] text-txt-tertiary truncate">
+        <div className="text-ui-caption text-txt-tertiary truncate">
           {isInDm ? t('dm:addMember.alreadyInDm') : `@${canonical.username}`}
         </div>
       </div>
@@ -257,10 +257,10 @@ export function AddDmMemberModal() {
       <div className="space-y-3">
         {/* Header with member count */}
         <div className="flex items-center justify-between">
-          <p className="text-[13px] text-txt-tertiary">
+          <p className="text-ui-label text-txt-tertiary">
             {t('dm:addMember.description')}
           </p>
-          <span className="text-[12px] text-txt-tertiary flex-shrink-0 ml-2">
+          <span className="text-ui-caption text-txt-tertiary flex-shrink-0 ml-2">
             {t('dm:addMember.capacity', { current: memberCount, max: maxMembers })}
           </span>
         </div>
@@ -271,12 +271,12 @@ export function AddDmMemberModal() {
             {selectedFriends.map((f) => (
               <span
                 key={friendKey(f)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] bg-accent-mint/15 text-accent-mint"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-ui-caption bg-accent-mint/15 text-accent-mint"
               >
                 {f.displayName ?? parseFederatedUsername(f.username).baseName}
-                <button
+                <button data-icon-motion="press"
                   onClick={() => removeFriend(friendKey(f))}
-                  className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
+                  className="opacity-60 hover:opacity-100 transition-opacity text-ui-body leading-none"
                 >
                   &times;
                 </button>
@@ -292,22 +292,22 @@ export function AddDmMemberModal() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('dm:addMember.searchPlaceholder')}
-          className="input-search w-full py-2 text-[14px]"
+          className="input-search w-full py-2 text-ui-body"
           disabled={remainingSlots <= 0}
         />
 
         {remainingSlots <= 0 && (
-          <p className="text-txt-danger text-[13px]">{t('dm:addMember.limitReached', { max: maxMembers })}</p>
+          <p className="text-txt-danger text-ui-label">{t('dm:addMember.limitReached', { max: maxMembers })}</p>
         )}
 
         {error && (
-          <p className="text-txt-danger text-[13px]">{error}</p>
+          <p className="text-txt-danger text-ui-label">{error}</p>
         )}
 
         {/* Friend list */}
         <div className="max-h-[300px] overflow-y-auto space-y-[2px]">
           {filteredFriends.length === 0 && (
-            <div className="py-4 text-center text-txt-tertiary text-[14px]">
+            <div className="py-4 text-center text-txt-tertiary text-ui-body">
               {query.trim() ? t('dm:addMember.noMatch') : t('dm:addMember.noFriends')}
             </div>
           )}
@@ -332,10 +332,10 @@ export function AddDmMemberModal() {
         </div>
 
         {/* Submit button */}
-        <button
+        <button data-icon-motion="send"
           onClick={handleSubmit}
           disabled={selectedFriends.length === 0 || isAdding}
-          className="w-full py-2 rounded-md text-[13px] font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-2 rounded-md text-ui-label font-semibold transition-colors bg-accent-mint text-surface-base hover:bg-accent-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isAdding ? t('dm:addMember.adding') : buttonText}
         </button>

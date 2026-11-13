@@ -102,7 +102,7 @@ export function MobileBottomNav() {
       }}
     >
       {tabs.map((tab) => (
-        <button
+        <button data-icon-motion="press"
           key={tab.id}
           onClick={() => handleTab(tab.id)}
           className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 relative transition-colors ${
@@ -115,12 +115,12 @@ export function MobileBottomNav() {
               <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-notification rounded-full" />
             )}
             {typeof tab.badge === 'number' && (
-              <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 bg-notification text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 bg-notification text-white text-ui-micro font-bold rounded-full flex items-center justify-center">
                 {tab.badge > 99 ? '99+' : tab.badge}
               </span>
             )}
           </div>
-          <span className="text-[10px] font-medium">{tab.label}</span>
+          <span className="text-ui-micro font-medium">{tab.label}</span>
         </button>
       ))}
     </nav>

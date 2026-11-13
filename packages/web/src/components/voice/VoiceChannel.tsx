@@ -1,6 +1,10 @@
+import { userSocialMenuItems } from '../layout/memberMenu/memberSocialActions';
 import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore, type VoiceChannelElapsed } from '../../stores/voiceStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
+import { useUIStore } from '../../stores/uiStore';
+import type { User } from '@backspace/shared';
+import { getCanonicalUserView } from '../../utils/userViewLookup';
 import { useSelfIdInChannel } from '../../utils/channelUser';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
@@ -20,7 +24,7 @@ function VoiceChannelTimer({ observation }: { observation: VoiceChannelElapsed }
   const duration = formatDuration(elapsedSeconds);
   return (
     <span
-      className="flex flex-shrink-0 items-center gap-1 text-[11px] leading-none tabular-nums text-txt-tertiary"
+      className="flex flex-shrink-0 items-center gap-1 text-ui-caption leading-none tabular-nums text-txt-tertiary"
       title={t('channelDuration', { duration })}
       // The row is a button, and a label on a child becomes part of that
       // button's accessible name. A duration that ticks every second would
@@ -63,7 +67,7 @@ interface VoiceChannelProps {
 
 /** Wrapper component for the volume slider so it can use hooks (useState). */
 export function VoiceChannel({ channelId, channelName, onClick, locked, canManage, onSettingsClick, voiceUserHandlers, dropZone }: VoiceChannelProps) {
-  const { t } = useTranslation(['voice', 'common']);
+  const { t } = useTranslation(['voice', 'common', 'spaces']);
   const serverVoiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
@@ -104,15 +108,22 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
   const openContextMenu = useContextMenuStore((s) => s.open);
 
   const handleContextMenu = useCallback(
-    (e: React.MouseEvent, userId: string) => {
+    (e: React.MouseEvent, userId: string, user: User | undefined, spaceId: string | undefined) => {
       if (userId === myIdHere) return;
       e.preventDefault();
       e.stopPropagation();
 
+      const anchor = e.currentTarget.getBoundingClientRect();
+      const items: ContextMenuItem[] = user ? [{
+        key: 'profile', type: 'action', label: t('spaces:members.menu.profile'),
+        onClick: () => useUIStore.getState().openUserProfile(user, getChannelOrigin(channelId), anchor, 'right', spaceId ? { spaceId, userId } : undefined),
+      }] : [];
+      if (user) items.push(...userSocialMenuItems(user, getChannelOrigin(channelId)));
       // Build moderation items
       const modItems = buildVoiceModMenuItems(userId, channelId);
 
-      const items: ContextMenuItem[] = [...modItems];
+      if (items.length && modItems.length) items.push({ key: 'profile-sep', type: 'separator' });
+      items.push(...modItems);
 
       // Separator after mod items
       if (modItems.length > 0) {
@@ -140,7 +151,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [myIdHere, channelId, openContextMenu],
+    [myIdHere, channelId, openContextMenu, t],
   );
 
   return (
@@ -151,7 +162,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
       onDrop={dropZone?.onDrop}
       className={dropZone?.isDragOver && dropZone?.isValidTarget ? 'rounded-[8px] ring-1 ring-accent-mint/40' : ''}
     >
-      <button
+      <button data-icon-motion="press"
         onClick={onClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
           locked
@@ -169,15 +180,15 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
           />
         )}
         {locked ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]/50">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-txt-tertiary/50">
             <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
           </svg>
         ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-txt-tertiary">
             <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
           </svg>
         )}
-        <span className="truncate text-[15px] font-medium flex-1 text-left">{channelName}</span>
+        <span className="truncate text-ui-message font-medium flex-1 text-left">{channelName}</span>
         <span className="relative flex flex-shrink-0 items-center">
           {canManage && (
             <svg
@@ -208,8 +219,10 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
           {voiceUsers.map((userId) => {
             const member = members.find(m => m.userId === userId);
             const participant = participants.find(p => p.userId === userId);
+            const rawUser = member?.user ?? participant?.cachedUser ?? undefined;
+            const profileUser = rawUser ? getCanonicalUserView(rawUser, getChannelOrigin(channelId)) : undefined;
             const displayName = member?.user.displayName ?? member?.user.username ?? participant?.username ?? userId;
-            const avatar = member?.user.avatar ?? null;
+            const avatar = profileUser?.avatar ?? null;
             const avatarColor = member?.user.avatarColor;
             const wsStatus = voiceUserStates.get(userId);
             const isParticipantDeafened = userId === currentUserId
@@ -244,15 +257,24 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const isBeingDragged = userDrag?.isBeingDragged ?? false;
 
             return (
-              <div
+              <div data-icon-motion="press"
                 key={userId}
                 className={`px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors ${
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${isBeingDragged ? 'opacity-50' : ''}`}
                 draggable={isDraggable}
+                role={profileUser ? 'button' : undefined}
+                tabIndex={profileUser ? 0 : undefined}
+                onClick={profileUser ? (e) => useUIStore.getState().openUserProfile(profileUser, getChannelOrigin(channelId), e.currentTarget.getBoundingClientRect(), 'right', spaceId ? { spaceId, userId } : undefined) : undefined}
+                onKeyDown={profileUser ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    useUIStore.getState().openUserProfile(profileUser, getChannelOrigin(channelId), e.currentTarget.getBoundingClientRect(), 'right', spaceId ? { spaceId, userId } : undefined);
+                  }
+                } : undefined}
                 onDragStart={isDraggable ? userDrag!.onDragStart : undefined}
                 onDragEnd={isDraggable ? userDrag!.onDragEnd : undefined}
-                onContextMenu={(e) => handleContextMenu(e, userId)}
+                onContextMenu={(e) => handleContextMenu(e, userId, profileUser, spaceId)}
               >
                 <VoiceUserRow
                   userId={member?.user.homeUserId ?? userId}

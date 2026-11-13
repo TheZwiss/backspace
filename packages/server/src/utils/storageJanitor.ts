@@ -12,11 +12,12 @@ import { expireOutboxQueues } from './federationOutboxQueue.js';
 import { sweepAppliedEvents } from './federationAppliedEvents.js';
 import { sweepSubjectClocks } from './federationSubjectClock.js';
 import { cleanupUnusedStickerAssets } from './stickerAssets.js';
+import { cleanupGameIconAssets } from './gameIconAssets.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv']);
-const AUDIO_EXTS = new Set(['.mp3', '.ogg', '.wav', '.flac', '.aac', '.m4a', '.opus']);
+const AUDIO_EXTS = new Set(['.mp3', '.ogg', '.wav', '.flac', '.aac', '.m4a', '.opus', '.weba']);
 const DOC_EXTS = new Set(['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.json', '.xml']);
 
 /** 1-hour threshold: attachments uploaded but never linked to a message */
@@ -140,6 +141,17 @@ function getReferencedFilenames(): Set<string> {
     .where(isNotNull(schema.attachments.thumbnailFilename))
     .all();
   for (const row of thumbRows) {
+    if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
+  }
+
+  // Files a bookmark owns (its own copies, never the originals' files). Without
+  // this the orphan phase would delete them.
+  const bookmarkRows = db.select({
+    filename: schema.bookmarkAttachments.filename,
+    thumbnailFilename: schema.bookmarkAttachments.thumbnailFilename,
+  }).from(schema.bookmarkAttachments).all();
+  for (const row of bookmarkRows) {
+    if (row.filename) referenced.add(path.basename(row.filename));
     if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
   }
 
@@ -376,6 +388,13 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
   freedBytes += stickers.freedBytes;
   errors.push(...stickers.errors);
 
+  // Phase 5: Game icons nobody renewed for a year, and their orphaned files
+  // (utils/gameIconAssets.ts).
+  const gameIcons = cleanupGameIconAssets(dryRun);
+  deletedFiles += gameIcons.deletedFiles;
+  freedBytes += gameIcons.freedBytes;
+  errors.push(...gameIcons.errors);
+
   return {
     dryRun,
     deletedFiles,
@@ -423,6 +442,61 @@ export function cleanupOldMedia(maxAgeDays: number, dryRun: boolean): CleanupRes
   }
 
   return { dryRun, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+}
+
+/** Most chat attachments one pressure sweep will consider; the rest wait for the next sweep. */
+const PRESSURE_CANDIDATE_CAP = 20_000;
+/** Files deleted between two checks of `shouldStop`, so the disk is not re-read per file. */
+const PRESSURE_STOP_CHECK_EVERY = 20;
+
+/**
+ * Delete chat attachments oldest first, until `shouldStop()` says the disk has
+ * room again. Used by the disk-pressure worker (`diskPressure.ts`) after the
+ * safe cleanups were not enough.
+ *
+ * - Nothing newer than `minAgeDays` is touched, however full the disk is.
+ * - Files in use as a profile image (avatar, banner, space icon) are skipped.
+ * - The attachment row goes with its file, the same as `cleanupOldMedia`; the
+ *   message keeps its text.
+ *
+ * `shouldStop` is asked before the first deletion and then every
+ * PRESSURE_STOP_CHECK_EVERY files, so a disk that is already fine deletes nothing.
+ */
+export function deleteOldestMedia(minAgeDays: number, shouldStop: () => boolean): CleanupResult {
+  const db = getDb();
+  const cutoff = Date.now() - minAgeDays * 24 * 60 * 60 * 1000;
+  const profileReferenced = getProfileReferencedFilenames();
+  const errors: string[] = [];
+  let deletedFiles = 0;
+  let freedBytes = 0;
+  let deletedAttachmentRecords = 0;
+
+  if (shouldStop()) return { dryRun: false, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+
+  const candidates = getRawDb().prepare(`
+    SELECT id, filename, size FROM attachments
+    WHERE (message_id IS NOT NULL OR dm_message_id IS NOT NULL)
+      AND created_at < ?
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(cutoff, PRESSURE_CANDIDATE_CAP) as { id: string; filename: string; size: number }[];
+
+  for (const att of candidates) {
+    if (profileReferenced.has(path.basename(att.filename))) continue;
+    try {
+      deleteUploadFile(att.filename);
+      db.delete(schema.attachments).where(eq(schema.attachments.id, att.id)).run();
+    } catch (err: unknown) {
+      errors.push(`Failed to delete old media ${att.id}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    deletedFiles++;
+    freedBytes += att.size;
+    deletedAttachmentRecords++;
+    if (deletedFiles % PRESSURE_STOP_CHECK_EVERY === 0 && shouldStop()) break;
+  }
+
+  return { dryRun: false, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
 }
 
 /**

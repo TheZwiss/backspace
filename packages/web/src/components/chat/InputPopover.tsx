@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { Tooltip } from '../ui/Tooltip';
 import { StickerPicker } from './StickerPicker';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
 import React, { useRef, useEffect, useCallback } from 'react';
@@ -20,6 +20,7 @@ interface InputPopoverProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   gifEnabled: boolean;
   onTabChange: (tab: InputPopoverTab) => void;
+  spaceId?: string | null;
 }
 
 interface SharedTabProps {
@@ -43,14 +44,14 @@ function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
       {availableTabs.map((t) => {
         const isSticker = t.key === 'sticker';
         return (
-          <button
+          <Tooltip content={t.label} position="top"><button data-icon-motion="press"
             key={t.key}
             type="button"
             onClick={() => onTabChange(t.key)}
-            title={t.label}
+
             aria-label={t.label}
             className={`flex items-center justify-center rounded-md font-medium transition-colors ${
-              isSticker ? 'px-2.5 py-1' : 'px-3 py-1 text-[13px]'
+              isSticker ? 'px-2.5 py-1' : 'px-3 py-1 text-ui-label'
             } ${
               activeTab === t.key
                 ? 'bg-interactive-selected text-txt-primary'
@@ -58,7 +59,7 @@ function TabBar({ activeTab, availableTabs, onTabChange }: SharedTabProps) {
             }`}
           >
             {isSticker ? <HeartIcon className="w-4 h-4" /> : t.label}
-          </button>
+          </button></Tooltip>
         );
       })}
     </div>
@@ -78,6 +79,7 @@ function DesktopPopover({
   gifEnabled,
   onTabChange,
   availableTabs,
+  spaceId,
 }: DesktopPopoverProps) {
   const floatingRef = useRef<HTMLDivElement>(null);
 
@@ -131,8 +133,11 @@ function DesktopPopover({
       const floating = floatingRef.current;
       const anchor = anchorRef.current;
       if (!floating) return;
-      if (floating.contains(e.target as Node)) return;
-      if (anchor && anchor.contains(e.target as Node)) return;
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (floating.contains(target)) return;
+      if (anchor && anchor.contains(target)) return;
+      if ((target as Element).closest?.('[role="dialog"], [aria-modal="true"], [data-modal]')) return;
       onClose();
     };
     document.addEventListener('mousedown', handler);
@@ -151,7 +156,7 @@ function DesktopPopover({
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <PickerEscapeScope onClose={onClose}>
             {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} />}
-            {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} />}
+            {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} spaceId={spaceId} />}
             {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} />}
           </PickerEscapeScope>
         </div>
@@ -173,6 +178,7 @@ function MobileSheet({
   gifEnabled,
   onTabChange,
   availableTabs,
+  spaceId,
 }: MobileSheetProps) {
   return (
     <MobilePickerSheet
@@ -180,19 +186,17 @@ function MobileSheet({
       header={<TabBar activeTab={activeTab} availableTabs={availableTabs} onTabChange={onTabChange} />}
     >
       {activeTab === 'emoji' && <EmojiPicker stickers={false} onEmojiSelect={onEmojiSelect} mobile />}
-      {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} mobile />}
+      {activeTab === 'sticker' && <StickerPicker onSelect={onGifSelect} mobile spaceId={spaceId} />}
       {activeTab === 'gif' && gifEnabled && <GifPicker onGifSelect={onGifSelect} mobile />}
     </MobilePickerSheet>
   );
 }
 
 export function InputPopover(props: InputPopoverProps) {
-  const { t } = useTranslation('chat');
   const isMobile = useUIStore((s) => s.isMobile);
 
   const availableTabs: { key: InputPopoverTab; label: string }[] = [
     { key: 'emoji', label: 'Emoji' },
-    { key: 'sticker', label: t('stickers.title') },
   ];
   if (props.gifEnabled) {
     availableTabs.splice(0, 0, { key: 'gif', label: 'GIF' });

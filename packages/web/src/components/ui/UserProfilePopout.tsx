@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ProfileThoughtBubble } from './ProfileThoughtBubble';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { useNavigate } from 'react-router-dom';
@@ -16,13 +17,15 @@ import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradi
 import { isMine, parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
-import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
 import { useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { viewerCanEditMemberRoles } from '../../utils/roleHierarchy';
 import { ProfileRoles } from './ProfileRoles';
 import { ProfileSpaceNickname } from './ProfileSpaceNickname';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
+import { ProfileActivities } from './ProfileActivities';
 
 /** Gap between the card and the element it was opened from. */
 const ANCHOR_OFFSET = 8;
@@ -55,7 +58,9 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
   const shownStatus = useShownStatus(user, origin, user.status);
   const self = useSelfIdentity();
   const isYou = isMine(user, origin, self);
-
+  const activities = useActivityStore((s) =>
+    isYou && s.myActivities ? s.myActivities : activitiesFor(s.userActivities, user, origin),
+  );
   const roles = useProfileMemberRoles(member);
   const isMobile = useUIStore((s) => s.isMobile);
   // Edit Roles opens the member role editor, which is desktop-only. It is
@@ -158,12 +163,12 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
     <div
       ref={cardRef}
       data-user-profile-popout
-      className="fixed z-[200] w-[340px] rounded-[12px] overflow-hidden animate-fade-in select-none glass-modal"
+      className="fixed z-modal w-[340px] max-h-[calc(calc(100*var(--app-vh))-32px)] overflow-y-auto scrollbar-thin rounded-[12px] animate-fade-in select-none glass-modal"
       style={cardStyle}
     >
       {/* Banner */}
       <div
-        className="h-[80px] rounded-t-[12px]"
+        className="h-[100px] rounded-t-[12px]"
         style={bannerSrc
           ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
           : { background: bannerFallback }
@@ -172,12 +177,15 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
       {/* Body */}
       <div className="px-4 pb-4 relative">
+        {/* The 80px avatar starts at x=16 and rises 44px over the banner. */}
+        <ProfileThoughtBubble text={user.customStatus} avatarLeft={16} avatarTop={-44} avatarSize={80} />
         {/* Avatar */}
         {/* The picture escalates to the full profile — the card is a preview, and
             clicking the face is the obvious way to ask for the whole thing. It
             deliberately does NOT reopen the card (see issue #37). */}
         <Avatar
           src={user.avatar}
+          animate
           name={displayName}
           size={80}
           status={shownStatus}
@@ -191,23 +199,21 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
         {/* Name & info */}
         <div>
           <ProfileSpaceNickname member={member} />
-          <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
-          <div className="text-[13px] text-txt-tertiary">
-            <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />
+          <span className="text-ui-lead font-semibold leading-tight">{displayName}</span>
+          <div className="text-ui-label text-txt-tertiary">
+            <Username username={user.username} showAt className="text-ui-label text-txt-tertiary" />
           </div>
-          {user.customStatus && (
-            <div className="text-[13px] text-txt-secondary italic mt-1">
-              {replaceEmojiShortcodes(user.customStatus)}
-            </div>
-          )}
         </div>
+
+        {/* Dynamic Activities (Gaming, Music with progress, Streaming, etc.) */}
+        <ProfileActivities activities={activities} skipCustom={!!user.customStatus} />
 
         {/* Bio */}
         {user.bio && (
           <>
-            <div className="border-t border-white/[0.06] my-3" />
+            <div className="border-t border-wash/[0.06] my-3" />
             <div>
-              <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+              <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
                 {t('social:profile.aboutMe')}
               </span>
               <ProfileBio bio={user.bio} />
@@ -217,25 +223,25 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
         {roles.length > 0 && (
           <>
-            <div className="border-t border-white/[0.06] my-3" />
+            <div className="border-t border-wash/[0.06] my-3" />
             <ProfileRoles roles={roles} />
           </>
         )}
 
-        <div className="border-t border-white/[0.06] my-3" />
+        <div className="border-t border-wash/[0.06] my-3" />
 
         {/* Member since + Mutuals */}
         <div className="space-y-1.5">
           <div>
-            <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+            <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
               {t('social:profile.memberSince')}
             </span>
-            <span className="text-[12px] text-txt-secondary ml-2">
+            <span className="text-ui-caption text-txt-secondary ml-2">
               {f.formatMediumDate(user.createdAt)}
             </span>
           </div>
           {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (
-            <div className="text-[12px] text-txt-tertiary">
+            <div className="text-ui-caption text-txt-tertiary">
               {mutualCounts.friends > 0 && (
                 <span>{t('social:mutuals.friends', { count: mutualCounts.friends })}</span>
               )}
@@ -251,24 +257,24 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
 
         {/* Actions. Nobody sends themselves a message. */}
         {!isYou && (
-          <button
+          <button data-icon-motion="send"
             onClick={handleSendMessage}
-            className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
+            className="w-full mt-3 py-2 rounded-lg text-ui-label font-medium text-txt-primary bg-wash/[0.06] hover:bg-wash/[0.10] border border-wash/[0.08] transition-colors"
           >
             {t('social:profile.sendMessage')}
           </button>
         )}
         {canEditRoles && (
-          <button
+          <button data-icon-motion="press"
             onClick={handleEditRoles}
-            className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-secondary hover:text-txt-primary bg-transparent hover:bg-white/[0.04] transition-colors"
+            className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-secondary hover:text-txt-primary bg-transparent hover:bg-wash/[0.04] transition-colors"
           >
             {t('social:profile.editRoles')}
           </button>
         )}
-        <button
+        <button data-icon-motion="press"
           onClick={handleViewFullProfile}
-          className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
+          className="w-full mt-1.5 py-2 rounded-lg text-ui-label font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-wash/[0.04] transition-colors"
         >
           {t('social:profile.viewFull')}
         </button>

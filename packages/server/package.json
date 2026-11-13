@@ -1,6 +1,6 @@
 {
   "name": "@backspace/server",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "private": true,
   "license": "AGPL-3.0-only",
   "author": "Jannis Braun",
@@ -46,7 +46,7 @@
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.11",
     "typescript": "^5.4.0",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "ws": "^8.21.3"
   }
 }

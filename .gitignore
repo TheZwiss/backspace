@@ -6,11 +6,18 @@ node_modules/
 dist/
 dist-electron/
 installers/
+output/
+*.tar
+*.tar.*
+*.tgz
+*.zip
 packages/web/dist/
+packages/web/dist-mobile/
 packages/server/dist/
 packages/shared/dist/
 packages/desktop/dist/
 packages/desktop/dist-electron/
+packages/mobile/
 
 # Data
 data/
@@ -60,6 +67,7 @@ Desktop.ini
 # IDE
 .idea/
 .vscode/
+.claude/
 *.code-workspace
 
 # Logs
@@ -71,6 +79,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 # tsc emit artifacts — Vite handles compilation, tsc is type-check only
 packages/web/src/**/*.js
+!packages/web/src/audio/worklets/*.worklet.js
 
 # Misc
 .cache/
@@ -124,3 +133,13 @@ site/sitemap.xml
 docs/superpowers/plans/2026-07-12-federation-security-remediation.md
 docs/superpowers/plans/2026-09-02-security-pass-master.md
 docs/superpowers/plans/2026-09-02-plan-e-remediation.md
+
+# Local dev tooling and test artifacts
+.serena/
+graphify-out/
+Backspace-rich-presence-test.AppImage
+Backspace-rich-presence-test.sh
+
+# Local test environment (scripts/testenv.sh) and Playwright MCP output
+.testenv/
+.playwright-mcp/

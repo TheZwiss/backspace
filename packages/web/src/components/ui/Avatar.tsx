@@ -1,6 +1,8 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
 import { getAvatarGradient, getSpaceGradient } from '../../utils/gradients';
+import { useStaticAvatar } from '../../utils/staticAvatar';
+import { PresenceIndicator } from './PresenceIndicator';
 
 interface AvatarProps {
   src?: string | null;
@@ -19,14 +21,14 @@ interface AvatarProps {
    * icon (`getSpaceGradient`); people use `user`, the default.
    */
   palette?: 'user' | 'space';
+  animate?: boolean;
+  /**
+   * Presence the avatar's surrounding frame is tinted with. Purely presentational
+   * (read by themes through `data-frame-status`); it draws nothing by itself and
+   * is independent of `status`, which controls the dot.
+   */
+  frameStatus?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
-
-const statusColors: Record<string, string> = {
-  online: 'bg-status-online',
-  idle: 'bg-status-idle',
-  dnd: 'bg-status-dnd',
-  offline: 'bg-status-offline',
-};
 
 /**
  * Builds a CSS radial-gradient mask that punches a circular hole in the avatar
@@ -49,9 +51,9 @@ function buildCutoutMask(avatarSize: number, ringWidth: number = 0): string {
 function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   let dot: number, gap: number, avatarInset: number;
   if (avatarSize <= 24) {
-    dot = 5; gap = 2; avatarInset = 3;
+    dot = 7; gap = 2; avatarInset = 3;
   } else if (avatarSize <= 48) {
-    dot = 6; gap = 3; avatarInset = 4;
+    dot = 9; gap = 2; avatarInset = 4;
   } else {
     dot = Math.round(avatarSize * 0.15);
     gap = Math.round(avatarSize * 0.05);
@@ -60,7 +62,9 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user' }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor, palette = 'user', animate = false, frameStatus }: AvatarProps) {
+  const imageUrl = src ? ((src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/')) ? src : `/api/uploads/${src}`) : null;
+  const displayedSrc = useStaticAvatar(imageUrl, animate || palette === 'space');
   const initials = name.charAt(0).toUpperCase();
   const fontPx = Math.round(size * 0.4);
   const gradient = palette === 'space'
@@ -79,8 +83,9 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   const { dot: dotDiameter, inset: dotInset } = getDotMetrics(size, ringWidth);
 
   return (
-    <div
+    <div data-icon-motion-target="" data-icon-motion={onClick ? 'press' : undefined}
       data-avatar
+      data-frame-status={frameStatus ?? undefined}
       className={`relative inline-flex flex-shrink-0 ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: outerSize, height: outerSize }}
       onClick={onClick}
@@ -94,10 +99,10 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
           ...maskStyle,
         }}
       >
-        {src ? (
+        {displayedSrc ? (
           <img
-            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/'))
-              ? src : `/api/uploads/${src}`}
+            key={displayedSrc}
+            src={displayedSrc}
             alt={name}
             loading="lazy"
             className="w-full h-full rounded-full object-cover"
@@ -112,23 +117,25 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
           />
         ) : null}
         <div
-          className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${src ? 'hidden' : 'flex'}`}
-          style={{ background: gradient.gradient, fontSize: fontPx, ...(src ? { display: 'none' } : {}) }}
+          className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${displayedSrc ? 'hidden' : 'flex'}`}
+          style={{ background: gradient.gradient, fontSize: fontPx, ...(displayedSrc ? { display: 'none' } : {}) }}
         >
           {initials}
         </div>
       </div>
       {/* Status dot — outside the masked div so it isn't clipped */}
       {status && (
-        <div
-          className={`absolute rounded-full ${statusColors[status] ?? 'bg-status-offline'}`}
+        <span
+          className="absolute flex items-center justify-center rounded-full bg-surface-channel"
           style={{
             width: dotDiameter,
             height: dotDiameter,
             bottom: dotInset - dotDiameter / 2,
             right: dotInset - dotDiameter / 2,
           }}
-        />
+        >
+          <PresenceIndicator status={status} size={dotDiameter} />
+        </span>
       )}
     </div>
   );

@@ -5,7 +5,7 @@ vi.mock('../hooks/useWebSocket', () => ({ wsSend: vi.fn() }));
 vi.mock('../audio/AudioManager', () => ({
   AudioManager: {
     getInstance: () => ({
-      clearInputDenial: vi.fn(),
+      setTextInputOnly: vi.fn(), clearInputDenial: vi.fn(),
       resumeContext: vi.fn().mockResolvedValue(undefined),
       setInputDevice,
     }),

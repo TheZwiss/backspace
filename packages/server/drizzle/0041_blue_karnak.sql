@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `people_discovery_mode` text DEFAULT 'search' NOT NULL;

@@ -1,5 +1,36 @@
+import { captureSessionType, shouldForceX11Ozone } from './ozonePlatform';
+import { linuxVideoAccelerationFeatures } from './videoAcceleration';
+import { app } from 'electron';
+import path from 'path';
+import process from 'process';
+import { spawnSync } from 'child_process';
+
+// Force X11 ozone (XWayland) BEFORE any other electron modules are loaded.
+// On Wayland (KDE Plasma, GNOME, etc.) the compositor ignores setPosition()
+// and setBounds() from Electron - toasts/overlays appear centered - and
+// desktopCapturer opens the screencast portal. Under XWayland the X server
+// honours the coordinates.
+// The ozone platform is chosen before any JS runs, and neither appendSwitch nor
+// ELECTRON_OZONE_PLATFORM_HINT is honoured by then on Wayland sessions, so the
+// process re-executes itself once with --ozone-platform=x11 as a real argument.
+// WebRTC's screen capturer picks the PipeWire/portal backend from
+// XDG_SESSION_TYPE, not from the ozone platform. XWayland only draws X11
+// clients on every compositor (KDE Plasma 6.8 included), so an X11 capture is
+// black; the relaunched process keeps `wayland` and capture uses the portal.
+const X11_OZONE_ARG = '--ozone-platform=x11';
+if (process.platform === 'linux' && !process.argv.includes(X11_OZONE_ARG) && shouldForceX11Ozone()) {
+  const result = spawnSync(process.execPath, [X11_OZONE_ARG, ...process.argv.slice(1)], { stdio: 'inherit', env: { ...process.env, XDG_SESSION_TYPE: captureSessionType() } });
+  process.exit(result.status ?? 1);
+}
+
+import { showFriendRequestToast, dismissFriendRequestToast } from './friendRequestToast';
+import { WindowsProcessAudio } from './windowsProcessAudio';
+import { playNudge } from './nudge';
+import { getMsnWinkAsset, isMsnWinkEffect } from './msnWinkCatalog';
+import { getMsnKnockVideo } from './msnKnockAsset';
+import { detectNudgeGames, hasNudgeGameActivity } from './nudgeGameContext';
+import { LocalTextVoice, type TextVoiceDevice } from './textVoice';
 import {
-  app,
   BrowserWindow,
   Tray,
   Menu,
@@ -11,12 +42,35 @@ import {
   session,
   desktopCapturer,
 } from 'electron';
-import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { execFile, spawn } from 'child_process';
 import { pathToFileURL } from 'url';
-import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
+import {
+  startActivityDetection,
+  stopActivityDetection,
+  getAllCurrentActivities,
+  applyIpcActivity,
+  listKnownGameNames,
+  listRunningPrograms,
+  getUnknownWinePrograms,
+  isGameProcess,
+  setManualBinding,
+  setManualBindings,
+} from './activityDetector';
+import type { Activity } from './activityDetector';
+import { resolveGameIcon } from './gameIcons';
+import { startRichPresenceIpcServer, stopRichPresenceIpcServer } from './richPresenceIpc';
+import {
+  startMediaDetection,
+  stopMediaDetection,
+  getCurrentMediaActivity,
+  type MediaSetupHint,
+} from './mediaDetector';
+import { installDownloadedUpdate, type InstallableUpdater } from './updateInstall';
+import { loadActivitySettings, parseActivitySettingsUpdate, saveActivitySettings } from './activitySettings';
 import { KeybindManager } from './keybindManager';
+import { integrateAppImage } from './appImageIntegration';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
 import {
   loadInstanceUrl,
@@ -51,7 +105,8 @@ import {
   type RecoveryState,
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
-import { isNavigationAllowed } from './navigationPolicy';
+import { ScreenSourceCache } from './screenSourceCache';
+import { isCallWindowRequest, isNavigationAllowed } from './navigationPolicy';
 import { NotificationRetainer } from './notificationRetention';
 import {
   screenSharePickerMode,
@@ -61,6 +116,8 @@ import {
   type ScreenSharePickerMode,
 } from './screenSharePolicy';
 import { getDesktopLanguage, isDesktopLanguage, saveStoredLanguage, translateDesktop } from './l10n';
+import { isValidDisplayCaptureRequest, startGameCapture, stopAllGameCaptures, stopGameCapture } from './gameCapture';
+import { startSharedTextureCapture, stopSharedTextureCapture, stopAllSharedTextureCaptures, updateSharedTextureCapture } from './sharedTextureCapture';
 
 // Override Electron's package.json-derived app name so userData lives at
 // "<appData>/Backspace" instead of leaking the monorepo's "@backspace/desktop"
@@ -85,6 +142,10 @@ app.setName('Backspace');
 }
 
 let mainWindow: BrowserWindow | null = null;
+const localTextVoice = new LocalTextVoice(path.join(app.getPath('userData'), 'text-voice'), (status) => {
+  mainWindow?.webContents.send('local-text-voice-status', status);
+});
+let callWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
 let tray: Tray | null = null;
 let isQuitting = false;
@@ -366,8 +427,10 @@ function createWindow(): void {
     minHeight: 500,
     title: 'Backspace',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    ...(process.platform !== 'darwin' ? {
+    ...(process.platform === 'linux' ? { frame: false } : {
+      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    }),
+    ...(process.platform === 'win32' ? {
       titleBarOverlay: {
         color: '#0b0b10',
         symbolColor: '#d8d8de',
@@ -460,14 +523,14 @@ function createWindow(): void {
   // download, and the page that keeps running may be sharing. `did-navigate` fires for a
   // committed cross-document main-frame load; `did-fail-load` for the main frame is the error
   // page that replaced it (-3, ERR_ABORTED, is a cancelled navigation that replaced nothing).
-  mainWindow.webContents.on('render-process-gone', () => systemAudio.stop());
-  mainWindow.webContents.on('did-navigate', () => systemAudio.stop());
+  mainWindow.webContents.on('render-process-gone', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); });
+  mainWindow.webContents.on('did-navigate', () => { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); });
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) systemAudio.stop();
+    if (isMainFrame && errorCode !== -3) { systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures(); }
   });
 
   mainWindow.on('closed', () => {
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch(); stopAllGameCaptures(); void stopAllSharedTextureCaptures();
     setMainWindow(null);
     mainWindow = null;
     // Clear recovery state so macOS dock-activate (which calls createWindow again)
@@ -487,7 +550,15 @@ function createWindow(): void {
 
   // Intercept own-instance /join/* URLs so they open in-app instead of the
   // system browser. Other URLs continue to open externally.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (isCallWindowRequest(url, frameName)) {
+      return { action: 'allow', overrideBrowserWindowOptions: {
+        width: 960, height: 640, minWidth: 480, minHeight: 320,
+        title: 'Backspace — Call', backgroundColor: '#111116',
+        ...(process.platform === 'linux' ? { frame: false } : {}),
+        webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      } };
+    }
     try {
       const u = new URL(url);
       if (
@@ -503,6 +574,12 @@ function createWindow(): void {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+  mainWindow.webContents.on('did-create-window', (child) => {
+    callWindow = child;
+    child.on('closed', () => { if (callWindow === child) callWindow = null; });
+    child.webContents.on('will-navigate', (event) => event.preventDefault());
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
 
   // Deny foreign top-level navigations. See navigationPolicy.ts for the
@@ -551,9 +628,9 @@ function createTray(): void {
  */
 const shownNotifications = new NotificationRetainer<Notification>();
 
-function showNotification(title: string, body: string, onClick?: () => void): void {
+function showNotification(title: string, body: string, onClick?: () => void, silent = false): void {
   if (!Notification.isSupported()) return;
-  const notification = new Notification({ title, body, silent: false });
+  const notification = new Notification({ title, body, silent });
   notification.on('click', onClick ?? (() => {
     mainWindow?.show();
     mainWindow?.focus();
@@ -580,6 +657,102 @@ interface SerializedScreenSource {
 }
 
 let pendingScreenSelection: PendingScreenSelection | null = null;
+let audioCaptureSourceId = '';
+let audioTargetId: string | undefined;
+const windowsAudioExecutable = app.isPackaged
+    ? path.join(process.resourcesPath, 'process-audio', process.arch, 'backspace-process-audio.exe')
+    : path.join(__dirname, '..', 'native', 'process-audio', 'bin', process.arch, 'backspace-process-audio.exe');
+const windowsProcessAudio = new WindowsProcessAudio(
+  windowsAudioExecutable,
+  (data) => mainWindow?.webContents.send('process-audio-data', data),
+  () => mainWindow?.webContents.send('process-audio-ended'),
+  (message) => {
+    console.warn('[WindowsProcessAudio]', message);
+    try {
+      fs.appendFileSync(path.join(app.getPath('userData'), 'windows-process-audio.log'), `${new Date().toISOString()} ${message}\n`);
+    } catch { /* Logging must not interrupt capture cleanup. */ }
+  },
+);
+/**
+ * One long-lived helper process per shared window, printing the window's
+ * rectangle every 100 ms. The renderer used to spawn the helper per poll, which
+ * is fine at 1 Hz and too expensive to run fast enough for a window being
+ * dragged; this keeps the crop following smoothly at one process.
+ */
+let geometryWatcher: ReturnType<typeof spawn> | null = null;
+/**
+ * How many captures hold the watcher. The setup screen can stage a second
+ * capture before the first one is torn down (auto-stage, then the tile the user
+ * clicks), and both hold the same window: the first teardown must not kill the
+ * watcher the second one is already reading.
+ */
+let geometryHolders = 0;
+/** The window the running watcher follows; a stop for another source is ignored. */
+let geometryWatcherSource: string | null = null;
+
+function stopWindowGeometryWatch(sourceId?: string): void {
+  if (sourceId && geometryWatcherSource && sourceId !== geometryWatcherSource) return;
+  geometryHolders = Math.max(0, geometryHolders - 1);
+  if (geometryHolders > 0) return;
+  const child = geometryWatcher;
+  geometryWatcher = null;
+  geometryWatcherSource = null;
+  child?.kill();
+}
+
+function startWindowGeometryWatch(sourceId: string): void {
+  if (geometryWatcher && geometryWatcherSource === sourceId) {
+    geometryHolders += 1;
+    return;
+  }
+  if (geometryWatcher) {
+    // A different window is being shared now: replace the watcher.
+    const previous = geometryWatcher;
+    geometryWatcher = null;
+    previous.kill();
+    geometryHolders = 0;
+  }
+  geometryHolders = 1;
+  if (process.platform !== 'win32' || !fs.existsSync(windowsAudioExecutable)) return;
+  const match = /^window:(\d+):\d+$/.exec(sourceId);
+  if (!match) return;
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(windowsAudioExecutable, ['geometry-watch', match[1]!, '100'], { windowsHide: true });
+  } catch (err) {
+    console.warn('[WindowGeometry] could not start the watch:', err);
+    return;
+  }
+  geometryWatcher = child;
+  geometryWatcherSource = sourceId;
+  let buffered = '';
+  child.stdout?.setEncoding('utf8');
+  child.stdout?.on('data', (chunk: string) => {
+    buffered += chunk;
+    for (;;) {
+      const newline = buffered.indexOf('\n');
+      if (newline < 0) break;
+      const line = buffered.slice(0, newline).trim();
+      buffered = buffered.slice(newline + 1);
+      if (!line) continue;
+      try {
+        mainWindow?.webContents.send('window-geometry', JSON.parse(line) as WindowGeometry);
+      } catch {
+        // A torn line is dropped; the next one is a complete snapshot.
+      }
+    }
+  });
+  child.on('exit', () => {
+    if (geometryWatcher !== child) return;
+    geometryWatcher = null;
+    mainWindow?.webContents.send('window-geometry-ended');
+  });
+  child.on('error', (err: Error) => {
+    console.warn('[WindowGeometry] watch failed:', err.message);
+    if (geometryWatcher === child) geometryWatcher = null;
+  });
+}
+
 /** Loopback preference for system-picker captures (no preselection carries it there). */
 let lastSystemPickerShareAudio: boolean | null = null;
 
@@ -589,8 +762,11 @@ let lastSystemPickerShareAudio: boolean | null = null;
 const systemAudio = createSystemAudioController({
   platform: process.platform,
   // Optional, Linux-only native module: a static import would fail to load elsewhere.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  loadModule: () => require('@vencord/venmic') as PatchBayModule,
+  loadModule: () => (app.isPackaged
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    ? require(path.join(process.resourcesPath, 'venmic', 'node-napi-v7.node'))
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    : require('@vencord/venmic')) as PatchBayModule,
   getPids: () => app.getAppMetrics().map((metric) => metric.pid),
   executablePath: process.execPath,
   isSandboxed,
@@ -598,28 +774,155 @@ const systemAudio = createSystemAudioController({
 });
 /** Last enumeration, so a preselected id resolves to its DesktopCapturerSource without a second scan. */
 let lastScreenSources: Electron.DesktopCapturerSource[] = [];
+/** Identifier-only map kept after picker cleanup; it never retains thumbnails or NativeImages. */
+const screenSourceDisplayIds = new Map<string, string>();
+let screenSourceDisplayGeneration = 0;
+let screenDisplayChangeListenersRegistered = false;
 /** Last list handed to the renderer, and when: what a throttled or unfocused caller gets back. */
-let lastServedScreenSources: SerializedScreenSource[] = [];
+const screenSourceCache = new ScreenSourceCache<SerializedScreenSource>();
 let lastScreenEnumerationAt: number | null = null;
 
-async function enumerateScreenSources(): Promise<Electron.DesktopCapturerSource[]> {
+function invalidateScreenSourceMappings(): void {
+  screenSourceDisplayGeneration += 1;
+  screenSourceDisplayIds.clear();
+  lastScreenSources = [];
+  screenSourceCache.clear();
+  lastScreenEnumerationAt = null;
+}
+
+function watchScreenDisplayChanges(): void {
+  if (screenDisplayChangeListenersRegistered) return;
+  screenDisplayChangeListenersRegistered = true;
+  screen.on('display-added', invalidateScreenSourceMappings);
+  screen.on('display-removed', invalidateScreenSourceMappings);
+  screen.on('display-metrics-changed', invalidateScreenSourceMappings);
+}
+
+/**
+ * @param withThumbnails Capture a preview of every source. False is the cheap
+ *   poll the setup screen runs while it is open: ids, names and icons only, no
+ *   pixels. A zero thumbnail size is Electron's way of asking for none.
+ */
+async function enumerateScreenSources(
+  withThumbnails = true,
+  generation = screenSourceCache.generationToken,
+): Promise<Electron.DesktopCapturerSource[]> {
+  const displayGeneration = screenSourceDisplayGeneration;
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
-    thumbnailSize: { width: 320, height: 180 },
+    thumbnailSize: withThumbnails ? { width: 320, height: 180 } : { width: 0, height: 0 },
     fetchWindowIcons: true,
   });
-  lastScreenSources = sources;
+  screenSourceCache.commitIfCurrent(generation, () => {
+    lastScreenSources = sources;
+    if (displayGeneration !== screenSourceDisplayGeneration) return;
+    screenSourceDisplayIds.clear();
+    for (const source of sources) {
+      if (source.id.startsWith('screen:') && source.display_id) {
+        screenSourceDisplayIds.set(source.id, source.display_id);
+      }
+    }
+  });
   return sources;
 }
 
-function serializeScreenSources(sources: Electron.DesktopCapturerSource[]): SerializedScreenSource[] {
+function serializeScreenSources(
+  sources: Electron.DesktopCapturerSource[],
+  withThumbnails = true,
+): SerializedScreenSource[] {
   return sources.map((source) => ({
     id: source.id,
     name: source.name,
-    thumbnailDataUrl: source.thumbnail.toDataURL(),
+    // An empty string, not an empty PNG: the renderer keeps the thumbnail it
+    // already has for this id instead of replacing it with a blank tile.
+    thumbnailDataUrl: withThumbnails ? source.thumbnail.toDataURL() : '',
     appIconDataUrl: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : null,
     isScreen: source.id.startsWith('screen:'),
   }));
+}
+
+/** Physical rectangle of a display, which is the space the helper's rectangles use. */
+function displayPhysicalBounds(display: Electron.Display): { x: number; y: number; width: number; height: number } {
+  return {
+    x: Math.round(display.bounds.x * display.scaleFactor),
+    y: Math.round(display.bounds.y * display.scaleFactor),
+    width: Math.round(display.bounds.width * display.scaleFactor),
+    height: Math.round(display.bounds.height * display.scaleFactor),
+  };
+}
+
+function dxgiOutputProbeExecutable(): string | null {
+  const candidates = [
+    path.join(process.resourcesPath, 'dxgi-output-probe', process.arch, 'backspace-dxgi-output-probe.exe'),
+    path.join(process.resourcesPath, 'dxgi-output-probe', 'backspace-dxgi-output-probe.exe'),
+    path.join(__dirname, '..', 'native', 'dxgi-output-probe', 'bin', process.arch, 'backspace-dxgi-output-probe.exe'),
+    path.join(__dirname, '..', 'native', 'dxgi-output-probe', 'build', 'backspace-dxgi-output-probe.exe'),
+    path.join(__dirname, '..', 'native', 'dxgi-output-probe', 'build', 'Release', 'backspace-dxgi-output-probe.exe'),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+}
+
+/** Resolve an Electron display against DXGI output rectangles on D3D11's default adapter. */
+function resolveDxgiOutputIndex(display: Electron.Display): Promise<number | null> {
+  const executable = dxgiOutputProbeExecutable();
+  if (!executable) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile(executable, [], { windowsHide: true, timeout: 5_000, encoding: 'utf8' }, (error, stdout) => {
+      if (error) { resolve(null); return; }
+      const outputs = stdout.split(/\r?\n/).flatMap((line) => {
+        const [indexText, deviceName, xText, yText, widthText, heightText] = line.split('\t');
+        const values = [indexText, xText, yText, widthText, heightText].map(Number);
+        if (!deviceName || values.some((value) => !Number.isSafeInteger(value))) return [];
+        return [{ index: values[0]!, deviceName, x: values[1]!, y: values[2]!, width: values[3]!, height: values[4]! }];
+      });
+      const target = displayPhysicalBounds(display);
+      const matches = outputs.filter((output) =>
+        Math.abs(output.x - target.x) <= 2 && Math.abs(output.y - target.y) <= 2
+        && Math.abs(output.width - target.width) <= 2 && Math.abs(output.height - target.height) <= 2,
+      );
+      // A mirrored/clone configuration can give more than one DXGI output the
+      // same desktop rectangle. There is no unique source to select then.
+      if (matches.length !== 1) { resolve(null); return; }
+      resolve(matches[0]!.index);
+    });
+  });
+}
+
+interface WindowGeometry {
+  window: [number, number, number, number];
+  monitor: [number, number, number, number];
+  minimized: boolean;
+  /** Whether this window is the one the user is working in. */
+  foreground: boolean;
+  /** A D3D app holds the display in exclusive fullscreen right now. */
+  exclusive: boolean;
+  /** Executable basename owning the window. */
+  process?: string;
+}
+
+/**
+ * Ask the helper where a window is. The renderer crops a display capture to
+ * this rectangle, which is how a single window can be shared on Windows 10
+ * without Windows Graphics Capture's yellow border — the capture is of the
+ * display, and a display capture draws no border.
+ */
+function queryWindowGeometry(hwnd: string): Promise<WindowGeometry | null> {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32' || !fs.existsSync(windowsAudioExecutable)) { resolve(null); return; }
+    execFile(windowsAudioExecutable, ['geometry', hwnd], { windowsHide: true, timeout: 5_000 }, (error, stdout) => {
+      if (error) { resolve(null); return; }
+      try {
+        const parsed = JSON.parse(stdout.trim()) as WindowGeometry;
+        const sane = Array.isArray(parsed.window) && parsed.window.length === 4
+          && Array.isArray(parsed.monitor) && parsed.monitor.length === 4
+          && parsed.window.every((n) => Number.isFinite(n))
+          && parsed.monitor.every((n) => Number.isFinite(n));
+        resolve(sane ? parsed : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
 }
 
 function currentPickerMode(): ScreenSharePickerMode {
@@ -634,7 +937,67 @@ function takePendingScreenSelection(): PendingScreenSelection | null {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string } }) => {
+  watchScreenDisplayChanges();
+  ipcMain.handle('local-text-voice-status', (event) => event.sender === mainWindow?.webContents ? localTextVoice.getStatus() : null);
+  ipcMain.handle('local-text-voice-prepare', (event, device: TextVoiceDevice) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.prepare(device);
+  });
+  ipcMain.handle('local-text-voice-speech', (event, data: unknown) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('invalid-sender');
+    return localTextVoice.speech(data);
+  });
+  ipcMain.handle('local-text-voice-release', (event) => { if (event.sender === mainWindow?.webContents) localTextVoice.release(); });
+  ipcMain.handle('nudge-context', async (event, detectGames: unknown) => {
+    if (event.sender !== mainWindow?.webContents || !mainWindow) return null;
+    const primary = screen.getPrimaryDisplay().id;
+    const appBounds = mainWindow.getBounds();
+    const games = detectGames === true ? await detectNudgeGames({ query: queryWindowGeometry,
+      isGame: isGameProcess, knownGameRunning: hasNudgeGameActivity(getAllCurrentActivities()), physicalBounds: displayPhysicalBounds })
+      : { gameRunning: false, foregroundGame: false, gameDisplayIds: [], gameDetectionUncertain: false };
+    return { ...games, focused: mainWindow?.isFocused() ?? false, minimized: mainWindow?.isMinimized() ?? true,
+      displays: screen.getAllDisplays().map(d => ({ id: d.id, label: d.label || `Monitor ${d.id}`, primary: d.id === primary,
+        app: appBounds.x < d.bounds.x + d.bounds.width && appBounds.x + appBounds.width > d.bounds.x
+          && appBounds.y < d.bounds.y + d.bounds.height && appBounds.y + appBounds.height > d.bounds.y })) };
+  });
+  ipcMain.handle('nudge-media', (event, effect: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return null;
+    if (effect === 'knock') return { video: getMsnKnockVideo(), durationMs: 2417 };
+    if (isMsnWinkEffect(effect)) return getMsnWinkAsset(effect);
+    return null;
+  });
+  ipcMain.on('play-nudge', (event, sender: unknown, avatar: unknown, channelId: unknown, options?: { effect?: unknown; mode?: unknown; displayIds?: unknown; sound?: unknown; volume?: unknown; labels?: { notice?: unknown; close?: unknown } }) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    const openConversation = () => {
+      if (!mainWindow || mainWindow.isDestroyed() || typeof channelId !== 'string' || !/^\d{1,20}$/.test(channelId)) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('open-internal-route', `/channels/@me/${channelId}`);
+    };
+    const effect = typeof options?.effect === 'string' && (['shake', 'wave', 'jelly', 'knock', 'confetti', 'pulse'].includes(options.effect) || isMsnWinkEffect(options.effect)) ? options.effect as import('./nudgeEffects').NudgeEffect : 'shake';
+    const mode = typeof options?.mode === 'string' && ['full', 'reduced', 'notification'].includes(options.mode) ? options.mode : 'full';
+    const displayIds = Array.isArray(options?.displayIds) ? options.displayIds.filter((id): id is number => typeof id === 'number' && Number.isFinite(id)).slice(0, 32) : undefined;
+    void playNudge(typeof sender === 'string' ? sender : undefined, typeof avatar === 'string' ? avatar : undefined, openConversation, effect, mode,
+      { labels: typeof options?.labels?.notice === 'string' && typeof options?.labels?.close === 'string' ? { notice: options.labels.notice.slice(0, 160), close: options.labels.close.slice(0, 80) } : undefined, displayIds, sound: options?.sound !== false, volume: typeof options?.volume === 'number' && Number.isFinite(options.volume) ? Math.max(0, Math.min(1, options.volume)) : .6 }).catch(error => console.warn('[Nudge]', error));
+  });
+  ipcMain.on('friend-request-notification', (event, data: import('./friendRequestToast').FriendRequestToastData) => {
+    if (event.sender !== mainWindow?.webContents || !data || typeof data.requestId !== 'string' || data.requestId.length > 128 || typeof data.userId !== 'string' || data.userId.length > 128 || typeof data.origin !== 'string' || data.origin.length > 2048 || typeof data.sender !== 'string' || !data.labels) return;
+    if (![data.labels.body, data.labels.accept, data.labels.decline, data.labels.close].every(value => typeof value === 'string' && value.length <= 200)) return;
+    const sender = event.sender, sourceOrigin = new URL(sender.getURL()).origin;
+    const notice = { ...data, sender: data.sender.slice(0, 80), avatar: typeof data.avatar === 'string' ? data.avatar : undefined };
+    void showFriendRequestToast(notice, action => {
+      if (!mainWindow || mainWindow.isDestroyed() || sender.isDestroyed() || sender !== mainWindow.webContents || new URL(sender.getURL()).origin !== sourceOrigin) return;
+      if (action === 'open') { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+      sender.send('friend-request-action', { requestId: data.requestId, origin: data.origin, userId: data.userId, action });
+    });
+  });
+  ipcMain.on('friend-request-dismiss', (event, data: { requestId: string; origin: string; userId: string }) => {
+    if (event.sender !== mainWindow?.webContents || !data || ![data.requestId, data.origin, data.userId].every(value => typeof value === 'string')) return;
+    dismissFriendRequestToast(data);
+  });
+
+  ipcMain.on('show-notification', (event, data: { title: string; body: string; options?: { channelId?: string; spaceId?: string; userId?: string; silent?: boolean } }) => {
     if (event.sender !== mainWindow?.webContents) return;
     const sender = event.sender;
     const origin = new URL(sender.getURL()).origin;
@@ -647,13 +1010,22 @@ function registerIpcHandlers(): void {
       if (sender === mainWindow.webContents && new URL(sender.getURL()).origin === origin && data.options) {
         sender.send('notification-click', data.options);
       }
-    });
+    }, data.options?.silent === true);
   });
 
   ipcMain.on('set-badge-count', (_event, count: number) => {
     if (app.setBadgeCount) {
       app.setBadgeCount(count);
     }
+  });
+
+  ipcMain.on('call-window-control', (event, action: unknown) => {
+    if (event.sender !== mainWindow?.webContents || !callWindow || callWindow.isDestroyed()) return;
+    if (action === 'minimize') callWindow.minimize();
+    else if (action === 'maximize') {
+      if (callWindow.isMaximized()) callWindow.unmaximize();
+      else callWindow.maximize();
+    } else if (action === 'close') callWindow.close();
   });
 
   ipcMain.on('minimize-window', () => {
@@ -731,7 +1103,7 @@ function registerIpcHandlers(): void {
 
     try {
       const { autoUpdater } = require('electron-updater');
-      autoUpdater.quitAndInstall();
+      installDownloadedUpdate(autoUpdater);
     } catch {
       store.setStatus({
         phase: 'failed',
@@ -799,7 +1171,9 @@ function registerIpcHandlers(): void {
   // policy: the app's own window only, focused only, and no faster than the
   // cache window, so a page polling on a timer cannot quietly photograph
   // whatever the user switched to.
-  ipcMain.handle('get-screen-sources', async (event): Promise<SerializedScreenSource[]> => {
+  ipcMain.handle('get-screen-sources', async (event, options?: { thumbnails?: boolean }): Promise<SerializedScreenSource[]> => {
+    const withThumbnails = options?.thumbnails !== false;
+    const generation = screenSourceCache.generationToken;
     const decision = screenEnumerationDecision({
       fromMainWindow: event.sender === mainWindow?.webContents,
       windowFocused: mainWindow?.isFocused() ?? false,
@@ -807,10 +1181,138 @@ function registerIpcHandlers(): void {
       now: Date.now(),
     });
     if (decision === 'deny') return [];
-    if (decision === 'serve-cache') return lastServedScreenSources;
-    lastServedScreenSources = serializeScreenSources(await enumerateScreenSources());
-    lastScreenEnumerationAt = Date.now();
-    return lastServedScreenSources;
+    const sources = decision === 'serve-cache'
+      ? screenSourceCache.read()
+      : await screenSourceCache.refresh(async () => {
+        const captured = serializeScreenSources(
+          await enumerateScreenSources(withThumbnails, generation),
+          withThumbnails,
+        );
+        screenSourceCache.commitIfCurrent(generation, () => { lastScreenEnumerationAt = Date.now(); });
+        return captured;
+      });
+    // Metadata polling stays cheap over IPC; cached pixels remain available to the next open.
+    return withThumbnails ? sources : sources.map(source => ({ ...source, thumbnailDataUrl: '' }));
+  });
+  // Optional Windows DXGI capture. Window IDs are deliberately rejected: a
+  // Desktop Duplication crop can include unrelated windows over the target.
+  ipcMain.handle('start-native-screen-capture', async (event, input: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32') return null;
+    if (!input || typeof input !== 'object') return null;
+    const request = input as Record<string, unknown>;
+    const sourceId = typeof request.sourceId === 'string' ? request.sourceId : '';
+    if (!isValidDisplayCaptureRequest(sourceId)) return null;
+    const frameRate = typeof request.frameRate === 'number' && Number.isFinite(request.frameRate)
+      ? Math.min(120, Math.max(1, Math.round(request.frameRate))) : 30;
+    const displaySourceId = typeof request.displaySourceId === 'string' ? request.displaySourceId : sourceId;
+    if (!isValidDisplayCaptureRequest(sourceId, displaySourceId)) return null;
+    const displayId = screenSourceDisplayIds.get(displaySourceId);
+    if (!displayId) return null;
+    // The identifier map survives picker cleanup, but it is invalidated on
+    // every display topology or metrics change. Resolve it against the live
+    // display list as a final fail-closed check before starting capture.
+    const display = screen.getAllDisplays().find((candidate) => String(candidate.id) === displayId);
+    if (!display) return null;
+    const monitorIndex = await resolveDxgiOutputIndex(display);
+    if (monitorIndex === null) return null;
+    const numeric = (value: unknown, min: number, max: number): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : undefined;
+    const rawCrop = request.crop && typeof request.crop === 'object'
+      ? request.crop as Record<string, unknown> : undefined;
+    const crop = rawCrop && ['x', 'y', 'width', 'height'].every((key) => typeof rawCrop[key] === 'number' && Number.isFinite(rawCrop[key]))
+      ? {
+          x: numeric(rawCrop.x, 0, 32768)!, y: numeric(rawCrop.y, 0, 32768)!,
+          width: numeric(rawCrop.width, 16, 32768)!, height: numeric(rawCrop.height, 16, 32768)!,
+        }
+      : undefined;
+    const captureRequest = {
+      sourceId,
+      displaySourceId,
+      monitorIndex,
+      frameRate,
+      width: numeric(request.width, 16, 7680),
+      height: numeric(request.height, 16, 4320),
+      sourceWidth: display ? displayPhysicalBounds(display).width : undefined,
+      sourceHeight: display ? displayPhysicalBounds(display).height : undefined,
+      bitrateKbps: numeric(request.bitrateKbps, 1_000, 50_000),
+      cursorMode: request.cursorMode === 'hide' ? 'hide' as const : request.cursorMode === 'show' ? 'show' as const : 'auto' as const,
+      encodingDevice: request.encodingDevice === 'cpu' ? 'cpu' as const : 'gpu' as const,
+      crop,
+    };
+    if (request.transport === 'shared-texture') {
+      if (event.senderFrame !== event.sender.mainFrame) return null;
+      stopAllGameCaptures();
+      return startSharedTextureCapture(event.sender, captureRequest);
+    }
+    await stopAllSharedTextureCaptures();
+    return startGameCapture(captureRequest);
+  });
+  ipcMain.handle('stop-native-screen-capture', (event, id: unknown) => {
+    if (event.sender !== mainWindow?.webContents || typeof id !== 'string') return;
+    stopGameCapture(id);
+    return stopSharedTextureCapture(id, event.sender);
+  });
+  ipcMain.handle('update-shared-texture-capture', (event, id: unknown, options: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || typeof id !== 'string') return;
+    updateSharedTextureCapture(id, event.sender, options);
+  });
+  ipcMain.on('shared-texture-consumer-stalled', (event, id: unknown) => {
+    if (event.sender !== mainWindow?.webContents || typeof id !== 'string') return;
+    event.sender.send('shared-texture-error', id);
+    void stopSharedTextureCapture(id, event.sender);
+  });
+  // Where a window is, and which display to capture for it. The renderer turns
+  // this into a cropped display capture: sharing the window as Chromium would
+  // (Windows Graphics Capture) draws the yellow border on Windows 10, and a
+  // display capture does not. Null means "fall back to the ordinary window
+  // capture" — an older helper, a window that is gone, or a display Electron
+  // and the helper disagree about.
+  ipcMain.handle('get-window-capture-target', async (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'win32') return null;
+    if (typeof sourceId !== 'string') return null;
+    const match = /^window:(\d+):\d+$/.exec(sourceId);
+    if (!match) return null;
+    const geometry = await queryWindowGeometry(match[1]!);
+    if (!geometry) return null;
+    const [mx, my, mw, mh] = geometry.monitor;
+    const [wx, wy, ww, wh] = geometry.window;
+    const display = screen.getAllDisplays().find((candidate) => {
+      const rect = displayPhysicalBounds(candidate);
+      return Math.abs(rect.x - mx) <= 2 && Math.abs(rect.y - my) <= 2
+        && Math.abs(rect.width - mw) <= 2 && Math.abs(rect.height - mh) <= 2;
+    });
+    if (!display) return null;
+    const matches = (source: Electron.DesktopCapturerSource): boolean =>
+      source.id.startsWith('screen:') && source.display_id === String(display.id);
+    let source = lastScreenSources.find(matches);
+    if (!source) source = (await enumerateScreenSources(false)).find(matches);
+    if (!source) return null;
+    const left = Math.max(mx, wx);
+    const top = Math.max(my, wy);
+    const right = Math.min(mx + mw, wx + ww);
+    const bottom = Math.min(my + mh, wy + wh);
+    if (right - left < 16 || bottom - top < 16) return null;
+    return {
+      screenSourceId: source.id,
+      monitor: { x: mx, y: my, width: mw, height: mh },
+      crop: { x: left - mx, y: top - my, width: right - left, height: bottom - top },
+      minimized: geometry.minimized === true,
+      foreground: geometry.foreground === true,
+      exclusive: geometry.exclusive === true,
+      processName: geometry.process ?? null,
+      isGame: !!geometry.process && isGameProcess(geometry.process),
+    };
+  });
+  // One helper process follows the shared window and streams its rectangle
+  // here (startWindowGeometryWatch); the renderer gets a line every 100 ms and
+  // an 'ended' event when the window is gone.
+  ipcMain.handle('start-window-geometry', (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    if (typeof sourceId === 'string') startWindowGeometryWatch(sourceId);
+  });
+  ipcMain.handle('stop-window-geometry', (event, sourceId: unknown) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    stopWindowGeometryWatch(typeof sourceId === 'string' ? sourceId : undefined);
   });
   ipcMain.handle('get-screen-share-picker-mode', (event) => {
     if (event.sender !== mainWindow?.webContents) return 'app';
@@ -820,6 +1322,7 @@ function registerIpcHandlers(): void {
   // (the call) to viewers; the stream settings say so before it is turned on.
   ipcMain.handle('get-system-audio-capability', (event, clientUsesSource: unknown) => {
     if (event.sender !== mainWindow?.webContents) return 'unknown';
+    if (process.platform === 'win32' && clientUsesSource === true) return fs.existsSync(windowsAudioExecutable) ? 'excluded' : 'unavailable';
     return withSystemAudioSource(
       ownAudioInSystemAudio(process.platform, process.getSystemVersion()),
       clientUsesSource,
@@ -829,21 +1332,37 @@ function registerIpcHandlers(): void {
   // The virtual source that carries every other app's playback (Linux). The
   // renderer opens it like a microphone and calls stop when the share, or its
   // audio, ends.
-  ipcMain.handle('system-audio-start', (event) => {
+  ipcMain.handle('system-audio-target', (event, targetId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || process.platform !== 'linux') return;
+    audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    audioCaptureSourceId = targetId === 'system' ? 'screen:portal' : 'window:portal';
+  });
+  ipcMain.handle('system-audio-targets', (event) => event.sender === mainWindow?.webContents ? systemAudio.targets() : []);
+  ipcMain.handle('system-audio-start', async (event) => {
     if (event.sender !== mainWindow?.webContents) return { ok: false, reason: 'unsupported-platform' };
-    return systemAudio.start();
+    if (process.platform === 'win32') {
+      const ok = await windowsProcessAudio.start(audioCaptureSourceId, process.pid);
+      return ok ? { ok: true, pcm: true } : { ok: false, reason: 'process-capture-failed' };
+    }
+    if (audioCaptureSourceId.startsWith('window:') && !audioTargetId) return { ok: false, reason: 'audio-target-required' };
+    return systemAudio.start(audioCaptureSourceId.startsWith('window:') ? audioTargetId : undefined);
   });
   ipcMain.handle('system-audio-stop', (event) => {
     if (event.sender !== mainWindow?.webContents) return;
-    systemAudio.stop();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
   });
   // handle, not on: the renderer awaits this before calling getDisplayMedia(),
   // so the selection is guaranteed to be armed when the display-media handler
   // runs. Fire-and-forget left the two unordered — the handler could win, fall
   // back to the prompted flow, and leave this armed to hijack the next share.
-  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean) => {
+  ipcMain.handle('screen-share-preselect', (event, sourceId: string, shareAudio?: boolean, targetId?: unknown, audioSourceId?: unknown) => {
     if (event.sender !== mainWindow?.webContents) return;
     if (typeof sourceId !== 'string' || !sourceId) return;
+    if (sourceId !== audioCaptureSourceId || targetId !== undefined) audioTargetId = typeof targetId === 'string' && /^(?:node:)?\d+$/.test(targetId) ? targetId : undefined;
+    // Usually the audio comes from the source being captured. A cropped window
+    // share captures the display but must take the audio of the window's own
+    // process tree, so it names that source separately.
+    audioCaptureSourceId = typeof audioSourceId === 'string' && /^window:\d+:\d+$/.test(audioSourceId) ? audioSourceId : sourceId;
     pendingScreenSelection = { sourceId, shareAudio: shareAudio === true, at: Date.now() };
   });
   // System-picker sessions have no tile to preselect; the renderer only tells
@@ -947,6 +1466,12 @@ function registerIpcHandlers(): void {
     return keybindManager.getPortalStatus();
   });
   ipcMain.on('keybind-portal-retry', () => keybindManager.retryPortal());
+  ipcMain.handle('keybind-portal-configure', () => keybindManager.configurePortal());
+  ipcMain.handle('keybind-appimage-integrate', () => {
+    const result = integrateAppImage(process.env.APPIMAGE);
+    if (result) keybindManager.retryPortal();
+    return result;
+  });
 
   ipcMain.handle('check-accessibility', () => {
     return keybindManager.checkAccessibility();
@@ -1015,7 +1540,7 @@ function getUpdateStore(): UpdateStatusStore {
  */
 function notifyAboutUpdate(
   snapshot: UpdateSnapshot,
-  updater: { quitAndInstall: () => void },
+  updater: InstallableUpdater,
 ): void {
   if (!shouldPromptForUpdate(snapshot)) return;
   // A focused user can see the in-app toast. Notifying as well is noise.
@@ -1028,7 +1553,7 @@ function notifyAboutUpdate(
     showNotification(
       'Backspace update ready',
       `Click to restart and install version ${version}.`,
-      () => updater.quitAndInstall(),
+      () => installDownloadedUpdate(updater),
     );
     return;
   }
@@ -1220,7 +1745,10 @@ if (process.platform === 'linux') {
   // Without it, returning `audio: 'loopback'` from setDisplayMediaRequestHandler
   // fails the whole getDisplayMedia request — screen share never starts when the
   // user has "Share system audio" enabled.
-  app.commandLine.appendSwitch('enable-features', 'PulseaudioLoopbackForScreenShare');
+  // A repeated enable-features switch replaces the previous one, so every
+  // feature goes through this single call. VA-API features are added only on
+  // Intel/AMD GPUs (see videoAcceleration.ts).
+  app.commandLine.appendSwitch('enable-features', ['PulseaudioLoopbackForScreenShare', ...linuxVideoAccelerationFeatures()].join(','));
 }
 
 // Windows: AppUserModelId so toast notifications attribute correctly to Backspace
@@ -1237,6 +1765,10 @@ if (process.platform === 'win32') {
  */
 export function requestQuit(): void {
   isQuitting = true;
+  stopMediaDetection();
+  stopActivityDetection();
+  mainWindow?.webContents.send('activities-detected', []);
+  mainWindow?.webContents.send('activity-detected', null);
   app.quit();
 }
 
@@ -1273,6 +1805,7 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
+    localTextVoice.registerProtocol();
     // Development runs inside the stock Electron.app bundle, whose Dock icon
     // macOS caches per bundle, so the copied icns in the dev script does not
     // show. Set it at runtime; packaged builds carry the icon in their own
@@ -1406,7 +1939,7 @@ if (!gotTheLock) {
         // answer a repeat call without a second scan. Both pin a thumbnail per
         // open window, so drop them as soon as the request is answered.
         lastScreenSources = [];
-        lastServedScreenSources = [];
+        screenSourceCache.clear();
         lastScreenEnumerationAt = null;
       }
     });
@@ -1476,12 +2009,105 @@ if (!gotTheLock) {
 
     initAutoUpdater();
 
-    // ─── Activity Detection ────────────────────────────────────────────────
-    startActivityDetection((activity) => {
-      mainWindow?.webContents.send('activity-detected', activity);
+    // ─── Activity & Media Detection ────────────────────────────────────────
+    let latestProcessActivities: Activity[] = getAllCurrentActivities();
+    let latestMediaActivity = getCurrentMediaActivity();
+    let currentMediaSetupHint: MediaSetupHint | null = null;
+
+    const buildEffectiveActivities = (): Activity[] => {
+      const activities: Activity[] = [];
+      for (const proc of latestProcessActivities) {
+        // Media players running in the background are not activities unless actively playing via mediaDetector.
+        // Prevent background processes (e.g. cloudmusic.exe in tray) from injecting fake media activities.
+        if (proc.type === 'listening' || proc.type === 'watching') continue;
+        activities.push(proc);
+      }
+      if (latestMediaActivity) {
+        const now = Date.now();
+        const start = latestMediaActivity.timestamps?.start;
+        const durationMs = latestMediaActivity.playback?.durationMs;
+        if (typeof start === 'number' && latestMediaActivity.playback) {
+          const positionMs = durationMs !== undefined
+            ? Math.min(durationMs, Math.max(0, now - start))
+            : Math.max(0, now - start);
+          activities.push({
+            ...latestMediaActivity,
+            playback: {
+              ...latestMediaActivity.playback,
+              positionMs,
+            },
+          });
+        } else {
+          activities.push(latestMediaActivity);
+        }
+      }
+      return activities;
+    };
+
+    const broadcastActivities = () => {
+      const activities = buildEffectiveActivities();
+      mainWindow?.webContents.send('activities-detected', activities);
+      mainWindow?.webContents.send('activity-detected', activities[0] || null);
+    };
+
+    startActivityDetection(
+      () => {
+        // legacy single activity callback maintained
+      },
+      (activities) => {
+        latestProcessActivities = activities;
+        broadcastActivities();
+      },
+    );
+
+    startMediaDetection(
+      (media) => {
+        latestMediaActivity = media;
+        broadcastActivities();
+      },
+      (hint) => {
+        currentMediaSetupHint = hint;
+        mainWindow?.webContents.send('media-setup-hint', hint);
+      },
+    );
+
+    // Rich presence IPC server: games (osu!lazer & co.) push richer
+    // activity that overlays process detection
+    startRichPresenceIpcServer({
+      onActivity: (push) => applyIpcActivity(push),
+    }).catch((err) => {
+      console.warn('[main] Rich presence IPC server failed to start:', err);
     });
 
-    ipcMain.handle('get-current-activity', () => getCurrentActivity());
+    ipcMain.handle('get-current-activity', () => {
+      const activities = buildEffectiveActivities();
+      return activities[0] || null;
+    });
+    ipcMain.handle('get-current-activities', () => buildEffectiveActivities());
+    ipcMain.handle('get-media-setup-hint', () => currentMediaSetupHint);
+    ipcMain.handle('get-activity-settings', () => loadActivitySettings());
+    ipcMain.handle('set-activity-settings', (event, settings: unknown) => {
+      if (event.sender !== mainWindow?.webContents) return;
+      const update = parseActivitySettingsUpdate(settings);
+      if (!update) return;
+      saveActivitySettings({ ...loadActivitySettings(), ...update });
+    });
+    ipcMain.handle('list-known-games', () => listKnownGameNames());
+    ipcMain.handle('list-running-programs', () => listRunningPrograms());
+    ipcMain.handle('get-unknown-wine-programs', () => getUnknownWinePrograms());
+    ipcMain.handle('set-manual-game-binding', (_event, binding: unknown) => { setManualBinding(binding); });
+    ipcMain.handle('set-manual-game-bindings', (_event, bindings: unknown) => { setManualBindings(bindings); });
+
+    // The renderer uploads the icon to the user's instance itself (it holds
+    // the session); main only hands over the bytes it extracted locally.
+    ipcMain.handle('get-game-icon', async (_event, name: unknown) => {
+      if (typeof name !== 'string' || name.length === 0 || name.length > 256) return null;
+      // Waits for a lookup in flight, and starts one for a game nothing warmed
+      // (a name the player typed by hand)
+      const icon = await resolveGameIcon(name);
+      if (!icon) return null;
+      return { data: icon.bytes.toString('base64'), mime: icon.mime };
+    });
 
     // Linux/AppImage path-refresh ONLY. On Windows and macOS the OS is the source
     // of truth for openAtLogin (Task 4) and we must not override user changes made
@@ -1538,9 +2164,16 @@ if (!gotTheLock) {
   });
 
   app.on('before-quit', () => {
-    systemAudio.stop();
+    localTextVoice.release();
+    stopAllGameCaptures();
+    void stopAllSharedTextureCaptures();
+    systemAudio.stop(); windowsProcessAudio.stop(); stopWindowGeometryWatch();
     isQuitting = true;
     stopActivityDetection();
+    stopRichPresenceIpcServer();
+    stopMediaDetection();
     keybindManager.stop();
+    mainWindow?.webContents.send('activities-detected', []);
+    mainWindow?.webContents.send('activity-detected', null);
   });
 }

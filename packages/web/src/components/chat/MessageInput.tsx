@@ -1,8 +1,10 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useMentionComposer } from './useMentionComposer';
 import { useComposerMention } from './useComposerMention';
 import { MentionTextarea } from './MentionTextarea';
 import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -11,6 +13,14 @@ import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
+import { PreparingFileTiles, type PreparingFile } from './PreparingFileTiles';
+import { AttachMenu } from './AttachMenu';
+import { useMediaUploadPreferences } from '../../stores/mediaUploadPreferences';
+import { compressionKind, prepareForUpload, shouldTryCompression } from '../../utils/mediaCompression';
+import { VoiceRecorderBar } from './VoiceRecorderBar';
+import { useVoiceRecorder, type VoiceRecording } from '../../hooks/useVoiceRecorder';
+import { ChatDropOverlay } from './ChatDropOverlay';
+import { useFileDropZone } from '../../hooks/useFileDropZone';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -24,6 +34,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { selfIdentityOf } from '../../utils/identity';
 import { findLastOwnEditableMessage } from './messageEditing';
 import { describeError } from '../../i18n/errors';
+import { NudgeButton } from './NudgeButton';
 
 interface MessageInputProps {
   channelId: string;
@@ -85,6 +96,15 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   // (after reload, persisted transfers fall back to the icon placeholder).
   const previewUrlsRef = useRef<Map<string, string>>(new Map());
 
+  // Photos and videos are shrunk on this device before they upload; "Document"
+  // sends the original. `preparing` is the files still being shrunk.
+  const compressMedia = useMediaUploadPreferences((s) => s.compressMedia);
+  const setCompressMedia = useMediaUploadPreferences((s) => s.setCompressMedia);
+  const [preparing, setPreparing] = useState<PreparingFile[]>([]);
+  const preparingControls = useRef<Map<string, { controller: AbortController; action: 'original' | 'cancel' | null }>>(new Map());
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+
   const sendMessage = useChatStore((s) => s.sendMessage);
   const returnToPresent = useChatStore((s) => s.returnToPresent);
   // This channel's reply only: reply state is per channel (#390).
@@ -103,6 +123,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   // Undefined until the ready that lists the channel: nothing can be routed yet, so the composer stays locked.
   const isDm = useIsDmChannel(channelId);
   const canSendMessages = isDm === true || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
@@ -217,9 +238,40 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
    */
   const enqueueFile = useCallback(
     async (
-      input: { file: File; handle?: FileSystemFileHandle | undefined },
-    ): Promise<void> => {
-      const { file, handle } = input;
+      input: { file: File; handle?: FileSystemFileHandle | undefined; mode?: 'compress' | 'original' },
+    ): Promise<string | null> => {
+      let { file, handle } = input;
+      const mode = input.mode ?? (useMediaUploadPreferences.getState().compressMedia ? 'compress' : 'original');
+
+      // Shrink photos and videos first. Anything it cannot improve, and any
+      // failure, comes back as the original file.
+      const kind = mode === 'compress' && shouldTryCompression(file) ? compressionKind(file) : null;
+      if (kind) {
+        const prepId = makeFileHandleKey();
+        const controller = new AbortController();
+        preparingControls.current.set(prepId, { controller, action: null });
+        setPreparing((list) => [...list, { id: prepId, name: file.name, kind, progress: null }]);
+        let action: 'original' | 'cancel' | null = null;
+        try {
+          const prepared = await prepareForUpload(file, 'compress', {
+            signal: controller.signal,
+            onProgress: (fraction) => {
+              setPreparing((list) => list.map((entry) => (entry.id === prepId ? { ...entry, progress: fraction } : entry)));
+            },
+          });
+          action = preparingControls.current.get(prepId)?.action ?? null;
+          if (action === 'cancel') return null;
+          if (action !== 'original' && prepared.compressed) {
+            file = prepared.file;
+            // The handle points at the original bytes; a resume would read those
+            handle = undefined;
+          }
+        } finally {
+          preparingControls.current.delete(prepId);
+          setPreparing((list) => list.filter((entry) => entry.id !== prepId));
+        }
+      }
+
       let fileHandleId: string | undefined;
       if (handle && supportsFsHandles()) {
         try {
@@ -251,13 +303,23 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             // ignore — preview is optional
           }
         }
+        return id;
       } catch (err) {
         const reason = err instanceof Error ? err.message : t('chat:composer.uploadFailedReason');
         addToast(t('chat:composer.uploadFailed', { file: file.name, reason }), 'warning');
+        return null;
       }
     },
     [channelId, startUpload, attachToComposer, addToast, t],
   );
+
+  /** Stop shrinking a file: upload the original (`original`) or drop it (`cancel`). */
+  const settlePreparing = useCallback((id: string, action: 'original' | 'cancel') => {
+    const entry = preparingControls.current.get(id);
+    if (!entry) return;
+    entry.action = action;
+    entry.controller.abort();
+  }, []);
 
   const removeStagedTransfer = useCallback(
     (transferId: string) => {
@@ -341,15 +403,24 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       return;
     }
 
-    // Attachment path — stage a pending bubble. The orchestrator dispatches the
-    // actual API call when every transfer reaches state='completed'.
+    submitAttachments(trimmed, stagedTransfers);
+  };
+
+  /**
+   * Attachment path of a send: stage a pending bubble for `staged`. The
+   * orchestrator dispatches the actual API call when every transfer reaches
+   * state='completed'. Takes the transfers as an argument because a caller
+   * that has just staged one (the voice recorder) holds a render that does not
+   * list it yet.
+   */
+  const submitAttachments = useCallback((trimmed: string, staged: Transfer[]): void => {
     const clientId = crypto.randomUUID();
     const replyToId = chatReplyTo?.id ?? null;
 
     // tusExpiresAt: min across staged transfers, default to 24h from now if absent.
     const now = Date.now();
     const fallbackExpires = now + DEFAULT_TUS_TTL_MS;
-    const expirations = stagedTransfers
+    const expirations = staged
       .map((t) => t.tusExpiresAt)
       .filter((x): x is number => typeof x === 'number' && x > 0);
     const tusExpiresAt = expirations.length > 0 ? Math.min(...expirations) : fallbackExpires;
@@ -362,7 +433,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       channelId,
       content: trimmed,
       replyToId,
-      transferIds: stagedTransfers.map((t) => t.id),
+      transferIds: staged.map((t) => t.id),
       createdAtLocal: now,
       state: 'sending',
       tusExpiresAt,
@@ -379,7 +450,51 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       textareaRef.current.style.height = 'auto';
       textareaRef.current.focus();
     }
-  };
+  }, [chatReplyTo?.id, returnToPresent, appendBubble, channelId, clearComposer, chatSetReplyTo]);
+
+  // ── Voice messages ──
+  // Hands a finished recording to the composer as an attachment and sends it,
+  // alone: the microphone button only shows while the draft and the staged
+  // files are empty, and the reply target, if any, goes with it.
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const sendVoiceRecording = useCallback(async (recording: VoiceRecording | null): Promise<void> => {
+    if (!recording) return;
+    setSendingVoice(true);
+    try {
+      const transferId = await enqueueFile({ file: recording.file });
+      const transfer = transferId ? useTransferStore.getState().transfers.get(transferId) : undefined;
+      if (transfer) submitAttachments('', [transfer]);
+    } finally {
+      setSendingVoice(false);
+    }
+  }, [enqueueFile, submitAttachments]);
+
+  const voice = useVoiceRecorder((recording) => {
+    addToast(t('chat:composer.voice.limit'), 'info');
+    void sendVoiceRecording(recording);
+  });
+  const recordingVoice = voice.state !== 'idle';
+
+  const handleVoiceSend = useCallback(async () => {
+    const recording = await voice.stop();
+    if (!recording) {
+      addToast(t('chat:composer.voice.tooShort'), 'info');
+      return;
+    }
+    await sendVoiceRecording(recording);
+  }, [voice, sendVoiceRecording, addToast, t]);
+
+  // A refused microphone says why instead of doing nothing.
+  useEffect(() => {
+    if (voice.error) addToast(t(voice.error === 'denied' ? 'chat:composer.voice.denied' : 'chat:composer.voice.unavailable'), 'warning');
+  }, [voice.error, addToast, t]);
+
+  // Back to typing: the textarea was unmounted while recording.
+  const wasRecordingVoice = useRef(false);
+  useEffect(() => {
+    if (wasRecordingVoice.current && !recordingVoice) textareaRef.current?.focus();
+    wasRecordingVoice.current = recordingVoice;
+  }, [recordingVoice]);
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
     // IME confirmation must not select a candidate or send the message.
@@ -429,9 +544,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
   };
 
-  const handleDrop = (e: React.DragEvent): void => {
-    e.preventDefault();
-    const items = e.dataTransfer.items;
+  // Called from the region's native `drop` (useFileDropZone), which already
+  // prevented the default. Everything that needs the DataTransfer is read
+  // synchronously here: it is empty once the event has finished dispatching.
+  const handleDrop = (dataTransfer: DataTransfer): void => {
+    const items = dataTransfer.items;
     const useDndHandles = supportsDnDHandles();
 
     if (useDndHandles && items && items.length > 0) {
@@ -467,15 +584,35 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
 
     // Fallback: plain Files list (Firefox/Safari)
-    const droppedFiles = Array.from(e.dataTransfer.files);
+    const droppedFiles = Array.from(dataTransfer.files);
     for (const file of droppedFiles) {
       void enqueueFile({ file });
     }
   };
 
-  const handleDragOver = (e: React.DragEvent): void => {
-    e.preventDefault();
-  };
+  const placeholderText =
+    placeholder ??
+    (channelName.startsWith('@')
+      ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
+      : t('chat:composer.placeholder.channel', { name: channelName }));
+
+  // The field fits its content: typing does it in `handleChange`, this covers
+  // everything else. On a phone the placeholder wraps to two lines next to the
+  // four composer buttons, and a field that kept its one-row height cut the
+  // second line off until the first keystroke.
+  const fitTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+  }, []);
+  useLayoutEffect(fitTextarea, [fitTextarea, draftText, placeholderText]);
+  useEffect(() => {
+    // The web font arrives after the first layout and changes where the text wraps; so does a turn of the phone
+    void document.fonts?.ready.then(fitTextarea);
+    window.addEventListener('resize', fitTextarea);
+    return () => window.removeEventListener('resize', fitTextarea);
+  }, [fitTextarea]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
     updateMention(e);
@@ -725,13 +862,25 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     setComposerEl(node);
   }, []);
 
+  // The whole chat region (the composer's parent: header, messages and composer)
+  // accepts dropped files, not just the input pill. An event on the pill bubbles
+  // to the region, so the pill carries no drop handlers of its own.
+  const dropRegion = composerEl?.parentElement ?? null;
+  const fileDragActive = useFileDropZone(dropRegion, {
+    enabled: canSendMessages && canAttachFiles,
+    onDrop: (dataTransfer) => {
+      handleDrop(dataTransfer);
+      textareaRef.current?.focus();
+    },
+  });
+
   if (!canSendMessages) {
     return (
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
         <div className="flex items-center justify-center py-[14px] px-4">
           {/* While the channel is unknown (before its ready) nothing is refused yet:
               the shell alone, a non-breaking space keeping its height. */}
-          <span className="text-txt-tertiary text-[14px]">
+          <span className="text-txt-tertiary text-ui-body">
             {isDm === undefined ? '\u00a0' : t('chat:composer.noPermission')}
           </span>
         </div>
@@ -740,6 +889,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   }
 
   return (
+    <>
+    {fileDragActive && dropRegion && createPortal(<ChatDropOverlay />, dropRegion)}
     <div
       ref={setComposerRef}
       data-pip-obstacle="bottom"
@@ -752,6 +903,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       {activePopover && (
         <InputPopover
           activeTab={activePopover}
+          spaceId={currentSpaceId}
           onClose={() => setActivePopover(null)}
           onEmojiSelect={handleEmojiSelect}
           onGifSelect={handleGifSelect}
@@ -762,14 +914,14 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       )}
 
       {chatReplyTo && (
-        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
-          <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
+        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-wash/[0.06]">
+          <div className="flex items-center gap-1 text-ui-body text-txt-message truncate">
             <span className="opacity-60">{t('chat:composer.replyingTo')}</span>
             <span className="font-bold">
               {chatReplyTo.user.displayName ?? chatReplyTo.user.username}
             </span>
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => chatSetReplyTo(channelId, null)}
             className="text-txt-tertiary hover:text-txt-primary transition-colors"
             aria-label={t('chat:composer.cancelReply')}
@@ -782,8 +934,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       )}
       <div
         className={`relative ${chatReplyTo ? 'rounded-b-lg' : ''} overflow-visible`}
-        onDrop={canAttachFiles ? handleDrop : undefined}
-        onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
         {/* Mention autocomplete popover */}
         {mentionState && mentionMatches.length > 0 && (
@@ -795,35 +945,75 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           />
         )}
 
+        <PreparingFileTiles
+          files={preparing}
+          onSendOriginal={(id) => settlePreparing(id, 'original')}
+          onCancel={(id) => settlePreparing(id, 'cancel')}
+        />
+
         <StagedTransferTiles
           stagedTransfers={stagedTransfers}
           previewUrls={previewUrlsRef.current}
           onRemove={removeStagedTransfer}
         />
 
+        {recordingVoice ? (
+          <VoiceRecorderBar
+            elapsedMs={voice.elapsedMs}
+            analyser={voice.analyser}
+            onCancel={voice.cancel}
+            onSend={() => void handleVoiceSend()}
+            busy={sendingVoice}
+          />
+        ) : (
         <div className="flex items-center gap-1 desktop:gap-0 pl-2 desktop:pl-[10px] pr-2 desktop:pr-1">
-          {/* File attach button */}
+          {/* File attach button: opens the Photo or video / Document menu */}
           {canAttachFiles && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
+            <Tooltip content={t('chat:composer.attachFile')} position="top"><button data-icon-motion="attach"
+              onClick={() => setAttachMenuOpen((open) => !open)}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
-              title={t('chat:composer.attachFile')}
+
               aria-label={t('chat:composer.attachFile')}
+              aria-haspopup="menu"
+              aria-expanded={attachMenuOpen}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
               </svg>
-            </button>
+            </button></Tooltip>
+          )}
+          {attachMenuOpen && canAttachFiles && (
+            <AttachMenu
+              compressMedia={compressMedia}
+              onCompressMediaChange={setCompressMedia}
+              onPickMedia={() => fileInputRef.current?.click()}
+              onPickDocument={() => documentInputRef.current?.click()}
+              onClose={() => setAttachMenuOpen(false)}
+            />
           )}
           <input
             ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files ?? []);
+              for (const f of selected) {
+                void enqueueFile({ file: f });
+              }
+              e.target.value = '';
+            }}
+          />
+          <input
+            ref={documentInputRef}
             type="file"
             multiple
             className="hidden"
             onChange={(e) => {
               const selected = Array.from(e.target.files ?? []);
               for (const f of selected) {
-                void enqueueFile({ file: f });
+                void enqueueFile({ file: f, mode: 'original' });
               }
               e.target.value = '';
             }}
@@ -838,13 +1028,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={canAttachFiles ? handlePaste : undefined}
-            placeholder={
-              placeholder ??
-              (channelName.startsWith('@')
-                ? t('chat:composer.placeholder.dm', { name: channelName.slice(1) })
-                : t('chat:composer.placeholder.channel', { name: channelName }))
-            }
-            className="input-embedded relative block w-full py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
+            placeholder={placeholderText}
+            className="input-embedded relative block w-full py-[10px] px-1 resize-none text-ui-message leading-[1.375rem] max-h-[calc(50*var(--app-vh))] scrollbar-thin"
             rows={1}
           />
 
@@ -861,7 +1046,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* Failed-upload hint (gates send button) */}
           {failedCount > 0 && (
             <span
-              className="text-[12px] font-medium text-accent-rose px-1 flex-shrink-0"
+              className="text-ui-caption font-medium text-accent-rose px-1 flex-shrink-0"
               title={t('chat:composer.failedHint')}
             >
               {t('chat:composer.failedCount', { count: failedCount })}
@@ -871,7 +1056,7 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
           {/* Character counter (shows when near or over limit) */}
           {draftText.length > MAX_MESSAGE_LENGTH - 200 && (
             <span
-              className={`text-[12px] font-medium tabular-nums flex-shrink-0 px-1 ${isOverLimit ? 'text-accent-rose' : 'text-txt-tertiary'}`}
+              className={`text-ui-caption font-medium tabular-nums flex-shrink-0 px-1 ${isOverLimit ? 'text-accent-rose' : 'text-txt-tertiary'}`}
             >
               {remaining}
             </span>
@@ -879,50 +1064,85 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
 
           {/* GIF button */}
           {gifEnabled && (
-            <button
+            <Tooltip content={t('chat:composer.gif')} position="top"><button data-icon-motion="press"
               onClick={() => togglePopover('gif')}
               className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
                 activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
-              title={t('chat:composer.gif')}
+
               aria-label={t('chat:composer.gifPicker')}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="1" y="4" width="22" height="16" rx="4.5" />
+                <path d="M10.4 9.8A3.4 3.4 0 1 0 10.8 13.4V12H8.2" />
+                <path d="M13 8.6v6.8" />
+                <path d="M15.6 15.4V8.6H20M15.6 12h3.4" />
               </svg>
-            </button>
+            </button></Tooltip>
           )}
 
+          {isDm && <NudgeButton channelId={channelId} />}
           {/* Emoji button */}
-          <button
+          <Tooltip content={t('chat:composer.emoji')} position="top"><button data-icon-motion="press"
             onClick={() => togglePopover('emoji')}
             className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
-            title={t('chat:composer.emoji')}
+
             aria-label={t('chat:composer.emojiPicker')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
             </svg>
-          </button>
+          </button></Tooltip>
+
+          {/* Sticker button */}
+          <Tooltip content={t('chat:stickers.title')} position="top"><button data-icon-motion="press"
+            onClick={() => togglePopover('sticker')}
+            className={`w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              activePopover === 'sticker' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+            }`}
+
+            aria-label={t('chat:stickers.title')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
+          </button></Tooltip>
 
           {/* Send button — appears when there's content/attachments to send */}
           {canSend && (
-            <button
+            <Tooltip content={t('chat:composer.send')} position="top"><button data-icon-motion="send"
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
               className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
               aria-label={t('chat:composer.sendMessage')}
-              title={t('chat:composer.send')}
+
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
               </svg>
-            </button>
+            </button></Tooltip>
+          )}
+
+          {/* Microphone button — where the send button goes while there is nothing to send */}
+          {!canSend && canAttachFiles && voice.supported && (
+            <Tooltip content={t('chat:composer.voice.record')} position="top"><button data-icon-motion="press"
+              type="button"
+              onClick={() => void voice.start()}
+              className="w-10 h-10 desktop:w-[34px] desktop:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-primary transition-colors flex-shrink-0"
+              aria-label={t('chat:composer.voice.record')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+              </svg>
+            </button></Tooltip>
           )}
         </div>
+        )}
       </div>
     </div>
+    </>
   );
 }

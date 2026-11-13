@@ -1,0 +1,278 @@
+{
+  "date": "2026-10-28",
+  "cpu": "AMD Ryzen 5 5600X (6 cores / 12 threads)",
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER (12 GB)",
+  "driver": "615.78.08",
+  "runtime": "Electron 43.7.5 / ONNX Runtime Web 1.31.1",
+  "notes": [
+    "Native desktop uses CPU INT8 with two WASM threads or GPU FP32 through WebGPU.",
+    "Browser measurements use an isolated Chromium renderer without the Electron preload bridge and one WASM thread.",
+    "Generation includes Portuguese phonemization and WAV encoding, excludes model download and playback duration.",
+    "WebGPU can run shape/control operators on CPU; this is not a pure-GPU-only benchmark.",
+    "AMD physical hardware was not available; AMD fallback paths have automated tests.",
+    "Working-set snapshots sum all Electron process working sets, including shared pages; they are not exclusive model RAM."
+  ],
+  "desktop": {
+    "rows": [
+      {
+        "device": "cpu",
+        "run": 0,
+        "characters": 13,
+        "generationMs": 770.8550000041723,
+        "audioSeconds": 1.3,
+        "rtf": 0.592965384618594,
+        "rms": 0.06806519686708737,
+        "backend": "cpu"
+      },
+      {
+        "device": "cpu",
+        "run": 0,
+        "characters": 56,
+        "generationMs": 1922.25,
+        "audioSeconds": 3.425,
+        "rtf": 0.5612408759124088,
+        "rms": 0.06511634526213904,
+        "backend": "cpu"
+      },
+      {
+        "device": "cpu",
+        "run": 1,
+        "characters": 13,
+        "generationMs": 729.695000000298,
+        "audioSeconds": 1.3,
+        "rtf": 0.5613038461540755,
+        "rms": 0.06806519686708737,
+        "backend": "cpu"
+      },
+      {
+        "device": "cpu",
+        "run": 1,
+        "characters": 56,
+        "generationMs": 1862.5249999985099,
+        "audioSeconds": 3.425,
+        "rtf": 0.5438029197075941,
+        "rms": 0.06511634526213904,
+        "backend": "cpu"
+      },
+      {
+        "device": "cpu",
+        "run": 2,
+        "characters": 13,
+        "generationMs": 695.9399999976158,
+        "audioSeconds": 1.3,
+        "rtf": 0.5353384615366276,
+        "rms": 0.06806519686708737,
+        "backend": "cpu"
+      },
+      {
+        "device": "cpu",
+        "run": 2,
+        "characters": 56,
+        "generationMs": 1852.6499999985099,
+        "audioSeconds": 3.425,
+        "rtf": 0.5409197080287621,
+        "rms": 0.06511634526213904,
+        "backend": "cpu"
+      },
+      {
+        "device": "gpu",
+        "run": 0,
+        "characters": 13,
+        "generationMs": 197.87000000476837,
+        "audioSeconds": 1.275,
+        "rtf": 0.15519215686648502,
+        "rms": 0.06914698877347937,
+        "backend": "webgpu"
+      },
+      {
+        "device": "gpu",
+        "run": 0,
+        "characters": 56,
+        "generationMs": 487.7199999988079,
+        "audioSeconds": 3.45,
+        "rtf": 0.14136811594168344,
+        "rms": 0.06639900973364074,
+        "backend": "webgpu"
+      },
+      {
+        "device": "gpu",
+        "run": 1,
+        "characters": 13,
+        "generationMs": 191.9949999973178,
+        "audioSeconds": 1.275,
+        "rtf": 0.15058431372338651,
+        "rms": 0.06914698877347937,
+        "backend": "webgpu"
+      },
+      {
+        "device": "gpu",
+        "run": 1,
+        "characters": 56,
+        "generationMs": 484.1850000023842,
+        "audioSeconds": 3.45,
+        "rtf": 0.14034347826156063,
+        "rms": 0.06639900973364074,
+        "backend": "webgpu"
+      },
+      {
+        "device": "gpu",
+        "run": 2,
+        "characters": 13,
+        "generationMs": 177.21000000089407,
+        "audioSeconds": 1.275,
+        "rtf": 0.13898823529481888,
+        "rms": 0.06914698877347937,
+        "backend": "webgpu"
+      },
+      {
+        "device": "gpu",
+        "run": 2,
+        "characters": 56,
+        "generationMs": 479.4750000014901,
+        "audioSeconds": 3.45,
+        "rtf": 0.13897826086999712,
+        "rms": 0.06639900973364074,
+        "backend": "webgpu"
+      }
+    ],
+    "memoryPeaks": {
+      "cpu": 1062.78125,
+      "gpu": 1885.89453125
+    },
+    "gpu": {
+      "auxAttributes": {
+        "amdSwitchable": false,
+        "canSupportThreadedTextureMailbox": false,
+        "glImplementationParts": "(gl=none,angle=none)",
+        "glResetNotificationStrategy": 0,
+        "hardwareSupportsVulkan": false,
+        "inProcessGpu": true,
+        "initializationTime": 0,
+        "isAsan": false,
+        "isClangCoverage": false,
+        "jpegDecodeAcceleratorSupported": false,
+        "optimus": false,
+        "passthroughCmdDecoder": false,
+        "sandboxed": false,
+        "skiaBackendType": "None",
+        "subpixelFontRendering": true,
+        "targetCpuBits": 64,
+        "visibilityCallbackCallCount": 0
+      },
+      "gpuDevice": [
+        {
+          "active": true,
+          "deviceId": 10115,
+          "gpuPreference": 0,
+          "vendorId": 4318
+        }
+      ]
+    }
+  },
+  "browser": {
+    "hasElectronBridge": false,
+    "supported": true,
+    "rows": [
+      {
+        "device": "cpu",
+        "run": 0,
+        "backend": "cpu",
+        "generationMs": 2838.89999999851,
+        "audioSeconds": 3.15,
+        "rms": 0.06416115010109286,
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        }
+      },
+      {
+        "device": "cpu",
+        "run": 1,
+        "backend": "cpu",
+        "generationMs": 2774.10000000149,
+        "audioSeconds": 3.15,
+        "rms": 0.06416115010109286,
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        }
+      },
+      {
+        "device": "cpu",
+        "prepareAndSpeakMs": 14162.20000000298
+      },
+      {
+        "device": "gpu",
+        "run": 0,
+        "backend": "webgpu",
+        "generationMs": 626.3000000044703,
+        "audioSeconds": 3.2,
+        "rms": 0.06555149163254491,
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        }
+      },
+      {
+        "device": "gpu",
+        "run": 1,
+        "backend": "webgpu",
+        "generationMs": 434.70000000298023,
+        "audioSeconds": 3.2,
+        "rms": 0.06555149163254491,
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        }
+      },
+      {
+        "device": "gpu",
+        "prepareAndSpeakMs": 18926.69999999553
+      }
+    ],
+    "status": [
+      {
+        "phase": "loading",
+        "device": "cpu"
+      },
+      {
+        "phase": "loading",
+        "device": "cpu"
+      },
+      {
+        "phase": "ready",
+        "device": "cpu",
+        "backend": "cpu",
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        },
+        "threads": 1
+      },
+      {
+        "phase": "loading",
+        "device": "gpu"
+      },
+      {
+        "phase": "loading",
+        "device": "gpu"
+      },
+      {
+        "phase": "ready",
+        "device": "gpu",
+        "backend": "webgpu",
+        "adapter": {
+          "vendor": "nvidia",
+          "architecture": "lovelace",
+          "description": ""
+        },
+        "threads": 1
+      }
+    ]
+  }
+}

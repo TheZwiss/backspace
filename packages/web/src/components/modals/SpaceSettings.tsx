@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/Tooltip';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
@@ -11,7 +12,7 @@ import { Toggle } from '../ui/Toggle';
 import { api } from '../../api/client';
 import { getApiForOrigin } from '../../utils/crossStoreResolvers';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SettingsPanelSuspense } from './lazySettingsPanels';
+import { OverviewPanel, MembersPanel, RolesPanel, BansPanel, SoundboardPanel, StickerPackPanel, SettingsPanelSuspense } from './lazySettingsPanels';
 import { useVisibilityOptions } from './spaceSettingsPanels/spaceOptions';
 import { ListInDirectoryConfirm } from './DirectoryConfirmations';
 import type { SpaceVisibility, JoinRequest, InstanceStreamingLimits } from '@backspace/shared';
@@ -169,7 +170,7 @@ function useInstanceDiscoveryFlags(origin: string): InstanceDiscoveryFlagsState 
  * space, that instance's own `GET /settings/streaming` for a remote one.
  */
 export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const visibilityOptions = useVisibilityOptions();
   const spaces = useSpaceStore((s) => s.spaces);
   const updateSpace = useSpaceStore((s) => s.updateSpace);
@@ -343,15 +344,15 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">{t('spaces:settings.discovery.title')}</h2>
       {!flagsUnknown && !discoveryEnabled && (
-        <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+        <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-ui-label text-accent-amber">
           {t('spaces:settings.discovery.disabledNotice')}
         </div>
       )}
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.visibility.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.visibility.hint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <div className="space-y-1.5">
             {visibilityOptions.map((opt) => (
               <label
@@ -381,8 +382,8 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:explore.outer.title')}</div>
+        <div className="rounded-lg bg-wash/[0.02] p-3.5 space-y-2.5">
           <label className={`flex items-center justify-between gap-4 ${directoryLocked ? 'cursor-default' : 'cursor-pointer'}`}>
             <div>
               <div className="text-sm font-medium text-txt-primary">{t('spaces:settings.discovery.directory.label')}</div>
@@ -399,7 +400,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <p className="text-xs text-txt-secondary">{directoryReason}</p>
               {rungActionOffered && (
-                <button
+                <button data-icon-motion="pulse"
                   type="button"
                   onClick={() => setConfirmingRung(true)}
                   disabled={rungPending}
@@ -427,7 +428,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             // scale of a reason under a switch.
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs flex flex-wrap items-center gap-2.5">
               <span>{t('common:states.loadSettingsFailed')}</span>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={retryFlags}
                 disabled={flagsLoading}
@@ -442,9 +443,9 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:settings.discovery.description.label')}</div>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:settings.discovery.description.hint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-wash/[0.02] p-3.5">
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
@@ -452,7 +453,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             rows={3}
             className="input-standard w-full resize-none"
           />
-          <div className="text-[11px] text-txt-tertiary text-right">
+          <div className="text-ui-caption text-txt-tertiary text-right">
             {t('spaces:settings.discovery.description.counter', { length: description.length, max: DESCRIPTION_MAX_LENGTH })}
           </div>
         </div>
@@ -470,16 +471,16 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 onClick={handleReset}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.reset')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {saving ? t('common:states.saving') : t('common:actions.save')}
               </button>
@@ -492,7 +493,7 @@ export function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 }
 
 function JoinRequestsSection({ spaceId }: { spaceId: string }) {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const f = useFormatters();
   const [loading, setLoading] = useState(true);
@@ -526,7 +527,7 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
 
   return (
     <div className="pt-4 border-t border-border-soft">
-      <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+      <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
         {t('spaces:settings.discovery.requests.title')}
       </div>
 
@@ -564,29 +565,29 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
                   {req.message && (
                     <p className="text-xs text-txt-secondary mt-0.5 line-clamp-2">{req.message}</p>
                   )}
-                  <span className="text-[10px] text-txt-tertiary">
+                  <span className="text-ui-micro text-txt-tertiary">
                     {f.formatNumericDate(req.createdAt)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button
+                  <Tooltip content={t('common:actions.accept')} position="top"><button data-icon-motion="pulse" aria-label={t('common:actions.accept')}
                     onClick={() => handleDecide(req.id, 'accept')}
                     className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
-                    title={t('common:actions.accept')}
+
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                     </svg>
-                  </button>
-                  <button
+                  </button></Tooltip>
+                  <Tooltip content={t('common:actions.decline')} position="top"><button data-icon-motion="press" aria-label={t('common:actions.decline')}
                     onClick={() => handleDecide(req.id, 'decline')}
                     className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
-                    title={t('common:actions.decline')}
+
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
                     </svg>
-                  </button>
+                  </button></Tooltip>
                 </div>
               </div>
             );
@@ -597,16 +598,16 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   );
 }
 
-type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans';
+type SpaceSettingsTab = 'overview' | 'discovery' | 'members' | 'roles' | 'bans' | 'soundboard' | 'stickers';
 
-const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans'];
+const SPACE_SETTINGS_TABS: readonly SpaceSettingsTab[] = ['overview', 'discovery', 'members', 'roles', 'bans', 'soundboard', 'stickers'];
 
 function isSpaceSettingsTab(value: unknown): value is SpaceSettingsTab {
   return typeof value === 'string' && (SPACE_SETTINGS_TABS as readonly string[]).includes(value);
 }
 
 export function SpaceSettingsModal() {
-  const { t } = useTranslation(['spaces', 'common']);
+  const { t } = useTranslation(['spaces', 'common', 'voice']);
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -624,6 +625,8 @@ export function SpaceSettingsModal() {
   const canManageSpace = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_SPACE);
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
   const canBanMembers = hasPermissionBit(mySpacePerms, PermissionBits.BAN_MEMBERS);
+  const canManageStickers = hasPermissionBit(mySpacePerms, PermissionBits.CREATE_STICKERS)
+    || hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_STICKERS);
 
   // Reset tab and mobile view when modal opens. A caller may name the tab
   // to open on (`openModal('spaceSettings', { tab: 'discovery' })`); a tab
@@ -634,6 +637,8 @@ export function SpaceSettingsModal() {
     if (!isOpen) return;
     const allowed: Record<SpaceSettingsTab, boolean> = {
       overview: true,
+      soundboard: true,
+      stickers: canManageStickers,
       discovery: canManageSpace,
       members: true,
       roles: canManageRoles,
@@ -681,20 +686,24 @@ export function SpaceSettingsModal() {
 
           {/* Nav list */}
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
-            <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+            <button data-icon-motion="press" onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+            <button data-icon-motion="press" onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+            {canManageStickers && (
+              <button data-icon-motion="press" onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+            )}
             {canManageSpace && (
-              <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
             )}
 
-            <div className="border-t border-white/[0.04] my-2 mx-2" />
-            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
+            <div className="border-t border-wash/[0.04] my-2 mx-2" />
+            <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+            <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
             {canManageRoles && (
-              <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
             )}
             {canBanMembers && (
-              <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
             )}
           </div>
         </div>
@@ -718,20 +727,24 @@ export function SpaceSettingsModal() {
             </div>
 
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
-              <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.general')}</div>
+              <button data-icon-motion="press" onClick={() => handleTabClick('overview')} className={tabClass('overview')}>{t('spaces:settings.nav.tabs.overview')}</button>
+              <button data-icon-motion="press" onClick={() => handleTabClick('soundboard')} className={tabClass('soundboard')}>{t('voice:soundboard.title')}</button>
+              {canManageStickers && (
+                <button data-icon-motion="press" onClick={() => handleTabClick('stickers')} className={tabClass('stickers')}>{t('spaces:stickers.title')}</button>
+              )}
               {canManageSpace && (
-                <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>{t('spaces:settings.nav.tabs.discovery')}</button>
               )}
 
-              <div className="border-t border-white/[0.04] my-2 mx-2" />
-              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
-              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
+              <div className="border-t border-wash/[0.04] my-2 mx-2" />
+              <div className="text-ui-micro font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">{t('spaces:settings.nav.management')}</div>
+              <button data-icon-motion="press" onClick={() => handleTabClick('members')} className={tabClass('members')}>{t('common:labels.members')}</button>
               {canManageRoles && (
-                <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('roles')} className={tabClass('roles')}>{t('spaces:settings.nav.tabs.roles')}</button>
               )}
               {canBanMembers && (
-                <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
+                <button data-icon-motion="press" onClick={() => handleTabClick('bans')} className={tabClass('bans')}>{t('spaces:settings.nav.tabs.bans')}</button>
               )}
             </div>
           </div>
@@ -743,7 +756,7 @@ export function SpaceSettingsModal() {
             <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
-                <button
+                <button data-icon-motion="arrow"
                   onClick={() => setMobileView('tabs')}
                   className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
                   aria-label={t('spaces:settings.backAria')}
@@ -756,6 +769,8 @@ export function SpaceSettingsModal() {
               )}
               <SettingsPanelSuspense key={tab}>
                 {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
+                {tab === 'soundboard' && <SoundboardPanel spaceId={currentSpaceId} />}
+                {tab === 'stickers' && canManageStickers && <StickerPackPanel spaceId={currentSpaceId} />}
                 {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
                 {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
                 {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}

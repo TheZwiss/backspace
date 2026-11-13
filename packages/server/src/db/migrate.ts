@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import crypto from 'crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { insertDmMember } from '../utils/dmMemberClosed.js';
 
 /**
@@ -100,3 +102,44 @@ export function backfillOneOnOneDmMembership(db: Database.Database): void {
   run();
   if (restored > 0) console.log(`[backfill] restored ${restored} deleted-partner DM membership row(s)`);
 }
+
+/**
+ * If an earlier boot attempt ran with a build that added max_sticker_size_bytes to
+ * instance_settings before migrate() crashed with a duplicate column error, the
+ * column is already present but __drizzle_migrations lacks the migration entry.
+ * Record it so Drizzle migrator does not attempt to execute the migration again.
+ */
+export function healSkippedStickerSizeMigration(db: Database.Database, migrationsFolder: string): void {
+  const settingsTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instance_settings'").get();
+  if (!settingsTable) return;
+
+  const cols = db.prepare("PRAGMA table_info('instance_settings')").all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'max_sticker_size_bytes')) return;
+
+  const migrationsTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'").get();
+  if (!migrationsTableExists) return;
+
+  const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+  if (!fs.existsSync(journalPath)) return;
+
+  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as {
+    entries?: Array<{ tag?: unknown; when?: unknown }>;
+  };
+  const entry = journal.entries?.find(
+    (candidate) => typeof candidate.tag === 'string' && candidate.tag.endsWith('_max_sticker_size'),
+  );
+  if (!entry || typeof entry.tag !== 'string' || typeof entry.when !== 'number') return;
+
+  const alreadyRecorded = db.prepare('SELECT 1 FROM __drizzle_migrations WHERE created_at = ? LIMIT 1').get(entry.when);
+  if (alreadyRecorded) return;
+
+  const migrationPath = path.join(migrationsFolder, `${entry.tag}.sql`);
+  if (!fs.existsSync(migrationPath)) return;
+
+  const sql = fs.readFileSync(migrationPath, 'utf8');
+  const hash = crypto.createHash('sha256').update(sql).digest('hex');
+
+  db.prepare('INSERT INTO __drizzle_migrations ("hash", "created_at") VALUES (?, ?)').run(hash, entry.when);
+  console.log(`[migrate] Detected pre-existing max_sticker_size_bytes. Backfilled migration ${entry.tag} record.`);
+}
+

@@ -9,6 +9,7 @@ vi.mock('../audio/AudioManager', () => ({
       setVolume: vi.fn(),
       playSound: vi.fn(() => Promise.resolve(null)),
       clearInputDenial: vi.fn(),
+      setTextInputOnly: vi.fn(),
       resumeContext: vi.fn(() => Promise.resolve()),
       setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),

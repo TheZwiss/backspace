@@ -241,7 +241,7 @@ describe('InstanceDiscoveryHint', () => {
     expect(screen.getByRole('button', { name: ENABLE_LABEL })).toBeDisabled();
     // Only that row: a stacked strip must not disable a neighbour's unrelated
     // action because this one is in flight.
-    expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
+    expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeEnabled();
     expect(onDiscoveryEnabled).not.toHaveBeenCalled();
 
     finish();
@@ -301,7 +301,7 @@ describe('InstanceDiscoveryHint', () => {
     await waitFor(() => expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument());
 
     fail(err);
-    await waitFor(() => expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeEnabled());
     expect(screen.queryByText(describeError(err))).not.toBeInTheDocument();
 
     // The row the attempt was made on comes back, and it comes back clean.
@@ -351,10 +351,11 @@ describe('InstanceDiscoveryHint', () => {
     render(<InstanceDiscoveryHint directoryConfigured directoryAvailable onDiscoveryEnabled={onDiscoveryEnabled} onBrowseEnabled={onBrowseEnabled} />);
 
     await clickThrough(user, LIST_LABEL, LIST_CONFIRM_LABEL);
-    expect(screen.getByRole('button', { name: LIST_LABEL })).toBeDisabled();
+    // The confirmation dialog is still leaving, so the row behind it is hidden from the accessibility tree.
+    expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeDisabled();
 
     finish();
-    await waitFor(() => expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeEnabled());
   });
 
   it('a rejected listing shows the described error and leaves the row in place', async () => {
@@ -371,7 +372,7 @@ describe('InstanceDiscoveryHint', () => {
     // have to be dismissed to read it.
     expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
     expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
+    expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeEnabled();
   });
 
   /*
@@ -540,10 +541,10 @@ describe('InstanceDiscoveryHint', () => {
     // The PATCH has answered by now; the re-read has not, and re-enabling here
     // would offer the click again under a row that is about to go.
     expect(updateInstanceSettings).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeDisabled();
+    expect(screen.getByRole('button', { name: BROWSE_LABEL, hidden: true })).toBeDisabled();
 
     finish();
-    await waitFor(() => expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: BROWSE_LABEL, hidden: true })).toBeEnabled());
   });
 
   it('a rejected browse change shows the described error and leaves the row in place', async () => {
@@ -565,7 +566,7 @@ describe('InstanceDiscoveryHint', () => {
     await waitFor(() => expect(screen.getByText(describeError(err))).toBeInTheDocument());
     expect(screen.queryByText(BROWSE_CONFIRM_TITLE)).not.toBeInTheDocument();
     expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeEnabled();
+    expect(screen.getByRole('button', { name: BROWSE_LABEL, hidden: true })).toBeEnabled();
     // The save never landed, so there is nothing for the page to re-read.
     expect(onBrowseEnabled).not.toHaveBeenCalled();
   });
@@ -740,7 +741,7 @@ describe('InstanceDiscoveryHint', () => {
       expect(updateInstanceSettings).not.toHaveBeenCalled();
       expect(screen.queryByText(LIST_CONFIRM_TITLE)).not.toBeInTheDocument();
       expect(screen.getByText(NOT_LISTED_TEXT)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: LIST_LABEL })).toBeEnabled();
+      expect(screen.getByRole('button', { name: LIST_LABEL, hidden: true })).toBeEnabled();
     });
 
     it('confirming the list action writes the flag exactly once', async () => {
@@ -798,7 +799,7 @@ describe('InstanceDiscoveryHint', () => {
       expect(onBrowseEnabled).not.toHaveBeenCalled();
       expect(screen.queryByText(BROWSE_CONFIRM_TITLE)).not.toBeInTheDocument();
       expect(screen.getByText(BROWSE_OFF_TEXT)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: BROWSE_LABEL })).toBeEnabled();
+      expect(screen.getByRole('button', { name: BROWSE_LABEL, hidden: true })).toBeEnabled();
     });
 
     it('confirming the browse action writes the flag exactly once', async () => {

@@ -84,7 +84,7 @@ function applyMigrations(db: Database.Database): void {
   }
 }
 
-const OWNER_INSTANCE = 'orbit.ddns.net';
+const OWNER_INSTANCE = 'orbit.example';
 const OWNER_ORIGIN = `https://${OWNER_INSTANCE}`;
 const FEDERATED_ID = 'fed-bootstrap-1';
 

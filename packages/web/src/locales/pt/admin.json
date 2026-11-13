@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "Descoberta de pessoas",
+      "description": "Escolha quem aparece antes de uma busca. A busca direta e a opção de adicionar pelos servidores continuam disponíveis.",
+      "search": "Somente busca direta (padrão)",
+      "shared": "Pessoas dos servidores em comum",
+      "all": "Todas as pessoas da instância"
+    },
     "title": "Geral",
     "description": "Configure sua instância do Backspace. Estas configurações afetam todos os usuários.",
     "instanceName": {
@@ -260,8 +267,11 @@
     "uploadLimit": {
       "label": "Limite de upload",
       "maxFileSize": "Tamanho máximo do arquivo",
+      "maxStickerSize": "Tamanho máximo da figurinha",
       "saved": "Limite de upload definido como {{limit}}",
-      "saveFailed": "Falha ao atualizar o limite de upload"
+      "saveFailed": "Falha ao atualizar o limite de upload",
+      "stickerSaved": "Limite de figurinhas definido como {{limit}}",
+      "stickerSaveFailed": "Falha ao atualizar o limite de figurinhas"
     },
     "cleanup": {
       "label": "Limpeza",
@@ -310,6 +320,34 @@
       "deletedToast_many": "{{count}} arquivos excluídos ({{size}})",
       "deletedToast_other": "{{count}} arquivos excluídos ({{size}})",
       "failed": "Falha na limpeza de mídia"
+    },
+    "diskCleanup": {
+      "label": "Limpeza automática",
+      "enable": "Liberar espaço automaticamente quando o disco estiver quase cheio",
+      "enableHint": "Primeiro apaga arquivos que nada usa, depois anexos antigos do chat, do mais antigo ao mais novo. O texto das mensagens fica.",
+      "warning": "Ligada: quando o disco chegar ao limite abaixo, anexos do chat com mais de {{days}} dias podem ser apagados de vez. Os mais novos e as fotos de perfil nunca são tocados.",
+      "usage": "{{percent}}% do disco em uso ({{used}} de {{total}})",
+      "usageLabel": "Uso do disco",
+      "usageUnknown": "Não foi possível ler o uso do disco.",
+      "threshold": "Começar a limpar em",
+      "target": "Limpar até",
+      "minAge": "Nunca apagar arquivos com menos de",
+      "days": "dias",
+      "problemThreshold": "O nível de início deve ser um número inteiro entre {{min}} e {{max}}.",
+      "problemTarget": "O nível até onde limpar deve ser um número inteiro entre {{min}} e {{max}} (pelo menos 5 pontos abaixo do nível de início).",
+      "problemAge": "A idade deve ser um número inteiro de dias entre {{min}} e {{max}}.",
+      "saved": "Configurações de limpeza salvas",
+      "checkNow": "Verificar agora",
+      "checking": "Verificando…",
+      "checkedNothing": "O disco está abaixo do limite, então nada foi apagado.",
+      "neverRan": "Nenhuma limpeza foi executada ainda.",
+      "stage": {
+        "safe": "só arquivos sem uso",
+        "media": "incluindo anexos antigos"
+      },
+      "lastRun_one": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados.",
+      "lastRun_other": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados.",
+      "lastRun_many": "Última limpeza {{when}} ({{stage}}): {{before}}% → {{after}}%, {{count}} arquivo(s) apagado(s), {{size}} liberados."
     }
   },
   "streaming": {
@@ -353,6 +391,32 @@
     "capWarning": {
       "title": "Os valores da matriz excedem o limite global.",
       "description": "Alguns valores de taxa de bits excedem seu máximo de {{max}}. As transmissões nessas combinações terão a qualidade reduzida ao seu limite."
+    },
+    "camera": {
+      "label": "Câmera",
+      "description": "Controla a qualidade com que os usuários publicam a câmera.",
+      "mode": {
+        "label": "Política de qualidade da webcam",
+        "fixed": "Fixa (comportamento atual)",
+        "userChoice": "Usuários escolhem",
+        "fixedHint": "Todos publicam na qualidade abaixo.",
+        "userChoiceHint": "Os usuários escolhem entre os valores permitidos em Voz e Vídeo."
+      },
+      "defaults": {
+        "resolution": "Resolução padrão",
+        "framerate": "Taxa de quadros padrão",
+        "bitrate": "Taxa de bits padrão (kbps)"
+      },
+      "quality": {
+        "resolutions": "Resoluções permitidas",
+        "framerates": "Taxas de quadros permitidas",
+        "bitrateRange": "Faixa de taxa de bits (kbps)",
+        "min": "Mín.",
+        "max": "Máx.",
+        "allowCustom": "Permitir taxa de bits personalizada",
+        "allowCustomHint": "Os usuários podem definir qualquer taxa dentro da faixa."
+      },
+      "highEndWarning": "Configurações altas de câmera custam banda de upload e CPU de todos os participantes."
     }
   },
   "updates": {

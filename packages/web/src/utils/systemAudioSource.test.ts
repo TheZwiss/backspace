@@ -5,7 +5,9 @@ const api = vi.hoisted(() => ({
   stopSystemAudio: vi.fn(),
 }));
 const platform = vi.hoisted(() => ({ getElectronAPI: vi.fn() }));
+const processAudio = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('../platform/platform', () => platform);
+vi.mock('./windowsProcessAudio', () => ({ openWindowsProcessAudio: processAudio.open }));
 
 import { isAppSystemAudioSource, userDevicesSignature } from './systemAudioSource';
 
@@ -39,6 +41,7 @@ beforeEach(async () => {
   ({ acquireAppExcludedSystemAudio } = await import('./systemAudioSource'));
   api.startSystemAudio.mockReset();
   api.stopSystemAudio.mockReset().mockResolvedValue(undefined);
+  processAudio.open.mockReset();
   platform.getElectronAPI.mockReset().mockReturnValue(api);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -92,6 +95,35 @@ describe('acquireAppExcludedSystemAudio', () => {
       },
     });
     expect(api.stopSystemAudio).not.toHaveBeenCalled();
+  });
+
+  it('opens the Windows PCM source as audio tracks and keeps the shared capture until the last track stops', async () => {
+    platform.getElectronAPI.mockReturnValue({ ...api, platform: 'win32' });
+    api.startSystemAudio.mockResolvedValue({ ok: true, pcm: true });
+    const first = fakeTrack();
+    const second = fakeTrack();
+    const tracks = [first.track, second.track];
+    processAudio.open.mockImplementation(async (onStop: () => void) => {
+      const track = tracks.shift()!;
+      const originalStop = track.stop.bind(track);
+      track.stop = (): void => { originalStop(); onStop(); };
+      return track;
+    });
+
+    const [a, b] = await Promise.all([
+      acquireAppExcludedSystemAudio(),
+      acquireAppExcludedSystemAudio(),
+    ]);
+
+    expect(a).toBe(first.track);
+    expect(b).toBe(second.track);
+    expect(api.startSystemAudio).toHaveBeenCalledOnce();
+    expect(processAudio.open).toHaveBeenCalledTimes(2);
+
+    a!.stop();
+    expect(api.stopSystemAudio).not.toHaveBeenCalled();
+    b!.stop();
+    expect(api.stopSystemAudio).toHaveBeenCalledOnce();
   });
 
   it('takes the source down when the track stops or ends', async () => {

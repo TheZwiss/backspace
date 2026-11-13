@@ -36,7 +36,7 @@ describe('Tooltip across the mobile breakpoint', () => {
     // The wrapper is gone, the children are not.
     const child = screen.getByRole('button', { name: 'Toggle' });
     expect(child).toBeInTheDocument();
-    expect(child.closest('.relative.inline-flex')).toBeNull();
+    expect(child.closest('.contents')).toBeNull();
   });
 
   it('stays mounted when the viewport stops being mobile', () => {
@@ -50,7 +50,7 @@ describe('Tooltip across the mobile breakpoint', () => {
       </Tooltip>,
     );
 
-    expect(screen.getByRole('button', { name: 'Toggle' }).closest('.relative.inline-flex')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Toggle' }).closest('.contents')).toBeNull();
 
     expect(() => {
       act(() => {
@@ -59,7 +59,7 @@ describe('Tooltip across the mobile breakpoint', () => {
     }).not.toThrow();
 
     // The hover wrapper is back, which is what the desktop tooltip hangs off.
-    expect(screen.getByRole('button', { name: 'Toggle' }).closest('.relative.inline-flex')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Toggle' }).closest('.contents')).not.toBeNull();
   });
 });
 
@@ -71,7 +71,7 @@ describe('Tooltip dismissal (WCAG 1.4.13, #329)', () => {
         <button type="button">Toggle</button>
       </Tooltip>,
     );
-    return screen.getByRole('button', { name: 'Toggle' }).closest('.relative.inline-flex') as HTMLElement;
+    return screen.getByRole('button', { name: 'Toggle' }).closest('.contents') as HTMLElement;
   }
 
   afterEach(() => {

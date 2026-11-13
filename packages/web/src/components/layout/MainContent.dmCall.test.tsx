@@ -7,6 +7,7 @@ vi.mock('../../audio/AudioManager', () => ({
       setOutputDevice: vi.fn(),
       setVolume: vi.fn(),
       clearInputDenial: vi.fn(),
+      setTextInputOnly: vi.fn(),
       resumeContext: vi.fn(() => Promise.resolve()),
       setInputDevice: vi.fn(() => Promise.resolve(null)),
     }),
@@ -52,14 +53,14 @@ describe('desktop DM header call actions', () => {
   it('starts a call on the DM channel origin', () => {
     useSpaceStore.setState({ channelOriginMap: new Map([[dm.id, 'https://remote.example']]) });
     renderDm();
-    fireEvent.click(screen.getByTitle('Start Voice Call'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Voice Call' }));
     expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id, withCamera: false });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_start', dmChannelId: dm.id }, 'https://remote.example');
   });
 
   it('starts a video call: the same call, with the camera to go on once connected', () => {
     renderDm();
-    fireEvent.click(screen.getByTitle('Start Video Call'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start Video Call' }));
     expect(useVoiceStore.getState().outgoingCall).toEqual({ dmChannelId: dm.id, withCamera: true });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_start', dmChannelId: dm.id }, '');
   });
@@ -74,7 +75,7 @@ describe('desktop DM header call actions', () => {
   it('cannot start a second call while an incoming call rings', () => {
     useVoiceStore.setState({ incomingCall: { dmChannelId: 'other', federatedCallId: null, callOrigin: null, callerId: 'bob', callerName: 'Bob', livekit: null } });
     renderDm();
-    const button = screen.getByTitle('Start Voice Call');
+    const button = screen.getByRole('button', { name: 'Start Voice Call' });
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(wsSend).not.toHaveBeenCalled();
@@ -98,7 +99,7 @@ describe('desktop DM header call actions', () => {
     useVoiceStore.setState({ voiceUsers: new Map([[dm.id, ['partner']]]), connectFn });
     renderDm();
     // The voice and video buttons both join; the voice one comes first.
-    fireEvent.click(screen.getAllByTitle('Join Call')[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Join Call' })[0]!);
     expect(useVoiceStore.getState().outgoingCall).toBeNull();
     expect(useVoiceStore.getState().activeDmCall).toEqual({ dmChannelId: dm.id, federatedCallId: null, callOrigin: null, livekit: null });
     expect(wsSend).toHaveBeenCalledWith({ type: 'dm_call_accept', dmChannelId: dm.id }, '');

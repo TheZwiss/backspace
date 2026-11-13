@@ -1,7 +1,9 @@
+import { CallHistoryMessage } from './CallHistoryMessage';
 import type { DmChannel, MessageWithUser } from '@backspace/shared';
 import { parseDmSystemEvent } from '@backspace/shared/src/dmSystemEvents';
 import { useTranslation } from 'react-i18next';
 import { SpaceInviteCard } from './SpaceInviteCard';
+import { useFormatters } from '../../i18n/formatters';
 import { dmSystemActor, dmSystemActorName, dmSystemIcon, dmSystemText } from '../../utils/dmFormatters';
 
 interface SystemMessageProps {
@@ -26,8 +28,11 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
   // Subscribes the row to language changes; the text itself comes from
   // `dmSystemText`, which reads the same i18n instance.
   useTranslation(['dm']);
+  const f = useFormatters();
   const event = parseDmSystemEvent(message.content);
   const actorName = dmSystemActorName(dmSystemActor(message, dm?.members));
+
+  if (event?.event === 'call_history') return <CallHistoryMessage event={event} actorName={actorName} />;
 
   if (event?.event === 'space_invite') {
     return (
@@ -43,6 +48,15 @@ export function SystemMessage({ message, dm }: SystemMessageProps) {
       <span className="text-xs text-txt-tertiary">
         {icon && <span className="mr-1.5">{icon}</span>}
         {dmSystemText(event, actorName, 'timeline')}
+        {event?.event === 'nudge' && (
+          <time
+            dateTime={new Date(message.createdAt).toISOString()}
+            title={`${f.formatMediumDate(message.createdAt)} ${f.formatTime(message.createdAt, true)}`}
+            className="ml-2 whitespace-nowrap tabular-nums text-ui-micro"
+          >
+            {f.formatTime(message.createdAt)}
+          </time>
+        )}
       </span>
     </div>
   );

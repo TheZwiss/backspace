@@ -67,6 +67,16 @@
         "note": "This channel is hidden from members without explicit access. Users with the Administrator permission or space owners can always see all channels.",
         "unhideOnSave": "Saving makes this channel visible to every member."
       },
+      "voiceQuality": {
+        "label": "Voice Quality",
+        "option": "{{value}} kbps",
+        "description": {
+          "64": "Clear speech. Uses the least bandwidth.",
+          "128": "Fuller, more natural voices.",
+          "256": "Highest quality, best for music. Uses the most bandwidth."
+        },
+        "hint": "Sets the highest audio bitrate each member can send in this channel. It applies to everyone, including people already connected."
+      },
       "deleteButton": "Delete Channel"
     },
     "delete": {
@@ -436,6 +446,12 @@
   "permissions": {
     "title": "Permissions",
     "names": {
+      "createSoundboard": "Create soundboard sounds",
+      "manageSoundboard": "Manage soundboard sounds",
+      "createStickers": "Create server stickers",
+      "manageStickers": "Manage server stickers",
+      "useSoundboard": "Use soundboard",
+      "useExternalSounds": "Use sounds from other servers",
       "administrator": "Administrator",
       "viewChannel": "View Channels",
       "manageChannels": "Manage Channels",
@@ -557,7 +573,13 @@
       "undeafen": "Undeafen",
       "spaceMuted": "Space Muted",
       "spaceDeafened": "Space Deafened",
-      "permissionMuted": "Muted (No Speak Permission)"
+      "permissionMuted": "Muted (No Speak Permission)",
+      "statusMenu": "Status",
+      "customStatus": "Custom status",
+      "customStatusPlaceholder": "What are you up to?",
+      "customStatusEmoji": "Add an emoji",
+      "editProfile": "Edit profile",
+      "statusUpdateFailed": "Could not update status"
     },
     "dmUnreadMessages_one": "{{count}} unread direct message",
     "dmUnreadMessages_other": "{{count}} unread direct messages",
@@ -694,5 +716,26 @@
     "suppressRoles": "Suppress role mentions",
     "massHeading": "Group mentions",
     "massNote": "@here reaches the same members as @everyone. Mentions of you by name always notify you."
+  },
+  "stickers": {
+    "title": "Server stickers",
+    "description": "One shared sticker pack for this server, with up to 50 static or animated stickers.",
+    "empty": "This server does not have a sticker pack yet.",
+    "create": "Create server pack",
+    "add": "Add sticker",
+    "pendingShares": "Albums awaiting approval",
+    "sharePending": "Requested a private album share for this server.",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
+  "profile": {
+    "title": "Server profile",
+    "view": "View server profile",
+    "viewIcon": "View server icon",
+    "viewBanner": "View server banner",
+    "bannerAlt": "Banner for {{name}}",
+    "server": "Server",
+    "noDescription": "This server has no description yet.",
+    "createdAt": "Created on"
   }
 }

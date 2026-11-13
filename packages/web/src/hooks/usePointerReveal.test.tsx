@@ -5,9 +5,9 @@ import { usePointerReveal } from './usePointerReveal';
 
 const IDLE_MS = 2500;
 
-function Probe({ active }: { active: boolean }) {
+function Probe({ active, bottomOnly = false }: { active: boolean; bottomOnly?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
-  const revealed = usePointerReveal(ref, active, IDLE_MS);
+  const revealed = usePointerReveal(ref, active, IDLE_MS, bottomOnly);
   return (
     <div ref={ref} data-testid="surface">
       <div data-testid="state">{revealed ? 'revealed' : 'hidden'}</div>
@@ -30,6 +30,20 @@ afterEach(() => {
 });
 
 describe('usePointerReveal', () => {
+  it('reveals controls at the bottom and keeps them visible over the controls', () => {
+    vi.useFakeTimers();
+    const view = render(<Probe active bottomOnly />);
+    const surface = view.getByTestId('surface');
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ bottom: 800 } as DOMRect);
+    act(() => surface.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 300 })));
+    expect(view.getByTestId('state')).toHaveTextContent('hidden');
+    act(() => surface.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 750 })));
+    expect(view.getByTestId('state')).toHaveTextContent('revealed');
+    act(() => view.getByTestId('button').dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientY: 500 })));
+    act(() => vi.advanceTimersByTime(IDLE_MS * 2));
+    expect(view.getByTestId('state')).toHaveTextContent('revealed');
+    view.unmount();
+  });
   it('hides the chrome once the pointer has been still, which :hover cannot do', () => {
     vi.useFakeTimers();
     const view = render(<Probe active />);

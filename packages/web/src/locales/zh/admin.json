@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "发现用户",
+      "description": "选择搜索前显示哪些用户。仍可直接搜索或从空间添加好友。",
+      "search": "仅直接搜索（默认）",
+      "shared": "共同空间中的用户",
+      "all": "此实例中的所有用户"
+    },
     "title": "常规",
     "description": "配置您的 Backspace 实例。这些设置将影响所有用户。",
     "instanceName": {
@@ -248,8 +255,11 @@
     "uploadLimit": {
       "label": "上传限制",
       "maxFileSize": "单文件大小上限",
+      "maxStickerSize": "单表情大小上限",
       "saved": "上传上限已设置为 {{limit}}",
-      "saveFailed": "更新上传上限失败"
+      "saveFailed": "更新上传上限失败",
+      "stickerSaved": "表情大小上限已设置为 {{limit}}",
+      "stickerSaveFailed": "更新表情大小上限失败"
     },
     "cleanup": {
       "label": "清理",
@@ -282,6 +292,33 @@
       "files_other": "{{count}} 个文件 ({{size}})",
       "deletedToast_other": "已删除 {{count}} 个文件 ({{size}})",
       "failed": "媒体清理失败"
+    },
+    "diskCleanup": {
+      "label": "自动清理",
+      "enable": "磁盘快满时自动释放空间",
+      "enableHint": "先删除没有任何引用的文件，再删除旧的聊天附件，从最旧的开始。消息文本会保留。",
+      "warning": "已开启：当磁盘达到下面的上限时，超过 {{days}} 天的聊天附件可能被永久删除。更新的附件和个人头像不会被触及。",
+      "usage": "磁盘已使用 {{percent}}%（{{used}} / {{total}}）",
+      "usageLabel": "磁盘使用率",
+      "usageUnknown": "无法读取磁盘使用情况。",
+      "threshold": "开始清理的水平",
+      "target": "清理到",
+      "minAge": "永不删除比此更新的文件",
+      "days": "天",
+      "problemThreshold": "开始水平必须是 {{min}} 到 {{max}} 之间的整数。",
+      "problemTarget": "清理目标必须是 {{min}} 到 {{max}} 之间的整数（至少比开始水平低 5 个百分点）。",
+      "problemAge": "天数必须是 {{min}} 到 {{max}} 之间的整数。",
+      "saved": "清理设置已保存",
+      "checkNow": "立即检查",
+      "checking": "正在检查…",
+      "checkedNothing": "磁盘低于上限，因此没有删除任何内容。",
+      "neverRan": "尚未执行过清理。",
+      "stage": {
+        "safe": "仅未使用的文件",
+        "media": "包括旧附件"
+      },
+      "lastRun_one": "上次清理 {{when}}（{{stage}}）：{{before}}% → {{after}}%，已删除 {{count}} 个文件，释放 {{size}}。",
+      "lastRun_other": "上次清理 {{when}}（{{stage}}）：{{before}}% → {{after}}%，已删除 {{count}} 个文件，释放 {{size}}。"
     }
   },
   "streaming": {
@@ -325,6 +362,32 @@
     "capWarning": {
       "title": "矩阵中的部分数值超过了全局上限。",
       "description": "部分码率设置超出了您配置的最大上限 {{max}}。在这些组合下推流的画质将被降级限制在您的上限之内。"
+    },
+    "camera": {
+      "label": "摄像头",
+      "description": "控制用户发布摄像头画面的画质。",
+      "mode": {
+        "label": "摄像头画质策略",
+        "fixed": "固定（当前行为）",
+        "userChoice": "用户自选",
+        "fixedHint": "所有人按下方画质发布。",
+        "userChoiceHint": "用户在“语音和视频”设置中从允许的值里选择。"
+      },
+      "defaults": {
+        "resolution": "默认分辨率",
+        "framerate": "默认帧率",
+        "bitrate": "默认码率（kbps）"
+      },
+      "quality": {
+        "resolutions": "允许的分辨率",
+        "framerates": "允许的帧率",
+        "bitrateRange": "码率范围（kbps）",
+        "min": "最小",
+        "max": "最大",
+        "allowCustom": "允许自定义码率",
+        "allowCustomHint": "用户可以在范围内设置任意码率。"
+      },
+      "highEndWarning": "较高的摄像头设置会消耗所有参与者的上传带宽和 CPU。"
     }
   },
   "updates": {

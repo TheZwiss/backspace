@@ -634,7 +634,7 @@ completes (`authStore.deleteAccount` has already reset by then).
 
 Splits a potentially federated username:
 ```
-"erin@nova.ddns.net" -> { baseName: "erin", domain: "nova.ddns.net" }
+"erin@nova.example" -> { baseName: "erin", domain: "nova.example" }
 "erin"                -> { baseName: "erin", domain: null }
 ```
 

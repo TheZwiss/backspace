@@ -21,11 +21,11 @@ vi.mock('./voice', () => ({
   broadcastDeafenViaLiveKit: vi.fn(),
 }));
 vi.mock('./screenShare', () => ({
-  CAMERA_PRESET: { resolution: { width: 1280, height: 720 }, encoding: { maxBitrate: 1, maxFramerate: 30 }, codec: 'h264' },
   stopScreenShare: vi.fn(async () => {}),
+  applyOverdrive: vi.fn(async () => true),
 }));
 
-import { handleScreenShareAction } from './voiceActions';
+import { handleScreenShareAction, handleScreenShareActionForWindow } from './voiceActions';
 import { stopScreenShare } from './screenShare';
 import { broadcastVoiceStatus } from './voice';
 import { getActiveRoom } from '../hooks/useLiveKit';
@@ -37,7 +37,7 @@ describe('handleScreenShareAction', () => {
     vi.clearAllMocks();
     vi.mocked(getActiveRoom).mockReturnValue(room as never);
     useVoiceStore.setState({ isScreenSharing: false });
-    useScreenShareSetupStore.setState({ isOpen: false });
+    useScreenShareSetupStore.setState({ isOpen: false, targetDocument: null });
   });
 
   it('opens the setup screen instead of capturing when idle', async () => {
@@ -45,6 +45,16 @@ describe('handleScreenShareAction', () => {
     expect(useScreenShareSetupStore.getState().isOpen).toBe(true);
     expect(stopScreenShare).not.toHaveBeenCalled();
     expect(broadcastVoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it('opens the setup in the detached window and resets the target on close', async () => {
+    const childDocument = document.implementation.createHTMLDocument('call');
+    await handleScreenShareActionForWindow(childDocument);
+    expect(useScreenShareSetupStore.getState().targetDocument).toBe(childDocument);
+    useScreenShareSetupStore.getState().close();
+    expect(useScreenShareSetupStore.getState().targetDocument).toBeNull();
+    await handleScreenShareAction();
+    expect(useScreenShareSetupStore.getState().targetDocument).toBeNull();
   });
 
   it('delegates the stop when live, leaving the broadcast to stopScreenShare', async () => {

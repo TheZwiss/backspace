@@ -34,7 +34,8 @@ const COLOR_UTILITY = /^-?(?:text|bg|border(?:-[xytrblse])?|ring(?:-offset)?|fil
  * Values of CSS's `<box>` type (`ResizeObserver`'s `box` option,
  * `transform-box`): keywords that look like a colour class, never a class.
  */
-const CSS_BOX_KEYWORDS = new Set(['border-box', 'content-box', 'padding-box', 'margin-box', 'fill-box', 'stroke-box', 'view-box']);
+// Error codes are protocol values, not Tailwind classes.
+const NON_CLASS_KEYWORDS = new Set(['text-too-long', 'text-voice-invalid', 'border-box', 'content-box', 'padding-box', 'margin-box', 'fill-box', 'stroke-box', 'view-box']);
 
 interface Candidate {
   /** The utility without variants or `!`, e.g. `bg-surface-input/50`. */
@@ -72,7 +73,7 @@ function classesIn(text: string, cutAtStart: boolean, cutAtEnd: boolean): string
 function colorCandidates(text: string, where: (index: number) => string, cutAtStart = false, cutAtEnd = false): Candidate[] {
   const found: Candidate[] = [];
   for (const className of classesIn(text, cutAtStart, cutAtEnd)) {
-    if (CSS_BOX_KEYWORDS.has(className)) continue;
+    if (NON_CLASS_KEYWORDS.has(className)) continue;
     const utility = utilityOf(className);
     if (utility.includes('[') || !COLOR_UTILITY.test(utility)) continue;
     found.push({ utility: utility.replace(/^-/, ''), where: `${where(text.indexOf(className))}: ${className}` });

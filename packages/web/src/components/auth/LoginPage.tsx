@@ -77,9 +77,9 @@ export function LoginPage() {
   const isDisabled = isLoading || retryAfter > 0;
 
   return (
-    <div className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
+    <div data-auth-page="login" className="h-full overflow-y-auto flex flex-col items-center bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgb(var(--accent-primary)/0.06)_0%,transparent_50%)]" />
-      <div className="my-auto flex-shrink-0 w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
+      <div data-auth-card className="my-auto flex-shrink-0 w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-txt-primary">{t('auth:login.title')}</h1>
           <p className="text-txt-tertiary mt-1">{t('auth:login.subtitle')}</p>
@@ -126,10 +126,10 @@ export function LoginPage() {
             />
           </div>
 
-          <button
+          <button data-icon-motion="press"
             type="submit"
             disabled={isDisabled}
-            className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ui-button ui-button-primary w-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {retryAfter > 0
               ? t('auth:login.rateLimited.retryIn', { seconds: retryAfter })
@@ -143,14 +143,14 @@ export function LoginPage() {
               t={t}
               i18nKey="auth:login.registerPrompt"
               components={{
-                actionLink: <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+                actionLink: <Link data-icon-motion="press" to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
               }}
             />
           </p>
         </form>
 
         {instanceInfo && (
-          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+          <div className="mt-6 pt-4 border-t border-wash/[0.04] flex justify-center">
             <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
           </div>
         )}

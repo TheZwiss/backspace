@@ -15,21 +15,21 @@ export function ProfileRoles({ roles }: { roles: Role[] }) {
 
   return (
     <div>
-      <span id={headingId} className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+      <span id={headingId} className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
         {t('social:profile.roles')}
       </span>
       <ul aria-labelledby={headingId} className="flex flex-wrap gap-1.5 mt-1.5">
         {roles.map((role) => (
           <li
             key={role.id}
-            className="inline-flex items-center gap-1.5 max-w-full min-w-0 px-2 py-[3px] rounded-md bg-white/[0.05]"
+            className="inline-flex items-center gap-1.5 max-w-full min-w-0 px-2 py-[3px] rounded-md bg-wash/[0.05]"
           >
             <span
               className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: role.color || '#b9bbbe' }}
               aria-hidden="true"
             />
-            <span className="text-[12px] leading-[1.35] text-txt-secondary truncate">{role.name}</span>
+            <span className="text-ui-caption leading-[1.35] text-txt-secondary truncate">{role.name}</span>
           </li>
         ))}
       </ul>

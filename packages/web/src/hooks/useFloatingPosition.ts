@@ -63,12 +63,13 @@ export function computeFloatingPosition(
   placement: Placement,
   offset: number,
   align: Alignment = 'center',
+  viewport: { width: number; height: number } = { width: window.innerWidth, height: window.innerHeight },
 ): { top: number; left: number; actualPlacement: Placement } {
   anchorRect = layoutRect(anchorRect);
   floatingWidth = layoutPixels(floatingWidth);
   floatingHeight = layoutPixels(floatingHeight);
-  const vw = layoutPixels(window.innerWidth);
-  const vh = layoutPixels(window.innerHeight);
+  const vw = layoutPixels(viewport.width);
+  const vh = layoutPixels(viewport.height);
 
   let top = 0;
   let left = 0;
@@ -165,6 +166,7 @@ export function useFloatingPosition(
       placement,
       offset,
       align,
+      { width: anchor.ownerDocument.defaultView?.innerWidth ?? window.innerWidth, height: anchor.ownerDocument.defaultView?.innerHeight ?? window.innerHeight },
     );
 
     setResult((prev) => {
@@ -190,13 +192,14 @@ export function useFloatingPosition(
     targets.forEach((t) => ro.observe(t));
 
     // Also update on scroll/resize
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    const ownerWindow = anchor?.ownerDocument.defaultView ?? window;
+    ownerWindow.addEventListener('scroll', update, true);
+    ownerWindow.addEventListener('resize', update);
 
     return () => {
       ro.disconnect();
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      ownerWindow.removeEventListener('scroll', update, true);
+      ownerWindow.removeEventListener('resize', update);
     };
   }, [enabled, update, anchorRef, floatingRef]);
 
@@ -211,7 +214,7 @@ export function useFloatingPosition(
       position: 'fixed',
       top: result.top,
       left: result.left,
-      zIndex: 200,
+      zIndex: 'var(--layer-menu)',
     },
     actualPlacement: result.actualPlacement,
   };

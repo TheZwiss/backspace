@@ -1,5 +1,12 @@
 {
   "general": {
+    "peopleDiscovery": {
+      "label": "Personensuche",
+      "description": "Wähle, wer vor einer Suche erscheint. Die direkte Suche und das Hinzufügen über einen Space bleiben verfügbar.",
+      "search": "Nur direkte Suche (Standard)",
+      "shared": "Personen aus gemeinsamen Spaces",
+      "all": "Alle Personen dieser Instanz"
+    },
     "title": "Allgemein",
     "description": "Richte deine Backspace-Instanz ein. Diese Einstellungen gelten für alle Nutzer.",
     "instanceName": {
@@ -254,8 +261,11 @@
     "uploadLimit": {
       "label": "Upload-Limit",
       "maxFileSize": "Maximale Dateigröße",
+      "maxStickerSize": "Maximale Stickergröße",
       "saved": "Upload-Limit auf {{limit}} gesetzt",
-      "saveFailed": "Upload-Limit konnte nicht geändert werden"
+      "saveFailed": "Upload-Limit konnte nicht geändert werden",
+      "stickerSaved": "Sticker-Größenlimit auf {{limit}} gesetzt",
+      "stickerSaveFailed": "Sticker-Größenlimit konnte nicht geändert werden"
     },
     "cleanup": {
       "label": "Aufräumen",
@@ -296,6 +306,33 @@
       "deletedToast_one": "{{count}} Datei gelöscht ({{size}})",
       "deletedToast_other": "{{count}} Dateien gelöscht ({{size}})",
       "failed": "Medien konnten nicht aufgeräumt werden"
+    },
+    "diskCleanup": {
+      "label": "Automatische Bereinigung",
+      "enable": "Speicherplatz automatisch freigeben, wenn die Festplatte fast voll ist",
+      "enableHint": "Löscht zuerst Dateien, die nichts mehr verwendet, dann alte Chat-Anhänge, die ältesten zuerst. Der Nachrichtentext bleibt erhalten.",
+      "warning": "Aktiv: Erreicht die Festplatte die untenstehende Grenze, können Chat-Anhänge, die älter als {{days}} Tage sind, endgültig gelöscht werden. Neuere Dateien und Profilbilder bleiben unberührt.",
+      "usage": "{{percent}} % der Festplatte belegt ({{used}} von {{total}})",
+      "usageLabel": "Festplattenauslastung",
+      "usageUnknown": "Die Festplattenauslastung konnte nicht gelesen werden.",
+      "threshold": "Bereinigung starten bei",
+      "target": "Bereinigen bis",
+      "minAge": "Dateien nie löschen, die neuer sind als",
+      "days": "Tage",
+      "problemThreshold": "Die Startschwelle muss eine ganze Zahl zwischen {{min}} und {{max}} sein.",
+      "problemTarget": "Das Bereinigungsziel muss eine ganze Zahl zwischen {{min}} und {{max}} sein (mindestens 5 Punkte unter der Startschwelle).",
+      "problemAge": "Das Alter muss eine ganze Zahl von Tagen zwischen {{min}} und {{max}} sein.",
+      "saved": "Bereinigungseinstellungen gespeichert",
+      "checkNow": "Jetzt prüfen",
+      "checking": "Wird geprüft…",
+      "checkedNothing": "Die Festplatte liegt unter der Grenze, daher wurde nichts gelöscht.",
+      "neverRan": "Es wurde noch keine Bereinigung ausgeführt.",
+      "stage": {
+        "safe": "nur ungenutzte Dateien",
+        "media": "einschließlich alter Anhänge"
+      },
+      "lastRun_one": "Letzte Bereinigung {{when}} ({{stage}}): {{before}} % → {{after}} %, {{count}} Datei(en) gelöscht, {{size}} freigegeben.",
+      "lastRun_other": "Letzte Bereinigung {{when}} ({{stage}}): {{before}} % → {{after}} %, {{count}} Datei(en) gelöscht, {{size}} freigegeben."
     }
   },
   "streaming": {
@@ -339,6 +376,32 @@
     "capWarning": {
       "title": "Matrixwerte überschreiten die globale Obergrenze.",
       "description": "Einige Bitraten liegen über deinem Maximum von {{max}}. Streams mit diesen Kombinationen werden auf deine Obergrenze heruntergeregelt."
+    },
+    "camera": {
+      "label": "Webcam-Kamera",
+      "description": "Steuert die Qualität, mit der Benutzer ihre Kamera senden.",
+      "mode": {
+        "label": "Webcam-Qualitätsrichtlinie",
+        "fixed": "Fest (aktuelles Verhalten)",
+        "userChoice": "Benutzer wählen",
+        "fixedHint": "Alle senden mit der unten gewählten Qualität.",
+        "userChoiceHint": "Benutzer wählen in den Voice-&-Video-Einstellungen aus den erlaubten Werten."
+      },
+      "defaults": {
+        "resolution": "Standardauflösung",
+        "framerate": "Standardbildrate",
+        "bitrate": "Standardbitrate (kbps)"
+      },
+      "quality": {
+        "resolutions": "Erlaubte Auflösungen",
+        "framerates": "Erlaubte Bildraten",
+        "bitrateRange": "Bitratenbereich (kbps)",
+        "min": "Min.",
+        "max": "Max.",
+        "allowCustom": "Benutzerdefinierte Bitrate erlauben",
+        "allowCustomHint": "Benutzer können jede Bitrate innerhalb des Bereichs festlegen."
+      },
+      "highEndWarning": "Hohe Kameraeinstellungen kosten Upload-Bandbreite und CPU aller Teilnehmer."
     }
   },
   "updates": {

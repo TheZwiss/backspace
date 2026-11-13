@@ -15,7 +15,15 @@ directories:
   output: dist-electron
 files:
   - dist/**/*
+  # Only the pinned asyncify runtime is used by the local voice engine.
+  - "!dist/text-voice/ort-wasm-simd-threaded.jsep.*"
+  - "!dist/text-voice/ort-wasm-simd-threaded.jspi.*"
+  - "!dist/text-voice/ort-wasm-simd-threaded.mjs"
+  - "!dist/text-voice/ort-wasm-simd-threaded.wasm"
   - resources/**/*
+  # main.ts loads the window and dock icon from build/icon.png; without this the
+  # packaged app has no icon of its own and Linux shells show a blank one.
+  - build/icon.png
   # Exclude host-compiled native module artifacts from the asar.
   # electron-rebuild (postinstall) compiles uiohook-napi for the build machine,
   # creating build/Release/*.node. node-gyp-build checks build/ BEFORE prebuilds/,
@@ -56,10 +64,30 @@ mac:
   target:
     - dmg
 win:
+  extraResources:
+    - from: native/shared-texture/bin/${arch}/
+      to: shared-texture/${arch}/
+      filter:
+        - "*.exe"
+    - from: native/process-audio/bin/${arch}/
+      to: process-audio/${arch}/
+      filter:
+        - "*.exe"
+    - from: native/dxgi-output-probe/bin/${arch}/
+      to: dxgi-output-probe/${arch}/
+      filter:
+        - "*.exe"
   icon: ./build/icon.ico
   target:
     - nsis
 linux:
+  # Package the native PipeWire addon explicitly: optional dependency discovery
+  # can omit venmic in pnpm workspaces even when its prebuild exists.
+  extraResources:
+    - from: node_modules/@vencord/venmic/prebuilds/venmic-addon-linux-${arch}/node-napi-v7.node
+      to: venmic/node-napi-v7.node
+    - from: node_modules/@vencord/venmic/LICENSE
+      to: venmic/LICENSE
   # electron-builder derives the Linux executable name from package.json `name`
   # when this key is unset (LinuxPackager: `appInfo.sanitizedName.toLowerCase()`),
   # and this package is named `@backspace/desktop`. Sanitising drops the slash and

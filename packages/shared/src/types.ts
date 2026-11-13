@@ -1,4 +1,5 @@
 import type { ErrorCode, ErrorDetails } from './errors.js';
+import type { Bookmark, BookmarkKind } from './bookmarks.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ export interface User {
 }
 
 export interface ReplicatedInstance {
-  origin: string;   // Full URL with protocol, e.g. "https://orbit.ddns.net"
+  origin: string;   // Full URL with protocol, e.g. "https://orbit.example"
   username: string;
   domain?: string;  // Legacy field — kept for backward compat with existing data
 }
@@ -307,6 +308,8 @@ export interface Channel {
   position: number;
   categoryId: string | null;
   isPrivate?: boolean;
+  /** Voice channels only: ceiling of each member's microphone bitrate, in kbps. */
+  voiceBitrateKbps?: number;
   createdAt: number;
   lastMessageId?: string | null;
   myPermissions?: string; // Computed per-user BigInt decimal string
@@ -557,6 +560,7 @@ export interface Embed {
 // ─── Active Call Types ───────────────────────────────────────────────────────
 
 export interface ActiveCallInfo {
+  waitingUntil?: number;
   dmChannelId: string | null;
   federatedCallId?: string;
   callerId: string;
@@ -640,6 +644,16 @@ export interface ActivityTimestamps {
   end?: number;
 }
 
+/**
+ * Playback progress independent of the sender's wall clock. Receivers anchor
+ * this position to their own clock when the activity arrives, so devices with
+ * skewed clocks still show the same elapsed playback.
+ */
+export interface ActivityPlayback {
+  positionMs: number;
+  durationMs?: number;
+}
+
 export interface ActivityAssets {
   largeImage?: string;
   largeText?: string;
@@ -653,6 +667,7 @@ export interface Activity {
   details?: string;
   state?: string;
   timestamps?: ActivityTimestamps;
+  playback?: ActivityPlayback;
   assets?: ActivityAssets;
   url?: string;
 }
@@ -691,7 +706,12 @@ export interface DmCallUndeliverableFailure {
 }
 
 // Client → Server Events
+export const MSN_WINK_EFFECTS = ['msn_bouncy_ball', 'msn_bow', 'msn_dancing_pig', 'msn_eyeball', 'msn_frog', 'msn_guitar_smash', 'msn_heart', 'msn_kiss', 'msn_lipstick_girl', 'msn_love_letter', 'msn_notes', 'msn_silly_face', 'msn_stars', 'msn_water_balloon', 'msn_fart_guy'] as const;
+export type MsnWinkEffect = typeof MSN_WINK_EFFECTS[number];
+export type NudgeEffect = 'shake' | 'wave' | 'jelly' | 'knock' | 'confetti' | 'pulse' | MsnWinkEffect;
+
 export type ClientEvent =
+  | { type: 'dm_nudge'; dmChannelId: string; effect?: NudgeEffect }
   | { type: 'auth'; token: string; client?: ClientKind }
   | { type: 'message_create'; channelId: string; content: string; replyToId?: string }
   | { type: 'message_edit'; messageId: string; content: string }
@@ -735,6 +755,7 @@ export interface PresenceIdentity {
 
 // Server → Client Events
 export type ServerEvent =
+  | { type: 'dm_nudge'; dmChannelId: string; userId: string; username: string; avatar?: string | null; displayName?: string | null; effect?: NudgeEffect }
   | { type: 'channel_poke'; message: MessageWithUser }
   | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; supportsPoke?: boolean; unreadCounts?: Record<string, number>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; userActivityIdentities?: Record<string, PresenceIdentity>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'channel_unread_count'; counts: Record<string, number> }
@@ -765,6 +786,7 @@ export type ServerEvent =
   // `dmChannelId` is null and `federatedCallId` set when the instance holds a
   // federated call with no local copy of the DM (Path B, voice.md).
   | { type: 'dm_call_rejected'; dmChannelId: string | null; federatedCallId?: string }
+  | { type: 'dm_call_waiting'; dmChannelId: string; endsAt: number | null }
   | { type: 'dm_call_ended'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; phase: DmCallPhase; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
@@ -802,6 +824,13 @@ export type ServerEvent =
   // any of their sessions here). A setting with level null and not muted was
   // cleared. See docs/systems/websocket.md.
   | { type: 'notification_settings_updated'; setting: NotificationSetting }
+  // The user saved a message on this instance (from any of their sessions here).
+  // Sent to the user's own sockets only, never relayed. `bookmark` is the same
+  // object `PUT /api/bookmarks/:kind/:messageId` returns. See docs/systems/websocket.md.
+  | { type: 'bookmark_added'; bookmark: Bookmark }
+  // A bookmark of this instance was removed from the user's list. Idempotent
+  // removals that found nothing send no event.
+  | { type: 'bookmark_removed'; kind: BookmarkKind; channelId: string; messageId: string }
   | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
@@ -884,9 +913,12 @@ export interface UpdateChannelRequest {
   topic?: string | null;
   position?: number;
   categoryId?: string | null;
+  /** Voice channels only; one of `VOICE_BITRATE_OPTIONS_KBPS`. */
+  voiceBitrateKbps?: number;
 }
 
 export interface UpdateSpaceRequest {
+  bannerCrop?: { x: number; y: number; width: number; height: number };
   ownerTitle?: string | null;
   name?: string;
   icon?: string;
@@ -1126,7 +1158,10 @@ export interface GifResult {
 
 // ─── Instance Settings Types ────────────────────────────────────────────────
 
+export type PeopleDiscoveryMode = 'search' | 'shared-spaces' | 'all';
+
 export interface InstanceAdminSettings {
+  peopleDiscoveryMode?: PeopleDiscoveryMode;
   instanceName: string;
   registrationOpen: boolean;
   federatedRegistrationOpen: boolean;
@@ -1134,10 +1169,22 @@ export interface InstanceAdminSettings {
   gifApiKey?: string;
   gifEnabled?: boolean;
   maxUploadSizeMb: number;
+  maxStickerSizeMb: number;
   federationRelayEnabled: boolean;
   federationRelayTtlDays: number;
   defaultAutoRotateIntervalDays: number;
   autoAcceptPeering: boolean;
+  /**
+   * Automatic cleanup when the disk is nearly full (`server/src/utils/diskPressure.ts`).
+   * Off by default: the second stage deletes old chat attachments.
+   */
+  diskCleanupEnabled: boolean;
+  /** Used-space percentage that starts a sweep (50..99). */
+  diskCleanupThresholdPercent: number;
+  /** Old chat attachments are deleted until usage falls below this (10..threshold-5). */
+  diskCleanupTargetPercent: number;
+  /** Chat attachments newer than this many days are never deleted (1..3650). */
+  diskCleanupMinAgeDays: number;
   directoryEnabled: boolean;
   /**
    * The other directory axis: whether people on this instance see spaces from
@@ -1189,6 +1236,28 @@ export interface InstanceStreamingLimits {
   directoryConfigured: boolean;
   bitrateMatrixOverrides: Record<string, number> | null;
   allowCustomBitrate: boolean;
+  /**
+   * Webcam publish policy. Optional on the wire: an instance that predates
+   * this field (or a peer that has not upgraded) omits it, and readers treat
+   * that as the fixed default rather than guessing from the screen-share
+   * limits, which describe a different surface.
+   */
+  camera?: CameraStreamingLimits;
+}
+
+export type CameraQualityMode = 'fixed' | 'user-choice';
+
+export interface CameraStreamingLimits {
+  /** `fixed` keeps the 720p30/H.264 preset regardless of the user's saved choice. */
+  mode: CameraQualityMode;
+  defaultResolution: number;
+  defaultFramerate: number;
+  defaultBitrateKbps: number;
+  allowedResolutions: number[];
+  allowedFramerates: number[];
+  minBitrateKbps: number;
+  maxBitrateKbps: number;
+  allowCustomBitrate: boolean;
 }
 
 // ─── Federation Types ──────────────────────────────────────────────────────
@@ -1229,6 +1298,10 @@ export interface InstanceInfoResponse {
   // page. It only hides that card in the web client and changes nothing the
   // server does.
   supportCardEnabled: boolean;
+  /**
+   * Maximum custom sticker / emoji upload size in megabytes.
+   */
+  maxStickerSizeMb?: number;
 }
 
 /**
@@ -1364,6 +1437,35 @@ export interface CleanupResult {
   freedBytes: number;
   deletedAttachmentRecords: number;
   errors: string[];
+}
+
+/** One sweep of the disk-pressure cleanup (`server/src/utils/diskPressure.ts`). */
+export interface DiskPressureRun {
+  /** When the sweep ran (ms since epoch). */
+  at: number;
+  /** Used-space percentage before and after the sweep. */
+  usedPercentBefore: number;
+  usedPercentAfter: number;
+  /** `safe` freed enough with orphans and abandoned uploads; `media` also had to delete old chat attachments. */
+  stage: 'safe' | 'media';
+  deletedFiles: number;
+  freedBytes: number;
+  errors: string[];
+}
+
+/** What `GET /api/admin/storage/disk` reports. */
+export interface DiskPressureStatus {
+  enabled: boolean;
+  /** Null when the filesystem could not be read. */
+  usedPercent: number | null;
+  totalBytes: number | null;
+  usedBytes: number | null;
+  thresholdPercent: number;
+  targetPercent: number;
+  minAgeDays: number;
+  /** How often the worker looks at the disk. */
+  checkIntervalMinutes: number;
+  lastRun: DiskPressureRun | null;
 }
 
 // ─── Admin User Management Types ──────────────────────────────────────────
@@ -2121,3 +2223,21 @@ export type FederationRejectedReason =
 
 /** `federation_peers.status_reason`: set for `needs_attention` and `rejected`, null otherwise. */
 export type FederationPeerStatusReason = FederationNeedsAttentionReason | FederationRejectedReason;
+
+
+export interface SoundboardSound {
+  id: string;
+  spaceId: string;
+  name: string;
+  assetId: string;
+  creatorId: string;
+  durationMs: number;
+  volume: number;
+}
+export interface SoundboardPack {
+  spaceId: string;
+  name: string;
+  canCreate: boolean;
+  canManage: boolean;
+  sounds: SoundboardSound[];
+}

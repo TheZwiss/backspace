@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import { handleOverlayPopState } from '../../utils/overlayBack';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { useUIStore } from '../../stores/uiStore';
@@ -16,6 +17,7 @@ import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
 import { MobileInstancePanel } from './MobileInstancePanel';
+import { MobileBookmarksScreen } from '../bookmarks/MobileBookmarksScreen';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
@@ -82,6 +84,7 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
   'settings': () => <MobileSettingsScreen />,
   'settings-account': () => <MobileSettingsScreen initialPanel="account" />,
   'settings-appearance': () => <MobileSettingsScreen initialPanel="appearance" />,
+  'settings-notifications': () => <MobileSettingsScreen initialPanel="notifications" />,
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
@@ -135,22 +138,52 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
   'group-dm-info': (params) => <MobileGroupDmInfo params={params} />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,
+  'bookmarks': () => <MobileBookmarksScreen />,
   'backspace': () => <MobileBackspaceScreen />,
-  'user-profile': (params) => {
-    // Open the user profile modal with the userId from params
-    if (params?.userId) {
-      // Set modalData so UserProfileModal can read it. `origin` is the
-      // instance whose id `userId` is. A profile opened for a space member
-      // carries that member, so the modal can show their roles and read their
-      // user from the space rather than the home instance.
-      const member = params.spaceId && params.memberUserId
-        ? { spaceId: params.spaceId, userId: params.memberUserId }
-        : null;
-      useUIStore.getState().openModal('userProfile', { userId: params.userId, origin: params.origin ?? '', member });
-    }
-    return <UserProfileModal />;
-  },
+  'user-profile': (params) => <UserProfileScreen params={params} />,
 };
+
+/**
+ * The profile of a person, as a screen of the stack that shows `UserProfileModal`.
+ *
+ * It used to open the modal from the screen map's render function, so closing
+ * the modal (its X, the backdrop, Back) made the stack re-render and open it
+ * again: on a phone the profile could not be dismissed except by popping the
+ * screen. It opens once, from an effect, and when the modal closes by any means
+ * the screen goes with it.
+ */
+function UserProfileScreen({ params }: { params?: Record<string, string> }) {
+  const userId = params?.userId;
+  const origin = params?.origin ?? '';
+  const spaceId = params?.spaceId;
+  const memberUserId = params?.memberUserId;
+  const isOpen = useUIStore((s) => s.activeModal === 'userProfile');
+  const wasOpen = useRef(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    // `origin` is the instance whose id `userId` is. A profile opened for a space
+    // member carries that member, so the modal can show their roles and read their
+    // user from the space rather than the home instance.
+    const member = spaceId && memberUserId ? { spaceId, userId: memberUserId } : null;
+    useUIStore.getState().openModal('userProfile', { userId, origin, member });
+    return () => {
+      if (useUIStore.getState().activeModal === 'userProfile') useUIStore.getState().closeModal();
+    };
+  }, [userId, origin, spaceId, memberUserId]);
+
+  useEffect(() => {
+    if (isOpen) { wasOpen.current = true; return; }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    // The modal closed itself. Step back through the screen's own history entry:
+    // the shell's popstate handler pops the screen, so history and stack agree.
+    if (window.history.state?.mobileScreen === 'user-profile') window.history.back();
+    else useUIStore.getState().popMobileScreen();
+  }, [isOpen]);
+
+  return <UserProfileModal />;
+}
 
 export function MobileShell() {
   const mobileScreen = useUIStore((s) => s.mobileScreen);
@@ -175,6 +208,8 @@ export function MobileShell() {
   // Sync browser back button with mobile stack
   useEffect(() => {
     const handlePopState = () => {
+      // An open sheet or dialog takes Back first (utils/overlayBack.ts)
+      if (handleOverlayPopState()) return;
       if (useUIStore.getState().mobileStack.length > 0) {
         popMobileScreen();
       }

@@ -67,16 +67,16 @@ async function seedStaleUserAndPeer(baselineEpoch: string | null, hmacSecret: st
   const staleHash = await hashPassword('OLD-password-not-this');
   testDb.insert(schema.users).values({
     id: 'user-c',
-    username: 'carol@orbit.ddns.net',
+    username: 'carol@orbit.example',
     passwordHash: staleHash,
-    homeInstance: 'orbit.ddns.net',
+    homeInstance: 'orbit.example',
     homeUserId: 'hid',
     avatarColor: '#fff',
     createdAt: Date.now(),
   }).run();
   testDb.insert(schema.federationPeers).values({
     id: 'peer-k',
-    origin: 'https://orbit.ddns.net',
+    origin: 'https://orbit.example',
     hmacSecret,
     status: 'active',
     peerInstanceId: baselineEpoch,
@@ -116,7 +116,7 @@ describe('detached account login (federation_home_orphaned)', () => {
   // only authority. Local-hash login works normally; the hijackable self-heal path
   // is PERMANENTLY disabled so the new incarnation can never re-hash a stranger's
   // credentials into this established identity (detach design §4.1).
-  const seededUsername = 'carol@orbit.ddns.net';
+  const seededUsername = 'carol@orbit.example';
   const seededUserId = 'user-detached-1';
   let savedFetch: typeof globalThis.fetch;
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -140,7 +140,7 @@ describe('detached account login (federation_home_orphaned)', () => {
       // Detached: homed here, its former identity kept aside.
       homeInstance: null,
       homeUserId: null,
-      detachedHomeInstance: 'orbit.ddns.net',
+      detachedHomeInstance: 'orbit.example',
       detachedHomeUserId: 'old-home-id',
       federationHomeOrphaned: 1,
       avatarColor: '#fff',
@@ -178,7 +178,7 @@ describe('detached account login (federation_home_orphaned)', () => {
     globalThis.fetch = makeFetchStub(secret, 'EPOCH-A'); // home echoes the SAME epoch
     const res = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
     expect(res.statusCode).toBe(200);
   });
@@ -189,9 +189,9 @@ describe('detached account login (federation_home_orphaned)', () => {
     const passwordHash = await hashPassword('correct-horse');
     testDb.insert(schema.users).values({
       id: 'user-ok-1',
-      username: 'dave@orbit.ddns.net',
+      username: 'dave@orbit.example',
       passwordHash,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'live-home-id',
       federationHomeOrphaned: 0,
       avatarColor: '#fff',
@@ -199,7 +199,7 @@ describe('detached account login (federation_home_orphaned)', () => {
     }).run();
     const res = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { username: 'dave@orbit.ddns.net', password: 'correct-horse' },
+      payload: { username: 'dave@orbit.example', password: 'correct-horse' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().token).toBeTruthy();
@@ -234,7 +234,7 @@ describe('login: self-heal epoch guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -248,7 +248,7 @@ describe('login: self-heal epoch guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'attacker-password' },
+      payload: { username: 'carol@orbit.example', password: 'attacker-password' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -262,7 +262,7 @@ describe('login: self-heal epoch guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'whatever' },
+      payload: { username: 'carol@orbit.example', password: 'whatever' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -277,7 +277,7 @@ describe('login: self-heal epoch guard', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -308,14 +308,14 @@ describe('login: self-heal only rehashes when the home confirms the same account
     await seedStaleUserAndPeer('EPOCH-A', secret);
     // The row carries a suffixed name from an older re-attach (`carol_1`); the
     // home's `carol_1` is someone else.
-    testDb.update(schema.users).set({ username: 'carol_1@orbit.ddns.net' }).run();
+    testDb.update(schema.users).set({ username: 'carol_1@orbit.example' }).run();
     const before = await storedHash();
     globalThis.fetch = makeFetchStub(secret, 'EPOCH-A', { id: 'someone-else', homeUserId: null, username: 'carol_1' });
 
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol_1@orbit.ddns.net', password: 'carol-1-own-password' },
+      payload: { username: 'carol_1@orbit.example', password: 'carol-1-own-password' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -331,7 +331,7 @@ describe('login: self-heal only rehashes when the home confirms the same account
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -348,7 +348,7 @@ describe('login: self-heal only rehashes when the home confirms the same account
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(401);
@@ -364,7 +364,7 @@ describe('login: self-heal only rehashes when the home confirms the same account
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -379,7 +379,7 @@ describe('login: self-heal only rehashes when the home confirms the same account
     const res = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'carol@orbit.ddns.net', password: 'the-real-current-password' },
+      payload: { username: 'carol@orbit.example', password: 'the-real-current-password' },
     });
 
     expect(res.statusCode).toBe(200);

@@ -192,3 +192,45 @@ describe('the System Audio note in the desktop app', () => {
     expect(await screen.findByText(/Windows loopback may capture call audio/)).toBeInTheDocument();
   });
 });
+
+
+it('lets the sharer choose normal, blurred or hidden previews', () => {
+  render(<StreamQualityControls />);
+  const select = screen.getByRole('combobox', { name: 'Stream preview' });
+  expect(select).toHaveValue('normal');
+  fireEvent.change(select, { target: { value: 'blurred' } });
+  expect(useVoiceStore.getState().screenShareConfig.previewMode).toBe('blurred');
+  fireEvent.change(select, { target: { value: 'hidden' } });
+  expect(useVoiceStore.getState().screenShareConfig.previewMode).toBe('hidden');
+});
+
+describe('Windows screen-share cursor mode', () => {
+  afterEach(() => {
+    delete (window as { backspace?: BackspaceElectronAPI }).backspace;
+  });
+
+  it('offers auto, show and hide in the desktop app and persists the choice', () => {
+    window.backspace = { platform: 'win32' } as unknown as BackspaceElectronAPI;
+    render(<StreamQualityControls />);
+    const select = screen.getByRole('combobox', { name: 'Mouse cursor' });
+    expect(select).toHaveValue('auto');
+    expect(screen.getByRole('option', { name: 'Automatic' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Show' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Hide' })).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: 'hide' } });
+    expect(useVoiceStore.getState().screenShareConfig.cursorMode).toBe('hide');
+    const persisted = JSON.parse(localStorage.getItem('backspace-voice-settings') ?? '{}');
+    expect(persisted.state.screenShareConfig.cursorMode).toBe('hide');
+  });
+
+  it('does not offer the setting in a browser or on other desktop platforms', () => {
+    const { unmount } = render(<StreamQualityControls />);
+    expect(screen.queryByRole('combobox', { name: 'Mouse cursor' })).not.toBeInTheDocument();
+    unmount();
+
+    window.backspace = { platform: 'darwin' } as unknown as BackspaceElectronAPI;
+    render(<StreamQualityControls />);
+    expect(screen.queryByRole('combobox', { name: 'Mouse cursor' })).not.toBeInTheDocument();
+  });
+});

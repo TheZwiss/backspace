@@ -49,7 +49,8 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
     setStage('ask');
     setFailed(false);
     // The ask arrives unprompted, so it takes focus: screen readers announce it
-    // and the keyboard reaches its controls without a click first.
+    // and the keyboard reaches its controls without a click first. The dialog
+    // role and its name come from the Modal around this content.
     dialogRef.current?.focus();
   }, [open]);
 
@@ -79,9 +80,6 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
     <Modal isOpen={open} onClose={close} maxWidth="max-w-3xl" mobileStyle="fullscreen">
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={headingId}
         tabIndex={-1}
         className="flex flex-col desktop:flex-row gap-6 outline-none"
       >
@@ -93,7 +91,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('yes.title')}</h2>
               <p>{t('yes.body')}</p>
-              <button type="button" className={CLOSE_BUTTON} onClick={close}>
+              <button data-icon-motion="press" type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('yes.close')}
               </button>
             </>
@@ -102,7 +100,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
             <>
               <h2 id={headingId} className="text-lg font-semibold text-txt-primary">{t('no.title')}</h2>
               <p>{t('no.body')}</p>
-              <button type="button" className={CLOSE_BUTTON} onClick={close}>
+              <button data-icon-motion="press" type="button" className={CLOSE_BUTTON} onClick={close}>
                 {t('no.close')}
               </button>
             </>
@@ -126,7 +124,7 @@ export function HelloModal({ open, onAnswer, onDismiss, preview, previewFailed =
               </div>
               <div className="flex items-center justify-between gap-3 text-xs text-txt-tertiary">
                 <span aria-live="polite">{stage === 'saving' ? t('ask.saving') : ''}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={stage === 'saving'}
                   className="underline hover:text-txt-secondary transition-colors disabled:opacity-50"

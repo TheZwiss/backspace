@@ -80,14 +80,14 @@ describe('POST /api/auth/attach-proof', () => {
       method: 'POST',
       url: '/api/auth/attach-proof',
       headers: { authorization: `Bearer ${signJwt({ userId: 'native-1', username: 'youruser' })}` },
-      payload: { targetDomain: 'nova.ddns.net' },
+      payload: { targetDomain: 'nova.example' },
     });
     expect(res.statusCode).toBe(200);
     const { token } = JSON.parse(res.body);
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     const row = testDb.select().from(schema.federationAttachProofs).all()[0]!;
     expect(row.homeUserId).toBe('native-1');
-    expect(row.targetDomain).toBe('nova.ddns.net');
+    expect(row.targetDomain).toBe('nova.example');
     expect(row.usedAt).toBeNull();
     expect(row.expiresAt - row.createdAt).toBe(60_000);
   });
@@ -97,7 +97,7 @@ describe('POST /api/auth/attach-proof', () => {
       method: 'POST',
       url: '/api/auth/attach-proof',
       headers: { authorization: `Bearer ${signJwt({ userId: 'fed-1', username: 'guest@orbit.test' })}` },
-      payload: { targetDomain: 'nova.ddns.net' },
+      payload: { targetDomain: 'nova.example' },
     });
     expect(res.statusCode).toBe(403);
   });
@@ -126,7 +126,7 @@ describe('POST /api/auth/attach-proof', () => {
   });
 
   it('rejects unauthenticated requests', async () => {
-    const res = await app.inject({ method: 'POST', url: '/api/auth/attach-proof', payload: { targetDomain: 'nova.ddns.net' } });
+    const res = await app.inject({ method: 'POST', url: '/api/auth/attach-proof', payload: { targetDomain: 'nova.example' } });
     expect(res.statusCode).toBe(401);
   });
 
@@ -139,7 +139,7 @@ describe('POST /api/auth/attach-proof', () => {
       method: 'POST',
       url: '/api/auth/attach-proof',
       headers: { authorization: `Bearer ${signJwt({ userId: 'native-1', username: 'youruser' })}` },
-      payload: { targetDomain: 'nova.ddns.net' },
+      payload: { targetDomain: 'nova.example' },
     });
     const tokens = testDb.select().from(schema.federationAttachProofs).all().map(r => r.token);
     expect(tokens).not.toContain('e'.repeat(64));

@@ -21,6 +21,7 @@
       "unknownRole": "Cargo desconhecido"
     },
     "reactions": {
+      "picker": "Reações",
       "you": "Você",
       "others_one": "{{count}} outra pessoa",
       "others_many": "{{count}} outras pessoas",
@@ -76,6 +77,8 @@
     "cancelReply": "Cancelar resposta",
     "removeAttachment": "Remover anexo",
     "attachFile": "Anexar arquivo",
+    "dropTitle": "Enviar arquivo",
+    "dropHint": "Solte para anexar",
     "uploading": "Enviando…",
     "uploadingLabel": "Enviando",
     "failedCount_one": "{{count}} falhou",
@@ -95,6 +98,32 @@
       "named_many": "{{names}} estão digitando",
       "named_other": "{{names}} estão digitando",
       "several": "Várias pessoas estão digitando"
+    },
+    "voice": {
+      "record": "Gravar mensagem de voz",
+      "recording": "Gravando mensagem de voz",
+      "cancel": "Cancelar gravação",
+      "send": "Enviar mensagem de voz",
+      "tooShort": "Grave por um pouco mais de tempo para enviar.",
+      "denied": "O acesso ao microfone está bloqueado. Permita para o Backspace gravar.",
+      "unavailable": "Nenhum microfone pôde ser usado para gravar.",
+      "limit": "Limite de gravação atingido. Sua mensagem de voz foi enviada."
+    },
+    "attach": {
+      "menuLabel": "Anexar",
+      "photoVideo": "Foto ou vídeo",
+      "photoVideoCompressed": "Reduzido no seu dispositivo antes de enviar",
+      "photoVideoOriginal": "Enviado como está (a compressão está desligada)",
+      "document": "Documento",
+      "documentHint": "Qualquer arquivo, enviado exatamente como é",
+      "compressDefault": "Comprimir fotos e vídeos",
+      "compressDefaultHint": "Envios menores. Desligue para manter os originais."
+    },
+    "preparing": {
+      "image": "Comprimindo foto…",
+      "video": "Comprimindo vídeo… {{percent}}%",
+      "sendOriginal": "Enviar original",
+      "cancel": "Cancelar"
     }
   },
   "menu": {
@@ -132,6 +161,13 @@
       "partialInstance": "instância de {{username}} (limite: {{limit}})",
       "partialList": "Não foi possível guardar o arquivo em cache em {{instances}}. Essas pessoas ainda podem vê-lo pela sua instância.",
       "listPair": "{{first}} e {{second}}"
+    },
+    "voice": {
+      "label": "Mensagem de voz, {{duration}}",
+      "play": "Reproduzir mensagem de voz",
+      "pause": "Pausar mensagem de voz",
+      "speed": "Velocidade de reprodução {{speed}}",
+      "seek": "Posição na mensagem de voz"
     }
   },
   "gif": {
@@ -176,6 +212,14 @@
   },
   "stickers": {
     "title": "Minhas figurinhas",
+    "collections": "Coleções de figurinhas",
+    "servers": "Servidores",
+    "serverEmpty": "Este servidor ainda não tem um pacote de figurinhas",
+    "serverEmptyHint": "Um administrador pode criar o pacote em Configurações do servidor → Figurinhas do servidor.",
+    "favoritesTitle": "Figurinhas favoritas",
+    "favorite": "Favoritar figurinha",
+    "favorited": "Figurinha adicionada às favoritas",
+    "sharePending": "Um álbum privado solicitou publicação nesta instância.",
     "upload": "Enviar imagem",
     "limits": "PNG, JPEG, WebP ou GIF · até 5 MB por imagem",
     "loading": "Processando…",
@@ -193,6 +237,7 @@
     "cancel": "Cancelar",
     "replace": "Substituir imagem",
     "name": "Nome da figurinha",
+    "invalidName": "Escolha um nome visível com até 100 caracteres.",
     "dropImage": "Clique ou arraste uma imagem para cá",
     "pasteHint": "Você também pode colar uma imagem da área de transferência",
     "uploading": "Adicionando figurinha…",
@@ -223,11 +268,149 @@
     "renameNamed": "Renomear {{name}}",
     "renameTitle": "Renomear figurinha",
     "search": "Pesquisar figurinhas",
-    "noResults": "Nenhuma figurinha encontrada"
+    "noResults": "Nenhuma figurinha encontrada",
+    "store": "Loja de Figurinhas",
+    "myCollection": "Minhas Figurinhas",
+    "packs": "Pacotes de Figurinhas",
+    "explore": "Explorar",
+    "myPacks": "Criados por mim",
+    "install": "Adicionar",
+    "installed": "Adicionado",
+    "uninstall": "Remover",
+    "createPack": "Criar Pacote",
+    "editPack": "Editar Pacote",
+    "packName": "Nome do pacote",
+    "packDesc": "Descrição (opcional)",
+    "submitReview": "Enviar para Análise",
+    "pendingReview": "Em Análise",
+    "approved": "Aprovado",
+    "rejected": "Rejeitado",
+    "draft": "Rascunho",
+    "newVersion": "Nova Versão",
+    "deletePack": "Excluir Pacote",
+    "stickersCount_one": "{{count}} figurinha",
+    "stickersCount_many": "{{count}} figurinhas",
+    "stickersCount_other": "{{count}} figurinhas",
+    "noPacks": "Nenhum pacote de figurinhas encontrado",
+    "replicaBadge": "Federado",
+    "viewPack": "Ver Pacote",
+    "saveDraft": "Salvar como Rascunho",
+    "packCreated": "Pacote criado com sucesso",
+    "reviewSubmitted": "Enviado para análise do administrador",
+    "reviews": "Revisão",
+    "noReviews": "Nenhum pacote de figurinhas aguardando revisão",
+    "approve": "Aprovar",
+    "reject": "Rejeitar",
+    "rejectTitle": "Rejeitar Pacote de Figurinhas",
+    "rejectReason": "Motivo da rejeição",
+    "rejectPlaceholder": "Insira o motivo da rejeição",
+    "rejectConfirm": "Confirmar Rejeição",
+    "approvedSuccess": "Pacote de figurinhas aprovado com sucesso",
+    "rejectedSuccess": "Pacote de figurinhas rejeitado",
+    "reviewNotes": "Notas da revisão",
+    "creator": "Criador",
+    "sourceInstance": "Instância",
+    "localInstance": "Instância local",
+    "viewStickers": "Ver figurinhas",
+    "pendingReviewHint": "Em revisão do administrador"
   },
   "poke": {
     "action": "Cutucar",
     "received": "{{actor}} cutucou {{target}}",
     "disconnected": "Não foi possível cutucar: sem conexão com o servidor"
+  },
+  "nudge": {
+    "notice": "Chamou sua atenção!",
+    "title": "Chamar atenção",
+    "cooldown": "Aguarde 10 segundos entre envios",
+    "choose": "Escolher efeito de atenção",
+    "originals": "MSN Messenger · Winks originais",
+    "footer": "Um envio a cada 10 segundos.",
+    "effects": {
+      "shake": {
+        "title": "Sacudida MSN",
+        "description": "A clássica sacudida rápida"
+      },
+      "wave": {
+        "title": "Ondinha",
+        "description": "Uma onda atravessa a tela"
+      },
+      "jelly": {
+        "title": "Gelatina",
+        "description": "Estica, balança e volta ao lugar"
+      },
+      "knock": {
+        "title": "Batida na tela",
+        "description": "Duas pancadinhas para chamar"
+      },
+      "confetti": {
+        "title": "Confete",
+        "description": "Uma pequena comemoração"
+      },
+      "pulse": {
+        "title": "Pulso",
+        "description": "Uma borda roxa acende na tela"
+      },
+      "msn_bouncy_ball": {
+        "title": "Bola quicando",
+        "description": "Wink original do MSN"
+      },
+      "msn_bow": {
+        "title": "Reverência",
+        "description": "Wink original do MSN"
+      },
+      "msn_dancing_pig": {
+        "title": "Porquinho dançando",
+        "description": "Wink original do MSN"
+      },
+      "msn_eyeball": {
+        "title": "Olhos curiosos",
+        "description": "Wink original do MSN"
+      },
+      "msn_frog": {
+        "title": "Sapo",
+        "description": "Wink original do MSN"
+      },
+      "msn_guitar_smash": {
+        "title": "Guitarra",
+        "description": "Wink original do MSN"
+      },
+      "msn_heart": {
+        "title": "Coração",
+        "description": "Wink original do MSN"
+      },
+      "msn_kiss": {
+        "title": "Beijo",
+        "description": "Wink original do MSN"
+      },
+      "msn_lipstick_girl": {
+        "title": "Garota do batom",
+        "description": "Wink original do MSN"
+      },
+      "msn_love_letter": {
+        "title": "Carta de amor",
+        "description": "Wink original do MSN"
+      },
+      "msn_notes": {
+        "title": "Notas musicais",
+        "description": "Wink original do MSN"
+      },
+      "msn_silly_face": {
+        "title": "Careta",
+        "description": "Wink original do MSN"
+      },
+      "msn_stars": {
+        "title": "Estrelas",
+        "description": "Wink original do MSN"
+      },
+      "msn_water_balloon": {
+        "title": "Balão de água",
+        "description": "Wink original do MSN"
+      },
+      "msn_fart_guy": {
+        "title": "Gordinho peidão",
+        "description": "Fart Guy · Wink original do MSN"
+      }
+    }
   }
 }

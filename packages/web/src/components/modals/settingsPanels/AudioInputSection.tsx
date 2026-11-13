@@ -107,7 +107,7 @@ export function AudioInputSection() {
           <div className="text-xs text-txt-tertiary">
             {t('voice.input.accessDenied.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => { requestPermission().catch(() => {}); }}
             className="text-xs px-3 py-1.5 rounded-md bg-surface-base hover:bg-interactive-hover text-txt-secondary transition-colors"
           >
@@ -125,9 +125,9 @@ export function AudioInputSection() {
           <div className="text-xs text-txt-tertiary">
             {t('voice.input.permissionPrompt.description')}
           </div>
-          <button
+          <button data-icon-motion="press"
             onClick={() => { requestPermission().catch(() => {}); }}
-            className="text-[13px] px-3 py-2 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white font-medium transition-colors"
+            className="ui-button ui-button-primary transition-colors"
           >
             {t('voice.input.permissionPrompt.enable')}
           </button>
@@ -158,12 +158,12 @@ export function AudioInputSection() {
     <SectionShell title={t('voice.input.title')}>
       <div className="space-y-3">
         <div ref={dropdownRef}>
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => setListOpen((v) => !v)}
             className="w-full px-3 py-2 flex items-center justify-between rounded-md bg-surface-base hover:bg-interactive-hover transition-colors"
           >
-            <span className="text-[13px] text-txt-primary truncate text-left">{selectedLabel}</span>
+            <span className="text-ui-label text-txt-primary truncate text-left">{selectedLabel}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
               className={`text-txt-tertiary flex-shrink-0 ml-2 transition-transform ${listOpen ? 'rotate-90' : ''}`}>
               <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
@@ -192,7 +192,7 @@ export function AudioInputSection() {
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-txt-primary">{t('voice.input.volume.label')}</div>
+            <div className="text-ui-label font-medium text-txt-primary">{t('voice.input.volume.label')}</div>
             <div className="text-xs text-txt-tertiary tabular-nums">{t('common:units.percent', { value: inputVolume })}</div>
           </div>
           <input
@@ -201,7 +201,7 @@ export function AudioInputSection() {
             max={200}
             value={inputVolume}
             onChange={(e) => setInputVolume(Number(e.target.value))}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+            className="ui-range"
             style={{
               background: `linear-gradient(to right, rgb(var(--accent-primary)) 0%, rgb(var(--accent-primary)) ${inputVolume / 2}%, rgb(var(--interactive-muted)) ${inputVolume / 2}%, rgb(var(--interactive-muted)) 100%)`,
             }}

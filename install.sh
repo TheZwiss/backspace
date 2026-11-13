@@ -601,6 +601,10 @@ EOF
 
 # LiveKit Voice/Video
 LIVEKIT_URL=wss://${DOMAIN}/livekit
+# How the server itself reaches LiveKit's HTTP API (soundboard, room service).
+# LIVEKIT_URL is the browsers' address and goes through the reverse proxy, which
+# the server's SDK cannot use: it drops the /livekit path and lands on the app.
+LIVEKIT_INTERNAL_URL=http://host.docker.internal:7880
 LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
 LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
 

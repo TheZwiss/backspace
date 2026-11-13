@@ -1,4 +1,6 @@
+import { useBackDismiss } from '../../utils/overlayBack';
 import { layoutRect, layoutPixels } from '../../platform/interfaceScale';
+import { StrikeLine } from '../ui/StrikeLine';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
@@ -37,6 +39,8 @@ export function MobileVoiceJoinSheet({
   const { t } = useTranslation(['voice', 'common']);
   const [preMuted, setPreMuted] = useState(false);
   const [visible, setVisible] = useState(false);
+  // The system Back closes the sheet instead of leaving the screen behind it
+  useBackDismiss(onClose);
 
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
@@ -396,7 +400,7 @@ export function MobileVoiceJoinSheet({
   return createPortal(
     <>
       {/* Backdrop */}
-      <div
+      <div data-icon-motion="arrow"
         className="fixed inset-0 bg-black/50 z-50"
         onClick={handleBackdropClick}
       />
@@ -421,7 +425,7 @@ export function MobileVoiceJoinSheet({
         {/* Drag handle + header — both belong to the drag-to-close region.
             The user can grab the visible pill OR the title row to drag down. */}
         <div {...dragHandleProps} className="touch-none">
-          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mt-3 mb-4" />
+          <div className="w-10 h-1 rounded-full bg-wash/20 mx-auto mt-3 mb-4" />
 
           {/* Header */}
           <div className="flex items-center justify-between px-5 mb-2">
@@ -460,10 +464,10 @@ export function MobileVoiceJoinSheet({
 
             {/* Dormant / prompt state — tap to enable */}
             {!previewActive && !previewError && permState !== 'denied' && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={startPreviewFromUser}
-                className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-white/[0.03] transition-colors"
+                className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary active:bg-wash/[0.03] transition-colors"
                 aria-label={t('voice:joinSheet.enablePreview')}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="mb-1.5">
@@ -479,10 +483,10 @@ export function MobileVoiceJoinSheet({
             {!previewActive && !previewError && permState === 'denied' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary px-6 text-center gap-2">
                 <span className="text-xs">{t('voice:joinSheet.cameraDenied')}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={startPreviewFromUser}
-                  className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
+                  className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
                   {t('common:actions.tryAgain')}
                 </button>
@@ -493,10 +497,10 @@ export function MobileVoiceJoinSheet({
             {previewError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-txt-tertiary px-6 text-center gap-2 bg-surface-base/90">
                 <span className="text-xs">{previewError}</span>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={startPreviewFromUser}
-                  className="text-[11px] px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
+                  className="text-ui-caption px-3 py-1.5 rounded-md bg-surface-elevated text-txt-secondary"
                 >
                   {t('common:actions.tryAgain')}
                 </button>
@@ -505,10 +509,10 @@ export function MobileVoiceJoinSheet({
 
             {/* Stop preview pill — visible while running */}
             {previewActive && !previewError && (
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={stopPreviewFromUser}
-                className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5"
+                className="absolute top-2 right-2 rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5"
               >
                 {t('voice:joinSheet.stopPreview')}
               </button>
@@ -520,10 +524,10 @@ export function MobileVoiceJoinSheet({
                 tile when the device list is long. */}
             {showCameraPicker && (
               <div ref={pickerAnchorRef} className="absolute bottom-2 left-2">
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   onClick={() => setPickerOpen((v) => !v)}
-                  className="rounded-md bg-black/60 text-white/90 text-[11px] px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
+                  className="rounded-md bg-black/60 text-white/90 text-ui-caption px-2.5 py-1.5 flex items-center gap-1 max-w-[160px]"
                 >
                   <span className="truncate">{selectedCameraLabel}</span>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 transition-transform ${pickerOpen ? 'rotate-180' : ''}`}>
@@ -588,29 +592,20 @@ export function MobileVoiceJoinSheet({
         {/* Bottom action bar */}
         <div className="flex items-center justify-between px-6 py-4">
           {/* Mic toggle */}
-          <button
+          <button data-icon-motion="toggle"
             onClick={() => setPreMuted(!preMuted)}
-            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
+            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary"
             aria-label={preMuted ? t('voice:joinSheet.unmuteMicrophone') : t('voice:joinSheet.muteMicrophone')}
           >
-            {preMuted ? (
-              /* Mic off icon */
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            ) : (
-              /* Mic on icon */
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-txt-primary">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              </svg>
-            )}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className={`transition-colors ${preMuted ? 'text-txt-danger' : 'text-txt-primary'}`}>
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+              <StrikeLine active={preMuted} />
+            </svg>
           </button>
 
           {/* Join Voice button */}
-          <button
+          <button data-icon-motion="press"
             onClick={handleJoin}
             className="bg-accent-mint text-black font-semibold rounded-full px-8 py-3 active:scale-95 transition-transform"
           >
@@ -618,9 +613,9 @@ export function MobileVoiceJoinSheet({
           </button>
 
           {/* Close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={onClose}
-            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary active:scale-95 transition-transform"
+            className="w-12 h-12 bg-surface-elevated rounded-full flex items-center justify-center text-txt-secondary"
             aria-label={t('common:actions.close')}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
@@ -653,27 +648,27 @@ export function MobileVoiceJoinSheet({
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <button
+          <button data-icon-motion="toggle"
             type="button"
             onClick={() => {
               setCameraDeviceId(null);
               setPickerOpen(false);
             }}
-            className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+            className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
               cameraDeviceId === null ? 'text-txt-primary' : 'text-txt-secondary'
             } active:bg-interactive-hover`}
           >
             {t('voice:camera.autoSystemDefault')}
           </button>
           {cameraDevices.map((d, i) => (
-            <button
+            <button data-icon-motion="toggle"
               key={d.deviceId}
               type="button"
               onClick={() => {
                 setCameraDeviceId(d.deviceId);
                 setPickerOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 text-[12px] truncate ${
+              className={`w-full text-left px-3 py-2 text-ui-caption truncate ${
                 cameraDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
               } active:bg-interactive-hover`}
             >

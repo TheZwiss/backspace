@@ -1,4 +1,4 @@
-import { stickerUrl } from '@backspace/shared/src/stickers';
+import { displayStickerUrl } from '../../utils/stickerAssets';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +15,7 @@ import { parseFederatedUsername } from '../../utils/identity';
 import { isOwnReaction, reactionSentence, summarizeReactors } from './reactionSummary';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { buildImageMenuItems } from './imageMenuItems';
+import { countChangeClass, useChangeSignal } from '../../hooks/useChangeSignal';
 
 interface ReactionPillProps {
   emoji: string;
@@ -23,6 +24,11 @@ interface ReactionPillProps {
   /** The instance that issued the message and its reactions. */
   origin: string;
   onToggle: () => void;
+  /**
+   * The emoji was not on the message when it was first shown: someone just
+   * reacted with it, so the pill pops in instead of simply being there.
+   */
+  entering?: boolean;
 }
 
 const SHOW_DELAY_MS = 300;
@@ -47,9 +53,9 @@ function truncateName(name: string): string {
  * routed through the cross-instance user views so a remote user shows their
  * home instance's name rather than a stub's.
  */
-export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPillProps) {
+export function ReactionPill({ emoji, reactions, origin, onToggle, entering = false }: ReactionPillProps) {
   const { t } = useTranslation(['chat', 'common']);
-  const imageUrl = stickerUrl(emoji);
+  const imageUrl = displayStickerUrl(emoji);
   const fmt = useFormatters();
   const self = useSelfIdentity();
   const isMobile = useUIStore((s) => s.isMobile);
@@ -62,7 +68,7 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
   const floatingRef = useRef<HTMLDivElement>(null);
   const portalContainer = usePortalContainer();
   const tooltipOpen = open && !isMobile;
-  const { style } = useFloatingPosition(anchorRef, floatingRef, {
+  const { style, actualPlacement } = useFloatingPosition(anchorRef, floatingRef, {
     placement: 'top',
     offset: 8,
     enabled: tooltipOpen,
@@ -71,6 +77,10 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
   useEffect(() => () => clearTimeout(showTimerRef.current), []);
 
   const mine = reactions.some((r) => isOwnReaction(r, origin, self));
+  // Live changes only: the count rolls the way it moved, and the emoji bumps
+  // when the viewer's own reaction lands.
+  const countChange = useChangeSignal(reactions.length);
+  const mineChange = useChangeSignal(mine ? 1 : 0);
 
   const nameOf = (reaction: Reaction): string => {
     const user = reaction.user
@@ -121,7 +131,7 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
 
   return (
     <>
-      <button
+      <button data-icon-motion="press"
         ref={anchorRef}
         type="button"
         onClick={onToggle}
@@ -136,13 +146,17 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
         aria-describedby={descriptionId}
         className={`glass-pill flex items-center gap-1 rounded-[6px] cursor-pointer transition-all duration-[120ms] ease-out focus-visible:ring-2 focus-visible:ring-accent-primary/60 ${
           mine ? 'glass-pill-mine' : ''
-        }`}
+        } ${entering ? 'motion-pop-in' : ''}`}
         style={{ padding: '2px 8px', fontSize: '13px', lineHeight: 1 }}
       >
-        {imageUrl ? <img src={imageUrl} alt={t('chat:stickers.sticker')} className="w-7 h-7 object-contain" />
-          : <span style={{ fontSize: '14px', lineHeight: 1 }}>{emoji}</span>}
-        <span className={`font-semibold ${mine ? 'text-accent-mint' : 'text-txt-secondary'}`} style={{ fontSize: '12px' }}>
-          {fmt.formatNumber(reactions.length)}
+        <span key={mineChange.generation} className={`inline-flex ${mineChange.direction === 'up' ? 'motion-bump' : ''}`}>
+          {imageUrl ? <img src={imageUrl} alt={t('chat:stickers.sticker')} className="w-7 h-7 object-contain" />
+            : <span style={{ fontSize: '14px', lineHeight: 1 }}>{emoji}</span>}
+        </span>
+        <span className={`font-semibold overflow-hidden transition-colors ${mine ? 'text-accent-mint' : 'text-txt-secondary'}`} style={{ fontSize: '12px' }}>
+          <span key={countChange.generation} className={`inline-block ${countChangeClass(countChange)}`}>
+            {fmt.formatNumber(reactions.length)}
+          </span>
         </span>
       </button>
       <span id={descriptionId} className="sr-only">{sentence.text}</span>
@@ -151,15 +165,16 @@ export function ReactionPill({ emoji, reactions, origin, onToggle }: ReactionPil
           ref={floatingRef}
           role="tooltip"
           style={style}
-          className={`glass flex items-center pointer-events-none animate-fade-in ${imageUrl
+          data-side={actualPlacement}
+          className={`glass flex items-center pointer-events-none motion-floating-enter ${imageUrl
             ? 'flex-col w-[224px] max-w-[calc(100*var(--app-vw)-24px)] rounded-xl overflow-hidden'
             : 'rounded-md px-2.5 py-1.5 gap-2 max-w-[360px]'}`}
         >
           {imageUrl ? <div className="w-full p-4">
             <img src={imageUrl} alt={t('chat:stickers.preview')} className="w-full h-40 object-contain" />
           </div>
-            : <span className="text-[16px] leading-none flex-shrink-0">{emoji}</span>}
-          <span className={`text-[13px] leading-[18px] text-txt-secondary [overflow-wrap:anywhere] ${imageUrl ? 'w-full border-t border-border-soft px-3 py-2.5 text-center' : ''}`}>
+            : <span className="text-ui-lead leading-none flex-shrink-0">{emoji}</span>}
+          <span className={`text-ui-label leading-[18px] text-txt-secondary [overflow-wrap:anywhere] ${imageUrl ? 'w-full border-t border-border-soft px-3 py-2.5 text-center' : ''}`}>
             {before}
             <span className="font-medium text-txt-primary">{names}</span>
             {after}

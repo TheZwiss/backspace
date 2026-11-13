@@ -6,7 +6,7 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { checkDmMessageCreate, checkDmMessageDelete, checkDmMessageEdit } from '../utils/dmMessageRules.js';
-import { DM_MESSAGE_CREATE_RATE_LIMIT } from '../utils/dmMessageRateLimit.js';
+import { consumeDmMessageCreate } from '../utils/dmMessageRateLimit.js';
 import { connectionManager } from '../ws/handler.js';
 import {
   type DmMessage,
@@ -505,7 +505,7 @@ function transferGroupDmOwnership(
   const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
   const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
   // Canonicalize to a full origin URL. `users.homeInstance` is stored as a
-  // bare host (e.g. `orbit.ddns.net`) for federated users, but
+  // bare host (e.g. `orbit.example`) for federated users, but
   // `dm_channels.ownerHomeInstance` is compared against `sourceInstance`
   // (always a full URL) in S2S authority checks. Storing the bare form here
   // caused legitimate `ownership_transfer` events to be rejected with
@@ -2071,19 +2071,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/dm/:id/messages - Send a DM message
-  app.post<{ Params: { id: string }; Body: CreateDmMessageRequest }>('/api/dm/:id/messages', {
-    config: {
-      rateLimit: {
-        // The WebSocket dm_message_create applies the same numbers, keyed on
-        // the same address (utils/dmMessageRateLimit.ts).
-        max: DM_MESSAGE_CREATE_RATE_LIMIT.max,
-        timeWindow: DM_MESSAGE_CREATE_RATE_LIMIT.windowMs,
-        // Per client address; see the note on the space-invite limit above.
-        keyGenerator: (request: FastifyRequest) => request.ip,
-      },
-    },
-  }, async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: CreateDmMessageRequest }>('/api/dm/:id/messages', async (request, reply) => {
     const { id } = request.params;
+    if (!consumeDmMessageCreate(request.userId)) {
+      return sendError(reply, 429, 'rate_limited');
+    }
 
     const check = checkDmMessageCreate(id, request.userId, request.body ?? {});
     if (!check.ok) {

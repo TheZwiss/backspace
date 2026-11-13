@@ -91,7 +91,8 @@
     "justNow": "刚刚",
     "minutesShort": "{{minutes}} 分钟",
     "hoursMinutesShort": "{{hours}} 小时 {{minutes}} 分钟",
-    "elapsed": "已过去 {{duration}}"
+    "elapsed": "已过去 {{duration}}",
+    "left": "剩余 {{duration}}"
   },
   "units": {
     "ms": "{{value}} 毫秒",

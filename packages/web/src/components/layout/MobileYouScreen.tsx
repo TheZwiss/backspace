@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
+import { BookmarkIcon } from '../ui/BookmarkIcon';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
 import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
@@ -25,7 +26,7 @@ interface ActionRow {
 
 export function MobileYouScreen() {
   useEmojiShortcodeNames();
-  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project']);
+  const { t } = useTranslation(['mobile', 'settings', 'common', 'admin', 'project', 'bookmarks']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -58,6 +59,11 @@ export function MobileYouScreen() {
       action: () => pushMobileScreen('friends'),
     },
     {
+      label: t('bookmarks:title'),
+      icon: <BookmarkIcon size={20} />,
+      action: () => pushMobileScreen('bookmarks'),
+    },
+    {
       label: t('settings:nav.tabs.connections'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -87,7 +93,7 @@ export function MobileYouScreen() {
     <div className="flex flex-col h-full bg-surface-base overflow-y-auto">
       {/* Header with settings gear */}
       <header className="h-12 flex items-center justify-end px-3 shrink-0">
-        <button
+        <button data-icon-motion="gear"
           onClick={() => pushMobileScreen('settings')}
           className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary relative"
           aria-label={updateBadge ? t('admin:updates.badge.settingsAriaLabel') : t('common:labels.settings')}
@@ -106,7 +112,7 @@ export function MobileYouScreen() {
       <div className="mx-4 rounded-xl overflow-hidden bg-surface-channel">
         {/* Banner or accent background */}
         <div
-          className="h-24 relative"
+          className="h-[120px] relative"
           style={{
             background: bannerUrl
               ? `url(/api/uploads/${user.banner}) center/cover`
@@ -135,7 +141,7 @@ export function MobileYouScreen() {
           {(() => {
             const { domain } = parseFederatedUsername(user.username);
             if (!domain) return null;
-            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">{t('mobile:you.homeInstance', { domain })}</div>;
+            return <div className="text-ui-micro leading-[1.3] text-txt-tertiary opacity-60">{t('mobile:you.homeInstance', { domain })}</div>;
           })()}
           {user.customStatus && (
             <p className="text-sm text-txt-secondary mt-1">{replaceEmojiShortcodes(user.customStatus)}</p>
@@ -149,7 +155,7 @@ export function MobileYouScreen() {
       {/* Action rows */}
       <div className="mt-4 mx-4 rounded-xl bg-surface-channel overflow-hidden">
         {actionRows.map((row, i) => (
-          <button
+          <button data-icon-motion="press"
             key={row.label}
             onClick={row.action}
             className={`w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors ${
@@ -168,7 +174,7 @@ export function MobileYouScreen() {
 
       {/* Log out */}
       <div className="mt-4 mx-4 mb-8 rounded-xl bg-surface-channel overflow-hidden">
-        <button
+        <button data-icon-motion="pulse"
           onClick={() => setShowLogoutConfirm(true)}
           className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-interactive-hover text-left transition-colors"
         >

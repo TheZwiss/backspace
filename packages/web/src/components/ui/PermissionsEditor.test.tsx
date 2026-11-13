@@ -251,10 +251,10 @@ describe('PermissionsEditor: saving that unhides a private channel says so', () 
 
     await user.click(await screen.findByRole('button', { name: /^@everyone/ }));
     const row = screen.getByText('View Channels').parentElement!;
-    await user.click(within(row).getByTitle('Neutral (inherit)'));
+    await user.click(within(row).getByRole('button', { name: 'Neutral (inherit)' }));
     expect(screen.getByText(UNHIDE_NOTE)).toBeInTheDocument();
 
-    await user.click(within(row).getByTitle('Deny'));
+    await user.click(within(row).getByRole('button', { name: 'Deny' }));
     expect(screen.queryByText(UNHIDE_NOTE)).toBeNull();
   });
 

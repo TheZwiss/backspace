@@ -105,7 +105,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       )}
 
       <div className="sticky top-0 z-10 pointer-events-none pb-3">
-        <button
+        <button data-icon-motion="press"
           onClick={handleCreateRole}
           disabled={creating || !canCreateRole}
           className="glass-bubble rounded-full px-3 py-1.5 flex items-center gap-1.5 text-sm text-txt-primary hover:text-txt-secondary transition-colors pointer-events-auto disabled:opacity-50"
@@ -119,10 +119,10 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       </div>
 
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.listHeading')}</div>
         <p className="text-xs text-txt-tertiary">{t('spaces:roles.description')}</p>
         <p className="text-xs text-txt-tertiary mb-2">{t('spaces:roles.hierarchyHint')}</p>
-        <div className="rounded-lg bg-white/[0.02] p-2">
+        <div className="rounded-lg bg-wash/[0.02] p-2">
           <RoleOrderList
             spaceId={spaceId}
             onOpen={(roleId) => { setIsNewRole(false); setEditingRoleId(roleId); }}
@@ -330,7 +330,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
     <div className="space-y-5">
       {/* Back button */}
       <div className="sticky top-0 z-10 pointer-events-none pb-3">
-        <button
+        <button data-icon-motion="arrow"
           onClick={onBack}
           className="glass-bubble rounded-full px-3 py-1.5 flex items-center gap-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors pointer-events-auto"
         >
@@ -360,9 +360,9 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('spaces:roles.identity')}</div>
           {/* A disabled fieldset disables every control inside it. */}
-          <fieldset disabled={!canEdit} className={`rounded-lg bg-white/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
+          <fieldset disabled={!canEdit} className={`rounded-lg bg-wash/[0.02] p-3.5 space-y-4 min-w-0 ${canEdit ? '' : 'opacity-60'}`}>
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
                 {t('spaces:roles.nameLabel')}
@@ -388,7 +388,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
               </label>
               <div className="flex items-center gap-2 flex-wrap">
                 {PRESET_COLORS.map((c) => (
-                  <button
+                  <button data-icon-motion="press"
                     key={c}
                     onClick={() => setDraftColor(c)}
                     className={`w-7 h-7 rounded-full border-2 transition-all ${
@@ -425,10 +425,10 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       {/* Permission groups — each gets its own section card */}
       {PERMISSION_GROUPS.map((group) => (
         <div key={group.id}>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {groupTitle(group.id)}
           </div>
-          <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="rounded-lg bg-wash/[0.02] p-3.5">
             <div className="space-y-1">
               {group.perms.map((perm) => {
                 const isAdminBit = perm.bit === PermissionBits.ADMINISTRATOR;
@@ -460,7 +460,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
                           <path d={LOCK_ICON} />
                         </svg>
                       )}
-                      <div
+                      <div data-icon-motion="press"
                         role="switch"
                         aria-checked={isOn}
                         aria-disabled={isLocked}
@@ -504,25 +504,25 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
             }`}>
               {hasChanges && (
                 <>
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleDiscard}
                     className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
                   >
                     {t('spaces:settings.discardChanges')}
                   </button>
-                  <button
+                  <button data-icon-motion="press"
                     onClick={handleSave}
                     disabled={saving || (!isEveryone && !draftName.trim()) || !!nameError}
-                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                    className="ui-button ui-button-primary transition-colors disabled:opacity-50"
                   >
                     {saving ? t('common:states.saving') : t('common:actions.save')}
                   </button>
                 </>
               )}
               {hasChanges && (
-                <div className="w-px h-5 bg-white/10" />
+                <div className="w-px h-5 bg-wash/10" />
               )}
-              <button
+              <button data-icon-motion="press"
                 onClick={handleCopy}
                 disabled={copying || !canCopy}
                 className="px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors disabled:opacity-50"
@@ -531,8 +531,8 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
               </button>
               {offersDelete && (
                 <>
-                  <div className="w-px h-5 bg-white/10" />
-                  <button
+                  <div className="w-px h-5 bg-wash/10" />
+                  <button data-icon-motion="press"
                     onClick={handleDelete}
                     disabled={deleting || deleteCarriesUnheld}
                     className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50 ${

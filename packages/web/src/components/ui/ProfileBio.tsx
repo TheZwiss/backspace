@@ -14,7 +14,7 @@ const ALLOWED_ELEMENTS = ['p', 'strong', 'em', 'del', 'a', 'br'];
 const REMARK_PLUGINS = [remarkGfm, remarkEmojiShortcodes];
 const COMPONENTS: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+    <a data-icon-motion="press" href={href} target="_blank" rel="noopener noreferrer">{children}</a>
   ),
 };
 
@@ -26,7 +26,7 @@ interface ProfileBioProps {
 export function ProfileBio({ bio }: ProfileBioProps) {
   useEmojiShortcodeNames();
   return (
-    <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
+    <div className="text-ui-label text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
       <ReactMarkdown
         allowedElements={ALLOWED_ELEMENTS}
         unwrapDisallowed

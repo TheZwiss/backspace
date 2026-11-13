@@ -133,7 +133,7 @@ export function CreateSpaceModal() {
 
         {/* Icon Picker */}
         <div className="flex justify-center mb-4">
-          <button
+          <button data-icon-motion="press"
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingIcon}
@@ -160,7 +160,7 @@ export function CreateSpaceModal() {
                 ) : (
                   <>
                     <span className="text-2xl font-bold">{(name || 'S').charAt(0).toUpperCase()}</span>
-                    <span className="text-[9px] font-medium opacity-60">{t('spaces:create.icon.upload')}</span>
+                    <span className="text-ui-micro font-medium opacity-60">{t('spaces:create.icon.upload')}</span>
                   </>
                 )}
               </div>
@@ -174,7 +174,7 @@ export function CreateSpaceModal() {
             className="hidden"
           />
           {iconPreview && (
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={handleRemoveIcon}
               className="ml-2 self-start mt-1 text-txt-tertiary hover:text-txt-danger text-xs transition-colors"
@@ -193,7 +193,7 @@ export function CreateSpaceModal() {
             {AVATAR_COLORS.map((key) => {
               const entry = SPACE_GRADIENT_MAP[key];
               return (
-                <button
+                <button data-icon-motion="press"
                   key={key}
                   type="button"
                   onClick={() => setAvatarColor(key)}
@@ -227,7 +227,7 @@ export function CreateSpaceModal() {
 
         {/* Visibility */}
         <div className="mb-4">
-          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+          <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
             {t('spaces:create.visibilityLabel')}
           </div>
           <div className="space-y-1.5">
@@ -259,7 +259,7 @@ export function CreateSpaceModal() {
 
         {/* Description */}
         <div className="mb-4">
-          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             {t('spaces:create.description.label')}
           </div>
           <textarea
@@ -269,7 +269,7 @@ export function CreateSpaceModal() {
             rows={3}
             className="input-standard w-full resize-none"
           />
-          <div className="text-[11px] text-txt-tertiary text-right">
+          <div className="text-ui-caption text-txt-tertiary text-right">
             {t('spaces:create.description.counter', { length: description.length, max: DESCRIPTION_MAX_LENGTH })}
           </div>
         </div>
@@ -278,17 +278,17 @@ export function CreateSpaceModal() {
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={handleClose}
                 className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 {t('common:actions.cancel')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={isLoading || uploadingIcon}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                className="ui-button ui-button-primary transition-colors disabled:opacity-50"
               >
                 {isLoading ? t('spaces:create.submitting') : t('spaces:create.submit')}
               </button>

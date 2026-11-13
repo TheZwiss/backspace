@@ -1,0 +1,333 @@
+{
+  "bursts": [
+    {
+      "i": 0,
+      "answers": [
+        {
+          "n": 0,
+          "ms": 106.80000000447035,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 1,
+          "ms": 107.39999999850988,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 2,
+          "ms": 107.70000000298023,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        }
+      ]
+    },
+    {
+      "i": 1,
+      "answers": [
+        {
+          "n": 0,
+          "ms": 110.5,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 1,
+          "ms": 110.69999999552965,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 2,
+          "ms": 111,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        }
+      ]
+    },
+    {
+      "i": 2,
+      "answers": [
+        {
+          "n": 0,
+          "ms": 2840.60000000149,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 1,
+          "ms": 2840.89999999851,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 2,
+          "ms": 2841.10000000149,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        }
+      ]
+    },
+    {
+      "i": 3,
+      "answers": [
+        {
+          "n": 0,
+          "ms": 95.60000000149012,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 1,
+          "ms": 96,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 2,
+          "ms": 96.30000000447035,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        }
+      ]
+    },
+    {
+      "i": 4,
+      "answers": [
+        {
+          "n": 0,
+          "ms": 105.80000000447035,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 1,
+          "ms": 106,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        },
+        {
+          "n": 2,
+          "ms": 106.30000000447035,
+          "count": 8,
+          "images": 8,
+          "ids": [
+            "screen:0:0",
+            "screen:1:0",
+            "window:66470:0",
+            "window:852200:1",
+            "window:790798:0",
+            "window:1574042:0",
+            "window:331306:0",
+            "window:66480:0"
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "ms": 37.79999999701977,
+    "count": 8,
+    "images": 0
+  },
+  "after": {
+    "count": 8,
+    "images": 7,
+    "cacheMs": 0.5
+  },
+  "initial": {
+    "firstMs": 938,
+    "first": [
+      {
+        "id": "screen:0:0",
+        "name": "Tela 1",
+        "image": true
+      },
+      {
+        "id": "screen:1:0",
+        "name": "Tela 2",
+        "image": true
+      },
+      {
+        "id": "window:66470:0",
+        "name": "Nova notificação",
+        "image": true
+      },
+      {
+        "id": "window:1379824:0",
+        "name": "Alerta de Segurança do Windows",
+        "image": true
+      },
+      {
+        "id": "window:790798:0",
+        "name": "⠴ Abrir Electron com dois usuários | backspace-prort-android",
+        "image": true
+      },
+      {
+        "id": "window:852200:1",
+        "name": "Backspace",
+        "image": true
+      },
+      {
+        "id": "window:1574042:0",
+        "name": "Backspace",
+        "image": true
+      },
+      {
+        "id": "window:331306:0",
+        "name": "backspace-prort-android",
+        "image": true
+      },
+      {
+        "id": "window:66480:0",
+        "name": "NVIDIA GeForce Overlay",
+        "image": true
+      }
+    ],
+    "metadata": 9,
+    "metadataImages": 0,
+    "afterImages": 8,
+    "after": 9
+  }
+}

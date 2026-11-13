@@ -69,41 +69,41 @@ describe('resolveOrCreateReplicatedUser — stub username', () => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
     const created = resolveOrCreateReplicatedUser(
       '310002371434024960',
-      'orbit.ddns.net',
+      'orbit.example',
       testDb,
       { username: 'pbtest3' },
     );
     expect(created).not.toBeNull();
-    expect(created!.username).toBe('pbtest3@orbit.ddns.net');
+    expect(created!.username).toBe('pbtest3@orbit.example');
     expect(created!.homeUserId).toBe('310002371434024960');
-    expect(created!.homeInstance).toBe('orbit.ddns.net');
+    expect(created!.homeInstance).toBe('orbit.example');
   });
 
   it('falls back to homeUserId@domain when no hint provided', async () => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
     const created = resolveOrCreateReplicatedUser(
       '310002371434024960',
-      'orbit.ddns.net',
+      'orbit.example',
       testDb,
     );
-    expect(created!.username).toBe('310002371434024960@orbit.ddns.net');
+    expect(created!.username).toBe('310002371434024960@orbit.example');
   });
 
   it.each([
     ['a display name', 'Kai Smith'],
-    ['a name with a domain', 'kai@orbit.ddns.net'],
+    ['a name with a domain', 'kai@orbit.example'],
     ['a dotted name', 'kai.smith'],
     ['a blank name', '   '],
   ])('names the stub by its id when the hint is %s', async (_kind, hint) => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
-    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.ddns.net', testDb, { username: hint });
-    expect(created!.username).toBe('310002371434024960@orbit.ddns.net');
+    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.example', testDb, { username: hint });
+    expect(created!.username).toBe('310002371434024960@orbit.example');
   });
 
   it('takes a handle-shaped hint in any case, lowercased and trimmed', async () => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
-    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.ddns.net', testDb, { username: ' Kai_Dev ' });
-    expect(created!.username).toBe('kai_dev@orbit.ddns.net');
+    const created = resolveOrCreateReplicatedUser('310002371434024960', 'orbit.example', testDb, { username: ' Kai_Dev ' });
+    expect(created!.username).toBe('kai_dev@orbit.example');
   });
 });
 
@@ -144,25 +144,25 @@ describe('resolveOrCreateReplicatedUser — self-homed identity guard', () => {
 
   it('still creates stubs for remote-domain identities (unchanged behavior)', async () => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
-    const result = resolveOrCreateReplicatedUser('remote-1', 'orbit.ddns.net', testDb, { username: 'bob' });
+    const result = resolveOrCreateReplicatedUser('remote-1', 'orbit.example', testDb, { username: 'bob' });
     expect(result).not.toBeNull();
-    expect(result!.username).toBe('bob@orbit.ddns.net');
+    expect(result!.username).toBe('bob@orbit.example');
   });
 
   it('refuses stub creation when the wire snapshot marks the identity deleted', async () => {
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
-    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.ddns.net', testDb, { username: null, deleted: true });
+    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.example', testDb, { username: null, deleted: true });
     expect(result).toBeNull();
     expect(testDb.select().from(schema.users).all()).toHaveLength(0);
   });
 
   it('a deleted-marked identity that already resolves locally still returns the existing row', async () => {
     testDb.insert(schema.users).values({
-      id: 'stub-1', username: 'old@orbit.ddns.net', passwordHash: '!federation-replicated',
-      homeInstance: 'orbit.ddns.net', homeUserId: 'remote-del', createdAt: 1,
+      id: 'stub-1', username: 'old@orbit.example', passwordHash: '!federation-replicated',
+      homeInstance: 'orbit.example', homeUserId: 'remote-del', createdAt: 1,
     }).run();
     const { resolveOrCreateReplicatedUser } = await import('./federation.js');
-    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.ddns.net', testDb, { deleted: true });
+    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.example', testDb, { deleted: true });
     expect(result?.id).toBe('stub-1'); // historical attribution stays intact
   });
 });

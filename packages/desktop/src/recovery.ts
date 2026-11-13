@@ -4,6 +4,7 @@ import type { AppUpdater } from 'electron-updater';
 import path from 'path';
 import { loadInstanceUrl, clearInstanceUrl, getPickerPath } from './instanceUrl';
 import { RELEASES_URL } from './updateStatus';
+import { installDownloadedUpdate } from './updateInstall';
 import { getDesktopLanguage, translateDesktop, type DesktopLanguage } from './l10n';
 
 export type RecoveryReasonCode =
@@ -475,7 +476,7 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       // Direct quitAndInstall — does NOT rely on autoInstallOnAppQuit.
       // Force-kill-fix: if user reaches recovery and clicks here, install
       // happens cleanly even if the on-quit hook would otherwise be bypassed.
-      autoUpdaterRef?.quitAndInstall();
+      if (autoUpdaterRef) installDownloadedUpdate(autoUpdaterRef);
       return;
     }
     case 'change-instance': {
@@ -516,6 +517,17 @@ export function handleRecoveryAction(action: RecoveryAction): void {
 
 const UNRESPONSIVE_GRACE_MS = 10_000;
 
+/**
+ * A proxy in front of an unreachable Backspace server (Tailscale Serve, Caddy)
+ * answers 502/503/504. Chromium treats that as a page that loaded, so
+ * `did-fail-load` never fires and the window would sit blank until the boot
+ * timer expires. Only 5xx on a web URL counts: 4xx pages can be served by a
+ * working instance, and file:// pages carry no status.
+ */
+export function isServerErrorNavigation(url: string, httpResponseCode: number): boolean {
+  return /^https?:\/\//.test(url) && httpResponseCode >= 500 && httpResponseCode <= 599;
+}
+
 export function attachRecoveryHandlers(win: BrowserWindow): void {
   let pendingArm = false;
   let unresponsiveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -524,10 +536,14 @@ export function attachRecoveryHandlers(win: BrowserWindow): void {
   // SPA in-page routing (history.pushState, hash) fires did-navigate-in-page,
   // which we deliberately ignore — keeps the boot timer from misfiring on
   // every channel switch.
-  win.webContents.on('did-navigate', () => {
+  win.webContents.on('did-navigate', (_e, url, httpResponseCode) => {
     clearBootTimer();
     pendingArm = true;
     pingReceivedThisNav = false;  // reset for new navigation
+    if (isServerErrorNavigation(url, httpResponseCode)) {
+      pendingArm = false;
+      enterRecoveryMode({ code: 'load-failed', detail: `HTTP ${httpResponseCode} @ ${url}` });
+    }
   });
 
   win.webContents.on('did-finish-load', () => {

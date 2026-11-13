@@ -1,4 +1,13 @@
 {
+  "mediaSetup": {
+    "neteaseSmtc": {
+      "title": "Turn on SMTC in NetEase Cloud Music",
+      "body": "Open NetEase Cloud Music → Settings → System → Enable SMTC, then restart the app. Backspace needs it to detect play, pause, and progress accurately.",
+      "gotIt": "Got it",
+      "dontRemind": "Don't remind me again",
+      "dismiss": "Dismiss this hint"
+    }
+  },
   "update": {
     "laterHint": "You can install this later from Settings, Desktop",
     "dismiss": "Dismiss this update",

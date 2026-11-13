@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { stickerUrl, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { type PersonalSticker } from '@backspace/shared/src/stickers';
+import { displayStickerPreviewUrl, displayStickerUrl } from '../../utils/stickerAssets';
 
 interface StickerGridProps {
   /** The entries the search leaves, in collection order. */
@@ -47,7 +48,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
       <div className="grid grid-cols-4 gap-1.5">
         {items.map(item => (
           <div key={item.id} className="group relative min-w-0 rounded-xl hover:bg-interactive-hover transition-colors">
-            <button
+            <button data-icon-motion="press"
               type="button"
               data-sticker-id={item.id}
               disabled={managing || !!removing}
@@ -57,16 +58,16 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
               className="sticker-tile w-full p-2"
             >
               <img
-                src={stickerUrl(item.token) ?? undefined}
+                src={displayStickerPreviewUrl(item.token) || displayStickerUrl(item.token) || undefined}
                 alt={item.name}
                 className="aspect-square w-full object-contain transition-transform group-hover:scale-105"
                 loading="lazy"
               />
-              <span className="mt-1 block truncate text-[10px] text-txt-tertiary">{item.name}</span>
+              <span className="mt-1 block truncate text-ui-micro text-txt-tertiary">{item.name}</span>
             </button>
             {managing && (
               <>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   data-sticker-rename={item.id}
                   disabled={!!removing}
@@ -76,7 +77,7 @@ export function StickerGrid({ items, noMatches, managing, removing, onSelect, on
                 >
                   <PencilIcon />
                 </button>
-                <button
+                <button data-icon-motion="press"
                   type="button"
                   disabled={!!removing}
                   aria-label={t('stickers.removeNamed', { name: item.name })}

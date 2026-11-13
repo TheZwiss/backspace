@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MAX_STICKER_NAME_LENGTH, normalizeStickerName, stickerUrl, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { MAX_STICKER_NAME_LENGTH, normalizeStickerName, type PersonalSticker } from '@backspace/shared/src/stickers';
+import { displayStickerUrl } from '../../utils/stickerAssets';
 import { api } from '../../api/client';
 import { describeError } from '../../i18n/errors';
 import { usePickerEscapeClaim } from './pickerEscape';
@@ -63,7 +64,7 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
     <form onSubmit={event => void submit(event)} aria-labelledby={headingId} className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
         <h3 id={headingId} className="text-sm font-semibold">{t('chat:stickers.renameTitle')}</h3>
-        <button type="button" disabled={saving} onClick={onCancel} className="sticker-icon-button" aria-label={t('chat:stickers.cancel')}>
+        <button data-icon-motion="press" type="button" disabled={saving} onClick={onCancel} className="sticker-icon-button" aria-label={t('chat:stickers.cancel')}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
@@ -72,7 +73,7 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin p-4 space-y-3">
         <div className="flex min-h-40 items-center justify-center rounded-xl border border-border-soft bg-surface-input/40 p-4 sticker-checkerboard">
-          <img src={stickerUrl(sticker.token) ?? undefined} alt={sticker.name} className="h-32 w-full object-contain" />
+          <img src={displayStickerUrl(sticker.token) ?? undefined} alt={sticker.name} className="h-32 w-full object-contain" />
         </div>
         <div>
           <label htmlFor={inputId} className="mb-1.5 block text-xs font-medium text-txt-secondary">
@@ -102,10 +103,10 @@ export function StickerRenameForm({ sticker, onRenamed, onCancel }: StickerRenam
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border-soft px-4 py-3">
-        <button type="button" disabled={saving} onClick={onCancel} className="sticker-secondary-button">
+        <button data-icon-motion="press" type="button" disabled={saving} onClick={onCancel} className="sticker-secondary-button">
           {t('chat:stickers.cancel')}
         </button>
-        <button type="submit" disabled={saving || !name.trim()} className="sticker-primary-button">
+        <button data-icon-motion="press" type="submit" disabled={saving || !name.trim()} className="sticker-primary-button">
           {saving && <span className="sticker-spinner" aria-hidden="true" />}
           {t('chat:stickers.rename')}
         </button>

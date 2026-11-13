@@ -97,6 +97,25 @@ describe('UpdatesPanel, an update exists', () => {
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 
+  it('cancels the pending "Copied" reset when the panel unmounts', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+
+    const { unmount } = render(<UpdatesPanel />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy' }));
+    await screen.findByRole('button', { name: 'Copied' });
+    const resetCall = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 2000);
+    expect(resetCall).toBeGreaterThanOrEqual(0);
+    const resetId = setTimeoutSpy.mock.results[resetCall]?.value;
+
+    unmount();
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(resetId);
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
+  });
+
   it('marks the manual steps as an expandable disclosure', async () => {
     render(<UpdatesPanel />);
     const toggle = await screen.findByRole('button', { name: /I do not have update\.sh/ });

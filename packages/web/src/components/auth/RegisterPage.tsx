@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ImageCropModal } from '../ui/ImageCropModal';
+import { isAnimatedImageFile, profileImageFileName } from '../../utils/animatedImage';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants';
@@ -308,13 +309,22 @@ export function RegisterPage() {
   };
 
   // ── Avatar file selection ──
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    if (await isAnimatedImageFile(file)) {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+      setAvatarPreview(URL.createObjectURL(file));
+      setAvatarFile(new File([file], profileImageFileName('avatar', file), {
+        type: file.type || 'image/gif',
+      }));
+      setAvatarCropSrc(null);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setAvatarCropSrc(reader.result as string);
     reader.readAsDataURL(file);
-    if (avatarInputRef.current) avatarInputRef.current.value = '';
   };
 
   const handleAvatarCropComplete = (blob: Blob) => {
@@ -416,10 +426,10 @@ export function RegisterPage() {
     // the visible viewport once the iOS keyboard claims ~300 px). `h-full` (rather than
     // `min-h-full`) makes this element exactly viewport-height; the inner flex wrapper
     // uses `min-h-full` so short content still centers vertically.
-    <div className="h-full overflow-y-auto bg-surface-base relative">
+    <div data-auth-page="register" className="h-full overflow-y-auto bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgb(var(--accent-primary)/0.06)_0%,transparent_50%)] pointer-events-none" />
       <div className="min-h-full flex items-center justify-center px-4 py-6 md:py-10 relative z-10">
-        <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-6 md:p-8 shadow-elevation-high overflow-hidden">
+        <div data-auth-card className="w-full max-w-[480px] bg-surface-elevated rounded-md p-6 md:p-8 shadow-elevation-high overflow-hidden">
         {/* Progress dots */}
         <div className="flex justify-center gap-2 mb-5">
           <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${step === 1 ? 'bg-accent-primary' : 'bg-txt-tertiary/30'}`} />
@@ -442,7 +452,7 @@ export function RegisterPage() {
               {/* Closed-registration invite entry — shown when registration is closed and:
                   (a) no URL token is present, or (b) the URL token has already failed validation */}
               {showManualEntry && (
-                <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-white/[0.06] space-y-2">
+                <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-wash/[0.06] space-y-2">
                   <div className="text-sm text-txt-secondary">
                     {t('auth:register.invite.closedNotice')}
                   </div>
@@ -579,12 +589,12 @@ export function RegisterPage() {
                 />
               </div>
 
-              <button
+              <button data-icon-motion="press"
                 type="submit"
                 disabled={continueDisabled}
                 // py-3 on mobile yields ≥44 px tap target (Apple HIG); py-2.5 keeps the
                 // tighter desktop look from before.
-                className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ui-button ui-button-primary w-full md:py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('common:actions.continue')}
               </button>
@@ -601,7 +611,7 @@ export function RegisterPage() {
                   t={t}
                   i18nKey="auth:register.loginPrompt"
                   components={{
-                    actionLink: <Link to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
+                    actionLink: <Link data-icon-motion="press" to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline" />,
                   }}
                 />
               </p>
@@ -629,7 +639,7 @@ export function RegisterPage() {
 
             {/* Avatar preview */}
             <div className="flex flex-col items-center mb-5">
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 className="relative group"
@@ -647,7 +657,7 @@ export function RegisterPage() {
                   </svg>
                 </div>
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 className="text-xs text-accent-primary hover:underline mt-2"
@@ -690,7 +700,7 @@ export function RegisterPage() {
                 {AVATAR_COLORS.map((key) => {
                   const entry = AVATAR_GRADIENT_MAP[key];
                   return (
-                    <button
+                    <button data-icon-motion="press"
                       key={key}
                       type="button"
                       onClick={() => setAvatarColor(key)}
@@ -710,11 +720,11 @@ export function RegisterPage() {
             </div>
 
             {/* Actions */}
-            <button
+            <button data-icon-motion="press"
               type="button"
               onClick={() => handleRegister(false)}
               disabled={isDisabled}
-              className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ui-button ui-button-primary w-full md:py-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retryAfter > 0
                 ? t('auth:register.rateLimited.retryIn', { seconds: retryAfter })
@@ -724,7 +734,7 @@ export function RegisterPage() {
             </button>
 
             <div className="flex items-center justify-between mt-3">
-              <button
+              <button data-icon-motion="arrow"
                 type="button"
                 onClick={() => { setError(''); setRetryAfter(0); setDirection('back'); setStep(1); }}
                 disabled={isRegistering}
@@ -733,7 +743,7 @@ export function RegisterPage() {
               >
                 {t('common:actions.back')}
               </button>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => handleRegister(true)}
                 disabled={isDisabled}
@@ -747,7 +757,7 @@ export function RegisterPage() {
 
         {/* AGPL § 13: source offer for anonymous visitors, shown on both steps. */}
         {instanceInfo && (
-          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+          <div className="mt-6 pt-4 border-t border-wash/[0.04] flex justify-center">
             <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
           </div>
         )}

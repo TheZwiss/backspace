@@ -40,8 +40,10 @@ const checkMobile = () => setIsMobile(isMobileViewport());
 
 | Breakpoint | Value | Layout |
 |------------|-------|--------|
-| Desktop | `>= 768` layout px **and** `innerWidth >= 600` | AppLayout three-column grid (sidebar + chat + member list) |
-| Mobile | `< 768` layout px **or** `innerWidth < 600` | MobileShell (tab bar + screen stack) |
+| Desktop | `>= 768` layout px **and** `innerWidth >= 600`, and not a phone on its side | AppLayout three-column grid (sidebar + chat + member list) |
+| Mobile | `< 768` layout px **or** `innerWidth < 600` **or** (`innerHeight < 500` **and** primary pointer is coarse) | MobileShell (tab bar + screen stack) |
+
+**Phones on their side.** A phone turned to landscape is 640-930px wide, past the 768px line, but under ~430px tall. It used to get the desktop shell in 400px of height (28px controls, three columns) and, worse, crossing the line on rotation ran `setIsMobile(false)`, which resets `mobileStack`: a person in a call or watching a stream landed on the Friends page and did not get the call screen back on turning the phone upright. `isMobileViewport()` now also answers mobile for `innerHeight < LANDSCAPE_PHONE_MAX_HEIGHT` (500) when `matchMedia('(pointer: coarse)')` matches. A tablet on its side (768px or more tall) and a short desktop window with a mouse keep the desktop shell.
 
 `AppLayout` conditionally renders `<MobileShell />` when `isMobile === true`. Modals render globally in both modes.
 
@@ -142,6 +144,14 @@ useEffect(() => {
 ```
 
 This means the hardware/browser back button pops the mobile screen stack. `popMobileScreen` intentionally does not call `history.back()` to avoid infinite loops when triggered by the `popstate` handler.
+
+#### Sheets and dialogs take Back first (`utils/overlayBack.ts`)
+
+A sheet or dialog is not a screen, so it used to push nothing and Back popped the screen under it (or did nothing). Every open overlay now registers with `overlayBack`: it defers one `history.pushState` of a **marker entry with the same URL** (the router sees no route change; the router's own state is kept; the push waits a microtask so a StrictMode mount/unmount/mount leaves one marker), and `MobileShell`'s `popstate` handler asks `handleOverlayPopState()` before it pops the stack. A Back that lands below the marker dismisses the top overlay and leaves the stack alone. Closing an overlay any other way takes its marker off again (`history.back()` after the closing handler ran, and only if the marker is still the top entry, so a screen pushed over it by the same handler is not undone); `popstate` events caused by that are counted as echoes and ignored. A marker left under a pushed screen is stepped over when the stack is empty. Only the mobile shell registers (`registerBackDismissOnMobile`).
+
+Wired into `useDialogLayer` (so every `Modal`, `ConfirmDialog`, image preview and profile dialog), `ContextMenuRenderer`'s mobile menu sheet, `MobilePickerSheet` (emoji, GIF, sticker and reaction pickers, the composer's attach sheet), `MobileFolderSheet`, `MobileVoiceJoinSheet` and the add-space sheet. Non-dismissible dialogs do not register.
+
+**`user-profile` is a screen and a dialog.** `UserProfileScreen` opens the modal once from an effect (the screen map used to call `openModal` while rendering, which re-opened it after every close and made the X, the backdrop and Esc do nothing, and logged React's "Cannot update a component while rendering"). When the modal closes by any means the screen follows through `history.back()` over its own entry, so history and stack agree.
 
 ### Deep Link Reconstruction
 
@@ -360,6 +370,7 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `members` | `MobileMembersScreen` | `{ spaceId? }` |
 | `voice-full` | `MobileVoiceFullScreen` | — |
 | `explore` | `ExplorePage` | — |
+| `bookmarks` | `MobileBookmarksScreen` | — |
 | `backspace` | `MobileBackspaceScreen`: `MobileScreenHeader` titled `project:nav.label` over `ProjectHubPage showTopBar={false}` (see [project-hub.md](project-hub.md)) | — |
 | `user-profile` | `UserProfileModal` | `{ userId }` (opens modal via `openModal('userProfile', ...)`) |
 

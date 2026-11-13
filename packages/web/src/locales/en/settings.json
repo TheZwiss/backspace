@@ -1,4 +1,64 @@
 {
+  "attentionMutes": {
+    "title": "Muted people",
+    "description": "Mute attention sounds, animations and notices from specific people on this device. Messages and calls remain available.",
+    "mute": "Mute attention effects",
+    "muteShort": "Mute",
+    "unmute": "Unmute attention effects",
+    "unmuteShort": "Unmute",
+    "minutes15": "For 15 minutes",
+    "hour1": "For 1 hour",
+    "hours8": "For 8 hours",
+    "hours24": "For 24 hours",
+    "forever": "Until unmuted",
+    "searchLabel": "Add a person",
+    "searchPlaceholder": "Search by username...",
+    "duration": "Mute duration",
+    "noResults": "No people found.",
+    "empty": "Nobody is muted.",
+    "until": "Muted until {{time}}"
+  },
+  "friendNotifications": {
+    "title": "Friend requests",
+    "description": "Show a card with a photo and quick actions when someone wants to add you. Do Not Disturb is respected.",
+    "enabled": "Show friend request cards",
+    "sound": "Play a sound",
+    "desktop": "Show over the desktop while in the background"
+  },
+  "theme": {
+    "label": "Theme",
+    "description": "Choose how Backspace looks. Saved in this browser or app on this device.",
+    "msnFrames": {
+      "label": "Windows XP frames",
+      "description": "Bevelled blue window borders, like Windows XP."
+    },
+    "options": {
+      "aether-drift": {
+        "name": "Aether Drift",
+        "description": "Warm matte surfaces with frosted glass accents."
+      },
+      "light": {
+        "name": "Light",
+        "description": "Warm paper surfaces with dark ink text."
+      },
+      "oled": {
+        "name": "OLED",
+        "description": "True black surfaces that save power on OLED screens."
+      },
+      "anime": {
+        "name": "Anime",
+        "description": "Twilight indigo with sakura-pink accents."
+      },
+      "msn": {
+        "name": "MSN",
+        "description": "Bright Live Messenger blue with glossy buttons and Segoe type."
+      },
+      "msn-dark": {
+        "name": "MSN Dark",
+        "description": "Live Messenger blue on deep navy, with glossy buttons."
+      }
+    }
+  },
   "interfaceScale": {
     "label": "Interface scale",
     "description": "Resize text, buttons, and panels. Saved in this browser or app on this device.",
@@ -69,7 +129,16 @@
         "fallbackName": "Camera {{number}}",
         "detectedFallback": "detected camera",
         "currentlyUsing": "Currently using: {{label}}",
-        "none": "No cameras detected."
+        "none": "No cameras detected.",
+        "quality": {
+          "label": "Webcam quality",
+          "managed": "Webcam quality is set by the instance: {{resolution}}, {{fps}} fps, {{bitrate}}.",
+          "resolution": "Resolution",
+          "framerate": "Frame rate",
+          "bitrate": "Bitrate",
+          "useDefault": "Use default",
+          "fps": "{{value}} fps"
+        }
       },
       "preview": {
         "testAria": "Test camera",
@@ -125,8 +194,10 @@
     "tabs": {
       "account": "Account",
       "appearance": "Appearance",
+      "notifications": "Notifications",
       "voice": "Voice & Video",
       "privacy": "Privacy",
+      "stickers": "Stickers",
       "connections": "Connections",
       "keybinds": "Keybinds",
       "desktop": "Desktop",
@@ -137,6 +208,26 @@
   },
   "appearance": {
     "title": "Appearance"
+  },
+  "stickers": {
+    "title": "My sticker library",
+    "description": "Private sticker albums only you can see. Each album holds up to 30 animated or static stickers.",
+    "packs": "Private albums",
+    "newPack": "New album name",
+    "createPack": "Create album",
+    "favorites": "Favorites",
+    "favoritesHint": "Right-click a sticker in chat to save a local copy here.",
+    "noFavorites": "No favorite stickers yet.",
+    "share": "Share album",
+    "instance": "This instance",
+    "requestShare": "Request approval",
+    "shareRequested": "Share request sent for approval.",
+    "cropTitle": "Crop sticker to a square",
+    "itemName": "Sticker name",
+    "deletePack": "Delete album",
+    "deletePackTitle": "Delete “{{name}}”?",
+    "deletePackDescription": "The album and its pending share requests will be removed. Stickers already sent remain available in chat.",
+    "deletePackSuccess": "Album deleted."
   },
   "account": {
     "title": "My Account",
@@ -268,7 +359,48 @@
     "activity": {
       "sectionTitle": "Activity Status",
       "label": "Share Activity Status",
-      "description": "Allow others to see what you're up to, like games you're playing or music you're listening to."
+      "description": "Allow others to see what you're up to, like games you're playing or music you're listening to.",
+      "game": {
+        "label": "Created manually",
+        "description": "Add a game that wasn't detected. It is shown until you remove it.",
+        "placeholder": "Game name",
+        "set": "Set",
+        "detectedLabel": "Detected right now",
+        "detectedDescription": "Show a detected game under a different name. It is remembered for next time.",
+        "renamePlaceholder": "Show as…",
+        "renameLabel": "Show {{name}} as",
+        "renamedLabel": "Renamed games",
+        "renamedItem": "{{detected}} → {{chosen}}",
+        "restore": "Restore",
+        "descriptionBound": "Add a game that wasn't detected: pick its program and name it. It is shown while that program is running.",
+        "programLabel": "Program",
+        "programPlaceholder": "Pick a running program…",
+        "programHint": "Start the game first, then pick its program from the list.",
+        "clearRename": "Clear",
+        "unknownLabel": "Unrecognized Wine programs",
+        "unknownDescription": "These are running but match no known game. If one is your game, show it as the game you're playing.",
+        "unknownUse": "Add to my games",
+        "gamesLabel": "Your games",
+        "gamesDescription": "The first game is the one lists show; move games to set the priority. A hidden game is not shown to others.",
+        "moveUp": "Move {{name}} up",
+        "moveDown": "Move {{name}} down",
+        "hide": "Hide",
+        "show": "Show",
+        "hideGame": "Hide {{name}}",
+        "showGame": "Show {{name}}",
+        "add": "Add",
+        "remove": "Remove",
+        "statusName": "shown by name",
+        "statusRunning": "running",
+        "statusWaiting": "waiting for {{program}}",
+        "dragHandle": "Drag {{name}} to change its priority",
+        "manualNameLabel": "Name of {{name}}",
+        "save": "Save"
+      },
+      "hideBrowserMedia": {
+        "label": "Hide browser players",
+        "description": "Tabs playing in Chrome, Firefox, Edge and other browsers (a YouTube video, a web player) are not shown as listening or watching."
+      }
     }
   },
   "connections": {
@@ -293,6 +425,11 @@
       "pending": "Connecting to the desktop portal. If a system dialog appears, choose shortcuts for the actions you want to use.",
       "ready": "Backspace is registered. Open your system's keyboard shortcut settings to change or remove assignments. The list below is read-only and refreshes when you return to Backspace.",
       "unavailable": "The portal is unavailable, permission was denied, or the session ended. A Global Shortcuts portal backend is required. Local bindings are disabled on Wayland.",
+      "missingDesktopEntry": "The desktop portal cannot find the Backspace application entry. Install or integrate the desktop app before registering global shortcuts.",
+      "integrateAppImage": "Integrate AppImage",
+      "integrationError": "Could not create the application entry. Check access to your applications directory.",
+      "configure": "Configure shortcuts",
+      "configureError": "Could not open the system shortcut editor. Open your desktop keyboard shortcut settings for Backspace.",
       "retry": "Register or reconnect shortcuts",
       "assigned": "System shortcut: {{shortcut}}",
       "notAssigned": "No active system assignment"
@@ -310,7 +447,8 @@
       "pushToTalk": "Push to Talk",
       "toggleCamera": "Toggle Camera",
       "toggleScreenShare": "Toggle Screen Share",
-      "disconnect": "Disconnect"
+      "disconnect": "Disconnect",
+      "dictationPushToTalk": "Dictate and send voice (hold)"
     },
     "row": {
       "recordingPrompt": "Press a key combo…",
@@ -429,5 +567,59 @@
     },
     "version": "Version {{version}}",
     "allReleases": "All releases on GitHub"
+  },
+  "notifications": {
+    "description": "Control the notices, sounds and animations you receive on this device.",
+    "soundsTitle": "App sounds",
+    "soundsDescription": "Messages, call join and leave sounds, and other alerts.",
+    "messagesTitle": "Message notices",
+    "messagesDescription": "Choose which messages notify you with each channel’s bell or space settings. Do Not Disturb still controls message and call alerts.",
+    "systemDescription": "System notices also follow the notification permissions for Backspace in your system settings.",
+    "permissionGranted": "Browser notifications allowed",
+    "permissionDenied": "Browser notifications blocked",
+    "permissionUnavailable": "Notifications unavailable in this browser",
+    "permissionDefault": "Browser notifications are not enabled yet",
+    "enable": "Enable notifications",
+    "attentionTitle": "Attention calls",
+    "attentionDescription": "Device preferences. Effects never take focus away from your game.",
+    "scopeLabel": "Where to receive",
+    "scopeBoth": "Inside or outside, depending on Backspace focus",
+    "scopeApp": "Only inside Backspace",
+    "scopeDesktop": "Only outside, while Backspace is in the background",
+    "scopeOff": "Do not receive attention calls",
+    "modeLabel": "How to display",
+    "modeFull": "Full animations",
+    "modeReduced": "Reduced motion (gentle pulse)",
+    "modeNotification": "Notification only, without animations",
+    "soundLabel": "Play the effect sound",
+    "volumeLabel": "Attention call volume",
+    "monitorLabel": "Monitors for desktop effects",
+    "monitorAll": "All monitors",
+    "monitorPrimary": "Primary monitor only",
+    "monitorApp": "Monitor containing Backspace",
+    "monitorSecondary": "Secondary monitors only",
+    "gameTitle": "Game mode",
+    "gameDetectionLabel": "Enable game mode",
+    "gameDetectionAuto": "Automatically when a game is detected",
+    "gameDetectionOn": "Keep enabled manually",
+    "gameDetectionOff": "Disabled",
+    "gameTriggerLabel": "Consider me to be gaming",
+    "gameTriggerForeground": "When the game is in the foreground",
+    "gameTriggerRunning": "While a game is running",
+    "gameActionLabel": "While gaming",
+    "notificationOnly": "Show notification only",
+    "gameOtherDisplays": "Animate only monitors without games",
+    "gameSuppress": "Silence and hide all attention calls",
+    "gameNormal": "Use my normal behavior",
+    "gameMonitorLabel": "Where the game is",
+    "gameMonitorAuto": "Detect automatically",
+    "gameMonitorPrimary": "On the primary monitor",
+    "gameMonitorApp": "On the same monitor as Backspace",
+    "gameMonitorSecondary": "On secondary monitors",
+    "gameFallbackLabel": "When no monitor is free or the game monitor is unknown",
+    "gameFallbackApp": "Show a notice only inside Backspace",
+    "gameFallbackOff": "Do not show anything or play sound",
+    "gameHelp": "Game and monitor detection depends on the system and game. When the game monitor is unknown, the fallback avoids animating it. Exclusive fullscreen games may prevent desktop notices from appearing.",
+    "appHelp": "In-app notices never bring the window forward. They are not displayed while Backspace is minimized."
   }
 }

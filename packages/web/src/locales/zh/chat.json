@@ -21,6 +21,7 @@
       "unknownRole": "未知身份组"
     },
     "reactions": {
+      "picker": "表情回应",
       "you": "您",
       "others_other": "另外 {{count}} 人",
       "bySelf": "您做出了反应",
@@ -74,6 +75,8 @@
     "cancelReply": "取消回复",
     "removeAttachment": "移除附件",
     "attachFile": "添加附件",
+    "dropTitle": "上传文件",
+    "dropHint": "松开即可添加",
     "uploading": "正在上传…",
     "uploadingLabel": "正在上传",
     "failedCount_other": "{{count}} 个失败",
@@ -89,6 +92,32 @@
     "typing": {
       "named_other": "{{names}} 正在输入",
       "several": "多人正在输入"
+    },
+    "voice": {
+      "record": "录制语音消息",
+      "recording": "正在录制语音消息",
+      "cancel": "取消录制",
+      "send": "发送语音消息",
+      "tooShort": "再录久一点才能发送。",
+      "denied": "麦克风权限被阻止。请允许 Backspace 使用麦克风以录音。",
+      "unavailable": "没有可用于录音的麦克风。",
+      "limit": "已达到录制上限，你的语音消息已发送。"
+    },
+    "attach": {
+      "menuLabel": "附加",
+      "photoVideo": "照片或视频",
+      "photoVideoCompressed": "发送前在你的设备上压缩",
+      "photoVideoOriginal": "按原样发送（压缩已关闭）",
+      "document": "文档",
+      "documentHint": "任何文件，按原样发送",
+      "compressDefault": "压缩照片和视频",
+      "compressDefaultHint": "上传更小。关闭后保留原件。"
+    },
+    "preparing": {
+      "image": "正在压缩照片…",
+      "video": "正在压缩视频… {{percent}}%",
+      "sendOriginal": "发送原件",
+      "cancel": "取消"
     }
   },
   "menu": {
@@ -126,6 +155,13 @@
       "partialInstance": "{{username}} 的实例（限制：{{limit}}）",
       "partialList": "文件无法在 {{instances}} 上缓存。他们仍可从您的实例查看。",
       "listPair": "{{first}} 和 {{second}}"
+    },
+    "voice": {
+      "label": "语音消息，{{duration}}",
+      "play": "播放语音消息",
+      "pause": "暂停语音消息",
+      "speed": "播放速度 {{speed}}",
+      "seek": "语音消息中的位置"
     }
   },
   "gif": {
@@ -168,6 +204,14 @@
   },
   "stickers": {
     "title": "我的表情",
+    "collections": "表情收藏",
+    "servers": "服务器",
+    "serverEmpty": "此服务器尚无表情包",
+    "serverEmptyHint": "服务器管理员可以在服务器设置中创建表情包。",
+    "favoritesTitle": "收藏的表情",
+    "favorite": "收藏贴纸",
+    "favorited": "贴纸已加入收藏",
+    "sharePending": "请求在当前实例发布私人相册。",
     "upload": "上传图片",
     "limits": "PNG、JPEG、WebP 或 GIF · 单张最大 5 MB",
     "loading": "处理中…",
@@ -185,6 +229,7 @@
     "cancel": "取消",
     "replace": "更换图片",
     "name": "表情名称",
+    "invalidName": "请选择最多 100 个字符的可见名称。",
     "dropImage": "点击选择，或将图片拖到这里",
     "pasteHint": "也可以直接粘贴剪贴板中的图片",
     "uploading": "正在添加表情…",
@@ -207,11 +252,148 @@
     "renameNamed": "重命名 {{name}}",
     "renameTitle": "重命名表情",
     "search": "搜索表情",
-    "noResults": "未找到匹配的表情"
+    "noResults": "未找到匹配的表情",
+    "store": "表情商店",
+    "myCollection": "我的表情",
+    "packs": "表情包",
+    "explore": "探索表情",
+    "myPacks": "我创建的表情",
+    "install": "添加",
+    "installed": "已添加",
+    "uninstall": "移除",
+    "createPack": "创建表情包",
+    "editPack": "编辑表情包",
+    "packName": "表情包名称",
+    "packDesc": "描述（可选）",
+    "submitReview": "提交审核",
+    "pendingReview": "审核中",
+    "approved": "已通过",
+    "rejected": "已驳回",
+    "draft": "草稿",
+    "newVersion": "创建新版本",
+    "deletePack": "删除表情包",
+    "stickersCount_one": "{{count}} 个表情",
+    "stickersCount_other": "{{count}} 个表情",
+    "noPacks": "暂无表情包",
+    "replicaBadge": "联邦同步",
+    "viewPack": "查看表情包",
+    "saveDraft": "保存草稿",
+    "packCreated": "表情包创建成功",
+    "reviewSubmitted": "已提交管理员审核",
+    "reviews": "表情审核",
+    "noReviews": "暂无待审核的表情包",
+    "approve": "通过审核",
+    "reject": "驳回",
+    "rejectTitle": "驳回表情包",
+    "rejectReason": "驳回原因",
+    "rejectPlaceholder": "请输入驳回原因（如：包含违规内容、图片不清晰等）",
+    "rejectConfirm": "确认驳回",
+    "approvedSuccess": "已通过该表情包审核",
+    "rejectedSuccess": "已驳回该表情包",
+    "reviewNotes": "驳回理由",
+    "creator": "创作者",
+    "sourceInstance": "所属实例",
+    "localInstance": "本地实例",
+    "viewStickers": "查看表情",
+    "pendingReviewHint": "管理员审核中，通过后将公开在探索页面"
   },
   "poke": {
     "action": "戳一戳",
     "received": "{{actor}} 戳了戳 {{target}}",
     "disconnected": "连接已断开，戳一戳未发送"
+  },
+  "nudge": {
+    "notice": "向你发送了窗口抖动！",
+    "title": "引起注意",
+    "cooldown": "每次发送后请等待 10 秒",
+    "choose": "选择引起注意效果",
+    "originals": "MSN Messenger · 原版传情动漫",
+    "footer": "每 10 秒可发送一次。",
+    "effects": {
+      "shake": {
+        "title": "MSN 震动",
+        "description": "经典快速震动"
+      },
+      "wave": {
+        "title": "波浪",
+        "description": "一道波浪掠过屏幕"
+      },
+      "jelly": {
+        "title": "果冻",
+        "description": "拉伸、摇摆后恢复原状"
+      },
+      "knock": {
+        "title": "敲屏幕",
+        "description": "敲一敲，引起注意"
+      },
+      "confetti": {
+        "title": "彩纸",
+        "description": "小小庆祝一下"
+      },
+      "pulse": {
+        "title": "脉冲",
+        "description": "紫色边框亮起"
+      },
+      "msn_bouncy_ball": {
+        "title": "弹跳球",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_bow": {
+        "title": "鞠躬",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_dancing_pig": {
+        "title": "跳舞小猪",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_eyeball": {
+        "title": "好奇眼睛",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_frog": {
+        "title": "青蛙",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_guitar_smash": {
+        "title": "砸吉他",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_heart": {
+        "title": "爱心",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_kiss": {
+        "title": "亲吻",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_lipstick_girl": {
+        "title": "口红女孩",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_love_letter": {
+        "title": "情书",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_notes": {
+        "title": "音符",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_silly_face": {
+        "title": "鬼脸",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_stars": {
+        "title": "星星",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_water_balloon": {
+        "title": "水气球",
+        "description": "MSN 原版传情动漫"
+      },
+      "msn_fart_guy": {
+        "title": "放屁胖子",
+        "description": "MSN 原版传情动漫"
+      }
+    }
   }
 }

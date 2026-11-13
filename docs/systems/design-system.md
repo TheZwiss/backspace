@@ -92,6 +92,59 @@ breakpoint. Native browser zoom and pinch gestures retain their normal behavior.
 
 ---
 
+## Themes
+
+Appearance settings include a device-local theme: `aether-drift` (default), `light`, `oled`
+or `anime` ("Sakura Night": indigo-violet surfaces, sakura-pink primary `219 61 135`, rosy glass edge). `themeStore` persists the id under `backspace-theme` (unknown values fall
+back to the default); `platform/theme.ts` mirrors it to `<html data-theme>` and
+the `theme-color` meta before React mounts, so login and portals are covered.
+`:root[data-theme="oled"]` in `globals.css` overrides only surface, border,
+text-neutral, interactive and glass tokens: every structural surface is true
+black (`0 0 0`), `--bg-elevated` is `20 20 20`, `--bg-input` is `12 12 12`, and
+separation comes from hairline borders. Accents and status colours are shared.
+`msn` ("Live Messenger") and `msn-dark` ("Live Messenger Dark", deep navy) are two variants of one presentation-only family (`isMsnTheme`; `platform/theme.ts` sets `html[data-msn]` for both, and every structural rule keys on it; the `msn-dark` block at the end of `theme-msn.css` only restates colours). `msn` is a light theme in its own file,
+`styles/theme-msn.css` (unlayered, imported after `globals.css`): Luna/Aero blue
+frames, glossy gradient buttons, a dark-blue space strip, glossy header bands,
+white conversation pane with a docked composer, Segoe UI/Tahoma type, 4px radii
+and no backdrop blur. It changes no DOM or behaviour; only the sidebar home tile
+swaps to `MsnMark`. `isLightTheme(theme)` in `themeStore` is true for `light` and
+`msn` and drives the emoji picker and code theme. The Windows XP (Luna) bevels and double borders are a
+device-local option, `themeStore.msnFrames` (default on, persisted in
+`backspace-theme`, shown as a switch under the theme list only while `msn` is
+selected); `platform/theme.ts` mirrors it to `html[data-msn-frames="xp|flat"]`
+and the `flat` block at the end of `theme-msn.css` removes the bevels. Login and
+register carry `data-auth-page` / `data-auth-card` (inert markers) so the theme
+can draw the Messenger sign-in window (sky background, framed display picture)
+around the unchanged form. In chat messages (DMs and server channels) the MSN theme frames each
+contact photo in a translucent glass frame tinted by presence (green online,
+amber idle, red busy, grey offline): `Avatar` takes an optional `frameStatus`
+prop that only sets `data-frame-status` (every chat message and `DmMemberRow` pass it;
+the dot is hidden by CSS under that attribute). References: dsn10-theme, msn-js,
+Windows-Live-Messenger.
+`anime` also changes elements, not just colours, all gated on `theme === 'anime'`
+(or `:root[data-theme="anime"]`): the `Mascot` gets cat ears, an ahoge, star
+catchlights, cheek marks, twinkling sparkles and the sakura palette
+(`ANIME_MASCOT_PALETTES`, drawn by `MascotAnimeLayer.tsx`; the animation hook is
+untouched because the layer only adds elements); the sidebar home tile shows
+`SakuraMark` instead of the Backspace glyph (the brand-flat rule covers the app
+mark, not this per-theme tile); `SakuraPetals` (mounted in `App`) drops 11 CSS
+petals on a `pointer-events: none` layer at z-index 50; controls use a 12px
+radius, primary buttons glow, scrollbars and modal edges turn pink. Animated
+parts (`.sakura-petals`, `.anime-twinkle`) are disabled under
+`prefers-reduced-motion`. `light` is warm paper (`--bg-chat 252 251 254`, ink text `24 22 36`) with the pastel
+accents re-pitched to mid-tones so they read as text and fills; the primary keeps
+its value. Neutral translucent tints must use the `wash` colour token
+(`bg-wash/5`, `border-wash/[0.06]`, `--wash`): it is white on the dark themes
+and ink on `light`, so **never write `bg-white/N` / `border-white/N` for a
+hover, inset or divider tint** (white stays correct only over photos and video,
+as in `VoiceUser`). Likewise never hardcode a dark hex as a surface or text colour: use
+`surface-*` / `txt-*` tokens (`text-white` is fine only on a coloured fill).
+Per-theme tweaks to component-layer classes (`.glass*`, the pill) live in the
+unlayered block at the end of `globals.css`, because `@layer components` beats
+`@layer base`. The emoji picker and the markdown code theme (One Light) follow
+the theme through `useThemeStore`. New themes are one id in `THEMES`, one CSS block, one swatch and the
+`settings:theme.options.<id>` strings.
+
 ## Color Palette
 
 ### Matte Surfaces (CSS vars, RGB channels)
@@ -200,6 +253,8 @@ variable.
 **Rule:** If it floats above the content plane, it's glass. Never use `bg-surface-elevated` for floating/overlay elements.
 
 **Modal backdrops:** `bg-black/50` — light enough for glass blur to show through.
+
+**Drop scrim:** `.drop-scrim` — the veil `ChatDropOverlay` lays over a chat region while files are dragged onto it: `blur(12px) saturate(110%)` over `--glass-bg`, no border or shadow. It is a scrim, not a surface tier; what sits on it follows the tiers (a dashed `border-accent-primary/50` frame, a `.glass-bubble` label). Under `prefers-reduced-transparency` it becomes `rgb(var(--bg-elevated) / 0.92)` with no filter. It is `pointer-events-none` so the drag keeps targeting the elements below.
 
 **Portal target — `usePortalContainer()`:** Every overlay (context menu, tooltip, popover, modal, screen-share picker) MUST portal through `usePortalContainer()` (`packages/web/src/hooks/usePortalContainer.ts`) instead of hard-coding `document.body`. The hook returns `document.fullscreenElement ?? document.body` and re-renders subscribers on `fullscreenchange`. Without this, anything portaled while an element (e.g. the voice container in fullscreen mode) is in the browser's Fullscreen API top-layer is rendered outside that layer and is invisible. Components mounted at App root that render with `fixed inset-0` (not just portals) must also portal through this hook for the same reason.
 
@@ -316,6 +371,40 @@ Any new card list uses this class rather than its own template.
 ### Skeleton Loading
 `.skeleton`, `.skeleton-circle`, `.skeleton-bar`, `.skeleton-block`
 
+### State motion
+
+Click feedback on icons is `data-icon-motion` (`packages/desktop/resources/icon-motion.json`, installed by `platform/iconMotion.ts`). State motion is the other half: a value changed and the interface acknowledges it once. Rules:
+
+- **Live changes only.** Nothing moves for the state a component mounted with, so opening a channel, a member list or the app does not set the screen moving. `useChangeSignal(value)` (`hooks/useChangeSignal.ts`) counts changes after mount and reports their direction; key an element on its `generation` to replay a one-shot animation.
+- **Transform, opacity and SVG stroke only.** No layout animation (the message list's scroll model depends on it, see message-list.md).
+- **Short and small.** `--motion-fast` 120ms, `--motion-enter` 180ms, `--motion-spring` for things that travel (switch thumb, presence symbol). Scale changes stay under ±20%.
+- **Reduced motion** is covered by the global `prefers-reduced-motion` rule in `globals.css`; loops end on their resting frame.
+
+| Class / component | What it means | Used by |
+|---|---|---|
+| `.motion-pop-in` | An element arrived | `UnreadCountBadge` on mount, `ReactionPill` with `entering` (an emoji that was not on the message when it was first shown, tracked in `Message.tsx`) |
+| `.motion-bump` | A visible element grew | `UnreadCountBadge` when the count rises, the reaction emoji when the viewer's own reaction lands |
+| `.motion-count-up` / `.motion-count-down` (`countChangeClass`) | A number rolled to a new value | Reaction counts |
+| `.motion-floating-enter` + `data-side` | A floating surface arrives from its anchor's side (uses `translate`, so it never fights a positioning transform) | `Tooltip`, the reaction tooltip, the message hover toolbar |
+| `.motion-rise-in` | A control rises into view from below | "Jump to present" |
+| `.motion-presence-swap` | A presence symbol changed shape | `PresenceIndicator` |
+| `StrikeLine` (`.strike-line`) | The "off" diagonal of mute, deafen and camera icons, always mounted: it draws in when the state turns off and retracts when it turns on | Voice control bar, user panel, desktop voice controls, mobile join sheet |
+| `CopiedCheck` (`.check-draw`) | The check of a confirmed copy, drawn stroke first | Invite link, update commands |
+| `.bookmark-fill` | The bookmark fill fades (`fill-opacity`) instead of switching | `BookmarkIcon` |
+| `.speaking-halo` | The speaking ring around a call tile's avatar, always mounted so it fades with the voice instead of blinking per syllable | `VoiceUser`; `VoiceUserRow` uses a `ring-transparent` ring with `transition-shadow` for the same reason |
+| `.typing-dot` | The typing indicator's slow wave | `TypingIndicator` |
+
+### Attention-effect previews
+
+The DM "Chamar atenção" menu (`NudgeButton`) shows what each effect does on the friend's screen instead of an emoji (`chat/NudgeEffectPreview.tsx`, styles in `globals.css`, "Attention-effect previews"):
+
+- **shake, wave, jelly, confetti, pulse** are a 56×42 miniature screen with the real effect running on it (the same jitter table, column-wise sine wave, squash and skew, falling pieces and glowing border as `desktop/src/nudgeEffects.ts`). Every animation is paused on a telling frame and runs while the entry is hovered or focused (`data-active`).
+- **knock and the 15 MSN winks** show frames of the actual clip: `public/nudge-previews/<name>.png` at rest, `<name>.webp` (about 2 s, 10 fps, alpha kept) while active. They are cut from `packages/desktop/resources/nudge-msn/*.webm` with ffmpeg: cropped to the union of the clip's opaque pixels, fitted into 104×78, still taken at the frame with the most opaque pixels. Re-cut them whenever a clip changes; `NudgeEffectPreview.test.tsx` fails if an effect has no still or animation. Images are not precached by the service worker, so the animations load on first hover.
+
+A new effect needs a preview in both places: a miniature in `NudgeEffectPreview`, or a still and an animation in `public/nudge-previews`.
+
+The `Toggle` thumb springs across and stretches toward its travel while pressed (`group-active`), so the switch answers the press before the click lands.
+
 ---
 
 ## Utility Classes
@@ -421,3 +510,17 @@ Every floating surface places itself with `computeFloatingPosition` (`hooks/useF
 | `GroupDmSettings.tsx` (modal hero + member-row previews) | varies | `modal` | Modal Overview tab |
 | `MobileGroupDmInfo.tsx` (pushed-screen hero) | 80 | `modal` | Mobile info screen hero |
 | `MobileDmsScreen.tsx` (DM list rows) | 40 | `channel` | Mobile sidebar parity with desktop `DmListItem` |
+
+## Shared visual controls (2026-11-02)
+
+- Use `ui-button` plus `ui-button-primary`, `ui-button-secondary`, `ui-button-danger` or `ui-button-warning`; the React `Button` primitive exports the same variants. Filled pastel warning/danger controls use a dark foreground. Primary hover and active have dedicated tokens.
+- `settings-section` is the default matte settings card. `ui-dialog-surface` and `ui-dialog-title` provide common dialog chrome; preserve purpose-specific widths and mobile sheets.
+- Native selects use `ui-select`; ranges use `ui-range`, with WebKit and Firefox thumb styling. Keep the native selection UI on touch layouts.
+- Typography roles: `text-ui-title` 18px, `text-ui-lead` 16px, `text-ui-message` 15px, `text-ui-body` 14px, `text-ui-label` 13px, `text-ui-caption` 12px, `text-ui-micro` 10px. Micro is for decorative badges, never essential instructions.
+- Mobile buttons/switches have at least 44px targets. The switch's visual track remains 24px high inside its target.
+- Keyboard focus must remain visible. Input rings and button rings replace, rather than stack on, the generic outline. Do not restore a universal `outline: none !important`.
+- Use the shared `Tooltip` for nonessential hover/focus explanations; keep an accessible name on icon buttons. Its `display: contents` wrapper preserves the child's layout and positioning. Long text wraps within the viewport. Touch interfaces do not depend on hover.
+- Overlay order is defined by `--layer-*`: fullscreen 100, modal 200, menu backdrop 399, menu 400, submenu 401, tooltip 500, confirmation 600, toast 700, attention notification 800. Portals still respect the active fullscreen container.
+- Native and in-app attention notices share `packages/desktop/resources/ui-theme.json`. Keep its colors synchronized with the CSS tokens (covered by `visualTheme.test.ts`). Native DM Sans is bundled with its OFL license. Localized labels must be escaped when interpolated into native HTML.
+
+The implementation and validation record is in `docs/audits/2026-11-02-ui-visual-implementation.md`.

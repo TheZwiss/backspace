@@ -8,6 +8,7 @@ import { MentionBadge } from './MentionBadge';
 import { remarkEmojiShortcodes } from '../../utils/remarkEmojiShortcodes';
 import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { splitMentions } from '../../utils/mentionTokens';
+import { isLightTheme, useThemeStore } from '../../stores/themeStore';
 
 // ─── Remark Plugin: Tag Bare Fenced Blocks ─────────────────────────────────
 // react-markdown v9 removed the `inline` prop from <code>. Fenced blocks
@@ -80,25 +81,48 @@ const aetherTheme = {
   },
 };
 
+// One Dark's pastel tokens vanish on the light theme's white code surface, so
+// it swaps to One Light, on the same surface and text variables.
+const aetherLightTheme = {
+  ...themes.oneLight,
+  plain: {
+    ...themes.oneLight.plain,
+    backgroundColor: 'rgb(var(--bg-input))',
+    color: 'rgb(var(--text-message))',
+  },
+};
+
 // ─── Markdown Component Overrides ──────────────────────────────────────────
 
 const REMARK_PLUGINS = [remarkGfm, remarkDefaultCodeLang, remarkEmojiShortcodes];
 
+/**
+ * The text inside a fenced block. An empty block (a lone fence line such as
+ * "```js") hands `<code>` no children at all, and `String(undefined)` would
+ * print the word "undefined" in the message.
+ */
+export function codeText(children: React.ReactNode): string {
+  if (children === null || children === undefined || typeof children === 'boolean') return '';
+  if (Array.isArray(children)) return children.map(codeText).join('');
+  return String(children);
+}
+
 function CodeBlock({ language, code }: { language: string; code: string }) {
+  const isLightScheme = useThemeStore(state => isLightTheme(state.theme));
   // 'text' means a bare fenced block with no language — render without highlighting
   if (language === 'text') {
     return (
-      <pre className="mt-1 p-3 bg-surface-elevated border border-white/[0.06] rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
+      <pre className="mt-1 p-3 bg-surface-elevated border border-wash/[0.06] rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
         <code>{code}</code>
       </pre>
     );
   }
 
   return (
-    <Highlight theme={aetherTheme} code={code} language={language}>
+    <Highlight theme={isLightScheme ? aetherLightTheme : aetherTheme} code={code} language={language}>
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
-          className="mt-1 rounded border border-white/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
+          className="mt-1 rounded border border-wash/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
           style={{ ...style, padding: '0.625rem 0.75rem', margin: 0 }}
         >
           {tokens.map((line, i) => {
@@ -159,7 +183,7 @@ function buildComponents(): Components {
         return <ChannelMentionBadge userId={mentionMatch[1]!} />;
       }
       return (
-        <a
+        <a data-icon-motion="press"
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -174,13 +198,13 @@ function buildComponents(): Components {
     code: ({ className, children, ...rest }) => {
       const match = /language-(\w+)/.exec(className || '');
       if (match) {
-        const code = String(children).replace(/\n$/, '');
+        const code = codeText(children).replace(/\n$/, '');
         return <MemoizedCodeBlock language={match[1]!} code={code} />;
       }
       // Inline code
       return (
         <code
-          className="px-[6px] py-px bg-[#111115] border border-border-soft rounded text-[13.5px] font-mono text-accent-lavender"
+          className="px-[6px] py-px bg-surface-input border border-border-soft rounded text-ui-label font-mono text-accent-lavender"
           {...rest}
         >
           {children}
@@ -238,7 +262,7 @@ function buildComponents(): Components {
     ),
     thead: ({ children }) => <thead className="border-b border-border-soft">{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
-    tr: ({ children }) => <tr className="border-b border-white/[0.06]">{children}</tr>,
+    tr: ({ children }) => <tr className="border-b border-wash/[0.06]">{children}</tr>,
     th: ({ children }) => <th className="px-3 py-1.5 text-left text-txt-primary font-semibold">{children}</th>,
     td: ({ children }) => <td className="px-3 py-1.5">{children}</td>,
   };

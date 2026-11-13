@@ -25,6 +25,7 @@ describe('AudioManager.releaseInputStream', () => {
   const getUserMedia = vi.fn<() => Promise<MediaStream>>();
 
   beforeEach(() => {
+    am.setTextInputOnly(false);
     state.inputSource = null;
     state.currentStream = null;
     state.currentInputDeviceId = 'default';
@@ -36,7 +37,30 @@ describe('AudioManager.releaseInputStream', () => {
     getUserMedia.mockReset();
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia } });
   });
-  afterEach(() => { am.releaseInputStream(); vi.unstubAllGlobals(); });
+  afterEach(() => { am.setTextInputOnly(false); am.releaseInputStream(); vi.unstubAllGlobals(); });
+
+  it('text voice releases hardware and blocks capture until the user leaves text mode', async () => {
+    const old = capture(); const fresh = capture();
+    getUserMedia.mockResolvedValueOnce(old.stream).mockResolvedValueOnce(fresh.stream);
+    await am.setInputDevice('mic');
+    am.setTextInputOnly(true);
+    expect(old.track.stop).toHaveBeenCalledOnce();
+    expect(await am.setInputDevice('other')).toBeNull();
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    am.setTextInputOnly(false);
+    expect(await am.setInputDevice('mic')).toBe(fresh.stream);
+  });
+
+  it('text voice stops a capture that resolves after enabling the mode', async () => {
+    const late = capture(); let finish!: (stream: MediaStream) => void;
+    getUserMedia.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const pending = am.setInputDevice('mic');
+    await Promise.resolve();
+    am.setTextInputOnly(true); finish(late.stream);
+    expect(await pending).toBeNull();
+    expect(late.track.stop).toHaveBeenCalledOnce();
+    expect(am.hasActiveStream()).toBe(false);
+  });
 
   it('stops every track and detaches handlers without reporting upstream loss', async () => {
     const tracks = [capture().track, capture().track];

@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Termux:Boot entry. Keeps running in the background so it cannot block the
+# other boot scripts (20-teamspeak-tailnet runs in the foreground).
+exec "$HOME/backspace-autostart.sh"

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { CopiedCheck } from '../../ui/CopiedCheck';
 import { useTranslation, Trans } from 'react-i18next';
 import { useFormatters, type Formatters } from '../../../i18n/formatters';
 import { useUIStore } from '../../../stores/uiStore';
@@ -21,12 +22,24 @@ function CommandBlock({ command }: { command: string }) {
   const { t } = useTranslation(['admin', 'common']);
   const addToast = useUIStore((s) => s.addToast);
   const [copied, setCopied] = useState(false);
+  // The "Copied" confirmation resets itself. The timer is kept so it can be
+  // cancelled when the block unmounts (or copies again): left running it fires
+  // into an unmounted component, and in a test after its environment is gone.
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+  }, []);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(() => {
+        resetTimer.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       // Clipboard access can be refused. The command is selectable either way,
       // so say so rather than failing silently.
@@ -39,11 +52,12 @@ function CommandBlock({ command }: { command: string }) {
       <code className="flex-1 min-w-0 rounded-lg bg-surface-input px-3 py-2 font-mono text-xs text-txt-primary overflow-x-auto whitespace-pre select-all">
         {command}
       </code>
-      <button
+      <button data-icon-motion="press"
         type="button"
         onClick={copy}
-        className="shrink-0 px-3 py-2 text-xs font-medium rounded-lg text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
+        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg bg-wash/[0.04] hover:bg-wash/[0.08] transition-colors ${copied ? 'text-accent-mint' : 'text-txt-secondary hover:text-txt-primary'}`}
       >
+        {copied && <CopiedCheck />}
         {copied ? t('common:actions.copied') : t('common:actions.copy')}
       </button>
     </div>
@@ -114,10 +128,10 @@ export function UpdatesPanel() {
         <div className="rounded-lg bg-accent-rose/10 border border-accent-rose/20 p-3.5 text-sm text-txt-secondary">
           {loadError || t('admin:updates.loadFailed')}
         </div>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => void load(false)}
-          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
+          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors"
         >
           {t('common:actions.tryAgain')}
         </button>
@@ -161,10 +175,10 @@ export function UpdatesPanel() {
 
       {/* What is running now */}
       <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           {t('admin:updates.running.label')}
         </div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3.5">
           <div className="text-sm text-txt-primary font-medium">
             {t('common:appName')} {status.current.version}
           </div>
@@ -178,7 +192,7 @@ export function UpdatesPanel() {
       {/* What to do about it */}
       {updateAvailable && status.latest !== null ? (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          <div className="text-ui-caption font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
             {t('admin:updates.available.label')}
           </div>
           <div className="rounded-lg bg-accent-primary/[0.06] border border-accent-primary/25 p-3.5 space-y-3">
@@ -188,7 +202,7 @@ export function UpdatesPanel() {
               </div>
               <div className="text-xs text-txt-tertiary mt-0.5">
                 {status.latest.publishedAt && t('admin:updates.available.released', { date: formatReleaseDate(status.latest.publishedAt, f) })}
-                <a
+                <a data-icon-motion="press"
                   href={status.latest.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -208,7 +222,7 @@ export function UpdatesPanel() {
             </div>
 
             <div>
-              <button
+              <button data-icon-motion="press"
                 type="button"
                 onClick={() => setShowManual((v) => !v)}
                 aria-expanded={showManual}
@@ -259,7 +273,7 @@ export function UpdatesPanel() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="rounded-lg bg-wash/[0.03] border border-wash/[0.04] p-3.5">
           {status.state === 'up-to-date' && (
             <div className="text-sm text-accent-mint">{t('admin:updates.upToDate')}</div>
           )}
@@ -298,11 +312,11 @@ export function UpdatesPanel() {
         <div className="text-xs text-txt-tertiary">
           {lastCheckedLine()}
         </div>
-        <button
+        <button data-icon-motion="press"
           type="button"
           onClick={() => void load(true)}
           disabled={checking || !status.checkEnabled}
-          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-wash/[0.04] hover:bg-wash/[0.08] rounded-lg transition-colors disabled:opacity-50"
         >
           {checking ? t('admin:updates.checking') : t('admin:updates.checkAgain')}
         </button>

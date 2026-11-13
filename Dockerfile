@@ -63,9 +63,10 @@ COPY patches/ patches/
 
 RUN pnpm install --frozen-lockfile --filter @backspace/web...
 
-# Copy source code (excluding desktop — not needed in Docker)
+# Copy source code (excluding desktop, except the UI definitions the web build imports)
 COPY packages/shared/ packages/shared/
 COPY packages/web/ packages/web/
+COPY packages/desktop/resources/ packages/desktop/resources/
 
 # The web build starts with the localization consistency check, which lives
 # in scripts/ and reads its allowlist and pending list from there. Only the

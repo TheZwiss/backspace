@@ -1,0 +1,193 @@
+{
+  "before": {
+    "alice": {
+      "time": 979393.8000000045,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "6d67775a-5668-4b0f-8506-ab67e7b35105",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 268.154488,
+          "frames": 2789,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "6d67775a-5668-4b0f-8506-ab67e7b35105",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:58\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n720P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n16 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n16 min decorridos"
+    },
+    "bob": {
+      "time": 88099.60000000149,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 77.994,
+          "frames": 1318,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:58\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 53FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n16 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n16 min decorridos"
+    },
+    "pubEvents": 16
+  },
+  "during": {
+    "alice": {
+      "time": 980131.900000006,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": true,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": true,
+          "sharing": true,
+          "track": "6d67775a-5668-4b0f-8506-ab67e7b35105",
+          "republishing": false
+        },
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": false,
+          "sharing": false,
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 268.889796,
+          "frames": 2827,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "6d67775a-5668-4b0f-8506-ab67e7b35105",
+          "ready": 4
+        },
+        {
+          "time": 0,
+          "frames": 0,
+          "paused": true,
+          "width": 0,
+          "height": 0,
+          "ready": 0
+        }
+      ],
+      "dialog": "Compartilhar sua tela",
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:58\nT\nTest Alice\nAO VIVO\nT\nTest Bob\nCriar canal\nCriar categoria\nVoz conectada\nvoice\nT\nTest Alice\n@test_alice\nvoice\nConectado\n2 conectados\nT\nTest Alice\n(você)\nAO VIVO\n720P\nTest Alice\n(você)\nT\nTest Bob\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n16 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n16 min decorridos\nCompartilhar sua tela\n\nEscolha o que compartilhar, ajuste a qualidade e comece.\n\nTelas2\nJanelas6\nNova notificação\nBackspace\n⠦ Abrir Electron com dois usuários | backspace-prort-android\nBackspace\nbackspace-prort-android\nNVIDIA GeForce Overlay\nPRONTO PARA ENTRAR AO VIVO\nPré-visualizar\nConfigurações da transmissão\nRESOLUÇÃO\n540p\n720p\n1080p\nTAXA DE QUADROS\n30\n45\n60\nMODO DE CONTEÚDO\nJogos\nTexto\nCODEC\nVP9\nH264\nTAXA DE BITS\nAutomática\nPersonalizada\nPRÉVIA DA TRANSMISSÃO\nNormal\nDesfocada\nSem imagem\n\nDefine a miniatura exibida antes de assistir. Não altera o vídeo da transmissão.\n\nÁUDIO DO SISTEMA\n4 Mbps · equilibrado\nNada foi escolhido.\nConfigurações da transmissão\nCancelar\nIniciar transmissão"
+    },
+    "bob": {
+      "time": 88838,
+      "route": "/channels/375400147737526272/375400147737526276",
+      "voice": "connected",
+      "sharing": false,
+      "config": {
+        "previewMode": "normal",
+        "height": 720,
+        "fps": 60,
+        "mode": "gaming",
+        "customBitrateKbps": null,
+        "shareAudio": false,
+        "codec": "vp9"
+      },
+      "participants": [
+        {
+          "userId": "375397997229785088",
+          "identity": "375397997229785088:test_bob",
+          "local": true,
+          "sharing": false,
+          "republishing": false
+        },
+        {
+          "userId": "375397996164431872",
+          "identity": "375397996164431872:test_alice",
+          "local": false,
+          "sharing": true,
+          "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+          "republishing": false
+        }
+      ],
+      "videos": [
+        {
+          "time": 80.457,
+          "frames": 1351,
+          "paused": false,
+          "width": 1098,
+          "height": 720,
+          "track": "0e76a4d6-a07f-41fc-b70a-e466e79fe516",
+          "ready": 4
+        }
+      ],
+      "body": "U\nUI Audit — disposable\nTEXT-CHANNELS\ngeneral\nVOICE-CHANNELS\nvoice\n13:59\nT\nTest Bob\nT\nTest Alice\nAO VIVO\nVoz conectada\nvoice\nT\nTest Bob\n@test_bob\nvoice\nConectado\n2 conectados\nT\nTest Bob\n(você)\nT\nTest Alice\nAO VIVO\n720P 53FPS\nTest Alice\nDONO — 1\nT\nTest Alice\n🎮\nWallpaper Engine\n16 min decorridos\nONLINE — 1\nT\nTest Bob\n🎮\nWallpaper Engine\n16 min decorridos"
+    },
+    "pubEvents": 16
+  }
+}

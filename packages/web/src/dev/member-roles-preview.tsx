@@ -76,7 +76,7 @@ function user(id: string, displayName: string, status: User['status'], extra: Pa
 }
 
 const MIRA = user('u-mira', 'Mira', 'offline', {
-  username: 'mira@orbit.ddns.net', homeInstance: 'orbit.ddns.net', homeUserId: 'orbit-mira',
+  username: 'mira@orbit.example', homeInstance: 'orbit.example', homeUserId: 'orbit-mira',
   bio: 'Runs the Thursday listening nights. Ask me about field recordings.',
 });
 const TOBI = user('u-tobi', 'Tobi', 'offline');

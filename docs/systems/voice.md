@@ -36,6 +36,21 @@ See `docs/systems/websocket.md` → "Mid-session space join" for the full ration
 
 Pre-arm is fire-and-forget: the mic acquisition runs in parallel with the LiveKit handshake, and `AudioManager.inputSwitchChain`'s serialization guarantees `useLiveKit.syncMic`'s subsequent call short-circuits on the already-acquired `currentStream` (no double prompt, no second `getUserMedia`).
 
+### Channel voice quality (`channels.voice_bitrate_kbps`)
+
+An admin with MANAGE_CHANNELS picks the quality of a space voice channel in its settings Overview (`VoiceQualitySetting`): 64, 128 or 256 kbps (`VOICE_BITRATE_OPTIONS_KBPS` in shared), saved on click through `PATCH /api/channels/:id`. A channel starts at 128 kbps (`DEFAULT_VOICE_BITRATE_KBPS`); LiveKit's own default is 48 kbps, and its RED redundancy (on by default) roughly doubles the Opus ceiling on the wire. It is the ceiling of each member's microphone Opus bitrate, not a server-side transcode.
+
+- **On join**, `useLiveKit.connect` reads the channel's `voiceBitrateKbps` from `spaceStore`, mirrors it into `voiceStore.channelVoiceBitrateKbps` and builds the `Room` with `publishDefaults.audioPreset = { maxBitrate: kbps * 1000 }` (`audioPresetForKbps`, `utils/voiceQuality.ts`), so every publish of the microphone, a device-change republish included, uses it. A DM call has no channel: it stores `null` and keeps LiveKit's default preset.
+- **Live changes** arrive as `channel_updated`; `useWebSocket` writes the new value to `voiceStore.channelVoiceBitrateKbps` when the channel is the one the client is in, and an effect in `useLiveKit` calls `applyMicBitrate`: it updates the room's `publishDefaults` and sets `maxBitrate` on the live microphone's `RTCRtpSender` in place, with no republish, so nobody hears a gap.
+- **Enforcement is client-side only**, as for the screen share limits below: the publish goes straight to the SFU, which has no audio bitrate cap to put in a token, so a modified client can send more. The server validates the value and who may set it.
+- **Federation:** nothing to relay. The channel and its setting live on the instance that owns the space; a client on another instance reads the field from that instance's API and WebSocket, resolved through the channel's origin like any other channel field.
+
+### Server-to-LiveKit address (`LIVEKIT_INTERNAL_URL`)
+
+`LIVEKIT_URL` is what browsers connect to, so it may be a LAN IP behind a self-signed Caddy certificate or a Tailscale name the server cannot dial from its own host. The server's own calls to LiveKit's HTTP API (soundboard playback sends its event through `RoomServiceClient.sendData`) use `config.livekit.internalUrl` (`LIVEKIT_INTERNAL_URL`, e.g. `http://127.0.0.1:7880`) and fall back to `LIVEKIT_URL`. When that call fails the player sees `voice_disabled` ("Voice and video are not configured on this instance"), which is why a working call can still have a soundboard that reports it.
+
+**Reverse proxy and the `/livekit` path.** When `LIVEKIT_URL` is `wss://<domain>/livekit` (the shape `install.sh` writes), leaving `LIVEKIT_INTERNAL_URL` unset breaks the server's own calls: the SDK builds `<origin>/twirp/...` and drops the `/livekit` path, so the request lands on the app, which answers with its HTML page, and the soundboard reports `voice_disabled` while calls themselves work. The bundled stack therefore sets `LIVEKIT_INTERNAL_URL=http://host.docker.internal:7880` (`install.sh` writes it when voice is on) and `docker-compose.yml` gives the `backspace` service `extra_hosts: host.docker.internal:host-gateway`, because LiveKit runs with `network_mode: host`. Instances installed before this change must add that line to `.env` by hand (or the gateway IP of the compose network, e.g. `http://172.19.0.1:7880`) and recreate the container.
+
 ### Listener mode (`micPermissionDenied`)
 
 When the user denies the prompt (or has previously denied at the OS level), the pre-arm's `setInputDevice` rejects with `NotAllowedError`. The `voiceStore.micPermissionDenied` flag is set to `true` and the LiveKit connect proceeds anyway — the user appears in the voice channel as a connected participant who can hear others but has no microphone publication. `useLiveKit.syncMic` checks the flag at the top of its body and skips the publish branch entirely.
@@ -270,7 +285,7 @@ When the relayed first message creates a local 1-on-1 copy (`findOrCreateOneOnOn
 - On the receiving side, both Path A and Path B skip a local member for whom the host sent no token instead of dispatching a `dm_call_incoming` with an unusable token. A local member homed on a third instance — a client-federation connection — is rung by their own home instance, which is the one the host minted their token for.
 - `participants` stays the complete roster: it is non-secret and Path B needs it for identity matching.
 
-**LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.ddns.net/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
+**LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.example/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
 
 **Token endpoint:** `POST /api/livekit/token` uses `federatedId` as the room name when the DM channel has a `federatedId` set, ensuring both instances join the same LiveKit room.
 
@@ -381,9 +396,13 @@ ScreenShareConfig {
 1. Resolve bitrate from matrix (custom > override > default > native estimate)
 2. Clamp to instance limits (minBitrateKbps, maxBitrateKbps)
 3. Select the persisted codec: VP9 (default) or H.264
-4. Configure a VP8 simulcast backup at reduced framerate/bitrate; room dynacast pauses it when no subscriber needs it
+4. For a VP9 share, configure a VP8 simulcast backup at reduced framerate/bitrate; room dynacast pauses it when no subscriber needs it. An H.264 share has no backup: every client decodes H.264, so a second encode would only take uplink and CPU
 5. Content hint: `'detail'` (text) or `'motion'` (gaming)
 6. Degradation preference: preserve resolution for text, balanced for gaming
+
+### Uplink priority and stall recovery
+- **Priority.** `applyOverdrive` sets the sender's `priority`/`networkPriority` from `OverdriveOptions.priority` (default `'high'`). The screen share keeps `'high'`; the camera's overdrive asks for `'low'`, so a short uplink takes bandwidth from the webcam before the share.
+- **Stall recovery.** WebRTC shrinks the picture when the uplink estimate dips and can leave it small (268x146) after the network recovers, especially with `maintain-framerate`. `screenShareRecovery.ts` samples the share's sender every 3 s (`startScreenShareRecovery`, started from `publishScreenShare`, stops itself when the share ends). `isScreenShareShrunk` (in `screenShareStall.ts`) calls it a fault when the encoded height is under 60% of the capture height, the limit is not `cpu`, and the congestion controller's `availableOutgoingBitrate` covers at least 75% of the share's ceiling; a small picture on a short uplink is honest and is left alone. A stream that is not encoding (dynacast paused it) is skipped. After 4 samples in a row it re-runs `scheduleScreenShareOverdrive`; if the picture is still small after a 15 s settle it republishes the same track (`republishScreenShare`, no re-capture), at most twice per share.
 
 ### Native Mode
 - Captures at display's full resolution
@@ -440,13 +459,15 @@ The pipeline in `utils/screenShare.ts` is **stage → publish**:
 
 The card is a fixed, near-viewport `glass-modal` surface (viewport width minus 6 rem, capped at `max-w-6xl`, 88 % of the app-scaled height) so the layout never jumps with its content. Where the app lists sources, a segmented control under the header switches **Screens / Windows** (with a window search field on the Windows tab). Browsers and system-picker mode have no such control: their picker decides, and the stage reports what came back instead. The source area is a **stage**: the app's thumbnail grid, or in browsers and system-picker mode an empty stage (monitor illustration, "Choose screen" button) that becomes the full-size live preview once staged.
 
+**The list stays live while the screen is open.** `getScreenSources` is polled every two seconds (thumbnails on the first call and every fifth one, ids and names only in between) and folded into the grid by `mergeScreenSources()`: a window that opened after the screen did appears at the front without moving the tiles already shown, one that closed drops out, and a cheap poll never blanks a thumbnail already decoded. Reopening the screen is no longer how a new window shows up. The main process still serves a cache to an unfocused window and refuses to enumerate faster than its one-second window (`screenSharePolicy.ts`), so the poll costs nothing while the app is in the background.
+
 **What was captured.** The ready bar's kind and name come *only* from a tile the app enumerated and the user clicked (`isScreen` → "Screen" / "Window", plus the source name). Nothing is read off the captured track: `MediaTrackSettings.displaySurface` looks like the right source for this and is not — Firefox omits it, and Electron on a Wayland portal session reports `window` for a whole monitor — and Firefox's `track.label` names a monitor after picking a window there. A confidently wrong label is worse than none, so browser and portal captures show the plain "Ready to go live" and let the live preview, which is the ground truth everywhere, speak for itself.
 
 The quality panel is a **drawer** that slides in over the stage from the right with a scrim. It opens from the **Stream settings** button in the footer's action pill (icon + label, icon-only on phones, next to Cancel / Start) or from the footer summary line; its own close button, the scrim, and Escape (before the screen) close it. It starts collapsed on every open.
 
 Source picking differs by platform, the rest of the screen is identical (drawer, summary + Cancel/Start in the footer):
 
-- **Electron, current desktop:** the renderer lists sources up front via `getScreenSources()` (IPC `get-screen-sources`). Clicking a tile sends `preselectScreenSource(id, shareAudio)` (IPC `screen-share-preselect`) and then calls `getDisplayMedia()`; the main process's display-media handler answers from the preselection without prompting. Double-click on the staged tile starts.
+- **Electron, current desktop:** the renderer lists sources up front via `getScreenSources()` (IPC `get-screen-sources`). Clicking a tile preselects it (`preselectScreenSource` → IPC `screen-share-preselect`) and then calls `getDisplayMedia()`; the main process's display-media handler answers from the preselection without prompting. Double-click on the staged tile starts. On Windows a **window** tile is captured as its display and cropped: `getWindowCaptureTarget(id)` returns the window's physical rectangle and its monitor, the preselection names that screen (and keeps the window as the audio source), and `utils/windowCropCapture.ts` draws only that rectangle from each display frame onto a canvas whose track is published. That is what removes Windows Graphics Capture's yellow border, and it is why the preview of a window is a crop rather than the window itself; process-audio-capture.md, "Window geometry and borderless window capture", has the measurements. A shared window that loses focus is drawn as a **paused card** (pause mark plus the localized "Stream paused") instead of its screen pixels, because the pixels behind an unfocused window are whatever is on top of it; the audio is a separate track and keeps flowing. The switch only applies once the share is published — during setup the app itself is focused, so the preview must keep showing the window. The helper's `geometry` reports `foreground` (the window is the top-level foreground window) and `geometry-watch` streams it at 10 Hz while sharing, which the renderer eases into the drawn rectangle. Minimizing the shared window pauses it (the card) without ending the share; only closing the window does — the helper exits and the renderer ends the track. When a D3D app holds the display in exclusive fullscreen, frames can stop; the renderer shows "Reconnecting capture…" and resumes on its own, with the audio untouched. A window dragged to another monitor is recaptured on that display underneath the same track, and a display-mode change that ends Chromium's capture (a game entering or leaving exclusive fullscreen) is retried with the card up — the publication and its audio never change, and only a closed window ends the share.
 
   One source is staged on open without being asked, chosen by `pickAutoStageSource()` (`utils/screenShareSources.ts`): the source shared last time if it is still in the list, otherwise the machine's only screen, otherwise nothing. `voiceStore.lastScreenShareSourceId` is persisted and written on a successful **Start**, not on a pick, so a capture the user backed out of is not what comes up next time; a browser or portal capture has no id of ours and stores `null`. Screen ids (`screen:0:0`) survive a restart, window ids (`window:12345:0`) are session handles and stop matching, which is the fallback rather than a failure. A remembered window switches the grid to the Windows tab so the highlight sits where the preview does. Staging publishes nothing, so this costs the user only the preview being ready.
 - **Electron, older desktop (no `getScreenSources`):** the "Choose" card calls `getDisplayMedia()`; the main process pushes its source list (`onScreenShareSources`) and the grid appears inline; a tile click answers the in-flight request with `selectScreenSource(id)`. Kept because the desktop app loads whatever web client its instance serves, so version skew in both directions is real.
@@ -513,7 +534,7 @@ The screen-share button is the **only** control-bar entry to screen sharing and 
 | State | Click |
 |-------|-------|
 | Not sharing | `handleScreenShareAction()` → `openScreenShareSetup()` → the setup screen above |
-| Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` |
+| Sharing | Toggles `ScreenShareSettingsPopover` anchored to the button, rendered with `onStopSharing` and `onChangeSource`. "Change stream" (`handleChangeScreenShareAction`) opens the setup screen in `replace` mode, so another screen or window is picked and swapped in without stopping the share |
 
 `ScreenShareSettingsPopover` takes an optional `onStopSharing` callback. When present it appends a full-width `bg-accent-rose` "Stop Sharing" button below the stats footer; the control bars pass it (they have no other stop control), while the local `StreamTile` context menu omits it because it already carries its own "Stop Streaming" item. Quality changes made from the popover apply mid-stream through the `screenShareConfig` effect in `useLiveKit` (constraints + overdrive re-applied; a codec change republishes).
 
@@ -528,12 +549,15 @@ Electron 43.4+ honors `restrictOwnAudio` in this custom-handler path: when the r
 | OS build | Backspace's own playback in System Audio | Why |
 |---|---|---|
 | Windows 11 (build 22000+) | left out (`excluded`) | WASAPI process loopback excluding the audio-service process tree. Chromium gates it on `base::win::Version::WIN11` |
-| Windows 10, any build (22H2 is 19045), and Server 2022 (20348) | included (`included`) | below the WIN11 gate. The OS API is documented from build 20348, but Chromium does not use it there, and no feature flag lifts the gate |
+| Windows 10 and 11, desktop app with the process-audio helper | left out (`excluded`) | not Chromium's loopback at all: WASAPI process loopback from `packages/desktop/native/process-audio`. A window share includes that window's process tree; a screen share excludes every Backspace process. See process-audio-capture.md |
+| Windows 10, any build (22H2 is 19045), and Server 2022 (20348) — browser, or desktop build without the helper | included (`included`) | below the WIN11 gate. The OS API is documented from build 20348, but Chromium does not use it there, and no feature flag lifts the gate |
 | macOS 14.2+ | left out (`excluded`) | CoreAudio Tap excluding the audio-service process |
 | macOS 13.0 to 14.1 | included (`included`) | ScreenCaptureKit loopback; the constraint needs CoreAudio Tap and is dropped |
 | macOS 12 and earlier | no system audio (`unavailable`) | no loopback source |
 | Linux with PipeWire and `@vencord/venmic`, web client that opens the source | left out (`excluded`) | not Chromium's loopback: the desktop app builds the capture itself, see "Linux system-audio source" below |
 | Linux without PipeWire (PulseAudio only), without the module, in a Flatpak, or with a web client from before the source | included (`included`) | monitor of the default PulseAudio sink, no exclusion |
+
+**Windows: the helper, not Chromium's loopback.** Where the packaged `backspace-process-audio.exe` exists, `startSystemAudio` runs it instead of asking Chromium for audio. A window share names the window (`window:<hwnd>:<n>`); the helper resolves `GetWindowThreadProcessId` and activates include-mode process loopback on that process tree, so only that application's playback is shared (Chrome and Brave play in a child audio-service process of the browser's tree, so a tab share carries the browser's audio, not another app's). A screen share passes the app's own pid with exclude mode, so the call, its sounds and in-app embeds stay out of the capture. `get-system-audio-capability` therefore answers `excluded` on Windows whenever the helper is on disk, without consulting the OS-build table; the table above still governs a browser and a desktop build that predates the helper. Activation and capture were verified on Windows 10 build 19045 (process-audio-capture.md).
 
 `loopbackWithMute` is no alternative: it mutes the sharer's own output for the duration and still captures the whole mix. Forcing `'loopbackWithoutChrome'` from the handler on Windows 10 is not done: the id is undocumented, Windows 10 is below Microsoft's documented minimum for exclude-mode process loopback, and a failed activation could break System Audio for every Windows 10 user.
 
@@ -548,7 +572,7 @@ Own-audio exclusion applies to all audio played by Backspace, including remote v
 | Platform | Mechanism | Notes |
 |----------|-----------|-------|
 | Browser (Chrome/Edge) | `getDisplayMedia({ audio: true })` | Tab/window/system audio per the user's pick |
-| Electron / Windows | Chromium WASAPI loopback | Works out of the box; Backspace left out only on Windows 11 (table above) |
+| Electron / Windows | WASAPI process loopback (native helper) | Window share: only that window's process tree. Screen share: everything except Backspace's processes. Falls back to a warning, not to Chromium's loopback, when the helper reports a failure |
 | Electron / macOS 13+ | ScreenCaptureKit, CoreAudio Tap (Catap) from 14.2 | Requires `NSAudioCaptureUsageDescription` (set by `packages/desktop/electron-builder.yml#mac.extendInfo`) |
 | Electron / Linux | PipeWire virtual source without Backspace (`systemAudio.ts`, above); otherwise PulseAudio loopback | **Requires** the `PulseaudioLoopbackForScreenShare` Chromium feature flag, enabled at startup in `main.ts` for Linux. Works on PulseAudio and on PipeWire systems with the `pipewire-pulse` compat layer. PipeWire-only systems without pulse compat will fail. |
 
@@ -591,7 +615,7 @@ See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus s
 
 ## Voice Fullscreen
 
-The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active, except when `voiceChatFocus` is on (see "Call chat focus").
 
 **Fullscreen chrome:** the channel header and call controls are positioned over the video instead of reserving rows. Their overlay bands use `pointer-events: none`, and only the actual buttons opt back into hit testing, so transparent chrome never steals tile or Grid-button clicks. The header actions leave the top-right Grid corner clear.
 
@@ -612,6 +636,19 @@ The docked (non-fullscreen) layout keeps plain `group-hover/voice` and ignores `
 When neither native API is available the effect returns without throwing; the `voiceFullscreen` flag still applies `h-screen` to `voiceContainerRef`, which acts as the in-page maximize fallback (chat panel hides, header fades, control bar stays). The exit path mirrors this with `document.exitFullscreen()` → `document.webkitExitFullscreen()` → no-op. Both paths are wrapped in try/catch so a Promise rejection (e.g. user cancels via Esc mid-transition) does not surface as an unhandled error. The `fullscreenchange` listener is registered for both `fullscreenchange` and `webkitfullscreenchange`. Before this fallback, calling the missing API directly threw `TypeError: requestFullscreen is not a function` on iPhone Safari, which surfaced as a full-screen error overlay when an iPhone user crossed the 768 px desktop breakpoint in landscape mode.
 
 **Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenShareSetup`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
+
+---
+
+## Call Chat Focus
+
+Both call branches in `MainContent` (`isInDmCall` and the voice-channel branch) render the stage and the chat from the same `voiceChatFocus` flag in `uiStore`:
+
+- `voiceChatFocus: false` is the original layout: `VoiceGrid` plus the floating `VoiceControlBar`, with `VoiceChatPanel` as a 340 px right column when `voiceChatOpen`.
+- `voiceChatFocus: true` unmounts `VoiceGrid` and renders `VoiceChatPanel` as the full-width column, with `VoiceControlBar variant="docked"` as a real footer row. The docked bar is not absolute, so it never covers `MessageInput`; it is also the way the controls stay reachable in fullscreen.
+- `toggleVoiceChatFocus` opens the chat when it is closed, and unfocusing leaves it as the side panel. `toggleVoiceChat` closing the panel clears the focus. `MainContent` clears the focus whenever `currentVoiceChannelId` changes, so a later call never starts in chat-only mode.
+- The panel header and the control bar both expose the toggle; `Escape` closes the panel through the existing path. Mobile's `MobileVoiceFullScreen` does not implement focus mode (the mobile chat is reachable through the normal navigation).
+
+Unmounting `VoiceGrid` only detaches the tile elements; it does not publish or stop tracks, so returning to the stage reattaches the same publications.
 
 ---
 
@@ -663,7 +700,7 @@ poller only while it is open. Publisher CPU attribution is available on the
 publisher from outbound stats; viewers receive the publisher's LiveKit
 connection-quality signal but cannot infer a remote encoder's CPU limitation.
 
-**Camera preset:** 1280x720, 2Mbps, 30fps, H.264
+**Camera quality:** the published camera is H.264 with simulcast. Its resolution, frame rate and bitrate come from the instance policy (`InstanceStreamingLimits.camera`): in `fixed` mode the admin's defaults apply to everyone (the historical 720p30/2 Mbps preset is the default configuration); in `user-choice` mode the user picks from the allowed values in **Settings → Voice & Video → Video**, persisted as `voiceStore.cameraConfig` (height, fps, custom bitrate). The effective choice is always fitted to the limits of the instance that issued the LiveKit token (`getStreamHostLimits()`), never to the page instance, and is never written back. `utils/camera.ts` builds the capture and publish options (`buildCameraOptions`) and applies a live change with `MediaStreamTrack.applyConstraints` plus `applyOverdrive` on `Track.Source.Camera`, re-asserting once after 5 s; if constraints fail it republishes the camera with the new options.
 
 ### Capture lifecycle on leave — `AudioManager.releaseInputStream()`
 
@@ -747,7 +784,11 @@ Users pick a camera in **User Settings → Voice & Video → Video**. Selection 
 - Sister action: `pruneStaleDevices()` — sweeps mic, speaker, and camera persisted IDs, resetting any that aren't present in `enumerateDevices()`. Skips a kind whose enumerated set has no non-empty deviceIds (Firefox/Safari pre-permission obscures IDs and we cannot distinguish stale from obscured). Called from `AppLayout` mount and on every `devicechange` event.
 
 ### Camera enable path (canonical)
-`utils/voiceActions.handleCameraAction()` is the **sole** camera-toggle path — voice-bar button, mobile button, and keybind all call it. It applies `CAMERA_PRESET` (720p30 H.264) and injects `cameraDeviceId` into `VideoCaptureOptions.deviceId` when non-null.
+`utils/voiceActions.handleCameraAction()` is the **sole** camera-toggle path — voice-bar button, mobile button, and keybind all call it. **Starting is never slowed by measuring the camera.** From the click it sets `voiceStore.isCameraStarting` (not persisted): the three camera buttons show a spinner, are `disabled` and `aria-busy`, and a second call returns at once, so a slow start cannot publish the camera twice; the flag clears in a `finally`, so a failed start leaves the camera off and the button usable. The capture options are built with `buildCameraCaptureOptions(options, deviceId, { measure: false })`: it fits to modes already cached and otherwise asks for the wanted size with an `ideal` 16:9 `aspectRatio` (the same shape the settings preview uses), instead of running `resolveCameraModes` first. Measuring a camera never seen took seconds (an `applyConstraints` per size and frame rate, one extra camera open, all before the UI changed), which was the several-second first start. Measuring still happens off the click path, in the Video settings preview and on a live quality change (`applyCameraQuality`, `republishCamera`, which keep the default `measure: true`). On a camera that cannot exceed 30 fps the probe reads the frame rate back instead of applying it, one capture restart fewer per size. It builds capture and publish options with `buildCameraOptions()` (host camera policy, `cameraConfig`) and injects `cameraDeviceId` into `VideoCaptureOptions.deviceId` when non-null. A `cameraConfig` change while the camera is live is picked up by a `useLiveKit` effect that calls `requestCameraQuality(room)`; the helper serializes calls and only the newest schedules the 5 s re-assert.
+
+**Two layers, no backup.** The camera is published as the chosen quality plus one 360p simulcast layer (`simulcast: true`, `videoSimulcastLayers: [VideoPresets.h360]`) and `backupCodec: false`, in `buildCameraOptions` and in the Room's `publishDefaults`. The extra layer is what lets `adaptiveStream` give a tile that is out of focus the low quality and a focused tile the full one; with a single encoding every tile would receive the full stream. LiveKit's default adds a third (720p) layer and a VP8 backup copy (`backupCodec: true`), which showed up as three simultaneous qualities in the connection inspector; `dynacast` pauses whichever layer nobody is watching. The screen share passes its own publish options and keeps its VP8 backup for VP9 (see "Screen Sharing").
+
+**16:9 capture fitted to the camera (`utils/cameraModes.ts`).** A size passed to `getUserMedia` is only a preference, so a camera without the exact mode (or without that frame rate at that size) fell back to its nearest one, usually 4:3. `resolveCameraModes(deviceId)` measures the camera once per device per session: on a live track it applies exact 16:9 constraints for 2160/1440/1080/720/540/360 and reads back `getSettings()`, then finds the highest standard frame rate each size holds. `pickCameraCapture` fits the saved choice to that list (largest size not above the wanted one, frame rate clamped to that size) and `buildCameraCaptureOptions` (`utils/camera.ts`) turns it into the `VideoCaptureOptions` used by `handleCameraAction`, the quality republish and the live `applyConstraints` (which also sets `aspectRatio` ideal 16/9). A camera with no 16:9 mode, or one that cannot be opened for the measurement, falls back to the wanted size unchanged; that result is not cached. The measurement opens the camera, so it runs only when the camera is being started, or on the settings preview's own track (`openCameraPreview`, from a user gesture); the Video settings never open the camera on their own. Once a device is measured, the Video settings list only the sizes it delivers and the frame rates up to the chosen size's top rate.
 
 ### Hot-swap mid-call
 `useLiveKit`'s `syncCamera` effect watches `cameraDeviceId`, `isCameraOn`, `isConnected`. When the published track's actual `getSettings().deviceId` differs from the store target (and target is non-null), it calls `room.switchActiveDevice('videoinput', targetId)` — an in-place source swap, no re-publish. Failure path: try to restore the previous deviceId in store (if its track is still live), else disable the camera entirely; toast `"Could not switch camera"`. The `null` ("Auto") target is intentionally a no-op: no force-switch of an already-live publication.
@@ -760,7 +801,7 @@ On `RoomEvent.LocalTrackPublished` for the camera, the underlying `MediaStreamTr
 2. Else re-probe `getUserMedia({video:{deviceId}})` to distinguish causes: `NotAllowedError` → `"Camera permission was revoked"` (macOS Privacy revoke); `NotFoundError` → `"Camera disconnected"` (unplug); other → `"Camera unavailable"`.
 3. Tear down camera state via the unified path: `markIntentionalCameraOff()` → `setCameraEnabled(false)` → `isCameraOn = false` → `broadcastVoiceStatus()` → toast.
 
-The `_intentionalCameraOff` module-level flag in `voiceActions.ts` is the gate. Producers: `handleCameraAction` disable branch, `syncCamera` rollback, the track-end handler's own teardown. Consumer: the track-end handler.
+The `intentionalCameraOff` module-level flag in `utils/cameraFlags.ts` is the gate (kept out of `voiceActions` so `utils/camera.ts` can mark a quality republish without a module cycle). Producers: `handleCameraAction` disable branch, `syncCamera` rollback, the quality fallback's republish, the track-end handler's own teardown. Consumer: the track-end handler.
 
 ### Two-mode preview (in `VideoSection.tsx`)
 | Mode | Triggered when | Source |

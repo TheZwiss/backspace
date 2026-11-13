@@ -260,7 +260,10 @@ export function processPresenceUpdateEvent(
   // activities changed they are included (possibly empty, which clears on
   // clients); otherwise the client keeps what it has.
   const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
-  const wsPayload = presenceUpdateEvent(localUser, shownStatus, activities);
+  const publishedActivities = activities === undefined
+    ? undefined
+    : connectionManager.getUserActivities(localUser.id);
+  const wsPayload = presenceUpdateEvent(localUser, shownStatus, publishedActivities);
   for (const uid of targetUserIds) {
     connectionManager.sendToUser(uid, wsPayload);
   }

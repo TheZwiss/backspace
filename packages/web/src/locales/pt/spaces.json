@@ -67,6 +67,16 @@
         "note": "Este canal fica oculto para membros sem acesso explícito. Usuários com a permissão de Administrador e os donos do espaço sempre podem ver todos os canais.",
         "unhideOnSave": "Ao salvar, este canal ficará visível para todos os membros."
       },
+      "voiceQuality": {
+        "label": "Qualidade de voz",
+        "option": "{{value}} kbps",
+        "description": {
+          "64": "Fala clara. Usa menos banda.",
+          "128": "Vozes mais cheias e naturais.",
+          "256": "Qualidade máxima, ideal para música. Usa mais banda."
+        },
+        "hint": "Define o maior bitrate de áudio que cada membro pode enviar neste canal. Vale para todos, inclusive para quem já está conectado."
+      },
       "deleteButton": "Excluir canal"
     },
     "delete": {
@@ -439,6 +449,12 @@
   "permissions": {
     "title": "Permissões",
     "names": {
+      "createSoundboard": "Criar efeitos sonoros",
+      "manageSoundboard": "Gerenciar efeitos sonoros",
+      "createStickers": "Criar figurinhas do servidor",
+      "manageStickers": "Gerenciar figurinhas do servidor",
+      "useSoundboard": "Usar efeitos sonoros",
+      "useExternalSounds": "Usar sons de outros servidores",
       "administrator": "Administrador",
       "viewChannel": "Ver canais",
       "manageChannels": "Gerenciar canais",
@@ -565,7 +581,13 @@
       "undeafen": "Desfazer ensurdecimento",
       "spaceMuted": "Silenciado no espaço",
       "spaceDeafened": "Ensurdecido no espaço",
-      "permissionMuted": "Silenciado (sem permissão para falar)"
+      "permissionMuted": "Silenciado (sem permissão para falar)",
+      "statusMenu": "Status",
+      "customStatus": "Status personalizado",
+      "customStatusPlaceholder": "O que você está fazendo?",
+      "customStatusEmoji": "Adicionar emoji",
+      "editProfile": "Editar perfil",
+      "statusUpdateFailed": "Não foi possível atualizar o status"
     },
     "dmUnreadMessages_one": "{{count}} mensagem direta não lida",
     "dmUnreadMessages_many": "{{count}} mensagens diretas não lidas",
@@ -707,5 +729,26 @@
     "suppressRoles": "Suprimir menções a cargos",
     "massHeading": "Menções em grupo",
     "massNote": "@here alcança os mesmos membros que @everyone. Menções diretas a você sempre notificam."
+  },
+  "stickers": {
+    "title": "Figurinhas do servidor",
+    "description": "Um pacote compartilhado para este servidor, com até 50 figurinhas estáticas ou animadas.",
+    "empty": "Este servidor ainda não tem um pacote de figurinhas.",
+    "create": "Criar pacote do servidor",
+    "add": "Adicionar figurinha",
+    "pendingShares": "Álbuns aguardando aprovação",
+    "sharePending": "Solicitou compartilhar um álbum privado com este servidor.",
+    "approve": "Aprovar",
+    "reject": "Rejeitar"
+  },
+  "profile": {
+    "title": "Perfil do servidor",
+    "view": "Ver perfil do servidor",
+    "viewIcon": "Ver foto do servidor",
+    "viewBanner": "Ver banner do servidor",
+    "bannerAlt": "Banner de {{name}}",
+    "server": "Servidor",
+    "noDescription": "Este servidor ainda não tem uma descrição.",
+    "createdAt": "Criado em"
   }
 }

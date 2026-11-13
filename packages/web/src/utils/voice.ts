@@ -133,12 +133,14 @@ export function preArmMicrophone(): void {
   const voiceState = useVoiceStore.getState();
   voiceState.setMicPermissionDenied(false);
   const audioManager = AudioManager.getInstance();
+  audioManager.setTextInputOnly(voiceState.textVoiceEnabled);
   audioManager.clearInputDenial();
   // iOS requires `AudioContext.resume()` from a user activation too.
   // `useLiveKit.connect` also calls this and awaits the same context.
   audioManager.resumeContext().catch((err: unknown) => {
     console.warn('[voice] AudioContext resume failed:', err);
   });
+  if (voiceState.textVoiceEnabled) return;
   audioManager.setInputDevice(voiceState.inputDeviceId).catch((err: unknown) => {
     const name = err instanceof Error ? err.name : '';
     if (name === 'NotAllowedError') {

@@ -1,11 +1,12 @@
+import { openUserFriendshipMenu } from '../layout/memberMenu/memberSocialActions';
+import { ProfileThoughtBubble } from '../ui/ProfileThoughtBubble';
 import { getFriendshipStatus, type FriendshipStatus } from '../../utils/friendshipStatus';
-import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '@backspace/shared';
+import type { User, Activity } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ProfileBio } from '../ui/ProfileBio';
@@ -21,10 +22,17 @@ import { normalizeUserAssets } from '../../utils/assetUrls';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 import { friendRequestTarget } from '../../utils/friendRequestTarget';
 import { presenceLabel } from '../../i18n/presence';
-import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
+import { useEmojiShortcodeNames } from '../../utils/emojiShortcodes';
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from '../ui/ProfileRoles';
+import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
+import { ProfileActivities } from '../ui/ProfileActivities';
+import { useDialogLayer } from '../../hooks/useDialogLayer';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+
+const EMPTY_ACTIVITIES: Activity[] = [];
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -44,6 +52,7 @@ export function UserProfileModal() {
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
   const cancelFriendRequest = useSocialStore((s) => s.cancelFriendRequest);
   const self = useSelfIdentity();
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const [user, setUser] = useState<User | null>(null);
   const [userOrigin, setUserOrigin] = useState('');
@@ -52,9 +61,11 @@ export function UserProfileModal() {
   const [mutualSpaces, setMutualSpaces] = useState<MutualSpace[]>([]);
   const [loadingMutuals, setLoadingMutuals] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [confirmRemoveFriend, setConfirmRemoveFriend] = useState(false);
 
   const isOpen = activeModal === 'userProfile';
   const userId = modalData?.userId as string | undefined;
+  useEffect(() => { setConfirmRemoveFriend(false); }, [userId, modalData?.origin, isOpen]);
   const passedUser = modalData?.user as User | undefined;
   const passedOrigin = (modalData?.origin as string | undefined) ?? '';
   const memberContext = (modalData?.member as ProfileMemberContext | null | undefined) ?? null;
@@ -62,10 +73,25 @@ export function UserProfileModal() {
   const memberUserId = memberContext?.userId;
   const roles = useProfileMemberRoles(memberContext);
 
-  // Determine friendship status (federation-safe canonical matching)
+  useDialogLayer(overlayRef, {
+    open: isOpen && !!user,
+    onClose: closeModal,
+    dismissible: !friendActionLoading,
+    label: user?.displayName ?? user?.username ?? 'User profile',
+  });
+
   const friendship: FriendshipStatus = user
     ? getFriendshipStatus({ viewedUser: user, origin: userOrigin, self, friends, requests })
     : { state: 'none' };
+
+  const isYou = friendship.state === 'self';
+  const activities = useActivityStore((s) =>
+    user
+      ? isYou && s.myActivities
+        ? s.myActivities
+        : activitiesFor(s.userActivities, user, userOrigin)
+      : EMPTY_ACTIVITIES,
+  );
 
   const loadUser = useCallback(async (id: string, origin: string) => {
     try {
@@ -129,16 +155,6 @@ export function UserProfileModal() {
     }
   }, [isOpen]);
 
-  // Escape to close
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeModal();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [isOpen, closeModal]);
-
   const shownStatus = useShownStatus(user, userOrigin, user?.status);
 
   if (!isOpen || !user) return null;
@@ -183,7 +199,10 @@ export function UserProfileModal() {
   const handleRemoveFriend = async () => {
     if (friendship.state !== 'friends') return;
     setFriendActionLoading(true);
-    try { await removeFriend(friendship.friend, friendship.friend._instanceOrigin); }
+    try {
+      await removeFriend(friendship.friend, friendship.friend._instanceOrigin);
+      setConfirmRemoveFriend(false);
+    }
     catch (err) { addToast(describeError(err), 'warning'); }
     finally { setFriendActionLoading(false); }
   };
@@ -234,20 +253,21 @@ export function UserProfileModal() {
   ];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
-      <div className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up overflow-hidden">
+    <div ref={overlayRef} className="fixed inset-0 z-modal flex items-center justify-center animate-fade-in">
+      <div data-icon-motion="press" className="absolute inset-0 bg-black/50" onClick={closeModal} />
+      <div onContextMenu={event => { if (user) openUserFriendshipMenu(event, user, userOrigin); }} className="relative max-w-lg w-full mx-4 max-h-[calc(calc(100*var(--app-vh))-2rem)] flex flex-col ui-dialog-surface animate-slide-up overflow-hidden">
         {/* Banner */}
         <div
-          className="h-[100px] flex-shrink-0 relative"
+          className="h-[128px] flex-shrink-0 relative"
           style={bannerSrc
             ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : { background: bannerFallback }
           }
         >
           {/* Close button */}
-          <button
+          <button data-icon-motion="press"
             onClick={closeModal}
+            aria-label={t('common:actions.close')}
             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
@@ -258,8 +278,11 @@ export function UserProfileModal() {
 
         {/* Header (avatar + name) */}
         <div className="px-5 flex-shrink-0 relative">
+          {/* The 96px avatar starts at x=20 and rises 52px over the banner. */}
+          <ProfileThoughtBubble text={user.customStatus} avatarLeft={20} avatarTop={-52} avatarSize={96} />
           <Avatar
             src={user.avatar}
+            animate
             name={displayName}
             size={96}
             status={shownStatus}
@@ -272,25 +295,20 @@ export function UserProfileModal() {
           <div className="mb-3">
             <ProfileSpaceNickname member={memberContext} />
             <span className="text-[20px] font-bold leading-tight">{displayName}</span>
-            <div className="text-[14px] text-txt-tertiary mt-0.5">
-              <Username username={user.username} showAt className="text-[14px] text-txt-tertiary" />
+            <div className="text-ui-body text-txt-tertiary mt-0.5">
+              <Username username={user.username} showAt className="text-ui-body text-txt-tertiary" />
             </div>
-            {user.customStatus && (
-              <div className="text-[13px] text-txt-secondary italic mt-1">
-                {replaceEmojiShortcodes(user.customStatus)}
-              </div>
-            )}
           </div>
         </div>
 
         {/* Tab bar */}
-        <div className="px-5 flex-shrink-0 border-b border-white/[0.06]">
+        <div className="px-5 flex-shrink-0 border-b border-wash/[0.06]">
           <div className="flex gap-1">
             {tabs.map((tab) => (
-              <button
+              <button data-icon-motion="press"
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-2 text-[13px] font-medium rounded-t-lg transition-colors relative ${
+                className={`px-3 py-2 text-ui-label font-medium rounded-t-lg transition-colors relative ${
                   activeTab === tab.key
                     ? 'text-txt-primary'
                     : 'text-txt-tertiary hover:text-txt-secondary'
@@ -298,7 +316,7 @@ export function UserProfileModal() {
               >
                 {tab.label}
                 {tab.count !== undefined && !loadingMutuals && (
-                  <span className="ml-1 text-[11px] text-txt-tertiary">({tab.count})</span>
+                  <span className="ml-1 text-ui-caption text-txt-tertiary">({tab.count})</span>
                 )}
                 {activeTab === tab.key && (
                   <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent-primary rounded-full" />
@@ -312,10 +330,12 @@ export function UserProfileModal() {
         <div className="flex-1 overflow-y-auto scrollbar-thin p-5 min-h-[200px]">
           {activeTab === 'about' && (
             <div className="space-y-4">
+              <ProfileActivities activities={activities} skipCustom={!!user.customStatus} />
+
               {/* Bio */}
               {user.bio && (
                 <div>
-                  <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+                  <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
                     {t('social:profile.aboutMe')}
                   </span>
                   <ProfileBio bio={user.bio} />
@@ -326,10 +346,10 @@ export function UserProfileModal() {
 
               {/* Member Since */}
               <div>
-                <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+                <span className="text-ui-caption uppercase tracking-wide font-semibold text-txt-tertiary">
                   {t('social:profile.memberSince')}
                 </span>
-                <div className="text-[13px] text-txt-secondary mt-1">
+                <div className="text-ui-label text-txt-secondary mt-1">
                   {f.formatLongDate(user.createdAt)}
                 </div>
               </div>
@@ -347,7 +367,7 @@ export function UserProfileModal() {
                   </svg>
                 </div>
               ) : mutualFriends.length === 0 ? (
-                <div className="text-center py-8 text-txt-tertiary text-[13px]">
+                <div className="text-center py-8 text-txt-tertiary text-ui-label">
                   {t('social:mutuals.noFriends')}
                 </div>
               ) : (
@@ -355,10 +375,10 @@ export function UserProfileModal() {
                   {mutualFriends.map((friend) => {
                     const fname = friend.displayName ?? parseFederatedUsername(friend.username).baseName;
                     return (
-                      <button
+                      <button data-icon-motion="press"
                         key={friend.id}
                         onClick={() => handleViewFriend(friend)}
-                        className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-colors text-left"
+                        className="flex items-center gap-2.5 p-2.5 rounded-lg bg-wash/[0.03] hover:bg-wash/[0.06] border border-wash/[0.04] transition-colors text-left"
                       >
                         <Avatar
                           src={friend.avatar}
@@ -369,14 +389,14 @@ export function UserProfileModal() {
                           avatarColor={friend.avatarColor}
                         />
                         <div className="min-w-0">
-                          <div className="text-[13px] font-medium text-txt-primary truncate">
+                          <div className="text-ui-label font-medium text-txt-primary truncate">
                             {fname}
                           </div>
-                          <div className="text-[11px] text-txt-tertiary">
+                          <div className="text-ui-caption text-txt-tertiary">
                             {presenceLabel(t, friend.status)}
                           </div>
                           {friend._instanceOrigin && (
-                            <div className="flex items-center gap-1 text-[10px] text-txt-tertiary/70 truncate">
+                            <div className="flex items-center gap-1 text-ui-micro text-txt-tertiary/70 truncate">
                               <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                               </svg>
@@ -402,7 +422,7 @@ export function UserProfileModal() {
                   </svg>
                 </div>
               ) : mutualSpaces.length === 0 ? (
-                <div className="text-center py-8 text-txt-tertiary text-[13px]">
+                <div className="text-center py-8 text-txt-tertiary text-ui-label">
                   {t('social:mutuals.noSpaces')}
                 </div>
               ) : (
@@ -410,10 +430,10 @@ export function UserProfileModal() {
                   {mutualSpaces.map((space) => {
                     const spaceApi = getApiForOrigin(space._instanceOrigin);
                     return (
-                    <button
+                    <button data-icon-motion="press"
                       key={`${space.id}:${space._instanceOrigin}`}
                       onClick={() => handleGoToSpace(space.id)}
-                      className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-white/[0.06] transition-colors text-left"
+                      className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-wash/[0.06] transition-colors text-left"
                     >
                       <div className="relative shrink-0">
                         {space.icon ? (
@@ -424,14 +444,14 @@ export function UserProfileModal() {
                           />
                         ) : (
                           <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-semibold text-white"
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-ui-label font-semibold text-white"
                             style={{ background: getSpaceGradient(space.id, space.name, space.avatarColor).gradient }}
                           >
                             {space.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                         {space._instanceOrigin && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-[#1a1a23] flex items-center justify-center">
+                          <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-channel flex items-center justify-center">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80">
                               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                             </svg>
@@ -439,11 +459,11 @@ export function UserProfileModal() {
                         )}
                       </div>
                       <div className="min-w-0 flex flex-col">
-                        <span className="text-[13px] font-medium text-txt-primary truncate">
+                        <span className="text-ui-label font-medium text-txt-primary truncate">
                           {space.name}
                         </span>
                         {space._instanceOrigin && (
-                          <span className="text-[10px] text-txt-tertiary/70 truncate flex items-center gap-1">
+                          <span className="text-ui-micro text-txt-tertiary/70 truncate flex items-center gap-1">
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
                               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                             </svg>
@@ -463,51 +483,60 @@ export function UserProfileModal() {
         {/* Action buttons. Your own profile offers none: nobody messages or
             befriends themselves. */}
         {friendship.state !== 'self' && (
-          <div className="flex-shrink-0 px-5 py-3 border-t border-white/[0.06] flex gap-2">
-            <button
+          <div className="flex-shrink-0 px-5 py-3 border-t border-wash/[0.06] flex gap-2">
+            <button data-icon-motion="send"
               onClick={handleSendMessage}
-              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors"
+              className="ui-button ui-button-primary flex-1 transition-colors"
             >
               {t('social:profile.sendMessage')}
             </button>
 
             {friendship.state === 'none' && (
-              <button onClick={handleAddFriend} disabled={friendActionLoading}
-                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
+              <button data-icon-motion="pulse" onClick={handleAddFriend} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-primary border border-wash/[0.08] bg-wash/[0.06] hover:bg-wash/[0.10] transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:profile.addFriend')}
               </button>
             )}
 
             {friendship.state === 'outbound_pending' && (
-              <button onClick={handleCancelRequest} disabled={friendActionLoading}
-                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
+              <button data-icon-motion="press" onClick={handleCancelRequest} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-ui-label font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:request.cancel')}
               </button>
             )}
 
             {friendship.state === 'inbound_pending' && (
               <>
-                <button onClick={handleAcceptRequest} disabled={friendActionLoading}
-                  className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
+                <button data-icon-motion="pulse" onClick={handleAcceptRequest} disabled={friendActionLoading}
+                  className="ui-button ui-button-primary flex-1 transition-colors disabled:opacity-50">
                   {friendActionLoading ? '...' : t('common:actions.accept')}
                 </button>
-                <button onClick={handleDeclineRequest} disabled={friendActionLoading}
-                  className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
+                <button data-icon-motion="press" onClick={handleDeclineRequest} disabled={friendActionLoading}
+                  className="py-2 px-3 rounded-lg text-ui-label font-medium text-txt-tertiary border border-wash/[0.06] hover:bg-wash/[0.06] transition-colors disabled:opacity-50">
                   {friendActionLoading ? '...' : t('social:request.ignore')}
                 </button>
               </>
             )}
 
             {friendship.state === 'friends' && (
-              <button onClick={handleRemoveFriend} disabled={friendActionLoading}
-                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
+              <button data-icon-motion="press" onClick={() => setConfirmRemoveFriend(true)} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-ui-label font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
                 {friendActionLoading ? '...' : t('social:friend.remove')}
               </button>
             )}
           </div>
         )}
       </div>
-
+      <ConfirmDialog
+        isOpen={confirmRemoveFriend && friendship.state === 'friends'}
+        onClose={() => setConfirmRemoveFriend(false)}
+        onConfirm={handleRemoveFriend}
+        title={t('social:removeFriend.title')}
+        description={t('social:removeFriend.description', { name: user?.displayName ?? user?.username ?? t('social:removeFriend.fallbackName') })}
+        confirmLabel={t('common:actions.remove')}
+        variant="danger"
+        loading={friendActionLoading}
+      />
     </div>
   );
 }

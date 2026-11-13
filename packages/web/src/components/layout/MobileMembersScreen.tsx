@@ -38,11 +38,11 @@ function MobileMemberRow({
   const displayName = spaceMemberName(member, canonical);
 
   const rowClass = isRichActivity
-    ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
-    : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] cursor-pointer transition-colors active:bg-interactive-hover';
+    ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-all duration-200 ease-out glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
+    : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] border-l-2 border-transparent cursor-pointer transition-all duration-200 ease-out active:bg-interactive-hover';
 
   return (
-    <div
+    <div data-icon-motion="press"
       onClick={() => onClickMember(member)}
       className={rowClass}
     >
@@ -56,13 +56,13 @@ function MobileMemberRow({
       />
       <div className="flex-1 min-w-0">
         <span
-          className={`text-[13.5px] leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
+          className={`text-ui-label leading-[1.2] font-medium truncate ${colorStyle ? (isOffline ? 'opacity-60' : '') : (isOffline ? 'text-txt-tertiary' : 'text-txt-primary')}`}
           style={colorStyle}
         >
           {displayName}
         </span>
         {!isOffline && isFederationGlobeApplicable(canonical) && (
-          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+          <div className="text-ui-micro leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
         )}
         {!isOffline && (
           <ActivityCard
@@ -208,7 +208,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
                 {group.kind === 'owner' && space ? (
                   <OwnerTitleHeading key={space.id} space={space} count={group.members.length} touch />
                 ) : (
-                  <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                  <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                     {groupHeading(group.kind, group.label)} — {formatNumber(group.members.length)}
                   </h3>
                 )}
@@ -218,7 +218,7 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
 
             {offlineMembers.length > 0 && (
               <div>
-                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                <h3 className="text-xs font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   {t('common:states.offline')} — {formatNumber(offlineMembers.length)}
                 </h3>
                 {offlineMembers.map((m) => renderMember(m, true))}

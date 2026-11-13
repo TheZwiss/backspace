@@ -173,7 +173,7 @@ describe('InviteModal', () => {
   });
 
   it('grays out friends already in the space using federated identity', async () => {
-    // Friend on remote instance orbit.ddns.net, member entry replicated
+    // Friend on remote instance orbit.example, member entry replicated
     // locally with user.homeUserId+homeInstance matching that identity.
     setUpStore({
       friends: [
@@ -182,7 +182,7 @@ describe('InviteModal', () => {
           username: 'remoteFriend',
           displayName: 'Remote Friend',
           homeUserId: 'remote-uid-7',
-          homeInstance: 'https://orbit.ddns.net',
+          homeInstance: 'https://orbit.example',
         }),
       ],
       members: [
@@ -192,7 +192,7 @@ describe('InviteModal', () => {
             id: 'local-replicated-id',
             username: 'remoteFriend',
             homeUserId: 'remote-uid-7',
-            homeInstance: 'https://orbit.ddns.net',
+            homeInstance: 'https://orbit.example',
           },
         }),
       ],
@@ -480,7 +480,7 @@ describe('InviteModal', () => {
           username: 'remoteAlex',
           displayName: 'Remote Alex',
           homeUserId: 'home-uid-9',
-          homeInstance: 'https://orbit.ddns.net',
+          homeInstance: 'https://orbit.example',
         }),
       ],
     });
@@ -500,7 +500,7 @@ describe('InviteModal', () => {
           // the host, whatever form the row stored it in.
           target: {
             homeUserId: 'home-uid-9',
-            homeInstance: 'orbit.ddns.net',
+            homeInstance: 'orbit.example',
           },
         }),
       );
@@ -511,7 +511,7 @@ describe('InviteModal', () => {
     const user = userEvent.setup();
     mockSpaceInvite.mockResolvedValue({});
     setUpStore({
-      friends: [makeFriend({ id: 'orbit-native-id', displayName: 'Orbit Native', _instanceOrigin: 'https://orbit.ddns.net' })],
+      friends: [makeFriend({ id: 'orbit-native-id', displayName: 'Orbit Native', _instanceOrigin: 'https://orbit.example' })],
     });
 
     render(<InviteModal />);
@@ -521,7 +521,7 @@ describe('InviteModal', () => {
     await waitFor(() => expect(mockSpaceInvite).toHaveBeenCalledTimes(1));
     expect(mockSpaceInvite.mock.calls[0][0].target).toEqual({
       homeUserId: 'orbit-native-id',
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
     });
   });
 
@@ -530,7 +530,7 @@ describe('InviteModal', () => {
     setUpStore({
       friends: [
         makeFriend({ id: 'same-id', displayName: 'Dave', _instanceOrigin: '' }),
-        makeFriend({ id: 'same-id', displayName: 'Erin', _instanceOrigin: 'https://orbit.ddns.net' }),
+        makeFriend({ id: 'same-id', displayName: 'Erin', _instanceOrigin: 'https://orbit.example' }),
       ],
     });
 
