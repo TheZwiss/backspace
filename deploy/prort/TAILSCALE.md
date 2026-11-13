@@ -13,7 +13,7 @@ proxy HTTPS respondendo corretamente.
 
 | Componente | Local | Uso |
 |---|---|---|
-| Tailscale Android | `mi-9t-pro` | Mantém a VPN do Android |
+| Tailscale Android | `android-node` | Mantém a VPN do Android |
 | Tailscale no PRoot | `backspace` | Publica os serviços do Debian em userspace networking |
 | Backspace | `127.0.0.1:3000` | Interface, API e WebSocket |
 | LiveKit | `127.0.0.1:7880` | Sinalização de voz, vídeo e compartilhamento de tela |
@@ -21,12 +21,12 @@ proxy HTTPS respondendo corretamente.
 | Tailscale Serve | HTTPS `443` | Entrada HTTPS com certificado gerenciado |
 
 O endereço canônico é publicado pelo nó `backspace`. O nó Android
-`mi-9t-pro` é separado e não deve ser usado como URL principal.
+`android-node` é separado e não deve ser usado como URL principal.
 
 Mas a **mídia UDP** é anunciada no IP do nó Android (`node_ip` do LiveKit), porque
 o `tailscale serve` do nó `backspace` (userspace) não encaminha UDP. Quem recebeu
 só o compartilhamento do `backspace` cai em TURN/TCP (`3479`). Para a mídia ir por
-UDP direto, compartilhe também o `mi-9t-pro` com essas pessoas.
+UDP direto, compartilhe também o `android-node` com essas pessoas.
 
 O roteamento HTTPS atual é:
 
@@ -134,8 +134,8 @@ por convite. Para amigos entrarem na instância atual:
 3. Garanta que as ACLs permitam acesso de entrada à porta `443`.
 4. Envie o FQDN exato `https://backspace.<sua-tailnet>.ts.net/`.
 
-Compartilhar o IP `100.91.47.106` isoladamente não substitui o convite de
-máquina. Também não é necessário compartilhar o nó Android `mi-9t-pro`.
+Compartilhar o IP `100.64.0.20` isoladamente não substitui o convite de
+máquina. Também não é necessário compartilhar o nó Android `android-node`.
 
 `Funnel` é somente necessário se o acesso precisar funcionar para usuários sem
 um convite do Tailscale. Ele expõe o serviço à internet pública e deve ser

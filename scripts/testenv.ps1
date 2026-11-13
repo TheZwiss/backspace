@@ -35,7 +35,7 @@ $Api = 'http://localhost:3005'
 $Web = 'http://localhost:5173'
 $LiveKitVersion = '1.13.11'
 $LiveKitExe = Join-Path $Bin 'livekit-server.exe'
-$Password = 'MotionTest#2026'
+$Password = 'change-me-dev-password'
 
 function Test-Port([int]$Port) {
   # Servers here listen on IPv4 only (Fastify, LiveKit) or IPv6 only (Vite), and

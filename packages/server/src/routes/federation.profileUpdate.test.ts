@@ -53,12 +53,12 @@ beforeEach(() => {
   // Stub seeded with displayName='pbtest3' (set previously by hydrateReplicatedUserProfile)
   testDb.insert(schema.users).values({
     id: 'stub-1',
-    username: 'pbtest3@orbit.ddns.net',
+    username: 'pbtest3@orbit.example',
     displayName: 'pbtest3',
     passwordHash: '!federation-replicated',
     status: 'offline',
     isAdmin: 0,
-    homeInstance: 'orbit.ddns.net',
+    homeInstance: 'orbit.example',
     homeUserId: 'home-1',
     profileUpdatedAt: 1000,
     createdAt: Date.now(),
@@ -76,7 +76,7 @@ describe('processProfileUpdateEvent — displayName fallback', () => {
       timestamp: Date.now(),
       profileUpdate: {
         homeUserId: 'home-1',
-        homeInstance: 'orbit.ddns.net',
+        homeInstance: 'orbit.example',
         profileUpdatedAt: 2000,
         username: 'pbtest3',
         displayName: null,
@@ -89,7 +89,7 @@ describe('processProfileUpdateEvent — displayName fallback', () => {
     };
     const accepted: string[] = [];
     const rejected: Array<{ messageId: string; reason: string }> = [];
-    await fed.processProfileUpdateEvent(event, 'orbit.ddns.net', testDb, accepted, rejected);
+    await fed.processProfileUpdateEvent(event, 'orbit.example', testDb, accepted, rejected);
 
     expect(rejected).toEqual([]);
     expect(accepted).toEqual(['m1']);
@@ -107,7 +107,7 @@ describe('processProfileUpdateEvent — displayName fallback', () => {
       timestamp: Date.now(),
       profileUpdate: {
         homeUserId: 'home-1',
-        homeInstance: 'orbit.ddns.net',
+        homeInstance: 'orbit.example',
         profileUpdatedAt: 3000,
         username: 'pbtest3',
         displayName: 'Peter B.',
@@ -118,7 +118,7 @@ describe('processProfileUpdateEvent — displayName fallback', () => {
         bio: null,
       },
     };
-    await fed.processProfileUpdateEvent(event, 'orbit.ddns.net', testDb, [], []);
+    await fed.processProfileUpdateEvent(event, 'orbit.example', testDb, [], []);
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
     expect(row!.displayName).toBe('Peter B.');
   });
@@ -157,7 +157,7 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
       timestamp: Date.now(),
       profileUpdate: {
         homeUserId: 'home-1',
-        homeInstance: 'orbit.ddns.net',
+        homeInstance: 'orbit.example',
         profileUpdatedAt: 5000,
         username: 'pbtest3',
         displayName: 'pbtest3',
@@ -167,14 +167,14 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
         avatarColor: 'mint',
         bio: null,
       },
-    }, 'orbit.ddns.net', testDb, [], []);
+    }, 'orbit.example', testDb, [], []);
     expect(stub().avatarColor).toBe('mint');
     vi.mocked(connectionManager.sendToUser).mockClear();
 
     // Messages alternate between the home (current colour) and a third
     // instance whose replica still holds the old one.
     for (const colour of ['rose', 'mint', 'rose', 'mint']) {
-      await fed.hydrateReplicatedUserProfile(stub(), { username: 'pbtest3@orbit.ddns.net', avatarColor: colour }, testDb);
+      await fed.hydrateReplicatedUserProfile(stub(), { username: 'pbtest3@orbit.example', avatarColor: colour }, testDb);
       expect(stub().avatarColor).toBe('mint');
     }
     expect(userUpdatedCount()).toBe(0);
@@ -209,7 +209,7 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
       timestamp: Date.now(),
       profileUpdate: {
         homeUserId: 'home-1',
-        homeInstance: 'orbit.ddns.net',
+        homeInstance: 'orbit.example',
         profileUpdatedAt: 6000,
         username: 'pbtest3',
         displayName: 'pbtest3',
@@ -219,7 +219,7 @@ describe('relayed profile snapshots never overwrite a stored field', () => {
         avatarColor: 'sky',
         bio: null,
       },
-    }, 'orbit.ddns.net', testDb, [], []);
+    }, 'orbit.example', testDb, [], []);
     expect(stub().avatarColor).toBe('sky');
     expect(userUpdatedCount()).toBeGreaterThan(0);
   });

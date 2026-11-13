@@ -45,8 +45,8 @@ npmRebuild: false
 afterPack: ./scripts/afterPack.js
 publish:
   - provider: github
-    owner: caduHD4
-    repo: backspace-prort-android
+    owner: TheZwiss
+    repo: backspace
 protocols:
   - name: Backspace
     schemes:

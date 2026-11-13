@@ -51,7 +51,7 @@ function makeUser(extras: Partial<User> & Pick<User, 'id' | 'username'>): User {
 
 beforeEach(() => {
   Object.defineProperty(window, 'location', {
-    value: { host: 'nova.ddns.net' },
+    value: { host: 'nova.example' },
     writable: true,
   });
   useSpaceStore.getState().reset();
@@ -72,13 +72,13 @@ describe('spaceStore.upsertUserView preference rule', () => {
     // orbit delivers Frank as a federated stub (frank's home is nova).
     const stubAxel = makeUser({
       id: 'orbit-local-id',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'lavender',
-      avatar: 'https://nova.ddns.net/api/uploads/old.png',
+      avatar: 'https://nova.example/api/uploads/old.png',
     });
-    useSpaceStore.getState().upsertUserView(stubAxel, 'https://orbit.ddns.net');
+    useSpaceStore.getState().upsertUserView(stubAxel, 'https://orbit.example');
 
     // Then nova, the page's own instance, delivers Frank's own row: native,
     // no homeInstance. It is the same person, so it lands on the same key and,
@@ -91,7 +91,7 @@ describe('spaceStore.upsertUserView preference rule', () => {
     });
     useSpaceStore.getState().upsertUserView(homeAxel, '');
 
-    expect(userKey(stubAxel, 'https://orbit.ddns.net')).toBe(userKey(homeAxel, ''));
+    expect(userKey(stubAxel, 'https://orbit.example')).toBe(userKey(homeAxel, ''));
     const entry = useSpaceStore.getState().userViews.get(userKey(homeAxel, ''));
     expect(entry?.isHome).toBe(true);
     expect(entry?.user.avatarColor).toBe('teal');
@@ -103,73 +103,73 @@ describe('spaceStore.upsertUserView preference rule', () => {
     // but delivered from two different origins.
     const fromOrbit = makeUser({
       id: 'orbit-local',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'lavender',
     });
     const fromNova = makeUser({
       id: 'nova-local',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'teal',
     });
 
-    useSpaceStore.getState().upsertUserView(fromOrbit, 'https://orbit.ddns.net');
-    useSpaceStore.getState().upsertUserView(fromNova, 'https://nova.ddns.net');
+    useSpaceStore.getState().upsertUserView(fromOrbit, 'https://orbit.example');
+    useSpaceStore.getState().upsertUserView(fromNova, 'https://nova.example');
 
-    const entry = useSpaceStore.getState().userViews.get(userKey(fromNova, 'https://nova.ddns.net'));
+    const entry = useSpaceStore.getState().userViews.get(userKey(fromNova, 'https://nova.example'));
     expect(entry?.isHome).toBe(true);
     expect(entry?.user.avatarColor).toBe('teal');
-    expect(entry?.deliveredBy).toBe('https://nova.ddns.net');
+    expect(entry?.deliveredBy).toBe('https://nova.example');
   });
 
   it('stub view does NOT overwrite an existing home view', () => {
     const fromNova = makeUser({
       id: 'nova-local',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'teal',
     });
     const fromOrbit = makeUser({
       id: 'orbit-local',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'lavender',
     });
 
-    useSpaceStore.getState().upsertUserView(fromNova, 'https://nova.ddns.net');
-    useSpaceStore.getState().upsertUserView(fromOrbit, 'https://orbit.ddns.net');
+    useSpaceStore.getState().upsertUserView(fromNova, 'https://nova.example');
+    useSpaceStore.getState().upsertUserView(fromOrbit, 'https://orbit.example');
 
-    const entry = useSpaceStore.getState().userViews.get(userKey(fromNova, 'https://nova.ddns.net'));
+    const entry = useSpaceStore.getState().userViews.get(userKey(fromNova, 'https://nova.example'));
     expect(entry?.isHome).toBe(true);
     expect(entry?.user.avatarColor).toBe('teal');
-    expect(entry?.deliveredBy).toBe('https://nova.ddns.net');
+    expect(entry?.deliveredBy).toBe('https://nova.example');
   });
 
   it('same-tier writes update freshness (later write wins)', () => {
     const a = makeUser({
       id: 'orbit-1',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'lavender',
     });
     const b = makeUser({
       id: 'orbit-1',
-      username: 'frank@nova.ddns.net',
+      username: 'frank@nova.example',
       homeUserId: 'nova-frank-id',
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       avatarColor: 'sky', // simulating a later profile-update event
     });
 
-    useSpaceStore.getState().upsertUserView(a, 'https://orbit.ddns.net');
-    useSpaceStore.getState().upsertUserView(b, 'https://orbit.ddns.net');
+    useSpaceStore.getState().upsertUserView(a, 'https://orbit.example');
+    useSpaceStore.getState().upsertUserView(b, 'https://orbit.example');
 
-    const entry = useSpaceStore.getState().userViews.get(userKey(b, 'https://orbit.ddns.net'));
+    const entry = useSpaceStore.getState().userViews.get(userKey(b, 'https://orbit.example'));
     expect(entry?.user.avatarColor).toBe('sky');
   });
 
@@ -194,15 +194,15 @@ describe('spaceStore.upsertUserView preference rule', () => {
     });
 
     useSpaceStore.getState().upsertUserView(frank, '');
-    useSpaceStore.getState().upsertUserView(heidi, 'https://orbit.ddns.net');
+    useSpaceStore.getState().upsertUserView(heidi, 'https://orbit.example');
     expect(useSpaceStore.getState().userViews.size).toBe(2);
 
     // Removing orbit drops what orbit delivered and keeps the rest.
-    useSpaceStore.getState().removeInstanceSpaces('https://orbit.ddns.net');
+    useSpaceStore.getState().removeInstanceSpaces('https://orbit.example');
     const remaining = useSpaceStore.getState().userViews;
     expect(remaining.size).toBe(1);
     expect(remaining.get(userKey(frank, ''))).toBeDefined();
-    expect(remaining.get(userKey(heidi, 'https://orbit.ddns.net'))).toBeUndefined();
+    expect(remaining.get(userKey(heidi, 'https://orbit.example'))).toBeUndefined();
   });
 
   it('removeInstanceSpaces of the home origin evicts entries it delivered', () => {
@@ -224,9 +224,9 @@ describe('spaceStore.upsertUserView preference rule', () => {
       username: 'heidi',
       avatarColor: 'sky',
     });
-    useSpaceStore.getState().upsertUserView(heidi, 'https://orbit.ddns.net');
+    useSpaceStore.getState().upsertUserView(heidi, 'https://orbit.example');
     // A native row's home is the instance that issued it: orbit.
-    const entry = useSpaceStore.getState().userViews.get('orbit.ddns.net:orbit-heidi-id');
+    const entry = useSpaceStore.getState().userViews.get('orbit.example:orbit-heidi-id');
     expect(entry?.isHome).toBe(true);
   });
 });

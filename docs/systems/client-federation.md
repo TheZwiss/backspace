@@ -28,7 +28,7 @@ Backspace supports **client-side federation**: a single app session (web or desk
 │                                                 │
 │  ┌──────────────┐    ┌──────────────────────┐   │
 │  │ Home Instance │    │ Remote Instance(s)   │   │
-│  │ nova.ddns.net│    │ orbit.ddns.net│   │
+│  │ nova.example│    │ orbit.example│   │
 │  │              │    │                      │   │
 │  │ WS ──────────┤    │ WS ──────────────────┤   │
 │  │ API ─────────┤    │ API ─────────────────┤   │
@@ -64,8 +64,8 @@ This is a **real account with a real bcrypt password** — not a replicated stub
 | Account type | Username | passwordHash | homeInstance | Can log in? |
 |---|---|---|---|---|
 | Local (native) | `erin` | bcrypt hash | `NULL` | Yes |
-| Federated (client-created) | `erin@nova.ddns.net` | bcrypt hash | `nova.ddns.net` | Yes |
-| Replicated stub (S2S-created) | `erin@nova.ddns.net` | `!federation-replicated` | `nova.ddns.net` | No |
+| Federated (client-created) | `erin@nova.example` | bcrypt hash | `nova.example` | Yes |
+| Replicated stub (S2S-created) | `erin@nova.example` | `!federation-replicated` | `nova.example` | No |
 
 Key distinction: **Federated accounts** and **replicated stubs** can have the same username format (`user@instance`), but federated accounts have real passwords and can log in. Replicated stubs are server-created placeholders for identity resolution and cannot log in.
 
@@ -88,11 +88,11 @@ When a user adds a remote instance via the Connections settings:
 2. **Resolve the home API client** — `resolveCredentialHomeApi()`; if there is no home session, throw naming the home instance.
 3. **Verify the entered password against the home instance** — `homeApi.users.verifyPassword`. The target never sees it.
 4. **Fetch the per-remote secret** — `homeApi.users.federationCredential({ origin })`.
-5. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `erin@nova.ddns.net`)
+5. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `erin@nova.example`)
 6. **Try registration** on the remote instance with:
-   - Username: `erin@nova.ddns.net`
+   - Username: `erin@nova.example`
    - Password: **the issued secret**
-   - `homeInstance`: `nova.ddns.net` (bare domain)
+   - `homeInstance`: `nova.example` (bare domain)
    - `homeUserId`: user's Snowflake ID on home instance
 7. **If registration is refused** because the username is taken or because the instance is closed to new accounts, log in with the issued secret. A migrated account on a closed instance still gets in this way. There is deliberately **no** retry with the entered password. If that login fails, `connectToRemote` throws `RemoteLoginRequiredError` and the caller offers the explicit per-instance login form, where the user chooses what to send. The error's `reason` records which refusal came first, and it is the only thing that decides what the form's notice may claim:
 
@@ -147,11 +147,11 @@ The central store for multi-instance state.
 
 ```typescript
 interface ConnectedInstance {
-  origin: string;           // 'https://orbit.ddns.net'
+  origin: string;           // 'https://orbit.example'
   label: string;            // Instance display name
   token: string;            // JWT for this instance
   user: User;               // User record on this instance
-  username: string;         // e.g., 'erin@nova.ddns.net'
+  username: string;         // e.g., 'erin@nova.example'
   status: 'connected' | 'connecting' | 'disconnected' | 'error';
   error?: string;
   api: BackspaceApiClient;  // Authenticated API client

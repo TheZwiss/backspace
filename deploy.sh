@@ -6,8 +6,8 @@
 #
 # Usage:
 #   ./deploy.sh              Deploy to both (default)
-#   ./deploy.sh pi           Deploy to Pi (nova.ddns.net)
-#   ./deploy.sh vm           Deploy to VM (orbit.ddns.net)
+#   ./deploy.sh pi           Deploy to Pi (nova.example)
+#   ./deploy.sh vm           Deploy to VM (orbit.example)
 #   ./deploy.sh all          Deploy to both
 #   ./deploy.sh --local      Force Pi via LAN IP
 #   ./deploy.sh --remote     Force Pi via public DNS
@@ -26,10 +26,10 @@ BUILD_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo '')"
 
 PI_USER="youruser"
 PI_LOCAL="192.168.1.10"
-PI_REMOTE="nova.ddns.net"
+PI_REMOTE="nova.example"
 PI_PATH="~/backspace"
 
-BETA_HOST="orbit.ddns.net"
+BETA_HOST="orbit.example"
 BETA_PATH="~/backspace"
 
 # ── Local target override (gitignored) ──────────────────────

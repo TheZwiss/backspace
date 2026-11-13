@@ -360,7 +360,7 @@ describe('formatDmHeaderName', () => {
   it('group with members lacking displayName → falls back to parseFederatedUsername base', () => {
     const dm = makeGroupDmFull({
       name: null,
-      otherMembers: [makeMember('A', { username: 'alice@nova.ddns.net' })],
+      otherMembers: [makeMember('A', { username: 'alice@nova.example' })],
     });
     expect(formatDmHeaderName(dm, SELF)).toBe('alice');
   });
@@ -376,7 +376,7 @@ describe('formatDmHeaderName', () => {
   });
 
   it('1-on-1 without displayName → username base', () => {
-    const dm = make1on1Dm(makeMember('A', { username: 'alice@nova.ddns.net' }));
+    const dm = make1on1Dm(makeMember('A', { username: 'alice@nova.example' }));
     expect(formatDmHeaderName(dm, SELF)).toBe('alice');
   });
 

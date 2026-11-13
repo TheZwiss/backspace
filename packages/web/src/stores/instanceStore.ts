@@ -1432,7 +1432,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             }
 
             // Backfill cached username if stale after server-side migration
-            // (e.g. "test" was renamed to "test@nova.ddns.net")
+            // (e.g. "test" was renamed to "test@nova.example")
             if (user.username !== cachedEntry.username) {
               cachedEntry.username = user.username;
             }

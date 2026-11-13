@@ -196,7 +196,7 @@ Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the per
 
 ### Redeploy: `deploy.sh [pi|vm|all]`
 
-`./deploy.sh` is Heidi's redeploy helper for the two live instances — `nova.ddns.net` (Raspberry Pi) and `orbit.ddns.net` (VM). It does **not** build locally; it `rsync`s the working tree to the target (excluding `node_modules`, `.env`, `data/`, build output, and a list of local-only paths) and then runs `docker compose up -d --build` on the remote so the image is rebuilt in place. Targets:
+`./deploy.sh` is Heidi's redeploy helper for the two live instances — `nova.example` (Raspberry Pi) and `orbit.example` (VM). It does **not** build locally; it `rsync`s the working tree to the target (excluding `node_modules`, `.env`, `data/`, build output, and a list of local-only paths) and then runs `docker compose up -d --build` on the remote so the image is rebuilt in place. Targets:
 
 | Arg | Target |
 |-----|--------|

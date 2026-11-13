@@ -29,16 +29,16 @@ const CONTRACT_CASES: ReadonlyArray<readonly [string, string | null | undefined,
   ['empty string', '', null],
   ['spaces only', '   ', null],
   ['whitespace only', '\t\n ', null],
-  ['bare host', 'nova.ddns.net', 'https://nova.ddns.net'],
-  ['bare host with surrounding whitespace', '  nova.ddns.net  ', 'https://nova.ddns.net'],
-  ['bare host with one trailing slash', 'nova.ddns.net/', 'https://nova.ddns.net'],
-  ['bare host with many trailing slashes', 'nova.ddns.net//////', 'https://nova.ddns.net'],
-  ['bare host with port and trailing slashes', 'nova.ddns.net:443//', 'https://nova.ddns.net:443'],
-  ['bare host with path and trailing slashes', 'nova.ddns.net/path//', 'https://nova.ddns.net/path'],
-  ['https origin', 'https://nova.ddns.net', 'https://nova.ddns.net'],
-  ['https origin with one trailing slash', 'https://nova.ddns.net/', 'https://nova.ddns.net'],
-  ['https origin with many trailing slashes', 'https://nova.ddns.net/////', 'https://nova.ddns.net'],
-  ['https origin with path and trailing slash', 'https://nova.ddns.net/path/', 'https://nova.ddns.net/path'],
+  ['bare host', 'nova.example', 'https://nova.example'],
+  ['bare host with surrounding whitespace', '  nova.example  ', 'https://nova.example'],
+  ['bare host with one trailing slash', 'nova.example/', 'https://nova.example'],
+  ['bare host with many trailing slashes', 'nova.example//////', 'https://nova.example'],
+  ['bare host with port and trailing slashes', 'nova.example:443//', 'https://nova.example:443'],
+  ['bare host with path and trailing slashes', 'nova.example/path//', 'https://nova.example/path'],
+  ['https origin', 'https://nova.example', 'https://nova.example'],
+  ['https origin with one trailing slash', 'https://nova.example/', 'https://nova.example'],
+  ['https origin with many trailing slashes', 'https://nova.example/////', 'https://nova.example'],
+  ['https origin with path and trailing slash', 'https://nova.example/path/', 'https://nova.example/path'],
   ['mixed-case scheme is preserved verbatim', 'HTTPS://Nova.DDNS.net/', 'HTTPS://Nova.DDNS.net'],
   ['localhost keeps an explicit http scheme', 'http://localhost:3005', 'http://localhost:3005'],
   ['localhost keeps http and drops the trailing slash', 'http://localhost:3005/', 'http://localhost:3005'],
@@ -55,19 +55,19 @@ const CONTRACT_CASES: ReadonlyArray<readonly [string, string | null | undefined,
 
 describe('stripTrailingSlashes', () => {
   it('leaves a string with no trailing slash untouched', () => {
-    expect(stripTrailingSlashes('nova.ddns.net')).toBe('nova.ddns.net');
+    expect(stripTrailingSlashes('nova.example')).toBe('nova.example');
   });
 
   it('removes a single trailing slash', () => {
-    expect(stripTrailingSlashes('nova.ddns.net/')).toBe('nova.ddns.net');
+    expect(stripTrailingSlashes('nova.example/')).toBe('nova.example');
   });
 
   it('removes a run of trailing slashes', () => {
-    expect(stripTrailingSlashes('nova.ddns.net////')).toBe('nova.ddns.net');
+    expect(stripTrailingSlashes('nova.example////')).toBe('nova.example');
   });
 
   it('keeps interior slashes', () => {
-    expect(stripTrailingSlashes('https://nova.ddns.net/a//b//')).toBe('https://nova.ddns.net/a//b');
+    expect(stripTrailingSlashes('https://nova.example/a//b//')).toBe('https://nova.example/a//b');
   });
 
   it('collapses an all-slash string to empty', () => {
@@ -88,8 +88,8 @@ describe('stripTrailingSlashes', () => {
       'a//',
       '/a',
       '/a/',
-      'https://nova.ddns.net',
-      'https://nova.ddns.net///',
+      'https://nova.example',
+      'https://nova.example///',
       '////a////',
     ];
     for (const input of inputs) {
@@ -117,7 +117,7 @@ describe('canonicalizeHomeInstance', () => {
 
 describe('normalizeOriginForCompare trailing slashes', () => {
   it('strips a run of trailing slashes', () => {
-    expect(normalizeOriginForCompare('https://nova.ddns.net////')).toBe('nova.ddns.net');
+    expect(normalizeOriginForCompare('https://nova.example////')).toBe('nova.example');
   });
 
   it('returns null for a slash-only value', () => {
@@ -140,7 +140,7 @@ describe('canonicalizeHomeInstance timing on a long run of slashes', () => {
 
   it('completes in well under 100ms', () => {
     // Warm the function up so the measurement is not dominated by first-call JIT.
-    canonicalizeHomeInstance('https://nova.ddns.net/');
+    canonicalizeHomeInstance('https://nova.example/');
 
     const elapsed = measure(() => canonicalizeHomeInstance(PATHOLOGICAL));
     expect(canonicalizeHomeInstance(PATHOLOGICAL)).toBe(`https://${'/'.repeat(40_000)}a`);
@@ -153,7 +153,7 @@ describe('canonicalizeHomeInstance timing on a long run of slashes', () => {
     // so a fast CI runner cannot flake it, while still being ~7x below what the
     // regex form actually costs here. The slow side needs room too: this test
     // is slow by design, and a slow runner took it past vitest's 5s default.
-    canonicalizeHomeInstanceRegex('https://nova.ddns.net/');
+    canonicalizeHomeInstanceRegex('https://nova.example/');
 
     const elapsed = measure(() => canonicalizeHomeInstanceRegex(PATHOLOGICAL));
     expect(elapsed).toBeGreaterThan(300);

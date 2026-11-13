@@ -6,7 +6,7 @@ import { isVersionDismissed } from './updateDismissal';
  * Shared by the main process notification, the recovery surface, and the
  * renderer toast so the three cannot drift apart.
  */
-export const RELEASES_URL = 'https://github.com/caduHD4/backspace-prort-android/releases/latest';
+export const RELEASES_URL = 'https://github.com/TheZwiss/backspace/releases/latest';
 
 /**
  * Where the updater currently is.

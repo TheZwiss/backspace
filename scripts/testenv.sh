@@ -5,7 +5,7 @@
 #   down   stop the stack, keep the data
 #   status show whether the ports answer
 #   reset  stop and delete .testenv/ (next `up` re-seeds)
-# State lives in .testenv/ (gitignored). Login: ana / MotionTest#2026,
+# State lives in .testenv/ (gitignored). Login: ana / change-me-dev-password,
 # space "Teste" with #general and a voice channel.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 S="$ROOT/.testenv"
 API="http://localhost:3005"
 USER_NAME="ana"
-USER_PASS="MotionTest#2026"
+USER_PASS="change-me-dev-password"
 
 up_ports() { curl -s -o /dev/null "$API/api/health" 2>/dev/null || curl -s -o /dev/null "$API" 2>/dev/null; }
 

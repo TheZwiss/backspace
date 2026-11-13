@@ -6,10 +6,10 @@ O servidor usa uma CA local. Navegador permite “continuar mesmo assim”, mas 
 Download (sem TLS, para funcionar antes da CA estar instalada):
 
 ```
-http://10.0.1.5:3000/ca.crt
+http://192.168.1.10:3000/ca.crt
 ```
 
-Também disponível em `https://10.0.1.5:8443/ca.crt` depois que a CA estiver
+Também disponível em `https://192.168.1.10:8443/ca.crt` depois que a CA estiver
 instalada.
 
 Fingerprint SHA-256 da CA:
@@ -22,7 +22,7 @@ Depois de instalar, **feche e reabra o Electron**.
 
 ## Android 11
 
-1. Abra `http://10.0.1.5:3000/ca.crt` no Chrome e baixe.
+1. Abra `http://192.168.1.10:3000/ca.crt` no Chrome e baixe.
 2. Configurações → Segurança → Criptografia e credenciais → Instalar certificado
    → Certificado de CA → escolha o arquivo.
 3. Confirme o aviso do Android.
@@ -38,14 +38,14 @@ Depois de instalar, **feche e reabra o Electron**.
 PowerShell como Administrador:
 
 ```powershell
-Invoke-WebRequest http://10.0.1.5:3000/ca.crt -OutFile "$env:TEMP\backspace-ca.crt"
+Invoke-WebRequest http://192.168.1.10:3000/ca.crt -OutFile "$env:TEMP\backspace-ca.crt"
 Import-Certificate -FilePath "$env:TEMP\backspace-ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
 ```
 
 ## Linux (Debian/Ubuntu)
 
 ```bash
-curl -fsS http://10.0.1.5:3000/ca.crt -o /tmp/backspace-ca.crt
+curl -fsS http://192.168.1.10:3000/ca.crt -o /tmp/backspace-ca.crt
 sudo cp /tmp/backspace-ca.crt /usr/local/share/ca-certificates/backspace-ca.crt
 sudo update-ca-certificates
 
@@ -58,7 +58,7 @@ certutil -d "sql:$HOME/.pki/nssdb" -A -t "C,," -n Backspace-CA -i /tmp/backspace
 ## macOS
 
 ```bash
-curl -fsS http://10.0.1.5:3000/ca.crt -o ~/Downloads/backspace-ca.crt
+curl -fsS http://192.168.1.10:3000/ca.crt -o ~/Downloads/backspace-ca.crt
 sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain ~/Downloads/backspace-ca.crt
 ```
@@ -73,7 +73,7 @@ sudo security add-trusted-cert -d -r trustRoot \
 ## Observações
 
 - Instalação é **uma vez por dispositivo**, não por usuário/navegador.
-- Em redes diferentes use `https://100.113.4.54:8443` ou o nome MagicDNS.
+- Em redes diferentes use `https://100.64.0.10:8443` ou o nome MagicDNS.
 - Não use `http://...:8443`: essa porta é TLS e responde `400`.
 - O certificado do site é renovado sem trocar a CA raiz; nesse caso não é
   preciso reinstalar em cada aparelho.
@@ -82,9 +82,9 @@ sudo security add-trusted-cert -d -r trustRoot \
 ## Teste de portas no Windows (PowerShell)
 
 ```powershell
-Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 5349
-Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 3479
-Test-NetConnection mi-9t-pro.<sua-tailnet>.ts.net -Port 8443
+Test-NetConnection android-node.<sua-tailnet>.ts.net -Port 5349
+Test-NetConnection android-node.<sua-tailnet>.ts.net -Port 3479
+Test-NetConnection android-node.<sua-tailnet>.ts.net -Port 8443
 ```
 
 Os três devem mostrar `TcpTestSucceeded : True`.

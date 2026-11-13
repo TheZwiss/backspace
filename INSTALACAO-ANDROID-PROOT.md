@@ -14,11 +14,11 @@ outros dispositivos. Nenhuma credencial é reproduzida aqui.
 URLs (preferencial, sem instalar CA):
 
 - Tailscale HTTPS: `https://backspace.<sua-tailnet>.ts.net` (certificado Let's Encrypt)
-- LAN: `https://10.0.1.5:8443`
-- Tailscale IP: `https://100.113.4.54:8443`
-- Tailscale MagicDNS: `https://mi-9t-pro.<sua-tailnet>.ts.net:8443` (se o DNS do
+- LAN: `https://192.168.1.10:8443`
+- Tailscale IP: `https://100.64.0.10:8443`
+- Tailscale MagicDNS: `https://android-node.<sua-tailnet>.ts.net:8443` (se o DNS do
   Tailscale estiver ativo no cliente)
-- CA local: `https://10.0.1.5:8443/ca.crt`
+- CA local: `https://192.168.1.10:8443/ca.crt`
 - LiveKit interno: `ws://127.0.0.1:7880`; pelo Caddy: `wss://<host>:8443/livekit/`
 
 ## 2. Iniciar, parar e checar
@@ -79,7 +79,7 @@ PORT=3000
 HOST=0.0.0.0
 JWT_SECRET=<gerar com: openssl rand -hex 32>
 REGISTRATION_OPEN=true
-LIVEKIT_URL=wss://10.0.1.5:8443/livekit/
+LIVEKIT_URL=wss://192.168.1.10:8443/livekit/
 LIVEKIT_URL_AUTO=1
 LIVEKIT_INTERNAL_URL=http://127.0.0.1:7880
 LIVEKIT_API_KEY=<mesma chave do livekit.yaml>
@@ -127,7 +127,7 @@ Correções aplicadas (binário em `/usr/local/bin/livekit-server.bin`, versão
 O wrapper `/usr/local/bin/livekit-server` define:
 
 ```bash
-LIVEKIT_PRORT_ADDRS=wlan0=10.0.1.5/24,tun1=100.113.4.54/32,lo=127.0.0.1/8
+LIVEKIT_PRORT_ADDRS=wlan0=192.168.1.10/24,tun1=100.64.0.10/32,lo=127.0.0.1/8
 ```
 
 e executa o binário com `argv[0]=livekit-server`. Se os IPs ou nomes de
@@ -162,7 +162,7 @@ port: 7880
 bind_addresses:
   - 0.0.0.0
 rtc:
-  node_ip: 100.113.4.54
+  node_ip: 100.64.0.10
   advertise_internal_ip: false
   ips:
     excludes:
@@ -196,7 +196,7 @@ O TURN/TLS na 443 não pode ser usado no Android sem root. O TURN/TCP 3479 é
 publicado pelo `tailscale serve` com PROXY protocol v2, então o cliente recebe:
 
 ```
-turn:100.113.4.54:3478?transport=udp
+turn:100.64.0.10:3478?transport=udp
 turn:backspace.<sua-tailnet>.ts.net:3479?transport=tcp
 ```
 
@@ -204,12 +204,12 @@ Se o firewall do cliente bloquear UDP, o TURN/TLS em 5349 é o fallback.
 
 #### Candidatos ICE: só o IP do Tailscale (estado validado em 2026-11-08)
 
-O servidor anuncia **um único** candidato de mídia: `100.113.4.54:7882/udp` (IP
+O servidor anuncia **um único** candidato de mídia: `100.64.0.10:7882/udp` (IP
 do Tailscale do Android). `advertise_internal_ip: false` e
 `ips.excludes: 10.0.0.0/8` mantêm o IP da LAN (`wlan0`) fora da lista.
 
 **Por quê.** Com `advertise_internal_ip: true` o LiveKit anunciava dois
-candidatos (`10.0.1.8` e `100.113.4.54`). Um cliente de fora (ex.: celular em 4G)
+candidatos (`192.168.1.11` e `100.64.0.10`). Um cliente de fora (ex.: celular em 4G)
 só alcançava o servidor através de um relé do TURN, e o ICE ficava trocando de
 par entre os dois endereços: `ice reconnected or switched pair` aparecia a cada
 2 a 6 segundos (47 vezes em 5 minutos), o que se via como picos de ping. Com um
@@ -218,12 +218,12 @@ par escolhido passou a ser `udp host ↔ udp host` (sem `relay`).
 
 **O que isso NÃO muda.** O bloco `turn:` continua ligado, de propósito: ele é o
 fallback para quem não alcança o IP UDP. Quem tem só o compartilhamento do nó
-`backspace` (e não o do nó Android `mi-9t-pro`) não consegue chegar a
-`100.113.4.54:7882` e cai em TURN/TCP (`3479`), que é o pior caminho (bloqueio de
+`backspace` (e não o do nó Android `android-node`) não consegue chegar a
+`100.64.0.10:7882` e cai em TURN/TCP (`3479`), que é o pior caminho (bloqueio de
 cabeça de fila do TCP dentro do WireGuard em userspace).
 
 **Para os amigos terem UDP direto**, compartilhe também o nó Android: Tailscale
-admin → Machines → `mi-9t-pro` → Share. A página e o sinal continuam entrando por
+admin → Machines → `android-node` → Share. A página e o sinal continuam entrando por
 `https://backspace.<sua-tailnet>.ts.net`; só a mídia passa a usar o nó Android.
 Abrir a porta no roteador não é opção atrás de CGNAT.
 
@@ -269,7 +269,7 @@ setsid nohup proot-distro login debian -- bash -lc \
 	auto_https disable_redirects
 }
 
-https://localhost:8443, https://10.0.1.5:8443, https://100.113.4.54:8443, https://mi-9t-pro.<sua-tailnet>.ts.net:8443 {
+https://localhost:8443, https://192.168.1.10:8443, https://100.64.0.10:8443, https://android-node.<sua-tailnet>.ts.net:8443 {
 	tls /opt/caddy/certs/backspace.crt /opt/caddy/certs/backspace.key
 
 	handle /ca.crt {
@@ -290,8 +290,8 @@ https://localhost:8443, https://10.0.1.5:8443, https://100.113.4.54:8443, https:
 O certificado é emitido pela CA local do Caddy e inclui:
 
 ```
-DNS:localhost, DNS:mi-9t-pro.<sua-tailnet>.ts.net,
-IP:127.0.0.1, IP:10.0.1.5, IP:100.113.4.54
+DNS:localhost, DNS:android-node.<sua-tailnet>.ts.net,
+IP:127.0.0.1, IP:192.168.1.10, IP:100.64.0.10
 ```
 
 O arquivo `backspace.crt` contém a **cadeia completa** (leaf + intermédio). Sem
@@ -303,13 +303,13 @@ Regenerar (validade de 365 dias):
 ```bash
 cd /opt/caddy/certs
 cat > ext.cnf <<'EOF'
-subjectAltName=DNS:localhost,DNS:mi-9t-pro.<sua-tailnet>.ts.net,IP:127.0.0.1,IP:10.0.1.5,IP:100.113.4.54
+subjectAltName=DNS:localhost,DNS:android-node.<sua-tailnet>.ts.net,IP:127.0.0.1,IP:192.168.1.10,IP:100.64.0.10
 extendedKeyUsage=serverAuth
 keyUsage=critical,digitalSignature,keyEncipherment
 basicConstraints=critical,CA:FALSE
 EOF
 openssl req -new -newkey rsa:2048 -nodes -keyout backspace.key \
-  -out backspace.csr -subj "/CN=10.0.1.5"
+  -out backspace.csr -subj "/CN=192.168.1.10"
 openssl x509 -req -in backspace.csr \
   -CA /root/.local/share/caddy/pki/authorities/local/intermediate.crt \
   -CAkey /root/.local/share/caddy/pki/authorities/local/intermediate.key \
@@ -329,12 +329,12 @@ aceitar o aviso ao menos uma vez no host usado, senão o `wss://` do LiveKit pod
 falhar silenciosamente.
 
 O download também está disponível **sem TLS** em
-`http://10.0.1.5:3000/ca.crt`, que é o jeito mais fácil de baixar antes de
+`http://192.168.1.10:3000/ca.crt`, que é o jeito mais fácil de baixar antes de
 confiar na CA.
 
 Android 11:
 
-1. Abra `http://10.0.1.5:3000/ca.crt` e baixe.
+1. Abra `http://192.168.1.10:3000/ca.crt` e baixe.
 2. Configurações → Segurança → Criptografia e credenciais → Instalar certificado
    → Certificado de CA → selecione o arquivo.
 3. Confirme o aviso do Android.
@@ -379,7 +379,7 @@ open -a Backspace --args --ignore-certificate-errors
 ## 7b. HTTPS válido do Tailscale (sem CA nos clientes)
 
 Foi criado um nó Tailscale userspace separado, chamado `backspace`
-(`100.91.47.106`), dentro do Debian, e o `tailscale serve` publica:
+(`100.64.0.20`), dentro do Debian, e o `tailscale serve` publica:
 
 ```text
 https://backspace.<sua-tailnet>.ts.net/          -> http://127.0.0.1:3000
@@ -387,7 +387,7 @@ https://backspace.<sua-tailnet>.ts.net/livekit   -> http://127.0.0.1:7880
 ```
 
 O certificado é Let's Encrypt, então Chrome/Electron confiam sem instalar CA.
-O Tailscale do Android continua ligado e mantém a mídia em `100.113.4.54`.
+O Tailscale do Android continua ligado e mantém a mídia em `100.64.0.10`.
 
 O `start-stack.sh` sobe o daemon userspace e reaplica o `serve` se necessário.
 A auth key foi usada uma vez e apagada; o estado fica em
@@ -397,7 +397,7 @@ A auth key foi usada uma vez e apagada; o estado fica em
 tailnet (por exemplo o usuário Helon21) acessar, compartilhe **apenas a máquina
 `backspace`** com essa pessoa no painel do Tailscale (Machines → backspace →
 Share). O TURN/TCP 3479 também passa por esse nó, então não é preciso
-compartilhar o `mi-9t-pro`. É uma ação por pessoa, não por dispositivo, e não
+compartilhar o `android-node`. É uma ação por pessoa, não por dispositivo, e não
 exige CA.
 
 ## 8. Testes que foram executados e passaram
@@ -405,10 +405,10 @@ exige CA.
 ```bash
 # HTTP/HTTPS
 curl http://127.0.0.1:3000/api/health
-curl -k https://10.0.1.5:8443/api/health
-curl -k https://100.113.4.54:8443/api/health
-curl -k --resolve mi-9t-pro.<sua-tailnet>.ts.net:8443:10.0.1.5 \
-  https://mi-9t-pro.<sua-tailnet>.ts.net:8443/api/health
+curl -k https://192.168.1.10:8443/api/health
+curl -k https://100.64.0.10:8443/api/health
+curl -k --resolve android-node.<sua-tailnet>.ts.net:8443:192.168.1.10 \
+  https://android-node.<sua-tailnet>.ts.net:8443/api/health
 
 # LiveKit REST + credenciais
 cd /opt/backspace/packages/server
@@ -418,7 +418,7 @@ LIVEKIT_LAN_URL=http://127.0.0.1:7880 node --import tsx/esm verify-livekit.ts
 # (validado com o JWT do usuário real; retornou {"type":"ready",...})
 
 # Token do app, grants e URL dinâmica
-# (validado para 10.0.1.5, 100.113.4.54, localhost e MagicDNS)
+# (validado para 192.168.1.10, 100.64.0.10, localhost e MagicDNS)
 ```
 
 Mídia real (dois clientes LiveKit CLI pela WSS do Caddy):
@@ -427,7 +427,7 @@ Mídia real (dois clientes LiveKit CLI pela WSS do Caddy):
 cd /tmp
 # lk: https://github.com/livekit/livekit-cli/releases (linux_arm64)
 set -a; . /opt/backspace/.env; set +a
-export LIVEKIT_URL=wss://10.0.1.5:8443/livekit
+export LIVEKIT_URL=wss://192.168.1.10:8443/livekit
 R=teste-$$
 ./lk room create "$R" --quiet
 (timeout 20 ./lk room join -i sub --auto-subscribe "$R" > /tmp/sub.log 2>&1 &)
@@ -438,7 +438,7 @@ grep -E "track subscribed|published" /tmp/sub.log /tmp/pub.log
 
 Resultado observado: publisher publicou H.264 simulcast e o subscriber assinou
 o track de vídeo. O log do LiveKit mostrou `connectionType: udp` e candidatos
-`10.0.1.5:7882` + `100.113.4.54:7882`.
+`192.168.1.10:7882` + `100.64.0.10:7882`.
 
 Testes unitários:
 
@@ -463,7 +463,7 @@ pnpm --filter @backspace/web exec vitest run src/utils/screenShare src/hooks/use
 ## 10. Limitações conhecidas / observações
 
 - `tailscaled` dentro do Debian não funciona (netlink bloqueado). O IP
-  `100.113.4.54` existe porque o app Tailscale do Android mantém a VPN. Não
+  `100.64.0.10` existe porque o app Tailscale do Android mantém a VPN. Não
   tente iniciar `tailscaled` dentro do PRoot.
 - Abrir `http://<host>:3000` no navegador redireciona (somente navegação HTML)
   para `https://<host>:8443`; sem HTTPS o microfone/câmera/tela não funcionam.

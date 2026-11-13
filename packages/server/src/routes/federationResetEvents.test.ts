@@ -90,7 +90,7 @@ function userToken(): string {
 describe('GET /api/federation/reset-events', () => {
   it('returns reset events with their orphaned real accounts and space info', async () => {
     testDb.insert(schema.federationResetEvents).values({
-      origin: 'orbit.ddns.net',
+      origin: 'orbit.example',
       deadEpoch: 'E0',
       newEpoch: 'E1',
       detectedAt: 1000,
@@ -102,14 +102,14 @@ describe('GET /api/federation/reset-events', () => {
     const uid = 'dave-1';
     testDb.insert(schema.users).values({
       id: uid,
-      username: 'dave@orbit.ddns.net',
+      username: 'dave@orbit.example',
       displayName: 'Dave',
       avatarColor: '#abc',
       passwordHash: 'real-hash',
       // Detached: homed here, its former home names the origin.
       homeInstance: null,
       homeUserId: null,
-      detachedHomeInstance: 'orbit.ddns.net',
+      detachedHomeInstance: 'orbit.example',
       detachedHomeUserId: 'h',
       federationHomeOrphaned: 1,
       isDeleted: 0,
@@ -155,7 +155,7 @@ describe('GET /api/federation/reset-events', () => {
     const body = JSON.parse(res.body);
     expect(body.events).toHaveLength(1);
     const ev = body.events[0];
-    expect(ev.origin).toBe('orbit.ddns.net');
+    expect(ev.origin).toBe('orbit.example');
     expect(ev.deadEpoch).toBe('E0');
     expect(ev.newEpoch).toBe('E1');
     expect(ev.detectedAt).toBe(1000);
@@ -164,7 +164,7 @@ describe('GET /api/federation/reset-events', () => {
     expect(ev.orphanedAccountCount).toBe(1);
     expect(ev.orphanedAccounts).toHaveLength(1);
     const acct = ev.orphanedAccounts[0];
-    expect(acct.username).toBe('dave@orbit.ddns.net');
+    expect(acct.username).toBe('dave@orbit.example');
     expect(acct.displayName).toBe('Dave');
     expect(acct.avatarColor).toBe('#abc');
     expect(acct.ownedSpaces).toEqual([{ id: 's1', name: 'Dave HQ' }]);

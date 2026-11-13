@@ -30,7 +30,7 @@ start_tailscale() {
       http://127.0.0.1:3000 >/dev/null 2>&1 || true
   fi
   # TURN/TCP through the same shared node, so media needs only the `backspace`
-  # share (not the Android `mi-9t-pro` node).
+  # share (not the Android `android-node` node).
   # Always refresh the TURN/TCP forward with PROXY protocol v2. The TURN server
   # needs the real client address here, otherwise it returns 127.0.0.1 and
   # browsers abandon the relay allocation.
@@ -87,11 +87,11 @@ done
 
 echo
 echo "Backspace:  https://backspace.<sua-tailnet>.ts.net  (Tailscale, certificado válido)"
-echo "            https://10.0.1.5:8443  (LAN)"
-echo "            https://100.113.4.54:8443  (Tailscale IP)"
-echo "            https://mi-9t-pro.<sua-tailnet>.ts.net:8443  (Tailscale MagicDNS)"
+echo "            https://192.168.1.10:8443  (LAN)"
+echo "            https://100.64.0.10:8443  (Tailscale IP)"
+echo "            https://android-node.<sua-tailnet>.ts.net:8443  (Tailscale MagicDNS)"
 echo "LiveKit:    ws://127.0.0.1:7880  (UDP 7882 / TCP 7881)"
-echo "CA cert:    https://10.0.1.5:8443/ca.crt"
+echo "CA cert:    https://192.168.1.10:8443/ca.crt"
 echo
 echo -n "health: "
 curl -fsS --max-time 3 http://127.0.0.1:3000/api/health || echo "FAILED"

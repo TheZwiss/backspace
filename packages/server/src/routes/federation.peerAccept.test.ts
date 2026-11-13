@@ -469,7 +469,7 @@ describe('POST /api/federation/peer/accept — BUG-1a: honest 409 refusal for ex
     const response = await app.inject({
       method: 'POST',
       url: '/api/federation/peer/accept',
-      remoteAddress: '10.0.1.5',
+      remoteAddress: '192.168.1.10',
       payload: {
         sourceOrigin: 'https://caller.example',
         hmacSecret: 'S1-other',

@@ -10,7 +10,7 @@ import { projectReplicaStatus } from '../../ws/replicaPresence.js';
 
 /**
  * Extract bare domain from a homeInstance value.
- * Handles both full URLs ("https://nova.ddns.net") and bare domains ("nova.ddns.net").
+ * Handles both full URLs ("https://nova.example") and bare domains ("nova.example").
  * Used to normalize homeInstance to a canonical format for identity matching.
  */
 export function extractDomain(homeInstance: string): string {

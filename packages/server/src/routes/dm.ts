@@ -505,7 +505,7 @@ function transferGroupDmOwnership(
   const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
   const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
   // Canonicalize to a full origin URL. `users.homeInstance` is stored as a
-  // bare host (e.g. `orbit.ddns.net`) for federated users, but
+  // bare host (e.g. `orbit.example`) for federated users, but
   // `dm_channels.ownerHomeInstance` is compared against `sourceInstance`
   // (always a full URL) in S2S authority checks. Storing the bare form here
   // caused legitimate `ownership_transfer` events to be rejected with

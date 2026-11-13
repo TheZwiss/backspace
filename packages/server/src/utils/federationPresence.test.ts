@@ -29,7 +29,7 @@ vi.mock('../db/index.js', () => ({
 
 vi.mock('./federationAuth.js', async (importActual) => ({
   ...(await importActual<typeof import('./federationAuth.js')>()),
-  getOurOrigin: () => 'https://nova.ddns.net',
+  getOurOrigin: () => 'https://nova.example',
 }));
 
 // snapshotPresenceForPeer reads the live activities of each user it snapshots.
@@ -110,11 +110,11 @@ describe('queuePresenceRelay', () => {
   it('is a no-op for replicated users (homeInstance set)', async () => {
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'pbtest3@orbit.ddns.net',
+      username: 'pbtest3@orbit.example',
       passwordHash: '!federation-replicated',
       status: 'online',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'remote-1',
       createdAt: Date.now(),
     }).run();
@@ -142,7 +142,7 @@ describe('presence of a detached account (#310)', () => {
       homeInstance: 'reset.example',
       homeUserId: 'old-home-uid',
       federationHomeOrphaned: 1,
-      replicatedInstances: JSON.stringify([{ origin: 'https://orbit.example', username: 'kai@nova.ddns.net' }]),
+      replicatedInstances: JSON.stringify([{ origin: 'https://orbit.example', username: 'kai@nova.example' }]),
       createdAt: Date.now(),
     }).run();
   }
@@ -150,7 +150,7 @@ describe('presence of a detached account (#310)', () => {
   it('relays the status under its identity here once detaching has homed it', async () => {
     insertDetachedLegacyRow();
     const { rehomeDetachedAccount } = await import('./detachedIdentity.js');
-    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.ddns.net');
+    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.example');
 
     const { queuePresenceRelay } = await import('./federationPresence.js');
     queuePresenceRelay('detached-1', 'dnd', [{ type: 'playing', name: 'Factorio' }]);
@@ -162,7 +162,7 @@ describe('presence of a detached account (#310)', () => {
     const update = JSON.parse(call.payload).presenceUpdate;
     // Its local id at this instance's origin: never the former identity.
     expect(update.homeUserId).toBe('detached-1');
-    expect(update.homeInstance).toBe('https://nova.ddns.net');
+    expect(update.homeInstance).toBe('https://nova.example');
     expect(update.status).toBe('dnd');
     expect(update.activities).toEqual([{ type: 'playing', name: 'Factorio' }]);
     expect(JSON.stringify(update)).not.toContain('old-home-uid');
@@ -172,7 +172,7 @@ describe('presence of a detached account (#310)', () => {
   it('sends a peer-activation snapshot for it like for any native user', async () => {
     insertDetachedLegacyRow();
     const { rehomeDetachedAccount } = await import('./detachedIdentity.js');
-    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.ddns.net');
+    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.example');
 
     const { snapshotPresenceForPeer } = await import('./federationPresence.js');
     await snapshotPresenceForPeer('https://orbit.example');
@@ -182,14 +182,14 @@ describe('presence of a detached account (#310)', () => {
     expect(forDetached[0]!.targetPeerOrigins).toEqual(['https://orbit.example']);
     const update = JSON.parse(forDetached[0]!.payload).presenceUpdate;
     expect(update.homeUserId).toBe('detached-1');
-    expect(update.homeInstance).toBe('https://nova.ddns.net');
+    expect(update.homeInstance).toBe('https://nova.example');
     expect(update.status).toBe('dnd');
   });
 
   it('is not counted as a user of its former home when that peer activates', async () => {
     insertDetachedLegacyRow();
     const { rehomeDetachedAccount } = await import('./detachedIdentity.js');
-    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.ddns.net');
+    rehomeDetachedAccount(sqlite, 'detached-1', 'https://nova.example');
     // erin is friends with the detached account; were it still counted as one
     // of reset.example's users, erin's status would be snapshotted to the new
     // incarnation of that domain.

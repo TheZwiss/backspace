@@ -43,7 +43,7 @@ export interface User {
 }
 
 export interface ReplicatedInstance {
-  origin: string;   // Full URL with protocol, e.g. "https://orbit.ddns.net"
+  origin: string;   // Full URL with protocol, e.g. "https://orbit.example"
   username: string;
   domain?: string;  // Legacy field — kept for backward compat with existing data
 }

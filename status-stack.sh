@@ -16,7 +16,7 @@ echo -n "app health:   "
 curl -fsS --max-time 3 http://127.0.0.1:3000/api/health || echo FAILED
 echo
 echo -n "caddy health: "
-curl -kfsS --max-time 3 https://10.0.1.5:8443/api/health || echo FAILED
+curl -kfsS --max-time 3 https://192.168.1.10:8443/api/health || echo FAILED
 echo
 echo -n "livekit:      "
 curl -fsS --max-time 3 http://127.0.0.1:7880/ || echo FAILED

@@ -748,7 +748,7 @@ Where `timestamp` is `Date.now()` (Unix milliseconds) and `requestBody` is the J
 | Header | Format | Example |
 |--------|--------|---------|
 | `X-Federation-Signature` | `sha256=<hex>` | `sha256=a1b2c3...` |
-| `X-Federation-Origin` | Full URL | `https://nova.ddns.net` |
+| `X-Federation-Origin` | Full URL | `https://nova.example` |
 | `X-Federation-Timestamp` | Unix ms string | `1711619400000` |
 | `Content-Type` | `application/json` | -- |
 
@@ -792,7 +792,7 @@ Two layers of replay protection:
 
 **`extractDomain(homeInstance)`** -- `federation.ts`
 - Extracts bare domain from a homeInstance value (full URL or bare domain)
-- `"https://nova.ddns.net"` → `"nova.ddns.net"`, `"nova.ddns.net"` → `"nova.ddns.net"`
+- `"https://nova.example"` → `"nova.example"`, `"nova.example"` → `"nova.example"`
 - **Use when:** Normalizing homeInstance for comparison or storage
 
 **`findFederatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
@@ -853,11 +853,11 @@ One coupling remains, and it predates this: the login self-heal in `auth.ts` §4
 
 | Location | Format | Example |
 |----------|--------|---------|
-| `users.home_instance` | Bare domain (normalized) | `nova.ddns.net` |
-| `federation_peers.origin` | Full URL | `https://nova.ddns.net` |
-| `getOurOrigin()` return | Full URL | `https://orbit.ddns.net` |
-| `resolveOrCreateReplicatedUser` stores | Bare domain (normalized via `extractDomain`) | `nova.ddns.net` |
-| Auth registration stores | Bare domain | `nova.ddns.net` |
+| `users.home_instance` | Bare domain (normalized) | `nova.example` |
+| `federation_peers.origin` | Full URL | `https://nova.example` |
+| `getOurOrigin()` return | Full URL | `https://orbit.example` |
+| `resolveOrCreateReplicatedUser` stores | Bare domain (normalized via `extractDomain`) | `nova.example` |
+| Auth registration stores | Bare domain | `nova.example` |
 
 Both user creation paths now store bare domain. A self-healing migration in `migrate.ts` normalizes any existing full-URL `homeInstance` values to bare domain on startup.
 
@@ -1186,7 +1186,7 @@ Network failures (timeouts, non-401/403 non-2xx responses) are tracked separatel
 ```typescript
 interface FederationRelayRequest {
   version: 1;
-  sourceInstance: string;          // Full URL, e.g., "https://nova.ddns.net"
+  sourceInstance: string;          // Full URL, e.g., "https://nova.example"
   sourceInstanceId?: string;       // Sender's epoch, see reset detection
   capabilities?: FederationRelayCapability[];  // Optional, see below
   events: FederationRelayEvent[];  // Max 50 per batch
@@ -1397,12 +1397,12 @@ Owner-authored update of a group DM's `name` and/or `icon`. Mirrors the `profile
   "federatedId": "9b8c2f4e-1a2b-4c3d-9e8f-0a1b2c3d4e5f",
   "metadata": {
     "name": "weekend plans",
-    "icon": "https://nova.ddns.net/api/uploads/abc123.png",
+    "icon": "https://nova.example/api/uploads/abc123.png",
     "metadataUpdatedAt": 1746864000000,
     "actor": {
       "userId": "...",
       "homeUserId": "...",
-      "homeInstance": "https://nova.ddns.net",
+      "homeInstance": "https://nova.example",
       "profile": { "username": "heidi" }
     }
   }
@@ -2272,7 +2272,7 @@ Relevant settings in `instance_settings`:
 
 The frontend needs to resolve federated identities for display purposes:
 
-**`parseFederatedUsername(username)`** -- splits `"erin@nova.ddns.net"` into `{baseName: "erin", domain: "nova.ddns.net"}`.
+**`parseFederatedUsername(username)`** -- splits `"erin@nova.example"` into `{baseName: "erin", domain: "nova.example"}`.
 
 **Who a row is, and whether it is the signed-in user** (`homeIdentityOf`, `userKey`, `authStore.myRowIds`, `isMine`, `personRequest`) are described in `client-federation.md` section 5.
 

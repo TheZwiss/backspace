@@ -139,9 +139,9 @@ describe('GET /api/social/search — filter hygiene', () => {
     // Stub username matches the production form: <homeUserId>@<domain>.
     seedUser({
       id: 'stub1',
-      username: 'remote-id@nova.ddns.net',
+      username: 'remote-id@nova.example',
       displayName: null,
-      homeInstance: 'nova.ddns.net',
+      homeInstance: 'nova.example',
       homeUserId: 'remote-id',
     });
     const out = await search('nova');

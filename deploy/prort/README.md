@@ -14,7 +14,7 @@ https://backspace.<sua-tailnet>.ts.net
 node `backspace` must be shared (Machines → backspace → Share) with users from
 another tailnet. On its own that share only gives them the TURN/TCP forward for
 media, which is the worst path (TCP inside userspace WireGuard). For direct UDP
-media, also share the Android node `mi-9t-pro`: LiveKit advertises only
+media, also share the Android node `android-node`: LiveKit advertises only
 `<TAILSCALE_IP>:7882/udp`, the Android node's address (see
 `livekit/livekit.yaml.example` and `INSTALACAO-ANDROID-PROOT.md`, section 5).
 

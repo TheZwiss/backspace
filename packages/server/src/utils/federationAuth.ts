@@ -217,9 +217,9 @@ export function stripTrailingSlashes(s: string): string {
  *
  * The homeInstance column is stored in two shapes depending on the code path
  * that wrote it:
- *   - `auth.ts` registration writes the bare host the client sent (e.g. `nova.ddns.net`).
+ *   - `auth.ts` registration writes the bare host the client sent (e.g. `nova.example`).
  *   - `resolveOrCreateReplicatedUser` writes the bare host (`extractDomain(...)`).
- *   - `getOurOrigin()` returns the full URL (`https://nova.ddns.net`).
+ *   - `getOurOrigin()` returns the full URL (`https://nova.example`).
  *
  * All federation authority / self-friend comparisons must route through this
  * helper to avoid false-fires across the dual storage convention. Returns the
@@ -242,10 +242,10 @@ export function normalizeOriginForCompare(value: string | null | undefined): str
 
 /**
  * Canonicalize a homeInstance value to a full origin URL
- * (e.g. `https://nova.ddns.net`) for storage on columns whose authority
+ * (e.g. `https://nova.example`) for storage on columns whose authority
  * checks compare against `sourceInstance` (which is always a full URL).
  *
- * Accepts bare host (`nova.ddns.net`), scheme-prefixed (`https://...`), or
+ * Accepts bare host (`nova.example`), scheme-prefixed (`https://...`), or
  * `null` / empty / whitespace (returns `null`). `localhost`-style values keep
  * `http://` if already present; otherwise the canonical default is `https://`.
  *

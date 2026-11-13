@@ -62,7 +62,7 @@ const SCENES: Record<string, Scene> = {
   },
   remote: {
     caption: 'Federated space, saved 1080p60: the host allows 540p/720p, 30 fps, 3 Mbps, no custom bitrate',
-    origin: 'https://orbit.ddns.net',
+    origin: 'https://orbit.example',
     hostLimits: STRICT_LIMITS,
   },
   'remote-long': {

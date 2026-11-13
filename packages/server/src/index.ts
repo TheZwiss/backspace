@@ -195,7 +195,7 @@ async function main(): Promise<void> {
   await app.register(websocket);
 
   // Opening the app directly on the plain-HTTP backend port (for example
-  // http://100.113.4.54:3000) gives the browser a non-secure context, so
+  // http://100.64.0.10:3000) gives the browser a non-secure context, so
   // getUserMedia and getDisplayMedia are blocked. Navigation requests are sent
   // to the HTTPS edge on 8443; API, asset and WebSocket traffic is untouched.
   // Requests arriving through Caddy/Tailscale Serve keep the public Host, so no loop.

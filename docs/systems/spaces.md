@@ -127,7 +127,7 @@ Every field is checked before anything is written. A body with `ownerTitle` from
 ### Invite URL Format
 
 Built by `spaceInviteUrl(instanceOrigin, inviteCode)` in `inviteParser.ts`, the one builder for every surface that hands out a link (`InviteModal`, and the Invite People item of the space context menu in `SpaceSidebar` and `MobileSpacesScreen`):
-- **Web:** `{instanceOrigin}/join/{inviteCode}` (e.g., `https://nova.ddns.net/join/a3f1b2c4`). `instanceOrigin` is the space's `_instanceOrigin`, the instance that issued the code; `''` (a space on the page's own instance) becomes `window.location.origin`.
+- **Web:** `{instanceOrigin}/join/{inviteCode}` (e.g., `https://nova.example/join/a3f1b2c4`). `instanceOrigin` is the space's `_instanceOrigin`, the instance that issued the code; `''` (a space on the page's own instance) becomes `window.location.origin`.
 - **Deep link (Electron):** `backspace://join/{inviteCode}` or `backspace://join/{inviteCode}@{host}` for remote instances
 
 ### Invite Code Parser (`inviteParser.ts`)

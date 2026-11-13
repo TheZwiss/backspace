@@ -285,7 +285,7 @@ When the relayed first message creates a local 1-on-1 copy (`findOrCreateOneOnOn
 - On the receiving side, both Path A and Path B skip a local member for whom the host sent no token instead of dispatching a `dm_call_incoming` with an unusable token. A local member homed on a third instance — a client-federation connection — is rung by their own home instance, which is the one the host minted their token for.
 - `participants` stays the complete roster: it is non-secret and Path B needs it for identity matching.
 
-**LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.ddns.net/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
+**LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.example/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
 
 **Token endpoint:** `POST /api/livekit/token` uses `federatedId` as the room name when the DM channel has a `federatedId` set, ensuring both instances join the same LiveKit room.
 

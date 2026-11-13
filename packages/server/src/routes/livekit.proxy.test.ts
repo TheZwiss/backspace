@@ -23,8 +23,8 @@ afterAll(async () => { await app.close(); });
 
 describe('LiveKit signaling through PRoot reverse proxies', () => {
   it.each([
-    ['10.0.1.5:8443', 'wss://10.0.1.5:8443/livekit/'],
-    ['100.113.4.54:8443', 'wss://100.113.4.54:8443/livekit/'],
+    ['192.168.1.10:8443', 'wss://192.168.1.10:8443/livekit/'],
+    ['100.64.0.10:8443', 'wss://100.64.0.10:8443/livekit/'],
     ['backspace.example.ts.net', 'wss://backspace.example.ts.net/livekit/'],
   ])('returns the connecting HTTPS host %s', async (host, expected) => {
     const res = await app.inject({ method: 'POST', url: '/api/livekit/token',

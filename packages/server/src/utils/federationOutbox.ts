@@ -58,7 +58,7 @@ function fetchSettings(): CachedSettings {
  *
  * @param icon Either a bare filename (e.g. "1234567890.png"), an
  *   already-absolute http(s) URL, or null.
- * @param ourOrigin Owner-instance origin (e.g. "https://nova.ddns.net").
+ * @param ourOrigin Owner-instance origin (e.g. "https://nova.example").
  * @returns Absolute URL or null.
  */
 export function normalizeIconForWire(icon: string | null, ourOrigin: string): string | null {

@@ -28,7 +28,7 @@ BIN="${BIN:-/usr/local/bin/livekit-server.bin}"
 CONFIG="${CONFIG:-$LK_DIR/livekit.yaml}"
 LOG_DIR="${LOG_DIR:-/var/log/livekit}"
 LIVEKIT_URL="${LIVEKIT_URL:-http://127.0.0.1:7880/}"
-PRORT_ADDRS="${LIVEKIT_PRORT_ADDRS:-wlan0=10.0.1.8/24,tun1=100.113.4.54/32,lo=127.0.0.1/8}"
+PRORT_ADDRS="${LIVEKIT_PRORT_ADDRS:-wlan0=192.168.1.11/24,tun1=100.64.0.10/32,lo=127.0.0.1/8}"
 UPSTREAM_API="https://api.github.com/repos/livekit/livekit/releases/latest"
 
 # Patches for the main module, applied with -p1 from the source root.

@@ -251,7 +251,7 @@ const INVITE: SpaceInviteSystemPayload = {
     avatarColor: 'rose',
     memberCount: 12,
     description: null,
-    instanceName: 'nova.ddns.net',
+    instanceName: 'nova.example',
   },
 };
 

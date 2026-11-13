@@ -133,7 +133,7 @@ scripts/testenv.sh reset    # stop and delete .testenv/ (next up re-seeds)
 ```
 
 - On Windows use `scripts/testenv.ps1` (`up|down|status|reset|client`) with the same commands. It also downloads and starts a local LiveKit (dev keys, `ws://localhost:7880`) so voice works, seeds a second user `bia` (same password) in the space, and `client -Index N [-FakeAudio file.wav]` opens an Electron client with its own profile and CDP port 922N (`http://localhost:9221` for client 1).
-- Open `http://localhost:5173`, login `ana` / `MotionTest#2026`. Space "Teste" has `#general` and a voice channel.
+- Open `http://localhost:5173`, login `ana` / `change-me-dev-password`. Space "Teste" has `#general` and a voice channel.
 - State lives in `.testenv/` (gitignored: DB, uploads, `dev.log`, `dev.pid`). Leave the stack running when you finish so the next session can reuse it.
 - Playwright MCP has no microphone permission: stub `navigator.mediaDevices.getUserMedia` with an oscillator `MediaStreamDestination` via `page.evaluate` (a page reload drops the stub). A telemetry prompt may cover the UI on first load: click "Decidir depois".
 - Do not use `pkill -f` to stop it; the pattern matches your own shell. `down` uses the pid file.
@@ -178,7 +178,7 @@ scripts/testenv.sh reset    # stop and delete .testenv/ (next up re-seeds)
 - Docker Compose: `backspace` + `caddy` (auto-HTTPS) + `livekit` (optional)
 - `./install.sh` — Interactive first-time setup
 - `./deploy.sh [pi|vm|all]` — Rsync + rebuild on target(s)
-- Instances: `nova.ddns.net` (Pi), `orbit.ddns.net` (VM)
+- Instances: `nova.example` (Pi), `orbit.example` (VM)
 - First registered user becomes admin (no default credentials). DB auto-backups to data/backups/; restore via ./restore.sh. See docs/systems/deployment.md.
 
 ---

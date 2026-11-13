@@ -43,7 +43,7 @@ What each patch fixes:
 - `node_linux.go`: `getTCStats()` returns 0 instead of hanging on rtnetlink.
 - `hwstats-cpu_linux.go`: treats denied `/sys/fs/cgroup` lstat as absent.
 - `anet-interface.go`: builds interfaces/addresses from
-  `LIVEKIT_PRORT_ADDRS=wlan0=10.0.1.5/24,tun1=100.113.4.54/32,lo=127.0.0.1/8`
+  `LIVEKIT_PRORT_ADDRS=wlan0=192.168.1.10/24,tun1=100.64.0.10/32,lo=127.0.0.1/8`
   instead of netlink.
 - `turn.go` / `config.go`: adds a plain TURN/TCP listener (`tcp_port`) with
   PROXY protocol support for `tailscale serve`.

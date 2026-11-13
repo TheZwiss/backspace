@@ -68,7 +68,7 @@ beforeEach(async () => {
   // Active peer
   testDb.insert(schema.federationPeers).values({
     id: 'peer-orbit',
-    origin: 'https://orbit.ddns.net',
+    origin: 'https://orbit.example',
     hmacSecret: 'a'.repeat(64),
     status: 'active',
     createdAt: Date.now(),
@@ -81,12 +81,12 @@ describe('backfillStubUsernamesForPeer', () => {
     // Seed legacy stub: username = `${homeUserId}@${domain}` (the old scheme)
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'home-1@orbit.ddns.net',
+      username: 'home-1@orbit.example',
       displayName: null,
       passwordHash: '!federation-replicated',
       status: 'offline',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'home-1',
       createdAt: Date.now(),
     }).run();
@@ -98,30 +98,30 @@ describe('backfillStubUsernamesForPeer', () => {
     });
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
-    expect(lookupCalls).toEqual([{ peerOrigin: 'https://orbit.ddns.net', homeUserId: 'home-1' }]);
+    expect(lookupCalls).toEqual([{ peerOrigin: 'https://orbit.example', homeUserId: 'home-1' }]);
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
-    expect(row!.username).toBe('pbtest3@orbit.ddns.net');
+    expect(row!.username).toBe('pbtest3@orbit.example');
     expect(row!.displayName).toBe('pbtest3'); // displayName ?? username fallback fills in real handle
   });
 
   it('skips stubs with their real name and a profile version (no lookup triggered)', async () => {
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'pbtest3@orbit.ddns.net',  // already migrated
+      username: 'pbtest3@orbit.example',  // already migrated
       displayName: 'pbtest3',
       passwordHash: '!federation-replicated',
       status: 'offline',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'home-1',
       profileUpdatedAt: 1000, // the home's profile already applied
       createdAt: Date.now(),
     }).run();
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
     expect(lookupCalls).toEqual([]); // no lookup triggered
   });
@@ -129,34 +129,34 @@ describe('backfillStubUsernamesForPeer', () => {
   it('leaves stub untouched on lookup miss (tombstoned home user)', async () => {
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'unknown-id@orbit.ddns.net',
+      username: 'unknown-id@orbit.example',
       displayName: null,
       passwordHash: '!federation-replicated',
       status: 'offline',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'unknown-id',
       createdAt: Date.now(),
     }).run();
     // No lookupResponses entry → mock returns { ok: false, reason: 'not_found' }
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
-    expect(row!.username).toBe('unknown-id@orbit.ddns.net'); // unchanged
+    expect(row!.username).toBe('unknown-id@orbit.example'); // unchanged
     expect(row!.displayName).toBeNull(); // unchanged
   });
 
   it('renames a stub named after a display name by an earlier call, from the home\'s answer', async () => {
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'kai smith@orbit.ddns.net',
+      username: 'kai smith@orbit.example',
       displayName: 'Kai Smith',
       passwordHash: '!federation-replicated',
       status: 'offline',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: '1234567890',
       createdAt: Date.now(),
     }).run();
@@ -168,11 +168,11 @@ describe('backfillStubUsernamesForPeer', () => {
     });
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
-    expect(lookupCalls).toEqual([{ peerOrigin: 'https://orbit.ddns.net', homeUserId: '1234567890' }]);
+    expect(lookupCalls).toEqual([{ peerOrigin: 'https://orbit.example', homeUserId: '1234567890' }]);
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get();
-    expect(row!.username).toBe('kai@orbit.ddns.net');
+    expect(row!.username).toBe('kai@orbit.example');
     expect(row!.displayName).toBe('Kai Smith');
   });
 
@@ -183,12 +183,12 @@ describe('backfillStubUsernamesForPeer', () => {
     for (const [id, homeUserId] of [['stub-1', '111'], ['stub-2', '222']] as const) {
       testDb.insert(schema.users).values({
         id,
-        username: `${homeUserId}@orbit.ddns.net`,
+        username: `${homeUserId}@orbit.example`,
         displayName: null,
         passwordHash: '!federation-replicated',
         status: 'offline',
         isAdmin: 0,
-        homeInstance: 'orbit.ddns.net',
+        homeInstance: 'orbit.example',
         homeUserId,
         createdAt: Date.now(),
       }).run();
@@ -208,11 +208,11 @@ describe('backfillStubUsernamesForPeer', () => {
     }));
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
     expect(lookupCalls.map(c => c.homeUserId)).toEqual(['111', '222']);
-    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!.username).toBe('111@orbit.ddns.net');
-    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-2')).get()!.username).toBe('second@orbit.ddns.net');
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!.username).toBe('111@orbit.example');
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-2')).get()!.username).toBe('second@orbit.example');
   });
 
   it('is a no-op when peer is not active', async () => {
@@ -222,12 +222,12 @@ describe('backfillStubUsernamesForPeer', () => {
       .run();
     testDb.insert(schema.users).values({
       id: 'stub-1',
-      username: 'home-1@orbit.ddns.net',
+      username: 'home-1@orbit.example',
       displayName: null,
       passwordHash: '!federation-replicated',
       status: 'offline',
       isAdmin: 0,
-      homeInstance: 'orbit.ddns.net',
+      homeInstance: 'orbit.example',
       homeUserId: 'home-1',
       createdAt: Date.now(),
     }).run();
@@ -239,15 +239,15 @@ describe('backfillStubUsernamesForPeer', () => {
     });
 
     const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
-    await backfillStubUsernamesForPeer('https://orbit.ddns.net');
+    await backfillStubUsernamesForPeer('https://orbit.example');
 
     expect(lookupCalls).toEqual([]); // gated on peer status
   });
 });
 
 describe('backfillStubUsernamesForPeer: names from before 1.8 and profiles without a version', () => {
-  const DOMAIN = 'orbit.ddns.net';
-  const ORIGIN = 'https://orbit.ddns.net';
+  const DOMAIN = 'orbit.example';
+  const ORIGIN = 'https://orbit.example';
 
   function seed(values: Partial<typeof schema.users.$inferInsert> & { id: string; username: string; homeUserId: string }): void {
     testDb.insert(schema.users).values({
