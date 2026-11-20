@@ -799,3 +799,13 @@
 {"snapshot_date":"2026-11-19","dimension":"alternativeto.net","title":"","count":3,"uniques":2}
 {"snapshot_date":"2026-11-19","dimension":"l.meta.ai","title":"","count":3,"uniques":1}
 {"snapshot_date":"2026-11-19","dimension":"steamcommunity.com","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-11-20","dimension":"Google","title":"","count":60,"uniques":46}
+{"snapshot_date":"2026-11-20","dimension":"github.com","title":"","count":56,"uniques":33}
+{"snapshot_date":"2026-11-20","dimension":"backspacechat.com","title":"","count":33,"uniques":29}
+{"snapshot_date":"2026-11-20","dimension":"chatgpt.com","title":"","count":12,"uniques":3}
+{"snapshot_date":"2026-11-20","dimension":"DuckDuckGo","title":"","count":6,"uniques":6}
+{"snapshot_date":"2026-11-20","dimension":"Bing","title":"","count":5,"uniques":5}
+{"snapshot_date":"2026-11-20","dimension":"alternativeto.net","title":"","count":4,"uniques":3}
+{"snapshot_date":"2026-11-20","dimension":"search.brave.com","title":"","count":4,"uniques":3}
+{"snapshot_date":"2026-11-20","dimension":"l.meta.ai","title":"","count":3,"uniques":1}
+{"snapshot_date":"2026-11-20","dimension":"steamcommunity.com","title":"","count":3,"uniques":3}
