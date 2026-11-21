@@ -45,6 +45,8 @@ export function MobileVoiceFullScreen() {
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
+  const hideNonVideoParticipants = useVoiceStore((s) => s.hideNonVideoParticipants);
+  const toggleHideNonVideoParticipants = useVoiceStore((s) => s.toggleHideNonVideoParticipants);
 
   const channels = useSpaceStore((s) => s.channels);
   const spaces = useSpaceStore((s) => s.spaces);
@@ -305,6 +307,25 @@ export function MobileVoiceFullScreen() {
         <span className="text-xs text-txt-tertiary">
           {t('voice:mobileCall.connectedCount', { count: participants.length })}
         </span>
+        <button
+          type="button"
+          onClick={toggleHideNonVideoParticipants}
+          aria-pressed={hideNonVideoParticipants}
+          aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
+          title={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
+          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+            hideNonVideoParticipants
+              ? 'bg-surface-elevated text-txt-primary'
+              : 'text-txt-secondary hover:text-txt-primary'
+          }`}
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            {hideNonVideoParticipants && (
+              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            )}
+          </svg>
+        </button>
         {!isDmCall && (
           <button
             onClick={() => pushMobileScreen('members')}
