@@ -23,6 +23,8 @@ import {
 interface StreamTileProps {
   tile: StreamTileType;
   large?: boolean;
+  edgeToEdge?: boolean;
+  chromeVisible?: boolean;
   stats: TrackStatsSnapshot | null;
 }
 
@@ -201,7 +203,7 @@ function handleViewerWatchToggle(sharer: StreamWatchTarget, watching: boolean): 
   void room.localParticipant.publishData(payload, { reliable: true });
 }
 
-export function StreamTile({ tile, large, stats }: StreamTileProps) {
+export function StreamTile({ tile, large, edgeToEdge = false, chromeVisible = true, stats }: StreamTileProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -417,11 +419,15 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
 
   const hasVideo = liveScreenTrack !== null;
 
+  const overlayFade = chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none';
+
   return (
     <div
       data-context-menu
-      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
-        'h-full w-full'
+      className={`relative overflow-hidden flex items-center justify-center group transition-all duration-200 h-full w-full ${
+        edgeToEdge
+          ? 'bg-black rounded-none ring-0'
+          : 'bg-surface-base rounded-xl ring-1 ring-white/[0.06] hover:ring-white/10'
       }`}
       onContextMenu={handleContextMenu}
     >
@@ -458,14 +464,14 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* LIVE badge — top left */}
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
+      <div className={`absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide transition-opacity duration-300 ease-out ${overlayFade}`}>
         {t('voice:badges.live')}
       </div>
 
       {/* Stream status — in focus mode this is the visual peer of the Grid
           action: same top edge, height, radius, and surface treatment. */}
       {(healthWarning || (qualityBadge && hasVideo)) && (
-        <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none`}>
+        <div className={`absolute top-2 left-20 ${large ? 'right-24' : 'right-2'} flex items-start justify-end gap-1.5 pointer-events-none transition-opacity duration-300 ease-out ${overlayFade}`}>
           {healthWarning && (
             <div className={`${large ? 'h-7 rounded-lg' : 'rounded'} min-w-0 max-w-full px-2 bg-black/75 border border-status-idle/40 flex items-center text-[10px] leading-[15px] text-white/90 truncate`}>
               {t(STREAM_HEALTH_KEYS[healthWarning])}
@@ -483,7 +489,7 @@ export function StreamTile({ tile, large, stats }: StreamTileProps) {
       )}
 
       {/* Bottom overlay */}
-      {hasVideo && isWatching && <div data-testid="stream-tile-caption" className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      {hasVideo && isWatching && <div data-testid="stream-tile-caption" className={`absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent transition-opacity duration-300 ease-out ${overlayFade}`}>
         <div className="flex items-center gap-1.5 min-w-0">
           {/* Screen icon */}
           <svg
