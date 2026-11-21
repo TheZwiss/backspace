@@ -63,4 +63,47 @@ describe('VoiceGrid participant strip', () => {
     await userEvent.click(screen.getByText(/show members/i));
     expect(screen.getByText(/hide members/i)).toBeInTheDocument();
   });
+
+  it('uses edge-to-edge layout and floats the members toggle cleanly above the control bar in fullscreen', async () => {
+    const { rerender } = render(
+      <VoiceGrid
+        participants={[participant('ada', true), participant('bob', false)]}
+        fullscreen
+        chromeRevealed={false}
+      />,
+    );
+
+    const focusedContainer = screen.getByTestId('focused-tile-container');
+    expect(focusedContainer.className).toContain('p-0');
+    expect(focusedContainer.className).not.toContain('p-2');
+
+    // Entering fullscreen defaults the member strip to hidden and auto-hides the toggle when chrome is idle
+    const overlay = screen.getByTestId('fullscreen-members-overlay');
+    expect(overlay.className).toContain('bottom-24');
+    expect(overlay.className).toContain('opacity-0');
+    expect(screen.getByText(/show members/i)).toBeInTheDocument();
+
+    // Pointer movement reveals the floating toggle
+    rerender(
+      <VoiceGrid
+        participants={[participant('ada', true), participant('bob', false)]}
+        fullscreen
+        chromeRevealed
+      />,
+    );
+    expect(screen.getByTestId('fullscreen-members-overlay').className).toContain('opacity-100');
+
+    // Expanding the strip moves it into normal flex flow so the video shrinks cleanly above it
+    await userEvent.click(screen.getByText(/show members/i));
+    expect(screen.getByText(/hide members/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('fullscreen-members-overlay')).not.toBeInTheDocument();
+    expect(screen.getByTestId('members-toggle-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('members-strip')).toBeInTheDocument();
+
+    // Collapsing again restores the floating pill above VoiceControlBar
+    await userEvent.click(screen.getByText(/hide members/i));
+    expect(screen.getByText(/show members/i)).toBeInTheDocument();
+    expect(screen.getByTestId('fullscreen-members-overlay')).toBeInTheDocument();
+    expect(screen.queryByTestId('members-strip')).not.toBeInTheDocument();
+  });
 });
