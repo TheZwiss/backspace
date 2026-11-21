@@ -88,7 +88,10 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
 
   const handleDisconnect = () => handleDisconnectAction();
 
-  const handleFullscreen = () => {
+  const handleFullscreen = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Release click focus so `focus-within:opacity-100` does not pin the bar
+    // open immediately after entering fullscreen via mouse click.
+    if (e.detail > 0) e.currentTarget.blur();
     toggleVoiceFullscreen();
   };
 
