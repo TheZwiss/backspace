@@ -16,6 +16,7 @@ export class AudioManager {
   
   private currentInputDeviceId: string = 'default';
   private desiredOutputDeviceId: string = 'default';
+  private desiredInputVolume = 100;
   private currentStream: MediaStream | null = null;
   private isInitialized = false;
   
@@ -33,6 +34,14 @@ export class AudioManager {
   private rnnoiseEnabled = false;
   private rnnoiseReady = false;
   private keepAliveOscillator: OscillatorNode | null = null;
+  private keepAliveGain: GainNode | null = null;
+
+  // Reference-counted audio lifecycle so the AudioContext suspends when idle
+  // and releases the OS audio device / DAC instead of holding it open 24/7.
+  private static readonly IDLE_SUSPEND_DELAY_MS = 1500;
+  private audioSessions: Set<symbol> = new Set();
+  private activePlaybackCount = 0;
+  private idleSuspendTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Cached `getUserMedia` denial. After a NotAllowedError, subsequent
   // `setInputDevice` calls (e.g. `useLiveKit.syncMic` racing the user's
@@ -93,19 +102,11 @@ export class AudioManager {
     this.inputGain.connect(this.silentGain);
     this.silentGain.connect(this.ctx.destination);
 
-    this.inputGain.gain.setValueAtTime(1, this.ctx.currentTime);
+    this.inputGain.gain.setValueAtTime(this.desiredInputVolume / 100, this.ctx.currentTime);
 
-    // Safari suspends the AudioContext when it detects no audible output,
-    // even while WebRTC audio is flowing through the pipeline. A sub-bass
-    // oscillator at near-zero gain keeps the rendering thread alive without
-    // producing audible sound.
-    this.keepAliveOscillator = this.ctx.createOscillator();
-    this.keepAliveOscillator.frequency.value = 20;
-    const keepAliveGain = this.ctx.createGain();
-    keepAliveGain.gain.value = 0.00001;
-    this.keepAliveOscillator.connect(keepAliveGain);
-    keepAliveGain.connect(this.ctx.destination);
-    this.keepAliveOscillator.start();
+    if (this.audioSessions.size > 0) {
+      this.startKeepAlive();
+    }
 
     this.ctx.onstatechange = () => {
       console.log(`[AudioManager] Context state: ${this.ctx?.state}`);
@@ -118,6 +119,91 @@ export class AudioManager {
 
     // Apply pending output device selection (user preference loaded before context creation)
     this.applyOutputDevice();
+  }
+
+  /**
+   * Safari suspends the AudioContext when it detects no audible output, even
+   * while WebRTC audio is flowing through the pipeline. A sub-bass oscillator
+   * at near-zero gain keeps the rendering thread alive without audible sound,
+   * but MUST only run while an active audio session (voice call / remote track)
+   * is held — running it permanently keeps the OS audio interface / DAC active
+   * even when the app is idle.
+   */
+  private startKeepAlive(): void {
+    if (!this.ctx || this.keepAliveOscillator) return;
+    const osc = this.ctx.createOscillator();
+    osc.frequency.value = 20;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.00001;
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    this.keepAliveOscillator = osc;
+    this.keepAliveGain = gain;
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAliveOscillator) {
+      try {
+        this.keepAliveOscillator.stop();
+      } catch {
+        // Ignore if already stopped
+      }
+      this.keepAliveOscillator.disconnect();
+      this.keepAliveOscillator = null;
+    }
+    if (this.keepAliveGain) {
+      this.keepAliveGain.disconnect();
+      this.keepAliveGain = null;
+    }
+  }
+
+  private clearIdleSuspendTimer(): void {
+    if (this.idleSuspendTimer !== null) {
+      clearTimeout(this.idleSuspendTimer);
+      this.idleSuspendTimer = null;
+    }
+  }
+
+  private isAudioInUse(): boolean {
+    return this.audioSessions.size > 0 || this.activePlaybackCount > 0 || this.hasActiveStream();
+  }
+
+  private scheduleIdleSuspendIfUnused(): void {
+    if (!this.ctx || this.ctx.state !== 'running' || this.isAudioInUse()) return;
+    this.clearIdleSuspendTimer();
+    this.idleSuspendTimer = setTimeout(() => {
+      this.idleSuspendTimer = null;
+      if (!this.ctx || this.ctx.state !== 'running' || this.isAudioInUse()) return;
+      void this.ctx.suspend().catch((err: unknown) => {
+        console.error('[AudioManager] Failed to suspend idle context:', err);
+      });
+    }, AudioManager.IDLE_SUSPEND_DELAY_MS);
+  }
+
+  /**
+   * Acquires a keep-alive lease on the AudioContext (e.g. while connected to a
+   * voice channel or playing a remote audio track). While at least one lease is
+   * held, the context will not auto-suspend and the Safari keep-alive oscillator
+   * stays active. Returns an idempotent release function.
+   */
+  acquireAudioSession(): () => void {
+    const token = Symbol('audio-session');
+    this.audioSessions.add(token);
+    this.clearIdleSuspendTimer();
+    if (this.ctx) {
+      this.startKeepAlive();
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.audioSessions.delete(token);
+      if (this.audioSessions.size === 0) {
+        this.stopKeepAlive();
+        this.scheduleIdleSuspendIfUnused();
+      }
+    };
   }
 
   /**
@@ -152,6 +238,7 @@ export class AudioManager {
   }
 
   async resumeContext() {
+    this.clearIdleSuspendTimer();
     if (!this.ctx) this.initContext();
     if (this.ctx && this.ctx.state === 'suspended') {
       try {
@@ -161,6 +248,7 @@ export class AudioManager {
         console.error('[AudioManager] Failed to resume context:', err);
       }
     }
+    this.scheduleIdleSuspendIfUnused();
   }
 
   async loadSound(name: string): Promise<AudioBuffer | null> {
@@ -184,44 +272,68 @@ export class AudioManager {
   }
 
   async playSound(name: string, options: { loop?: boolean; volume?: number } = {}): Promise<AudioBufferSourceNode | null> {
-    await this.resumeContext();
-    const buffer = await this.loadSound(name);
-    if (!buffer || !this.ctx) return null;
+    this.activePlaybackCount++;
+    this.clearIdleSuspendTimer();
+    let playbackCompleted = false;
+    const finishPlayback = () => {
+      if (playbackCompleted) return;
+      playbackCompleted = true;
+      this.activePlaybackCount = Math.max(0, this.activePlaybackCount - 1);
+      this.scheduleIdleSuspendIfUnused();
+    };
 
-    const source = this.ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = options.loop || false;
-
-    const gainNode = this.ctx.createGain();
-    const targetVolume = options.volume ?? 0.8;
-
-    // Short attack/release envelope to avoid the click/pop that occurs when a
-    // buffer starts (or ends) at a non-zero sample amplitude. Without this the
-    // waveform's first sample jumps from silence instantly, producing an
-    // audible pop — most noticeable on the looping call cues. Mirrors the
-    // envelope used by playTestTone().
-    const now = this.ctx.currentTime;
-    const attack = 0.01; // 10ms fade-in — kills the start pop, imperceptible
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(targetVolume, now + attack);
-
-    // Tail fade-out for one-shots so they don't pop at the natural end of the
-    // buffer. Looping cues are stopped explicitly by the caller, so they ramp
-    // in once and hold; no tail ramp is scheduled for them.
-    if (!source.loop) {
-      const release = 0.01; // 10ms fade-out
-      const dur = buffer.duration;
-      if (dur > attack + release) {
-        gainNode.gain.setValueAtTime(targetVolume, now + dur - release);
-        gainNode.gain.linearRampToValueAtTime(0, now + dur);
+    try {
+      await this.resumeContext();
+      const buffer = await this.loadSound(name);
+      if (!buffer || !this.ctx) {
+        finishPlayback();
+        return null;
       }
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = options.loop || false;
+
+      const gainNode = this.ctx.createGain();
+      const targetVolume = options.volume ?? 0.8;
+
+      // Short attack/release envelope to avoid the click/pop that occurs when a
+      // buffer starts (or ends) at a non-zero sample amplitude. Without this the
+      // waveform's first sample jumps from silence instantly, producing an
+      // audible pop — most noticeable on the looping call cues. Mirrors the
+      // envelope used by playTestTone().
+      const now = this.ctx.currentTime;
+      const attack = 0.01; // 10ms fade-in — kills the start pop, imperceptible
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(targetVolume, now + attack);
+
+      // Tail fade-out for one-shots so they don't pop at the natural end of the
+      // buffer. Looping cues are stopped explicitly by the caller, so they ramp
+      // in once and hold; no tail ramp is scheduled for them.
+      if (!source.loop) {
+        const release = 0.01; // 10ms fade-out
+        const dur = buffer.duration;
+        if (dur > attack + release) {
+          gainNode.gain.setValueAtTime(targetVolume, now + dur - release);
+          gainNode.gain.linearRampToValueAtTime(0, now + dur);
+        }
+      }
+
+      source.onended = () => {
+        source.disconnect();
+        gainNode.disconnect();
+        finishPlayback();
+      };
+
+      source.connect(gainNode);
+      gainNode.connect(this.masterBoost!);
+
+      source.start(now);
+      return source;
+    } catch (err) {
+      finishPlayback();
+      throw err;
     }
-
-    source.connect(gainNode);
-    gainNode.connect(this.masterBoost!);
-
-    source.start(now);
-    return source;
   }
 
   /**
@@ -305,6 +417,7 @@ export class AudioManager {
       this.currentStream = newStream;
       this.currentInputDeviceId = deviceId;
       this.streamGeneration++;
+      this.clearIdleSuspendTimer();
 
       // Attach upstream-loss detection to every track in the new stream. If the
       // OS / hardware ends a track (unplug, revoke, audio-service crash), the
@@ -378,6 +491,7 @@ export class AudioManager {
     // The missing currentStream makes the next join acquire a fresh stream.
     this.currentInputDeviceId = 'default';
     this.streamGeneration++;
+    this.scheduleIdleSuspendIfUnused();
   }
 
   /**
@@ -496,7 +610,7 @@ export class AudioManager {
   }
 
   setInputVolume(volume: number) {
-    if (!this.isInitialized) this.initContext();
+    this.desiredInputVolume = volume;
     if (this.inputGain && this.ctx) {
       const gainValue = volume / 100;
       this.inputGain.gain.setTargetAtTime(gainValue, this.ctx.currentTime, 0.1);
@@ -595,20 +709,42 @@ export class AudioManager {
    * settings to confirm that audio is reaching the chosen output device.
    */
   async playTestTone(): Promise<void> {
-    await this.resumeContext();
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    osc.frequency.value = 440;
-    const gain = this.ctx.createGain();
-    // Soft envelope to avoid pop on start/stop.
-    const now = this.ctx.currentTime;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
-    gain.gain.linearRampToValueAtTime(0, now + 0.4);
-    osc.connect(gain);
-    gain.connect(this.masterBoost!);
-    osc.start(now);
-    osc.stop(now + 0.45);
+    this.activePlaybackCount++;
+    this.clearIdleSuspendTimer();
+    let completed = false;
+    const finish = () => {
+      if (completed) return;
+      completed = true;
+      this.activePlaybackCount = Math.max(0, this.activePlaybackCount - 1);
+      this.scheduleIdleSuspendIfUnused();
+    };
+    try {
+      await this.resumeContext();
+      if (!this.ctx) {
+        finish();
+        return;
+      }
+      const osc = this.ctx.createOscillator();
+      osc.frequency.value = 440;
+      const gain = this.ctx.createGain();
+      // Soft envelope to avoid pop on start/stop.
+      const now = this.ctx.currentTime;
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+      gain.gain.linearRampToValueAtTime(0, now + 0.4);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+        finish();
+      };
+      osc.connect(gain);
+      gain.connect(this.masterBoost!);
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } catch (err) {
+      finish();
+      throw err;
+    }
   }
 
   getContext(): AudioContext | null {

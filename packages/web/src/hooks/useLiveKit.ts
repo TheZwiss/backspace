@@ -334,6 +334,11 @@ export function useLiveKit() {
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
 
   const lastMicGenRef = useRef(0);
+  const releaseAudioSessionRef = useRef<(() => void) | null>(null);
+  const releaseAudioSession = useCallback(() => {
+    releaseAudioSessionRef.current?.();
+    releaseAudioSessionRef.current = null;
+  }, []);
 
   const updateParticipants = useCallback(() => {
     const r = roomRef.current;
@@ -740,6 +745,12 @@ export function useLiveKit() {
     };
     const gen = ++_connectGeneration;
 
+    // Hold an audio session lease for the duration of this voice connection so
+    // the AudioContext stays running (and Safari's keep-alive stays active) while
+    // in voice, then auto-suspends once disconnected and idle.
+    releaseAudioSession();
+    releaseAudioSessionRef.current = AudioManager.getInstance().acquireAudioSession();
+
     // Ensure AudioContext is created and resumed before tracks arrive
     await AudioManager.getInstance().resumeContext();
     if (gen !== _connectGeneration) return;
@@ -1080,6 +1091,7 @@ export function useLiveKit() {
         // Keep that attempt current so its catch can report the failure.
         if (!initialConnectPending) _connectGeneration++;
         AudioManager.getInstance().releaseInputStream();
+        releaseAudioSession();
         SpeakingDetector.getInstance().clear();
         setConnectionState(ConnectionState.Disconnected);
         setIsConnecting(false);
@@ -1144,19 +1156,21 @@ export function useLiveKit() {
     } catch (err) {
       if (gen === _connectGeneration) {
         AudioManager.getInstance().releaseInputStream();
+        releaseAudioSession();
         setConnectionError('connect_failed');
         useVoiceStore.getState().leaveVoice();
         useVoiceStore.getState().setConnectionError('connect_failed');
       }
     }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived]);
+  }, [updateParticipants, handleDataReceived, releaseAudioSession]);
 
   const disconnect = useCallback(async () => {
     const gen = ++_connectGeneration;
     // Release before SDK teardown, even if token fetching has not made a Room
     // yet. A late teardown must never stop a subsequent call's fresh capture.
     AudioManager.getInstance().releaseInputStream();
+    releaseAudioSession();
     SpeakingDetector.getInstance().clear();
     deactivateHwOverdrive();
     connectedChannelRef.current = null;
@@ -1181,7 +1195,7 @@ export function useLiveKit() {
     useVoiceStore.getState().setVoiceConnectionStatus('disconnected');
     useVoiceStore.getState().setSpeakingParticipants(new Set());
     useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
-  }, []);
+  }, [releaseAudioSession]);
 
   const toggleMic = useCallback(async () => { 
     await AudioManager.getInstance().resumeContext();
@@ -1242,6 +1256,7 @@ export function useLiveKit() {
       SpeakingDetector.getInstance().clear();
       deactivateHwOverdrive();
       AudioManager.getInstance().releaseInputStream();
+      releaseAudioSession();
       const roomToDestroy = roomRef.current;
       roomRef.current = null;
       _activeRoom = null;
@@ -1250,7 +1265,7 @@ export function useLiveKit() {
         void destroyRoom(roomToDestroy);
       }
     };
-  }, []);
+  }, [releaseAudioSession]);
 
 
   return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic };

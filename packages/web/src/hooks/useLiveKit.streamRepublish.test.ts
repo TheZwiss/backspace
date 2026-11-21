@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   token: vi.fn(),
   connect: vi.fn(), disconnect: vi.fn(),
   audio: {
+    acquireAudioSession: vi.fn(() => vi.fn()),
     releaseInputStream: vi.fn(), resumeContext: vi.fn(),
     setVoiceProcessing: vi.fn(), setRnnoiseEnabled: vi.fn(),
     setInputDevice: vi.fn(), setInputVolume: vi.fn(),
