@@ -918,8 +918,12 @@ function UserAreaPanel({
 
     const start = async () => {
       try {
-        await AudioManager.getInstance().resumeContext();
-        const analyser = AudioManager.getInstance().getAnalyserNode();
+        const am = AudioManager.getInstance();
+        // Only wake the audio pipeline for the live meter when a mic stream is
+        // actually active — opening the popover while idle must not wake the DAC.
+        if (!am.hasActiveStream()) return;
+        await am.resumeContext();
+        const analyser = am.getAnalyserNode();
         analyser.fftSize = 256;
         analyserRef.current = analyser;
         
@@ -960,8 +964,12 @@ function UserAreaPanel({
       setOpenPanel(panel);
       setShowInputDeviceList(false);
       setShowOutputDeviceList(false);
-      // Resume the AudioContext so the mic-level meter starts measuring on open.
-      AudioManager.getInstance().resumeContext();
+      // Resume the AudioContext only when opening the input panel with an
+      // active mic stream so the mic-level meter starts measuring without
+      // waking the audio interface while idle.
+      if (panel === 'input' && AudioManager.getInstance().hasActiveStream()) {
+        AudioManager.getInstance().resumeContext();
+      }
     }
   };
 

@@ -54,24 +54,9 @@ export function AppLayout() {
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
-  // Global interaction handler to resume AudioContext
-  useEffect(() => {
-    const resume = () => {
-      AudioManager.getInstance().resumeContext().then(() => {
-        window.removeEventListener('click', resume);
-        window.removeEventListener('keydown', resume);
-        window.removeEventListener('touchstart', resume);
-      });
-    };
-    window.addEventListener('click', resume);
-    window.addEventListener('keydown', resume);
-    window.addEventListener('touchstart', resume);
-    return () => {
-      window.removeEventListener('click', resume);
-      window.removeEventListener('keydown', resume);
-      window.removeEventListener('touchstart', resume);
-    };
-  }, []);
+  // AudioContext is created and resumed lazily when voice/audio actually plays
+  // (and auto-suspends when idle) so opening or browsing the app never holds
+  // the user's audio interface / DAC active unnecessarily.
 
   // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
   // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback
