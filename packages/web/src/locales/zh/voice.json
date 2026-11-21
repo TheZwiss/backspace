@@ -37,7 +37,9 @@
     "backToGrid": "返回网格视图",
     "gridButton": "网格",
     "showMembers": "显示成员",
-    "hideMembers": "隐藏成员"
+    "hideMembers": "隐藏成员",
+    "noVideoParticipants": "目前没有开启视频的参与者",
+    "showAllParticipants": "显示所有参与者"
   },
   "connectionInfo": {
     "title": "连接信息",
@@ -194,6 +196,8 @@
     "shareScreen": "共享屏幕",
     "shareOptions": "屏幕共享选项",
     "toggleChat": "切换聊天窗口",
+    "hideNonVideo": "隐藏无视频参与者",
+    "showNonVideo": "显示无视频参与者",
     "exitFullscreen": "退出全屏 (Esc)",
     "fullscreen": "全屏",
     "disconnect": "断开连接",

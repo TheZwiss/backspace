@@ -37,7 +37,9 @@
     "backToGrid": "Voltar à visualização em grade",
     "gridButton": "Grade",
     "showMembers": "Mostrar membros",
-    "hideMembers": "Ocultar membros"
+    "hideMembers": "Ocultar membros",
+    "noVideoParticipants": "Nenhum participante com vídeo no momento",
+    "showAllParticipants": "Mostrar todos os participantes"
   },
   "connectionInfo": {
     "title": "Informações da conexão",
@@ -194,6 +196,8 @@
     "shareScreen": "Compartilhar tela",
     "shareOptions": "Opções de compartilhamento de tela",
     "toggleChat": "Alternar chat",
+    "hideNonVideo": "Ocultar participantes sem vídeo",
+    "showNonVideo": "Mostrar participantes sem vídeo",
     "exitFullscreen": "Sair da tela cheia (Esc)",
     "fullscreen": "Tela cheia",
     "disconnect": "Desconectar",

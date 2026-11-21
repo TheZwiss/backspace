@@ -37,7 +37,9 @@
     "backToGrid": "Вернуться к сетке",
     "gridButton": "Сетка",
     "showMembers": "Показать участников",
-    "hideMembers": "Скрыть участников"
+    "hideMembers": "Скрыть участников",
+    "noVideoParticipants": "Сейчас нет участников с видео",
+    "showAllParticipants": "Показать всех участников"
   },
   "connectionInfo": {
     "title": "Сведения о соединении",
@@ -194,6 +196,8 @@
     "shareScreen": "Демонстрировать экран",
     "shareOptions": "Параметры демонстрации экрана",
     "toggleChat": "Показать или скрыть чат",
+    "hideNonVideo": "Скрыть участников без видео",
+    "showNonVideo": "Показать участников без видео",
     "exitFullscreen": "Выйти из полноэкранного режима (Esc)",
     "fullscreen": "Полноэкранный режим",
     "disconnect": "Отключиться",

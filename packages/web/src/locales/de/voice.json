@@ -37,7 +37,9 @@
     "backToGrid": "Zurück zur Rasteransicht",
     "gridButton": "Raster",
     "showMembers": "Mitglieder anzeigen",
-    "hideMembers": "Mitglieder ausblenden"
+    "hideMembers": "Mitglieder ausblenden",
+    "noVideoParticipants": "Derzeit keine Teilnehmer mit Video",
+    "showAllParticipants": "Alle Teilnehmer anzeigen"
   },
   "connectionInfo": {
     "title": "Verbindungsinfo",
@@ -194,6 +196,8 @@
     "shareScreen": "Bildschirm teilen",
     "shareOptions": "Bildschirmfreigabe-Optionen",
     "toggleChat": "Chat ein- oder ausblenden",
+    "hideNonVideo": "Teilnehmer ohne Video ausblenden",
+    "showNonVideo": "Teilnehmer ohne Video anzeigen",
     "exitFullscreen": "Vollbild verlassen (Esc)",
     "fullscreen": "Vollbild",
     "disconnect": "Trennen",
