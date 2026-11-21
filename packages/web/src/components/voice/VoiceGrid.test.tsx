@@ -93,10 +93,17 @@ describe('VoiceGrid participant strip', () => {
     );
     expect(screen.getByTestId('fullscreen-members-overlay').className).toContain('opacity-100');
 
-    // Expanding the strip keeps it visible and allows collapsing again
+    // Expanding the strip moves it into normal flex flow so the video shrinks cleanly above it
     await userEvent.click(screen.getByText(/show members/i));
     expect(screen.getByText(/hide members/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('fullscreen-members-overlay')).not.toBeInTheDocument();
+    expect(screen.getByTestId('members-toggle-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('members-strip')).toBeInTheDocument();
+
+    // Collapsing again restores the floating pill above VoiceControlBar
     await userEvent.click(screen.getByText(/hide members/i));
     expect(screen.getByText(/show members/i)).toBeInTheDocument();
+    expect(screen.getByTestId('fullscreen-members-overlay')).toBeInTheDocument();
+    expect(screen.queryByTestId('members-strip')).not.toBeInTheDocument();
   });
 });

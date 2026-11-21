@@ -168,43 +168,38 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
           </button>
         </div>
 
-        {/* Fullscreen: float the Hide/Show Members control (and strip when expanded)
-            above VoiceControlBar so it neither shrinks the fullscreen video nor
-            overlaps the bottom control bar, and auto-hides with the fullscreen chrome. */}
-        {fullscreen && otherTiles.length > 0 && (
+        {/* Fullscreen (strip hidden): float only the Show Members pill above
+            VoiceControlBar so the video stays 100% edge-to-edge and the pill
+            never overlaps controls, auto-hiding with chromeRevealed. */}
+        {fullscreen && stripHidden && otherTiles.length > 0 && (
           <div
             data-testid="fullscreen-members-overlay"
             {...{ [VOICE_CHROME_ATTR]: '' }}
-            className={`absolute inset-x-0 bottom-24 z-20 flex flex-col items-center gap-2 transition-opacity duration-300 ease-out ${
-              stripHidden ? fullscreenChromeFade : 'opacity-100'
-            }`}
+            className={`absolute bottom-24 left-1/2 -translate-x-1/2 z-20 transition-opacity duration-300 ease-out ${fullscreenChromeFade}`}
           >
             {membersToggleButton}
-            {!stripHidden && (
-              <div className="w-full h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex items-center justify-center gap-2 px-4 py-2 bg-black/65 backdrop-blur-md overflow-x-auto no-scrollbar">
-                {otherTiles.map((t) => (
-                  <div
-                    key={t.key}
-                    onClick={() => setFocusedParticipant(t.key)}
-                    className="h-full aspect-video flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                  >
-                    {renderTile(t)}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
-        {/* Docked mode: centered Hide/Show Members divider + flow-layout bottom strip */}
-        {!fullscreen && otherTiles.length > 0 && (
-          <div className="flex justify-center flex-shrink-0 py-1">
+        {/* Docked mode, or fullscreen with the strip explicitly expanded:
+            keep the Hide/Show Members divider + strip in normal flex flow so
+            the focused video shrinks cleanly above the strip without overlap. */}
+        {(!fullscreen || !stripHidden) && otherTiles.length > 0 && (
+          <div
+            data-testid="members-toggle-bar"
+            className={`flex justify-center flex-shrink-0 py-1 ${fullscreen ? 'bg-black' : ''}`}
+          >
             {membersToggleButton}
           </div>
         )}
 
-        {!fullscreen && !stripHidden && otherTiles.length > 0 && (
-          <div className="h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
+        {!stripHidden && otherTiles.length > 0 && (
+          <div
+            data-testid="members-strip"
+            className={`h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 overflow-x-auto no-scrollbar ${
+              fullscreen ? 'bg-surface-base/90' : 'bg-surface-base/50'
+            }`}
+          >
             {otherTiles.map((t) => (
               <div
                 key={t.key}
