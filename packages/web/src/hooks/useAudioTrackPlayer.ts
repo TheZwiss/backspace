@@ -72,7 +72,9 @@ export function useAudioTrackPlayer(
     }
 
     // --- Web Audio pipeline for actual output ---
-    const ctx = AudioManager.getInstance().ensureContext();
+    const audioManager = AudioManager.getInstance();
+    const releaseAudioSession = audioManager.acquireAudioSession();
+    const ctx = audioManager.ensureContext();
 
     const stream = new MediaStream([track]);
     const source = ctx.createMediaStreamSource(stream);
@@ -84,7 +86,7 @@ export function useAudioTrackPlayer(
     gain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.015);
 
     source.connect(gain);
-    gain.connect(AudioManager.getInstance().getMasterOutput());
+    gain.connect(audioManager.getMasterOutput());
 
     sourceRef.current = source;
     gainRef.current = gain;
@@ -94,6 +96,7 @@ export function useAudioTrackPlayer(
       gain.disconnect();
       sourceRef.current = null;
       gainRef.current = null;
+      releaseAudioSession();
     };
   }, [track]);
 
