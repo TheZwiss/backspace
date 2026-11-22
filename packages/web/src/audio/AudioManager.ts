@@ -112,6 +112,8 @@ export class AudioManager {
       console.log(`[AudioManager] Context state: ${this.ctx?.state}`);
       if (this.ctx?.state === 'running') {
         this.notifyResumed();
+      } else if (this.isContextInterrupted() && !this.isAudioInUse()) {
+        this.scheduleIdleSuspendIfUnused();
       }
     };
 
@@ -165,17 +167,32 @@ export class AudioManager {
     }
   }
 
+  private isContextInterrupted(): boolean {
+    // iOS Safari uses the non-standard `'interrupted'` AudioContextState after
+    // phone calls, Siri, or background audio interruptions.
+    return (this.ctx?.state as string | undefined) === 'interrupted';
+  }
+
+  private isSuspendableContextState(): boolean {
+    if (!this.ctx) return false;
+    return this.ctx.state === 'running' || this.isContextInterrupted();
+  }
+
+  isContextRunning(): boolean {
+    return this.ctx?.state === 'running';
+  }
+
   private isAudioInUse(): boolean {
     return this.audioSessions.size > 0 || this.activePlaybackCount > 0 || this.hasActiveStream();
   }
 
   private scheduleIdleSuspendIfUnused(): void {
-    if (!this.ctx || this.ctx.state !== 'running' || this.isAudioInUse()) return;
+    if (!this.isSuspendableContextState() || this.isAudioInUse()) return;
     this.clearIdleSuspendTimer();
     this.idleSuspendTimer = setTimeout(() => {
       this.idleSuspendTimer = null;
-      if (!this.ctx || this.ctx.state !== 'running' || this.isAudioInUse()) return;
-      void this.ctx.suspend().catch((err: unknown) => {
+      if (!this.isSuspendableContextState() || this.isAudioInUse()) return;
+      void this.ctx!.suspend().catch((err: unknown) => {
         console.error('[AudioManager] Failed to suspend idle context:', err);
       });
     }, AudioManager.IDLE_SUSPEND_DELAY_MS);
@@ -240,7 +257,7 @@ export class AudioManager {
   async resumeContext() {
     this.clearIdleSuspendTimer();
     if (!this.ctx) this.initContext();
-    if (this.ctx && this.ctx.state === 'suspended') {
+    if (this.ctx && (this.ctx.state === 'suspended' || this.isContextInterrupted())) {
       try {
         await this.ctx.resume();
         console.log('[AudioManager] AudioContext resumed.');

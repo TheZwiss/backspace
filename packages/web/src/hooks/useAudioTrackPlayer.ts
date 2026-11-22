@@ -62,19 +62,105 @@ export function useAudioTrackPlayer(
     }
 
     // --- Keep-alive: attach track to <audio> element (always muted) ---
-    // Chrome needs an HTML element consuming the WebRTC track or it
-    // stops the audio pipeline for that track entirely.
-    if (audioEl) {
-      audioEl.srcObject = new MediaStream([track]);
-      audioEl.muted = true;
-      audioEl.volume = 0;
-      audioEl.play().catch(() => {});
+    // Chrome / Samsung Internet need a playing HTML media element consuming the
+    // WebRTC track or Chromium's audio pipeline outputs silence (zero samples) to
+    // MediaStreamAudioSourceNode — breaking both remote playback and SpeakingDetector.
+    // Mobile browsers can reject the initial play() if the remote track arrives
+    // outside a user gesture, so retry on the next gesture / visibility / resume.
+    const audioManager = AudioManager.getInstance();
+    let gestureListenersAttached = false;
+    let disposed = false;
+
+    const isPlaybackHealthy = () =>
+      audioManager.isContextRunning() && (!audioEl || !audioEl.paused);
+
+    const removeGestureListeners = () => {
+      if (!gestureListenersAttached) return;
+      gestureListenersAttached = false;
+      document.removeEventListener('touchstart', onGesture);
+      document.removeEventListener('pointerdown', onGesture);
+      document.removeEventListener('click', onGesture);
+      document.removeEventListener('keydown', onGesture);
+    };
+
+    const attachGestureListeners = () => {
+      if (disposed || gestureListenersAttached) return;
+      gestureListenersAttached = true;
+      document.addEventListener('touchstart', onGesture, { passive: true });
+      document.addEventListener('pointerdown', onGesture, { passive: true });
+      document.addEventListener('click', onGesture, { passive: true });
+      document.addEventListener('keydown', onGesture, { passive: true });
+    };
+
+    const attemptPlay = () => {
+      if (disposed || !audioEl || !audioEl.srcObject) {
+        if (!disposed && isPlaybackHealthy()) removeGestureListeners();
+        return;
+      }
+      void audioEl.play().then(() => {
+        if (disposed) return;
+        // On iOS Safari, muted <audio>.play() resolves without a user gesture
+        // even while the Web AudioContext is still 'suspended' or 'interrupted'.
+        // Keep gesture listeners attached until the AudioContext is also running.
+        if (isPlaybackHealthy()) {
+          removeGestureListeners();
+        }
+      }).catch(() => {
+        // Will retry on next user gesture / resume / visibility change
+      });
+    };
+
+    function onGesture() {
+      void audioManager.resumeContext().then(() => {
+        if (disposed) return;
+        if (isPlaybackHealthy()) removeGestureListeners();
+      });
+      attemptPlay();
     }
 
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!isPlaybackHealthy()) {
+        attachGestureListeners();
+        void audioManager.resumeContext().then(() => {
+          if (disposed) return;
+          if (isPlaybackHealthy()) removeGestureListeners();
+        });
+        attemptPlay();
+      }
+    };
+
+    if (audioEl) {
+      audioEl.defaultMuted = true;
+      audioEl.muted = true;
+      audioEl.volume = 0;
+      audioEl.srcObject = new MediaStream([track]);
+    }
+
+    const unsubResume = audioManager.onResumed(() => {
+      if (audioEl && audioEl.paused) {
+        attemptPlay();
+      } else if (isPlaybackHealthy()) {
+        removeGestureListeners();
+      }
+    });
+    document.addEventListener('visibilitychange', onVisibility);
+    attachGestureListeners();
+
+    const cleanupPlayRetry = () => {
+      disposed = true;
+      unsubResume();
+      removeGestureListeners();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+
     // --- Web Audio pipeline for actual output ---
-    const audioManager = AudioManager.getInstance();
     const releaseAudioSession = audioManager.acquireAudioSession();
     const ctx = audioManager.ensureContext();
+    void audioManager.resumeContext().then(() => {
+      if (!disposed && isPlaybackHealthy()) removeGestureListeners();
+    });
+    attemptPlay();
 
     const stream = new MediaStream([track]);
     const source = ctx.createMediaStreamSource(stream);
@@ -92,6 +178,7 @@ export function useAudioTrackPlayer(
     gainRef.current = gain;
 
     return () => {
+      cleanupPlayRetry();
       source.disconnect();
       gain.disconnect();
       sourceRef.current = null;

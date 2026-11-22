@@ -281,4 +281,26 @@ describe('AudioManager idle suspension and keep-alive lifecycle', () => {
     await vi.advanceTimersByTimeAsync(1500);
     expect(mockCtx.suspend).toHaveBeenCalledTimes(1);
   });
+
+  it('resumes an iOS interrupted AudioContext on resumeContext()', async () => {
+    am.ensureContext();
+    (mockCtx as unknown as { state: string }).state = 'interrupted';
+    expect(am.isContextRunning()).toBe(false);
+
+    await am.resumeContext();
+
+    expect(mockCtx.resume).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('running');
+    expect(am.isContextRunning()).toBe(true);
+  });
+
+  it('schedules idle suspend when AudioContext transitions to interrupted while unused', async () => {
+    am.ensureContext();
+    (mockCtx as unknown as { state: string }).state = 'interrupted';
+    mockCtx.onstatechange?.();
+
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('suspended');
+  });
 });
