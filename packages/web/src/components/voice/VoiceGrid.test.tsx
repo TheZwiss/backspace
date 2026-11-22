@@ -76,6 +76,7 @@ describe('VoiceGrid participant strip', () => {
     const focusedContainer = screen.getByTestId('focused-tile-container');
     expect(focusedContainer.className).toContain('p-0');
     expect(focusedContainer.className).not.toContain('p-2');
+    expect(focusedContainer).not.toHaveAttribute('title');
 
     // Entering fullscreen defaults the member strip to hidden and auto-hides the toggle when chrome is idle
     const overlay = screen.getByTestId('fullscreen-members-overlay');

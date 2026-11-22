@@ -139,7 +139,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
           data-testid="focused-tile-container"
           className={`flex-1 min-h-0 cursor-pointer relative ${fullscreen ? 'p-0 bg-black' : 'p-2'}`}
           onClick={() => setFocusedParticipant(null)}
-          title={t('voice:grid.returnToGridHint')}
+          title={fullscreen ? undefined : t('voice:grid.returnToGridHint')}
         >
           {renderTile(focusedTile, {
             large: true,
