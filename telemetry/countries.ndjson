@@ -401,3 +401,11 @@
 {"snapshot_date":"2026-11-20","dimension":"US","title":"","count":5,"uniques":5}
 {"snapshot_date":"2026-11-20","dimension":"IR","title":"","count":3,"uniques":3}
 {"snapshot_date":"2026-11-20","dimension":"NL","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-11-21","dimension":"RU","title":"","count":20,"uniques":20}
+{"snapshot_date":"2026-11-21","dimension":"BR","title":"","count":14,"uniques":14}
+{"snapshot_date":"2026-11-21","dimension":"other","title":"","count":14,"uniques":14}
+{"snapshot_date":"2026-11-21","dimension":"DE","title":"","count":6,"uniques":6}
+{"snapshot_date":"2026-11-21","dimension":"FR","title":"","count":5,"uniques":5}
+{"snapshot_date":"2026-11-21","dimension":"US","title":"","count":5,"uniques":5}
+{"snapshot_date":"2026-11-21","dimension":"IR","title":"","count":3,"uniques":3}
+{"snapshot_date":"2026-11-21","dimension":"NL","title":"","count":3,"uniques":3}
