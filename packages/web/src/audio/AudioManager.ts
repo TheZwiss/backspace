@@ -44,6 +44,7 @@ export class AudioManager {
   private activePlaybackCount = 0;
   private idleSuspendTimer: ReturnType<typeof setTimeout> | null = null;
   private visibilityListenerAttached = false;
+  private interruptedWhileActive = false;
 
   // Cached `getUserMedia` denial. After a NotAllowedError, subsequent
   // `setInputDevice` calls (e.g. `useLiveKit.syncMic` racing the user's
@@ -114,24 +115,34 @@ export class AudioManager {
       console.log(`[AudioManager] Context state: ${this.ctx?.state}`);
       if (this.ctx?.state === 'running') {
         this.notifyResumed();
-      } else if (this.isContextInterrupted() && !this.isAudioInUse()) {
-        this.scheduleIdleSuspendIfUnused();
+      } else if (this.isContextInterrupted()) {
+        if (this.audioSessions.size > 0) {
+          this.interruptedWhileActive = true;
+        } else if (!this.isAudioInUse()) {
+          this.scheduleIdleSuspendIfUnused();
+        }
       }
     };
 
     this.isInitialized = true;
 
     // On iOS Safari, backgrounding puts the AudioContext in 'interrupted'.
-    // Automatically resume when returning to foreground if a voice session is active.
+    // Automatically resume when returning to foreground if a voice session is active,
+    // and also retry on the next touchend/click gesture in case WebKit requires a
+    // user gesture to unstick an interrupted context.
     if (typeof document !== 'undefined' && !this.visibilityListenerAttached) {
       this.visibilityListenerAttached = true;
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && this.audioSessions.size > 0) {
-          if (this.ctx && (this.ctx.state === 'suspended' || this.isContextInterrupted())) {
-            void this.resumeContext();
-          }
+      const recoverIfActive = () => {
+        if (this.audioSessions.size === 0 || !this.ctx) return;
+        if (this.interruptedWhileActive || this.ctx.state === 'suspended' || this.isContextInterrupted()) {
+          void this.resumeContext();
         }
+      };
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') recoverIfActive();
       });
+      document.addEventListener('touchend', recoverIfActive, { passive: true, capture: true });
+      document.addEventListener('click', recoverIfActive, { passive: true, capture: true });
     }
 
     // Apply pending output device selection (user preference loaded before context creation)
@@ -272,6 +283,20 @@ export class AudioManager {
   async resumeContext() {
     this.clearIdleSuspendTimer();
     if (!this.ctx) this.initContext();
+    if (!this.ctx) return;
+
+    // WebKit on iOS can transition 'interrupted' → 'running' on foreground return
+    // while leaving the Web Audio output pipeline silent until bounced through
+    // suspend() → resume().
+    if (this.interruptedWhileActive && this.ctx.state === 'running') {
+      this.interruptedWhileActive = false;
+      try {
+        await this.ctx.suspend();
+      } catch {
+        // Best-effort bounce; proceed to resume
+      }
+    }
+
     if (this.ctx && (this.ctx.state === 'suspended' || this.isContextInterrupted())) {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
@@ -284,6 +309,7 @@ export class AudioManager {
           }),
         ]);
         if (this.ctx?.state === 'running') {
+          this.interruptedWhileActive = false;
           console.log('[AudioManager] AudioContext resumed.');
         }
       } catch (err) {

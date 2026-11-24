@@ -78,6 +78,7 @@ export function useAudioTrackPlayer(
       if (!gestureListenersAttached) return;
       gestureListenersAttached = false;
       document.removeEventListener('touchstart', onGesture);
+      document.removeEventListener('touchend', onGesture);
       document.removeEventListener('pointerdown', onGesture);
       document.removeEventListener('click', onGesture);
       document.removeEventListener('keydown', onGesture);
@@ -87,6 +88,7 @@ export function useAudioTrackPlayer(
       if (disposed || gestureListenersAttached) return;
       gestureListenersAttached = true;
       document.addEventListener('touchstart', onGesture, { passive: true });
+      document.addEventListener('touchend', onGesture, { passive: true });
       document.addEventListener('pointerdown', onGesture, { passive: true });
       document.addEventListener('click', onGesture, { passive: true });
       document.addEventListener('keydown', onGesture, { passive: true });
@@ -120,14 +122,12 @@ export function useAudioTrackPlayer(
 
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      if (!isPlaybackHealthy()) {
-        attachGestureListeners();
-        void audioManager.resumeContext().then(() => {
-          if (disposed) return;
-          if (isPlaybackHealthy()) removeGestureListeners();
-        });
-        attemptPlay();
-      }
+      attachGestureListeners();
+      void audioManager.resumeContext().then(() => {
+        if (disposed) return;
+        if (isPlaybackHealthy()) removeGestureListeners();
+      });
+      attemptPlay();
     };
 
     if (audioEl) {
