@@ -321,10 +321,8 @@ cannot be worked one at a time.
 
 ### What is left open, and why
 
-Sixteen OSV findings are held in `osv-scanner.toml`, in two shapes. Fourteen need a
-major upgrade that is a separate decision with its own compatibility work. Two
-have no fixed release at all and sit only in build tooling. None of them is
-dismissed:
+Fourteen OSV findings are held in `osv-scanner.toml`. Each needs a major
+upgrade and its own compatibility review.
 
 | Package | Findings | Bucket | Fixed in |
 |---------|----------|--------|----------|
@@ -333,8 +331,13 @@ dismissed:
 | `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
 | `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
 | `postcss-selector-parser` 6.1.4 | 1 | build-time (`tailwindcss` 3 and `postcss-nested`) | 7.1.6 only; tailwindcss 3 does not accept 7.x |
-| `braces` 3.0.3 | 1 | build-time (`tailwindcss` 3 through `chokidar` and `micromatch`) | no fixed release |
-| `sprintf-js` 1.1.3 | 1 | build-time (`electron-builder` to `@electron/get` to `global-agent` to `roarr`) | no fixed release |
+
+On 23 November 2026, OSV reported two unused ignores. The `sprintf-js`
+advisory (`CVE-2026-97058`) was withdrawn. The `braces` advisory
+(`CVE-2026-93687`) remains active in OSV, but its record only supplies a Git
+range. OSV therefore cannot match it to the npm lockfile. Keep tracking it
+with the Tailwind upgrade. Version 3.0.3 remains a build-time dependency through
+Tailwind 3, chokidar and micromatch.
 
 The five fastify findings published on 2026-09-30 were each checked against the
 server rather than only deferred. Each needs a feature the server does not use:
@@ -404,8 +407,14 @@ finds the shipped binary before the build step is reached.
 
 ## Dismissal register
 
-`.trivyignore` and `.github/codeql/codeql-config.yml` are the machine-readable half
-of this. What follows is the half a human reads.
+`.gitleaksignore`, `.trivyignore` and `.github/codeql/codeql-config.yml` record the exceptions the scanners use.
+
+On 23 November 2026, the history scan reported sixteen `generic-api-key`
+false positives. Twelve are literal JWT secrets injected into mocked server
+configuration. One is a dummy JWT secret in a disposable container smoke test.
+Three are prose describing S2S-proof-gated reattachment, including a comment in
+the auth route. `.gitleaksignore` records the exact historical fingerprints.
+The rule remains active for any other match, including on the same paths.
 
 ### CodeQL alerts
 
@@ -748,7 +757,7 @@ the pipeline the code runs in". The bot's verdict encodes exactly that split:
 | CI workflows | `.github/workflows/**`, `.github/actions/**`, including the previous name of a rename | yes |
 | Install-time code | `.pnpmfile.cjs` and `.npmrc` at any depth, `pnpm-workspace.yaml`, `patches/**`; and any `package.json` whose `scripts.*`, `pnpm.*` or `packageManager` changed (a dependency bump alone does not count) | yes |
 | Build recipes | `Dockerfile*`, `docker-compose*.yml`, `docker-entrypoint.sh`, `Caddyfile`, `install.sh`, `deploy.sh`, `restore.sh`, `io.github.TheZwiss.backspace*.yml`, `flatpak/*.{sh,mjs,cjs,js,py}`, `packages/desktop/electron-builder.yml`, `packages/desktop/scripts/**` | yes |
-| Scanner configuration | `.github/codeql/**`, `osv-scanner.toml`, `.trivyignore`, `.zap/**`, `.gitleaks.toml` | yes |
+| Scanner configuration | `.github/codeql/**`, `osv-scanner.toml`, `.trivyignore`, `.zap/**`, `.gitleaks.toml`, `.gitleaksignore` | yes |
 | `pnpm-lock.yaml` | new package names vs. version bumps vs. removals; entries whose resolution is not exactly `{integrity: ...}` with a bare semver (git, tarball URL, directory, `file:`); importer specifiers new at head that point outside the registry; `overrides` and `patchedDependencies` blocks | only `overrides` and `patchedDependencies` |
 | `flatpak/node-sources.json` | added `file`/`archive` entries with a checksum from the hosts the generator uses (npm registry, Electron releases on github.com, Node headers on electronjs.org) are "known"; `shell`, `script`, `patch`, unknown types, and `inline` entries with a script name or a shebang are "executable"; downloads from any other host or without a checksum are "foreign" | executable and foreign entries |
 
