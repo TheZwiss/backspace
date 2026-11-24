@@ -168,8 +168,40 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          load: true
+          tags: backspace:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test the built image
+        shell: bash
+        run: |
+          secret=$(openssl rand -hex 32)
+          container=$(docker run --detach --network none \
+            --env "JWT_SECRET=$secret" \
+            --env DIRECTORY_ENDPOINT= --env BACKUP_DISABLED=true \
+            --env TELEMETRY=false --env TRUSTED_PROXY_HOPS=0 backspace:ci)
+          trap 'docker rm --force "$container" >/dev/null' EXIT
+          for _ in {1..30}; do
+            if docker exec "$container" node --input-type=module -e '
+              const origin = "http://127.0.0.1:3000";
+              const options = { signal: AbortSignal.timeout(2000) };
+              const health = await fetch(`${origin}/api/health`, options);
+              const page = await fetch(`${origin}/`, options);
+              if (!health.ok || (await health.json()).status !== "ok" ||
+                  !page.ok || !(await page.text()).includes("<title>Backspace</title>")) {
+                process.exitCode = 1;
+              }
+            ' 2>/dev/null; then
+              exit 0
+            fi
+            if [[ $(docker inspect --format '{{.State.Running}}' "$container") != true ]]; then
+              break
+            fi
+            sleep 1
+          done
+          docker logs "$container"
+          exit 1
 
   # Aggregate gate reporting a single, matrix-independent "Build & test" status.
   # Branch protection on main requires the "Build & test" context, but the matrix
