@@ -495,7 +495,7 @@ export function MainContent() {
     return (
       <div 
         ref={voiceContainerRef}
-        className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen' : ''}`}
+        className={`flex-1 flex flex-col min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen bg-black' : 'bg-surface-base'}`}
       >
         <div
           data-testid="voice-header-overlay"

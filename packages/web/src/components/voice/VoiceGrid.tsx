@@ -109,7 +109,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
     const otherTiles = tiles.filter((t) => t.key !== focusedParticipantId);
     const fullscreenChromeFade = chromeRevealed
       ? 'opacity-100'
-      : 'opacity-0 pointer-events-none focus-visible:opacity-100 focus-visible:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto';
+      : 'opacity-0 pointer-events-none focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(any-pointer:coarse)]:opacity-100 [@media(any-pointer:coarse)]:pointer-events-auto';
     const membersToggleButton = (
       <button
         onClick={(e) => {
@@ -146,14 +146,14 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
             edgeToEdge: fullscreen,
             chromeVisible: !fullscreen || chromeRevealed,
           })}
-          {/* Grid button — top-right */}
+          {/* Grid button — top-right; in fullscreen sit below the h-12 voice header overlay so it never collides with revealed header chrome */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               setFocusedParticipant(null);
             }}
             {...(fullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
-            className={`absolute ${fullscreen ? 'top-2.5 right-3' : 'top-4 right-4'} z-20 h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-all duration-300 ease-out ${fullscreen ? fullscreenChromeFade : ''}`}
+            className={`absolute ${fullscreen ? 'top-14 right-3 z-30' : 'top-4 right-4 z-20'} h-7 px-3 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-all duration-300 ease-out ${fullscreen ? fullscreenChromeFade : ''}`}
             title={t('voice:grid.backToGrid')}
           >
             <svg
@@ -168,36 +168,33 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
           </button>
         </div>
 
-        {/* Fullscreen (strip hidden): float only the Show Members pill above
-            VoiceControlBar so the video stays 100% edge-to-edge and the pill
-            never overlaps controls, auto-hiding with chromeRevealed. */}
-        {fullscreen && stripHidden && otherTiles.length > 0 && (
+        {/* Single toggle wrapper so the button stays mounted (preserving focus)
+            across fullscreen expand/collapse transitions. When collapsed in
+            fullscreen it floats above VoiceControlBar and auto-hides with
+            chromeRevealed; when expanded (or docked) it sits in normal flex
+            flow so the focused video shrinks cleanly above the strip. */}
+        {otherTiles.length > 0 && (
           <div
-            data-testid="fullscreen-members-overlay"
-            {...{ [VOICE_CHROME_ATTR]: '' }}
-            className={`absolute bottom-24 left-1/2 -translate-x-1/2 z-20 transition-opacity duration-300 ease-out ${fullscreenChromeFade}`}
+            data-testid={fullscreen && stripHidden ? 'fullscreen-members-overlay' : 'members-toggle-bar'}
+            {...(fullscreen && stripHidden ? { [VOICE_CHROME_ATTR]: '' } : {})}
+            className={
+              fullscreen && stripHidden
+                ? `absolute bottom-24 left-1/2 -translate-x-1/2 z-20 transition-opacity duration-300 ease-out ${fullscreenChromeFade}`
+                : `flex justify-center flex-shrink-0 py-1 ${fullscreen ? 'bg-black' : ''}`
+            }
           >
             {membersToggleButton}
           </div>
         )}
 
-        {/* Docked mode, or fullscreen with the strip explicitly expanded:
-            keep the Hide/Show Members divider + strip in normal flex flow so
-            the focused video shrinks cleanly above the strip without overlap. */}
-        {(!fullscreen || !stripHidden) && otherTiles.length > 0 && (
-          <div
-            data-testid="members-toggle-bar"
-            className={`flex justify-center flex-shrink-0 py-1 ${fullscreen ? 'bg-black' : ''}`}
-          >
-            {membersToggleButton}
-          </div>
-        )}
-
+        {/* Reserve the h-24 bottom band owned by the floating VoiceControlBar
+            in fullscreen (`mb-24`) so the call controls never overlap or
+            intercept clicks on the center thumbnails of the member strip. */}
         {!stripHidden && otherTiles.length > 0 && (
           <div
             data-testid="members-strip"
             className={`h-[120px] max-h-[calc(20*var(--app-vh))] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 overflow-x-auto no-scrollbar ${
-              fullscreen ? 'bg-surface-base/90' : 'bg-surface-base/50'
+              fullscreen ? 'bg-surface-base/90 mb-24' : 'bg-surface-base/50'
             }`}
           >
             {otherTiles.map((t) => (
