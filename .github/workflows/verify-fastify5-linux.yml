@@ -1,0 +1,31 @@
+name: Verify Fastify proxy upgrade on Linux
+on:
+  push:
+    branches: [codex/fastify5-linux-check]
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build legacy and candidate images
+        run: |
+          legacy_dir="$RUNNER_TEMP/backspace-fastify4"
+          mkdir -p "$legacy_dir"
+          git archive c832007dea7fff2cc157d71ec19092f250e10653 | tar -x -C "$legacy_dir"
+          docker build --tag backspace:fastify5-legacy "$legacy_dir"
+          docker build --tag backspace:fastify5-smoke .
+          docker pull caddy:2.11.1-alpine
+      - name: Verify the bundled proxy transition
+        env:
+          LEGACY_IMAGE: backspace:fastify5-legacy
+          CANDIDATE_IMAGE: backspace:fastify5-smoke
+        run: bash scripts/verify-fastify5-compose-linux.sh
