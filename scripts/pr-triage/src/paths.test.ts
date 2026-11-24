@@ -72,7 +72,14 @@ describe('classifyPaths', () => {
   });
 
   it('puts scanner configuration under scannerConfig', () => {
-    const names = ['.github/codeql/codeql-config.yml', 'osv-scanner.toml', '.trivyignore', '.zap/rules.tsv', '.gitleaks.toml'];
+    const names = [
+      '.github/codeql/codeql-config.yml',
+      'osv-scanner.toml',
+      '.trivyignore',
+      '.zap/rules.tsv',
+      '.gitleaks.toml',
+      '.gitleaksignore',
+    ];
     const hits = classifyPaths(files(...names));
     expect(hits.map((h) => h.path)).toEqual(names);
     expect(new Set(hits.map((h) => h.area))).toEqual(new Set(['scannerConfig']));

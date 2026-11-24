@@ -55,7 +55,8 @@ const RULES: Array<{ area: PipelineArea; test: (path: string) => boolean }> = [
       p === 'osv-scanner.toml' ||
       p === '.trivyignore' ||
       p.startsWith('.zap/') ||
-      p === '.gitleaks.toml',
+      p === '.gitleaks.toml' ||
+      p === '.gitleaksignore',
   },
 ];
 
