@@ -21,6 +21,7 @@
 #     DOMAIN=chat.example.com \
 #     DEPLOY_MODE=allinone|proxy|tunnel \
 #     APP_PORT=8080 \                 # proxy/tunnel only; auto-picked if unset
+#     TRUSTED_PROXY_ADDRESSES=192.0.2.2 \  # required for proxy/tunnel
 #     ENABLE_VOICE=true \
 #     INSTANCE_NAME="My Chat" \
 #     TELEMETRY=on|off \              # the optional daily usage ping; leave it
@@ -480,17 +481,37 @@ else
   MAX_UPLOAD_SIZE=104857600  # 100 MB
 fi
 
-# ── Trusted proxy hops ──────────────────────────────────────
-# The number of proxies in front of the app that may be trusted to have written
-# X-Forwarded-For. Every rate limit keys on the address it produces. All three
-# deployment modes are one hop, which is the app's default, so this is written
-# commented-out and only becomes a live line when an operator (or a previous
-# run) set one: 0 for an app exposed with nothing in front, 2 for a CDN ahead
-# of an appending reverse proxy. An explicit env value or an existing .env
-# value always wins; neither is second-guessed here, because only the operator
-# knows their topology.
-existing_hops=$(env_val TRUSTED_PROXY_HOPS)
-TRUSTED_PROXY_HOPS="${TRUSTED_PROXY_HOPS:-${existing_hops}}"
+# ── Trusted proxy configuration ─────────────────────────────
+# An empty explicit override clears a saved value. Compose supplies the
+# exact bundled Caddy address only for all-in-one mode.
+TRUSTED_PROXY_HOPS="${TRUSTED_PROXY_HOPS-$(env_val TRUSTED_PROXY_HOPS)}"
+TRUSTED_PROXY_ADDRESSES="${TRUSTED_PROXY_ADDRESSES-$(env_val TRUSTED_PROXY_ADDRESSES)}"
+CADDY_PROXY_IP="${CADDY_PROXY_IP-$(env_val CADDY_PROXY_IP)}"
+APP_NETWORK_SUBNET="${APP_NETWORK_SUBNET-$(env_val APP_NETWORK_SUBNET)}"
+APP_NETWORK_DYNAMIC_RANGE="${APP_NETWORK_DYNAMIC_RANGE-$(env_val APP_NETWORK_DYNAMIC_RANGE)}"
+
+# Leave full validation to the server. For the missing-list check, recognise
+# blank and zero settings even when the existing .env line is quoted.
+proxy_hops="$TRUSTED_PROXY_HOPS"
+proxy_addresses="$TRUSTED_PROXY_ADDRESSES"
+dotenv_double_quoted='^[[:space:]]*"(.*)"[[:space:]]*(#.*)?$'
+dotenv_single_quoted="^[[:space:]]*'(.*)'[[:space:]]*(#.*)?$"
+dotenv_comment='^(.*)[[:space:]]+#.*$'
+for setting in proxy_hops proxy_addresses; do
+  value="${!setting}"
+  if [[ "$value" =~ $dotenv_double_quoted || "$value" =~ $dotenv_single_quoted ]]; then
+    printf -v "$setting" '%s' "${BASH_REMATCH[1]}"
+  elif [[ "$value" =~ $dotenv_comment ]]; then
+    printf -v "$setting" '%s' "${BASH_REMATCH[1]}"
+  fi
+done
+if [[ "$DEPLOY_MODE" != "allinone" && ! "$proxy_hops" =~ ^[[:space:]]*0+[[:space:]]*$ &&
+      ! "$proxy_addresses" =~ [^[:space:]] ]]; then
+  error "Set TRUSTED_PROXY_ADDRESSES to the actual connection source IP of your reverse proxy or tunnel."
+  error "The published loopback destination is not necessarily the peer address in the container."
+  error "See docs/systems/deployment.md for upgrade and discovery steps."
+  exit 1
+fi
 
 # ── Phase 3: Generate Secrets ───────────────────────────────
 
@@ -551,34 +572,12 @@ APP_PORT=${APP_PORT_FINAL}
 EOF
   fi
 
-  if [[ -n "$TRUSTED_PROXY_HOPS" ]]; then
-    cat << EOF
-
-# Proxies in front of this app that may be trusted to have written
-# X-Forwarded-For. Preserved from your previous configuration or from the
-# environment; see .env.example for what each value means.
-TRUSTED_PROXY_HOPS=${TRUSTED_PROXY_HOPS}
-EOF
-  else
-    cat << 'EOF'
-
-# How many proxies sit in front of this app and may be trusted to have written
-# X-Forwarded-For. It is the address every rate limit counts a request against.
-# The default of 1 is right for all three deployment modes above: the bundled
-# Caddy, your own reverse proxy and a tunnel daemon are each one hop. Change it
-# only if your topology differs:
-#   0  nothing in front at all (the app exposed directly). Leaving such an
-#      instance at 1 lets a client send its own X-Forwarded-For and choose the
-#      address its rate limits are counted against.
-#   2  a CDN in front of your own reverse proxy, when that proxy APPENDS to
-#      X-Forwarded-For. Behind the bundled Caddy the number alone does nothing
-#      until Caddy's trusted_proxies names the CDN.
-# Any value that is not a non-negative integer, or is above 4, stops the server
-# at boot with a message instead of quietly running a number you did not pick.
-# Leaving the line blank is not a value: it reads as unset and you get 1.
-# TRUSTED_PROXY_HOPS=1
-EOF
-  fi
+  printf '\n%s\n' '# Proxy forwarding settings (see .env.example and docs/systems/deployment.md).'
+  for setting in TRUSTED_PROXY_HOPS TRUSTED_PROXY_ADDRESSES CADDY_PROXY_IP APP_NETWORK_SUBNET APP_NETWORK_DYNAMIC_RANGE; do
+    if [[ -n "${!setting}" ]]; then
+      printf '%s=%s\n' "$setting" "${!setting}"
+    fi
+  done
 
   cat << EOF
 

@@ -295,6 +295,11 @@ later `docker compose …` command in the directory keeps working with no `-f`
 flags. The installer auto-picks a free `APP_PORT` (3000/8080 are often taken);
 override it with `APP_PORT=…`.
 
+For an external proxy or tunnel, set `TRUSTED_PROXY_ADDRESSES` to the source
+address the backend sees before installing or upgrading. Bundled Caddy's
+address is configured automatically. See the
+[proxy configuration and upgrade steps](docs/systems/deployment.md#deployment-modes).
+
 The installer prints ready-to-paste config for your mode at the end. The
 canonical snippets are below.
 
@@ -303,8 +308,7 @@ canonical snippets are below.
 The app answers plain HTTP on `127.0.0.1:APP_PORT`; your proxy terminates TLS and
 forwards to it. Every snippet already includes the three things people get wrong:
 **WebSocket upgrade** (chat and live events won't work without it),
-**`X-Forwarded-*`** (the server runs with `trustProxy` and needs the real client
-scheme/IP), and a **body-size limit** matching `MAX_UPLOAD_SIZE` (default 100 MB).
+**`X-Forwarded-*`** (Backspace uses these fields from approved proxies), and a **body-size limit** matching `MAX_UPLOAD_SIZE` (default 100 MB).
 
 Replace `chat.example.com` and `8080` with your domain and `APP_PORT`.
 
@@ -469,7 +473,9 @@ From the install directory:
 
 `update.sh` takes a database snapshot, refreshes the checkout where that is
 possible, fetches the new image (pulling or rebuilding to match how you
-installed), and restarts only the `backspace` container. It then waits for the
+installed), and restarts the `backspace` container. The Fastify 5 bridge upgrade
+also recreates the bundled Caddy container if it is still on the old bridge.
+The updater waits for the
 healthcheck **and verifies the running version actually changed**. If either
 fails, it puts back the image you were on and tells you what happened. A
 no-op update is detected and skips the restart entirely, so nobody gets
@@ -495,6 +501,11 @@ docker compose up -d --build backspace
 Because `COMPOSE_FILE` lives in `.env`, these commands automatically use the
 right compose files in every mode, with no `-f` flags to remember. A redeploy
 briefly restarts the `backspace` container (clients reconnect automatically).
+
+For the first upgrade to Fastify 5, update your Compose files before pulling
+the new image. Follow the [deployment migration steps](docs/systems/deployment.md#deployment-modes)
+to prepare the external proxy allowlist or bring bundled Caddy onto the new
+bridge.
 
 > **Name the `backspace` service and do not pass `--remove-orphans`.** If you run
 > other containers in the same compose project, Compose will suggest that flag,
@@ -664,7 +675,7 @@ packages/
 
 | Layer        | Technology |
 |--------------|------------|
-| Server       | Node.js 22+, Fastify 4, TypeScript (strict) |
+| Server       | Node.js 22+, Fastify 5, TypeScript (strict) |
 | Database     | SQLite (better-sqlite3) + Drizzle ORM |
 | Auth         | JWT + bcrypt |
 | Frontend     | React 18, Vite 8, Tailwind CSS 3, Zustand 5 |

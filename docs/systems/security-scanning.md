@@ -85,23 +85,12 @@ wholesale from `deps` and the CMD starts `node` directly, so neither manager was
 ever invoked. The `Dockerfile` now removes both from that stage (the `deps` and
 `builder` stages still need pnpm and keep it). **The count after that change is 3.**
 
-The three that remain are one cluster, all reached through Fastify 4:
-`fastify` 4.29.1 (CVE-2026-25223), `@fastify/static` 7.0.4 (CVE-2026-15074) and
-`find-my-way` 8.2.2 (CVE-2026-47219). Every fixed version Trivy names is in a
-later major: Fastify 5.7.2, `@fastify/static` 10.1.1, `find-my-way` 9.7.0, and
-`@fastify/static` 10 requires Fastify 5 anyway. There is no fix inside the 4.x
-line, so clearing these is the Fastify 5 migration and its plugin ecosystem, not a
-version bump. That is a code change with a real blast radius and it belongs in its
-own pass.
-
-So the job stays report-only for now. Making it blocking today would fail every
-release publish until the Fastify migration lands, and holding security fixes
-behind a scanner backlog is the exact inversion this project already decided
-against when the release track was changed from one release at the end to a patch
-per landed track. **When the Fastify migration lands, re-measure, and if the count
-is zero add `exit-code: '1'` and drop `continue-on-error` from the Trivy step in
-`docker-publish.yml`.** Do not reach the same place with `.trivyignore` entries;
-suppressing the count is not the same as clearing it.
+The three results in that baseline came from Fastify 4.29.1
+(CVE-2026-25223), `@fastify/static` 7.0.4 (CVE-2026-15074), and
+`find-my-way` 8.2.2 (CVE-2026-47219). The Fastify 5 migration updated all
+three. Keep the image job report-only until a fresh image scan confirms the
+remaining count. If it is zero, add `exit-code: '1'` and drop
+`continue-on-error` from the Trivy step in `docker-publish.yml`.
 
 ## Dynamic scanning (DAST)
 
@@ -321,14 +310,12 @@ cannot be worked one at a time.
 
 ### What is left open, and why
 
-Twelve OSV findings remain in `osv-scanner.toml`. They are tracked with the
-Fastify 5 and server plugin upgrade.
-
-| Package | Findings | Bucket | Fixed in |
-|---------|----------|--------|----------|
-| `fastify` 4.29.1 | 9 | server image | 5.x (5.12.2, one in 5.12.5) |
-| `@fastify/static` 7.0.4 | 2 | server image | 10.x |
-| `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
+The Fastify 5 migration removed twelve OSV deferrals: nine for Fastify core,
+two for the static plugin, and one for `find-my-way`. The new versions are
+Fastify 5.12.8, `@fastify/static` 10.1.12 and `find-my-way` 9.10.2. The
+workspace scan still reports `CVE-2026-118773` on glob 11.1.0 and
+`CVE-2026-118764` on minimatch 9.0.9 and 10.2.6. These are separate dependency
+paths from the updated static plugin, which uses glob 14 and minimatch 11.
 
 On 23 November 2026, OSV reported two unused ignores. The `sprintf-js`
 advisory (`CVE-2026-97058`) was withdrawn. The `braces` advisory
@@ -345,14 +332,6 @@ Drizzle Kit 0.31.11 declares `@esbuild-kit/esm-loader` but loads TypeScript sche
 with its direct `esbuild` dependency. The version-scoped override removes the unused
 loader and its esbuild 0.18.20 copy, clearing `GHSA-67mh-4wv8-2f99`. Recheck the
 override when updating Drizzle Kit.
-
-The five fastify findings published on 2026-09-30 were each checked against the
-server rather than only deferred. Each needs a feature the server does not use:
-HTTP/2 with `reply.trailer()`, an `$async` request schema, a header schema with
-the `dependencies` keyword, a `false` request-part schema, or not-found handlers
-encapsulated under an auth hook (the server registers one, at the root, as the
-SPA fallback). A new route that uses one of those makes the matching finding
-reachable, which is a reason to do the fastify 5 upgrade first.
 
 The October 2026 pass removed four entries. The two `react-router` ones no longer
 matched anything, since `react-router-dom` is on 7.18.4. The two `lodash` ones were
@@ -613,7 +592,6 @@ Currently deferred, with the condition that releases each one:
 | react / react-dom / `@types/*` 18 | `RefObject<T \| null>` variance and `useState` arity break across the chat components | the UI pass landing; then one PR moving all four together |
 | tailwindcss 3 | v4 moves the PostCSS plugin to `@tailwindcss/postcss` and replaces the config model the design system is built on | a dedicated port of the theme, surface/input tiers and `globals.css` |
 | typescript 5 | v7 removes the `baseUrl` compiler option (TS5102) that the workspace tsconfigs rely on | migrating every tsconfig off `baseUrl` first |
-| fastify 4 + all `@fastify/*` | the 11.x plugin lines target Fastify 5; on Fastify 4 the server stops booting | one PR taking core and every plugin across together |
 | `@tus/file-store` + `@tus/server` 1.x | matched pair; bumping either alone splits it | one PR moving both, upload pipeline exercised end to end |
 | `@types/node` 22 (24 for the script packages) | types describing a newer Node than the runtime let code typecheck clean and fail in production | whenever a runtime moves, in that same PR |
 | jsdom 28 | jsdom 30 pulls undici 8 against the `undici@^7` override, so every vitest worker dies with `webidl.util.markAsUncloneable is not a function` and the web suite does not run; it also changes SVG attribute-selector matching | extending the undici override to 8, then re-testing both |
@@ -645,11 +623,6 @@ pnpm outdated -r
 That lists every package behind its latest across the workspace in one shot, with
 no PR churn, and it is the right way to check whether an ignore entry is still
 earning its place.
-
-One entry can also preempt several future PRs. The `@fastify/*` wildcard covers
-`cors`, `helmet`, `multipart` and `static`, all of which are sitting a major
-behind and would otherwise arrive as four separate proposals for the same
-Fastify 5 migration.
 
 ### A green check is not a verified upgrade
 

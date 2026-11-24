@@ -12,3 +12,4 @@
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET ??= 'test-only-jwt-secret-not-for-production-use!!';
+process.env.TRUSTED_PROXY_HOPS = '0';

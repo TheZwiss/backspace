@@ -21,6 +21,8 @@
 
 services:
   backspace:
+    environment:
+      - "TRUSTED_PROXY_ADDRESSES=${TRUSTED_PROXY_ADDRESSES:-}"
     # Bind to loopback only. The reverse proxy / tunnel connects over 127.0.0.1;
     # the app is never reachable directly from the network. Container listens on
     # PORT (default 3000); APP_PORT is the host-side port your proxy forwards to.

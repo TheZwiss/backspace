@@ -71,6 +71,7 @@ jobs:
           JWT_SECRET=0000000000000000000000000000000000000000000000000000000000000000
           PORT=3000
           NODE_ENV=production
+          TRUSTED_PROXY_HOPS=0
           REGISTRATION_OPEN=true
           EOF
 
@@ -90,7 +91,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/zap-out"
           docker run --rm \
-            --network backspace-dast_internal \
+            --network backspace-dast_app \
             -v "$GITHUB_WORKSPACE/zap-out:/zap/wrk/:rw" \
             -v "$GITHUB_WORKSPACE/.zap:/zap/cfg/:ro" \
             ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef \

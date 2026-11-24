@@ -657,130 +657,33 @@ server renders different HTML.
 
 ## 9. The client address, and what rests on it
 
-`request.ip` is what every rate limit in the app is billed to, so where that
-address comes from is a security property, not a detail. The app runs Fastify
-with `trustProxy: config.trustedProxyHops`, a **count of trusted hops** that
-defaults to 1 and is set with the `TRUSTED_PROXY_HOPS` environment variable
-(read and validated in `packages/server/src/config.ts`, documented there and in
-`.env.example`). One hop means: trust the proxy directly in front of the app
-and nothing further out. `request.ip` is then the entry that proxy appended,
-which is the peer it actually saw, and entries a client puts in the header sit
-further left and are ignored.
+HTTP and WebSocket message rate limits use Fastify's `request.ip`. Starting with
+the socket peer, the `trustProxy` callback checks both the hop's address against
+`TRUSTED_PROXY_ADDRESSES` and its position against `TRUSTED_PROXY_HOPS`.
+Fastify stops at the first unapproved hop or at the cap. The address at that
+boundary is the rate-limit key. Set the cap to the number of proxies that
+actually supply the chain. It defaults to 1 and allows at most 4. Zero turns
+forwarding trust off. IPv4-mapped IPv6 addresses match IPv4 entries.
 
-It is a variable rather than a constant because this describes the operator's
-topology, which only the operator knows, and because the app ships as a
-published image: a number baked into it could not be corrected by the two
-deployments that need a different one. A **set** value that is not a
-non-negative integer stops the server at boot with a message instead of falling
-back to 1, so a mistyped setting cannot pass for a chosen one, and so does any
-value above **4**. A blank value (`TRUSTED_PROXY_HOPS=`, or whitespace) is the
-one thing that is not a refusal: it reads as unset and takes the default,
-because `KEY=` is how an operator un-sets a line and carries no number for the
-parse to discard.
+Startup rejects a missing allowlist with forwarding enabled, invalid addresses
+or CIDRs, and invalid hop counts. A valid allowlist contains only proxy addresses
+or ranges controlled by the chosen proxies. Each trusted proxy must construct
+forwarding metadata from its own view of the preceding connection. Bundled
+Caddy gets an exact allowlist entry from Compose. Operators of external proxies
+or tunnels must identify the peer the backend actually sees.
+See [deployment.md](deployment.md) under “Server proxy-awareness”.
 
-That cap is there because the failure above it is the quiet one:
-`TRUSTED_PROXY_HOPS=11`, typed for 1, trusts the whole forwarded chain on a
-one-proxy instance, which is the `trustProxy: true` behaviour this setting
-exists to remove, on an instance whose operator believes it is configured. A
-CDN in front of an operator's own reverse proxy in front of a tunnel daemon is
-three hops, so four is already one more than the deepest topology anyone has
-described. The refusal states the value it got, the cap, and what the number
-counts, and then asks the operator to open an issue describing the hops in
-front of their instance: someone who genuinely exceeds four should be arguing
-with the cap, not with their own network, and raising it needs the topology.
-It deliberately names no source file, because most operators run the published
-image and have no checkout to open. **Its exact wording lives with the check in
-`packages/server/src/config.ts` and is not copied anywhere**, this paragraph
-included.
-
-The alternative, `trustProxy: true`, trusts the whole chain and takes the
-left-most entry, which is whatever the client cared to send. The app ran that
-way until this was corrected, and under it a request arriving with
-`X-Forwarded-For: 9.9.9.9` was read as coming from 9.9.9.9 even when the proxy
-appended the real address after it.
-
-**The count governs the address, and only the address.** The rest of the
-`X-Forwarded-*` family is trusted or not, without following the number: at 1 or
-more, `request.protocol` and `request.hostname` are taken from
-`X-Forwarded-Proto` and `X-Forwarded-Host` (the last entry, at any count), and
-at 0 they come from the socket and the `Host` header. Raising the count to 2
-for a CDN changes which address is billed and leaves protocol and host where
-they were. Nothing in this server reads those two, which is what keeps it from
-mattering; a route that builds a URL from the request host would change that
-(see the CVE note in
-`docs/superpowers/plans/2026-09-03-deferred-dependency-upgrades.md`).
-
-**What rests on the address.** The global rate limiter keys on it and has
-nothing else to key on (see [api.md](api.md), "Rate limiting"); the per-route
-limits key the same way; the hand-written limiter on
-`POST /federation/peer/accept`
-(`routes/federation/handlers/peerHandshake.ts`, unauthenticated first contact)
-buckets on it; and Fastify's request log records it as `remoteAddress`, so it
-is also what an operator reads when deciding who to block. Limits keyed on a
-user instead (the two upload limits in `routes/files.ts`) do not depend on any
-of this.
-
-**What each front yields at a hop count of 1.**
-
-| Front | `X-Forwarded-For` it produces | `request.ip` | Verdict |
-|---|---|---|---|
-| Bundled Caddy (`allinone`, the shipped default) | overwrites the header; incoming values ignored, since this repo's `Caddyfile` sets no `trusted_proxies` | the real client | correct |
-| Operator's nginx with the snippet `install.sh` prints | **appends**: `"<whatever the client sent>, <peer nginx saw>"` | the real client; the client's own entries are ignored | correct, and this is what the hop count fixed |
-| A tunnel provider (Cloudflare and friends) | one hop that writes its own entry | the real client | correct |
-| CDN in front of an inner proxy that **appends** (nginx and friends) | two hops: `"<client>, <CDN>"` | at 1, the CDN's address, so every client behind it shares one bucket | **`TRUSTED_PROXY_HOPS=2`** |
-| CDN in front of the **bundled Caddy** | one hop: Caddy discards the CDN's entry and writes the CDN's address | the CDN's address at any count | the number alone does nothing. Give Caddy `trusted_proxies` first (see below), then set 2 |
-| App exposed directly, no proxy at all | only what the client chose to send | the client's own claim | **`TRUSTED_PROXY_HOPS=0`**, which ignores the header and uses the socket address |
-
-The rows that need a number other than 1 are the ones the app cannot detect
-for itself: one proxy looks exactly like none-plus-a-lying-client from inside
-the process. That is why the number is the operator's to set, and why
-`.env.example` spells out the cases. Both mistakes are asymmetric: too low
-costs a shared bucket, too high gives the key back to the client.
-
-**A CDN behind the bundled Caddy needs the Caddyfile changed, not just the
-number.** Caddy ignores an incoming `X-Forwarded-For` unless `trusted_proxies`
-names the sender, so behind the shipped `Caddyfile` the CDN's entry is thrown
-away and the app is handed a one-entry header containing the CDN's own address.
-Measured: identical behaviour at 1, 2 and 3. Raising the count on such a
-deployment changes nothing at all, which is worse than leaving it alone,
-because it looks like the problem has been dealt with. The order is: tell Caddy
-which addresses to trust (`trusted_proxies static <CDN ranges>` in the
-`reverse_proxy` block, or the global `servers > trusted_proxies` option), then
-set `TRUSTED_PROXY_HOPS=2`. An inner proxy that appends, nginx as configured by
-this repo's snippet among them, needs only the number.
-
-**Do not "fix" anything here by disabling proxy trust** while a proxy is in
-front. The app would then read the proxy's own address for every request and
-collapse every client on the instance into one limiter key. The number is the
-mechanism, and `TRUSTED_PROXY_HOPS=0` is the honest way to say "nothing is in
-front of me".
-
-**The nginx snippet in `install.sh` is correct as it stands.** Appending is
-what a proxy should do, and it is what the hop count expects. Rewriting it to
-`proxy_set_header X-Forwarded-For $remote_addr;` would throw away the real
-client address on any deployment that later puts a CDN in front. It was left
-alone deliberately.
-
-`packages/server/src/config.trustedProxyHops.test.ts` holds both halves, 18
-cases. The parse: a number an operator set, 0, the cap itself, an unset
-variable and a blank one both landing on 1, four junk values and two
-above-the-cap values that must refuse the import, and the refusal's parts
-asserted, including that it names no source file. The resulting address: a
-forged left-most entry, a forged chain, an overwriting proxy, no header at
-all, the two-proxy case and the zero case. Reading the value with the lenient
-`envInt` fails five of them, moving the default off 1 fails five, and deleting
-the cap check fails two. See also [deployment.md](deployment.md), "Server
-proxy-awareness".
+Fastify also checks the immediate peer before using `X-Forwarded-Proto` and
+`X-Forwarded-Host` for request metadata. Backspace builds advertised URLs
+from `DOMAIN` or `PUBLIC_ORIGIN`.
 
 ---
 
 ## Dependency note
 
-`@fastify/helmet` is pinned to `^11.1.1` and must stay on the 11.x line. The
-12.x line depends on `fastify-plugin@^5` and 13.x on `^6`, and both target
-Fastify 5. This repo is on Fastify 4 and every other plugin is pinned to its
-Fastify 4 major (`@fastify/cors@^9`, `rate-limit@^9`, `static@^7`,
-`websocket@^10`). A helmet bump is a Fastify 5 migration, not a version bump.
+The server runs Fastify 5 with compatible versions of CORS, Helmet, multipart,
+rate-limit, static and WebSocket. Recheck each plugin's supported Fastify
+major when upgrading the framework.
 
 `livekit-client` is the dependency the meta policy's two script directives are
 measured against, because it is the only one in the voice path that could start

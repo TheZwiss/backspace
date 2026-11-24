@@ -5,6 +5,9 @@ Source files: `packages/server/src/routes/*.ts`
 
 ---
 
+Clients set `Content-Type: application/json` when sending a JSON body.
+Bodyless requests such as a group DM member `DELETE` omit `Content-Type`.
+
 ## Rate limiting
 
 Every request passes a limit: the global **200 per minute** registered in
@@ -21,14 +24,12 @@ creates and 1000 PATCHes per minute per user), which run inside the tus handler
 after auth, and the sticker upload limit in `routes/stickers.ts` (30 per minute
 per account, also counted after auth).
 
-The address comes from Fastify's `trustProxy`, which is a **count of trusted
-hops**: the `TRUSTED_PROXY_HOPS` environment variable, default 1, read in
-`config.ts` and documented there and in `.env.example`. At 1 the key is the
-address the nearest proxy appended, and entries a client writes into
-`X-Forwarded-For` are ignored. A deployment with a CDN in front of its own
-proxy, or with no proxy at all, sets a different number; see
-[web-security.md](web-security.md) section 9 and
-[deployment.md](deployment.md), "Server proxy-awareness".
+Fastify derives the client address by walking from the socket peer toward the
+client. Each trusted hop must match `TRUSTED_PROXY_ADDRESSES` and be within
+`TRUSTED_PROXY_HOPS` (default 1). The first untrusted address is the rate-limit
+key. Direct access uses the socket address with `TRUSTED_PROXY_HOPS=0`.
+See [web-security.md](web-security.md) section 9 and
+[deployment.md](deployment.md) under “Server proxy-awareness”.
 
 What an operator should take from that: **everyone sharing one public address
 shares one budget.** A school, an office behind a corporate proxy, a VPN exit
