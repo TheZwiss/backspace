@@ -677,6 +677,15 @@ Channel switches detach the old room reference before calling `room.disconnect()
 
 A separate input-release generation invalidates acquisitions queued or in flight before leave. Queued jobs are skipped; a late `getUserMedia` result is stopped immediately rather than attached to the graph. A stale denial is not cached for the next call. The browser permission prompt itself cannot be cancelled. New requests after release remain valid and reuse the existing serialized acquisition chain. The mic synchronization effect checks room identity and cleanup after awaits so an abandoned effect cannot reacquire or republish after leaving.
 
+### AudioContext idle suspend & session leases — `AudioManager.acquireAudioSession()`
+
+Holding the shared `AudioContext` running continuously (and running Safari's 20 Hz keep-alive oscillator permanently) keeps the OS audio device / DAC open even when the user is idle outside voice (#473). `AudioManager` therefore manages the `AudioContext` with reference-counted session leases and active-playback tracking:
+
+- **Active sessions (`acquireAudioSession()`):** Returns an idempotent release callback. While at least one lease is held (a live voice room in `useLiveKit`, an active remote track in `useAudioTrackPlayer`, etc.), `AudioManager` keeps the Safari keep-alive oscillator running and cancels any pending idle suspend.
+- **Per-connection lease ownership in `useLiveKit`:** Each `connect()` call acquires its own lease, held in `pendingAudioLeaseRef` keyed by connection generation until `newRoom` is created, at which point ownership transfers to `_roomAudioLeases` (`WeakMap<Room, () => void>`). A late `RoomEvent.Disconnected` from an old room while a channel switch awaits `resumeContext()` releases only the old room's own lease and does not increment `_connectGeneration` or cancel the incoming join.
+- **One-shot cues (`playSound` / `playTestTone`):** Increment `activePlaybackCount` while decoding/playing and resume the `AudioContext` on demand. `AppLayout`'s global first-gesture handler resumes an already-created context without eagerly creating one on ordinary non-voice clicks, and once all leases, playbacks, and mic streams end, `AudioManager` stops the keep-alive oscillator and suspends the `AudioContext` after `IDLE_SUSPEND_DELAY_MS` (1500 ms) so the OS can release the audio device.
+- **iOS Safari `'interrupted'` state:** `resumeContext()` resumes both `'suspended'` and non-standard `'interrupted'` states (e.g. after backgrounding or phone calls), and `onstatechange` schedules idle suspend if the context enters `'interrupted'` while no audio is in use.
+
 ---
 
 ## Audio Device Selection (Microphone & Speakers)

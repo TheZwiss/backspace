@@ -259,6 +259,42 @@ describe('voice capture teardown', () => {
     expect(result.current.isConnected).toBe(true);
     expect(result.current.connectedChannelId).toBe('second');
   });
+
+  it('keeps room B audio lease intact when room A emits a late disconnect while B awaits resumeContext', async () => {
+    const releaseA = vi.fn();
+    const releaseB = vi.fn();
+    mocks.audio.acquireAudioSession
+      .mockReturnValueOnce(releaseA)
+      .mockReturnValueOnce(releaseB);
+
+    const { result } = renderHook(() => useLiveKit());
+    await act(async () => { await result.current.connect('room-a'); });
+    const roomA = result.current.room!;
+    expect(releaseA).not.toHaveBeenCalled();
+
+    // Start switching to room B with resumeContext() held pending while room A is still current.
+    let finishResume!: () => void;
+    mocks.audio.resumeContext.mockReturnValueOnce(new Promise<void>(r => { finishResume = r; }));
+    let switching!: Promise<void>;
+    act(() => { switching = result.current.connect('room-b'); });
+
+    // A late Disconnected from room A must release only A's lease and must not cancel B.
+    act(() => { roomA.emit(RoomEvent.Disconnected, DisconnectReason.PARTICIPANT_REMOVED); });
+    expect(releaseA).toHaveBeenCalledTimes(1);
+    expect(releaseB).not.toHaveBeenCalled();
+
+    // Resolving resumeContext() lets room B finish connecting with its own lease still held.
+    await act(async () => { finishResume(); await switching; });
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.connectedChannelId).toBe('room-b');
+    expect(releaseA).toHaveBeenCalledTimes(1);
+    expect(releaseB).not.toHaveBeenCalled();
+
+    // Room B releases its own lease exactly once on teardown.
+    await act(async () => { await result.current.disconnect(); });
+    expect(releaseB).toHaveBeenCalledTimes(1);
+    expect(releaseA).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('screen-share audio published mid-stream', () => {
