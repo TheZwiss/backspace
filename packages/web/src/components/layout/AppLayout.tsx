@@ -54,9 +54,28 @@ export function AppLayout() {
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
-  // AudioContext is created and resumed lazily when voice/audio actually plays
-  // (and auto-suspends when idle) so opening or browsing the app never holds
-  // the user's audio interface / DAC active unnecessarily.
+  // Global first-gesture handler: unlock AudioContext autoplay once on the first
+  // user interaction so later WebSocket-driven cues (incoming calls, message
+  // notifications) are allowed to play. Because no audio session is held,
+  // AudioManager immediately schedules idle auto-suspend (~1.5s) and releases
+  // the OS audio device / DAC instead of keeping it open.
+  useEffect(() => {
+    const unlock = () => {
+      AudioManager.getInstance().resumeContext().then(() => {
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keydown', unlock);
+        window.removeEventListener('touchstart', unlock);
+      });
+    };
+    window.addEventListener('click', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('touchstart', unlock);
+    return () => {
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
+  }, []);
 
   // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
   // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback

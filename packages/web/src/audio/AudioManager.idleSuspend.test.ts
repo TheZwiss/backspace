@@ -303,4 +303,33 @@ describe('AudioManager idle suspension and keep-alive lifecycle', () => {
     expect(mockCtx.suspend).toHaveBeenCalledTimes(1);
     expect(mockCtx.state).toBe('suspended');
   });
+
+  it('does not hang resumeContext() when browser/iOS leaves ctx.resume() pending', async () => {
+    am.ensureContext();
+    (mockCtx as unknown as { state: string }).state = 'interrupted';
+    mockCtx.resume.mockReturnValueOnce(new Promise(() => {}));
+
+    let settled = false;
+    const p = am.resumeContext().then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(999);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await p;
+    expect(settled).toBe(true);
+  });
+
+  it('auto-resumes an interrupted AudioContext on visibilitychange when an audio session is active', async () => {
+    const release = am.acquireAudioSession();
+    am.ensureContext();
+    (mockCtx as unknown as { state: string }).state = 'interrupted';
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+
+    expect(mockCtx.resume).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('running');
+    release();
+  });
 });
