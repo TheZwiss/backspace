@@ -83,21 +83,3 @@ reason = "@fastify/static 7.0.4, fixed in 10.1.2. 10.1.1 is still affected. Gate
 id = "CVE-2026-47219"
 ignoreUntil = 2026-12-01
 reason = "find-my-way 8.2.2, fixed in 9.7.0. Transitive through fastify 4."
-
-# esbuild 0.18.20 -> 0.25.0. Build-time only: drizzle-kit to
-# @esbuild-kit/core-utils. Note the separate 0.28.2 copy that tsx pulls into the
-# server image is a different instance and is not affected by this advisory.
-[[IgnoredVulns]]
-id = "GHSA-67mh-4wv8-2f99"
-ignoreUntil = 2026-12-01
-reason = "esbuild 0.18.20, build-time only via drizzle-kit. The runtime copy is 0.28.2."
-
-# postcss-selector-parser 6.1.4 -> 7.1.6. Build-time only: tailwindcss 3 and
-# its postcss-nested, both devDependencies of @backspace/web. The parser runs
-# while Vite builds the stylesheet and is not in the bundle a browser loads. No
-# 6.x release carries the fix and tailwindcss 3 does not accept 7.x, so it is
-# gated behind the tailwindcss 4 port in the Dependabot table.
-[[IgnoredVulns]]
-id = "CVE-2026-104844"
-ignoreUntil = 2026-12-01
-reason = "postcss-selector-parser 6.1.4, fixed in 7.1.6 only. Build-time only via tailwindcss 3, which does not accept 7.x."

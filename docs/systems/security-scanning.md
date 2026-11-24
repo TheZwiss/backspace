@@ -321,16 +321,14 @@ cannot be worked one at a time.
 
 ### What is left open, and why
 
-Fourteen OSV findings are held in `osv-scanner.toml`. Each needs a major
-upgrade and its own compatibility review.
+Twelve OSV findings remain in `osv-scanner.toml`. They are tracked with the
+Fastify 5 and server plugin upgrade.
 
 | Package | Findings | Bucket | Fixed in |
 |---------|----------|--------|----------|
 | `fastify` 4.29.1 | 9 | server image | 5.x (5.12.2, one in 5.12.5) |
 | `@fastify/static` 7.0.4 | 2 | server image | 10.x |
 | `find-my-way` 8.2.2 | 1 | server image | 9.7.0 |
-| `esbuild` 0.18.20 | 1 | build-time (`drizzle-kit` to `@esbuild-kit/core-utils`) | 0.25.0 |
-| `postcss-selector-parser` 6.1.4 | 1 | build-time (`tailwindcss` 3 and `postcss-nested`) | 7.1.6 only; tailwindcss 3 does not accept 7.x |
 
 On 23 November 2026, OSV reported two unused ignores. The `sprintf-js`
 advisory (`CVE-2026-97058`) was withdrawn. The `braces` advisory
@@ -338,6 +336,15 @@ advisory (`CVE-2026-97058`) was withdrawn. The `braces` advisory
 range. OSV therefore cannot match it to the npm lockfile. Keep tracking it
 with the Tailwind upgrade. Version 3.0.3 remains a build-time dependency through
 Tailwind 3, chokidar and micromatch.
+
+The `postcss-selector-parser` 6.1.6 security release carries the fixes on the 6.x
+line. Tailwind 3 and `postcss-nested` already accept that major, so the override
+raises the 6.x floor and the `CVE-2026-104844` deferral is removed.
+
+Drizzle Kit 0.31.11 declares `@esbuild-kit/esm-loader` but loads TypeScript schemas
+with its direct `esbuild` dependency. The version-scoped override removes the unused
+loader and its esbuild 0.18.20 copy, clearing `GHSA-67mh-4wv8-2f99`. Recheck the
+override when updating Drizzle Kit.
 
 The five fastify findings published on 2026-09-30 were each checked against the
 server rather than only deferred. Each needs a feature the server does not use:
