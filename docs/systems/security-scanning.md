@@ -843,7 +843,7 @@ rename.
       `RELEASE_BOT_APP_ID` (the numeric App ID) and `RELEASE_BOT_PRIVATE_KEY`
       (its PEM private key). The private key only ever goes to
       `actions/create-github-app-token`, pinned by SHA
-      (`bcd2ba49218906704ab6c1aa796996da409d3eb1`, v3.2.0), which mints an
+      (`f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc`, v3.4.0), which mints an
       installation token narrowed to this repository and to the scopes the job
       uses, and revokes it when the job ends. Two jobs do that, and no other
       workflow reads the secrets.
