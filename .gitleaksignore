@@ -1,0 +1,21 @@
+# Literal JWT secret used only in mocked server configuration.
+04d791007701e0f607a207fccf4a15daff66e4ce:packages/server/src/routes/federation.groupBootstrap.test.ts:generic-api-key:34
+240df49d1d9761069b976a7f6c8bbeb50d7a0622:packages/server/src/routes/federation.groupMetadataUpdate.test.ts:generic-api-key:34
+3c7bb029016d29e04eb106e952dde6202e49e0f0:packages/server/src/routes/federation.ownershipTransfer.test.ts:generic-api-key:55
+42355ee8891cfe25ba34f4e2b727611fe3a4f5d8:packages/server/src/routes/federation.outboundApprove.test.ts:generic-api-key:31
+42355ee8891cfe25ba34f4e2b727611fe3a4f5d8:packages/server/src/routes/federation.outboundDeny.test.ts:generic-api-key:31
+45ab0ea2c84bcdcec1b9ab3ca983059a6e482ad5:packages/server/src/routes/federation.peeringSubscriptions.test.ts:generic-api-key:35
+4ad83a7cc1461c660572937c03e265667f501dc8:packages/server/src/routes/federation.recheck.test.ts:generic-api-key:31
+7c8de29effc3a24c6c5c6ae89770bcd7f21772ef:packages/server/src/routes/federation.kick.test.ts:generic-api-key:31
+86ac54b91364fc9ae2deb6a44a69426dac4b2532:packages/server/src/routes/federation.peeringNotifications.test.ts:generic-api-key:35
+86ac54b91364fc9ae2deb6a44a69426dac4b2532:packages/server/src/utils/storageJanitor.peeringExpiry.test.ts:generic-api-key:30
+fa7a5f831dba56916ae5e55c4c24bdb0f1110e08:packages/server/src/routes/federation.approveOutbound.test.ts:generic-api-key:31
+fa7a5f831dba56916ae5e55c4c24bdb0f1110e08:packages/server/src/routes/federation.peerInitiateOutbound.test.ts:generic-api-key:31
+
+# Dummy JWT secret in the disposable container smoke test.
+321428ba1f54806b75f35d81590158bb90a5eef0:docs/superpowers/plans/2026-07-13-plan-b-container-hardening.md:generic-api-key:109
+
+# Prose describing S2S-proof-gated reattachment.
+79456dae97ba59bcf4f60317928c83b1492f3b8a:docs/superpowers/plans/2026-07-12-federation-security-remediation.md:generic-api-key:57
+8313e0a54e2dbaae8ec3f612b0a83df5b7c50ac6:packages/server/src/routes/auth.test.ts:generic-api-key:555
+8313e0a54e2dbaae8ec3f612b0a83df5b7c50ac6:packages/server/src/routes/auth.ts:generic-api-key:143
