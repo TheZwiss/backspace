@@ -28,6 +28,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { api, HttpError } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
+import { useActivityStore } from '../../stores/activityStore';
 
 function makeUser(overrides: Partial<User>): User {
   return {
@@ -59,6 +60,28 @@ describe('UserProfileModal', () => {
 
     expect(screen.getByText('praying 🙏')).toBeInTheDocument();
     expect(screen.getByText('Christus aeternus est. ❤️‍🔥')).toBeInTheDocument();
+  });
+
+  it('lists every game the person is playing, with its own time, in the About tab', () => {
+    const user = makeUser({});
+    useActivityStore.getState().setUserActivities(user, '', [
+      { type: 'playing', name: 'Honkai: Star Rail', timestamps: { start: Date.now() - 90_000 } },
+      { type: 'playing', name: 'Stardew Valley', timestamps: { start: Date.now() - 3_600_000 } },
+    ]);
+    useUIStore.getState().openModal('userProfile', { userId: user.id, user, origin: '' });
+
+    render(
+      <MemoryRouter>
+        <UserProfileModal />
+      </MemoryRouter>,
+    );
+
+    // One card per game, each headed by the activity type (the old single
+    // "Playing now" section header was replaced by ProfileActivities).
+    expect(screen.getAllByText('Playing a Game')).toHaveLength(2);
+    expect(screen.getByText('Honkai: Star Rail')).toBeInTheDocument();
+    expect(screen.getByText('Stardew Valley')).toBeInTheDocument();
+    expect(document.querySelectorAll('.tabular-nums')).toHaveLength(2);
   });
 
   it('Add Friend on a federated user sends their home identity, not only the stub username (issue #339)', async () => {

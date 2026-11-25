@@ -91,7 +91,8 @@
     "justNow": "Только что",
     "minutesShort": "{{minutes}} мин.",
     "hoursMinutesShort": "{{hours}} ч {{minutes}} мин.",
-    "elapsed": "Прошло {{duration}}"
+    "elapsed": "Прошло {{duration}}",
+    "left": "Осталось {{duration}}"
   },
   "units": {
     "ms": "{{value}} мс",

@@ -1,4 +1,13 @@
 {
+  "mediaSetup": {
+    "neteaseSmtc": {
+      "title": "请在网易云音乐中开启 SMTC",
+      "body": "打开网易云音乐 → 设置 → 系统 → 开启 SMTC，然后重启网易云。Backspace 需要它才能准确识别播放、暂停和进度。",
+      "gotIt": "知道了",
+      "dontRemind": "不再提醒",
+      "dismiss": "关闭此提示"
+    }
+  },
   "update": {
     "laterHint": "您可以稍后在“设置 - 桌面”中安装此更新",
     "dismiss": "忽略此更新",

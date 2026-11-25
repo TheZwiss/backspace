@@ -640,6 +640,16 @@ export interface ActivityTimestamps {
   end?: number;
 }
 
+/**
+ * Playback progress independent of the sender's wall clock. Receivers anchor
+ * this position to their own clock when the activity arrives, so devices with
+ * skewed clocks still show the same elapsed playback.
+ */
+export interface ActivityPlayback {
+  positionMs: number;
+  durationMs?: number;
+}
+
 export interface ActivityAssets {
   largeImage?: string;
   largeText?: string;
@@ -653,6 +663,7 @@ export interface Activity {
   details?: string;
   state?: string;
   timestamps?: ActivityTimestamps;
+  playback?: ActivityPlayback;
   assets?: ActivityAssets;
   url?: string;
 }

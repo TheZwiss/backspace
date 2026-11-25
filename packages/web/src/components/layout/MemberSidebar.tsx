@@ -44,8 +44,8 @@ function MemberSidebarRow({
   const displayName = spaceMemberName(member, canonical);
 
   const rowClass = isRichActivity
-    ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} ${ROW_FOCUS_CLASS}`
-    : `flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors ${ROW_FOCUS_CLASS}`;
+    ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-all duration-200 ease-out glass-pill border-l-2 ${accentClass} ${ROW_FOCUS_CLASS}`
+    : `flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] border-l-2 border-transparent hover:bg-interactive-hover cursor-pointer group transition-all duration-200 ease-out ${ROW_FOCUS_CLASS}`;
 
   // The row is a control: Enter and Space open the profile like a click, and
   // the menu key or Shift+F10 open the member menu like a right click.

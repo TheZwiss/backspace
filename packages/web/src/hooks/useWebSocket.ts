@@ -9,7 +9,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, FederatedIdentity, User } from '@backspace/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo, FederatedIdentity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { dmCallCredentialsFrom, dmCallIds, dmCallOrigin, dmCallRefFrom, dmCallRoomKey } from '../utils/dmCall';
@@ -27,6 +27,7 @@ import { useFederationStore } from '../stores/federationStore';
 import { notePendingOriginReady } from '../stores/pendingMessageRehydrate';
 import { useNotificationSettingsStore } from '../stores/notificationSettingsStore';
 import { detectClientKind } from '../platform/clientKind';
+import { fetchCurrentActivities } from '../platform/activityBridge';
 import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
 // ─── Rejected peer origins (for unreachable member indicators) ───────────────
@@ -437,12 +438,17 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Re-push local Electron activities after reconnect (sleep/wake, network blip, etc.)
       // The process scanner keeps running but onActivityDetected only fires on change,
       // so if the same app was active before and after sleep, nothing would re-push.
-      if (isHome && window.backspace?.getCurrentActivity) {
-        window.backspace.getCurrentActivity().then((activity: unknown) => {
-          if (activity) {
-            useActivityStore.getState().pushActivities([activity as Activity]);
+      if (isHome && (window.backspace?.getCurrentActivities || window.backspace?.getCurrentActivity)) {
+        fetchCurrentActivities().then((activities) => {
+          if (activities.length > 0) {
+            useActivityStore.getState().pushActivities(activities);
+          } else {
+            // Nothing detected: a game the player named themselves still stands
+            useActivityStore.getState().republish();
           }
         }).catch(() => {});
+      } else if (isHome) {
+        useActivityStore.getState().republish();
       }
 
       // Re-push current activities to newly connected instances so their

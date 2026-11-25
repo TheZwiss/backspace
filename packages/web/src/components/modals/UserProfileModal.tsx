@@ -1,11 +1,10 @@
 import { getFriendshipStatus, type FriendshipStatus } from '../../utils/friendshipStatus';
-import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { describeError } from '../../i18n/errors';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '@backspace/shared';
+import type { User, Activity } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ProfileBio } from '../ui/ProfileBio';
@@ -25,6 +24,11 @@ import { replaceEmojiShortcodes, useEmojiShortcodeNames } from '../../utils/emoj
 import { getProfileMember, useProfileMemberRoles } from '../../hooks/useProfileMember';
 import { useShownStatus } from '../../hooks/useShownStatus';
 import { ProfileRoles } from '../ui/ProfileRoles';
+import { ProfileSpaceNickname } from '../ui/ProfileSpaceNickname';
+import { useActivityStore, activitiesFor } from '../../stores/activityStore';
+import { ProfileActivities } from '../ui/ProfileActivities';
+
+const EMPTY_ACTIVITIES: Activity[] = [];
 
 type Tab = 'about' | 'friends' | 'spaces';
 
@@ -62,10 +66,18 @@ export function UserProfileModal() {
   const memberUserId = memberContext?.userId;
   const roles = useProfileMemberRoles(memberContext);
 
-  // Determine friendship status (federation-safe canonical matching)
   const friendship: FriendshipStatus = user
     ? getFriendshipStatus({ viewedUser: user, origin: userOrigin, self, friends, requests })
     : { state: 'none' };
+
+  const isYou = friendship.state === 'self';
+  const activities = useActivityStore((s) =>
+    user
+      ? isYou && s.myActivities
+        ? s.myActivities
+        : activitiesFor(s.userActivities, user, userOrigin)
+      : EMPTY_ACTIVITIES,
+  );
 
   const loadUser = useCallback(async (id: string, origin: string) => {
     try {
@@ -312,6 +324,8 @@ export function UserProfileModal() {
         <div className="flex-1 overflow-y-auto scrollbar-thin p-5 min-h-[200px]">
           {activeTab === 'about' && (
             <div className="space-y-4">
+              <ProfileActivities activities={activities} skipCustom={!!user.customStatus} />
+
               {/* Bio */}
               {user.bio && (
                 <div>

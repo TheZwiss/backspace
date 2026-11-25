@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { Activity, MemberWithUser, ServerEvent, User } from '@backspace/shared';
@@ -175,7 +175,7 @@ describe("#340: a federated friend's activity in the friends views", () => {
     expect(within(view).getByText('Factorio')).toBeTruthy();
   });
 
-  it('shows one delivery in the member list and the friends panel alike, and clears both', () => {
+  it('shows one delivery in the member list and the friends panel alike, and clears both', async () => {
     const stubRow = user({ id: 'stub-a', username: 'bob@orbit.test', displayName: 'Bob', homeUserId: 'bob-home', homeInstance: 'orbit.test' });
     showSpace('', stubRow);
     const home = socketFor('');
@@ -193,8 +193,11 @@ describe("#340: a federated friend's activity in the friends views", () => {
       type: 'presence_update', userId: 'stub-a', status: 'online', activities: [],
       homeUserId: 'bob-home', homeInstance: 'orbit.test',
     });
-    expect(within(friendsView).queryByText('Factorio')).toBeNull();
-    expect(within(membersView).queryByText('Factorio')).toBeNull();
+    // ActivityCard keeps its previous content for the 220 ms collapse animation.
+    await waitFor(() => {
+      expect(within(friendsView).queryByText('Factorio')).toBeNull();
+      expect(within(membersView).queryByText('Factorio')).toBeNull();
+    });
   });
 
   it("keeps a home native's activity apart from a same-id user native elsewhere", () => {

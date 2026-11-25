@@ -30,7 +30,7 @@ import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { statusOnConnect, type StatusSourceRow } from '../utils/presenceStatus.js';
 import { ownsChosenStatus, type ChosenUserStatus } from '@backspace/shared';
 import { attachReplicaSessionHost, showReplicaStatusOnConnect, showReplicaStatusOnDisconnect, type ReplicaSessionHost } from './replicaPresence.js';
-import { presenceIdentityOf, presenceUpdateFor, snapshotActivities } from './presenceEvent.js';
+import { presenceIdentityOf, presenceUpdateFor, projectActivityPlayback, snapshotActivities } from './presenceEvent.js';
 import { touchUserActivity, parseClientKind } from '../telemetry/activity.js';
 import { isGroupConversation } from '../utils/dmConversation.js';
 import { normalizeOriginForCompare } from '../utils/federationAuth.js';
@@ -168,12 +168,15 @@ class ConnectionManager implements ReplicaSessionHost {
   // ─── Rich Presence ──────────────────────────────────────────────────────
   // userId → Activity[] (ephemeral, same lifecycle as voiceUserStates)
   private userActivities: Map<string, Activity[]> = new Map();
+  private activityObservedAt: Map<string, number> = new Map();
   // userId → boolean (cached from DB at auth time, updated via REST)
   private userShowActivity: Map<string, boolean> = new Map();
   // userId → status string (cached at auth, updated on presence_update)
   private userStatuses: Map<string, string> = new Map();
   // userId → timestamp of last activity_update (rate limiting)
   private lastActivityUpdate: Map<string, number> = new Map();
+  // userId → the WebSocket that published the current userActivities
+  private activityWs: Map<string, WebSocket> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -200,6 +203,23 @@ class ConnectionManager implements ReplicaSessionHost {
       if (this.voiceWs.get(userId) === ws) {
         this.voiceWs.delete(userId);
         this.scheduleVoiceDisconnect(userId);
+      }
+
+      // If the socket that was publishing activities for this user disconnects (e.g. Desktop app exited),
+      // clear the activities immediately and broadcast to the user's remaining connections (e.g. Web) and friends.
+      if (this.activityWs.get(userId) === ws) {
+        this.activityWs.delete(userId);
+        this.userActivities.delete(userId);
+
+        const status = this.getUserStatus(userId);
+        const payload = presenceUpdateFor(userId, status, []);
+        const targets = collectProfileBroadcastTargetIds(userId);
+        for (const uid of targets) this.sendToUser(uid, payload);
+        this.sendToUser(userId, payload);
+
+        void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+          try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(clear) failed', e); }
+        });
       }
 
       if (userConnections.size === 0) {
@@ -365,6 +385,10 @@ class ConnectionManager implements ReplicaSessionHost {
 
   /** The per-session state a user's last disconnect drops. */
   private forgetSessionState(userId: string): void {
+    // userActivities / activityObservedAt are not session state: a native user's
+    // were already cleared by finalizeDisconnect, and a replicated user's are
+    // what the home relayed, which must outlive a session here.
+    this.activityWs.delete(userId);
     this.userShowActivity.delete(userId);
     this.userStatuses.delete(userId);
     this.lastActivityUpdate.delete(userId);
@@ -393,20 +417,31 @@ class ConnectionManager implements ReplicaSessionHost {
 
   // ─── Activity accessors ─────────────────────────────────────────────────
 
-  setUserActivities(userId: string, activities: Activity[]): void {
+  setUserActivities(userId: string, activities: Activity[], ws?: WebSocket): void {
     if (activities.length === 0) {
       this.userActivities.delete(userId);
+      this.activityObservedAt.delete(userId);
+      this.activityWs.delete(userId);
     } else {
       this.userActivities.set(userId, activities);
+      this.activityObservedAt.set(userId, Date.now());
+      if (ws) {
+        this.activityWs.set(userId, ws);
+      }
     }
   }
 
   getUserActivities(userId: string): Activity[] {
-    return this.userActivities.get(userId) ?? [];
+    const activities = this.userActivities.get(userId) ?? [];
+    const observedAt = this.activityObservedAt.get(userId);
+    if (observedAt === undefined) return activities;
+    return projectActivityPlayback(activities, Math.max(0, Date.now() - observedAt));
   }
 
   clearUserActivities(userId: string): void {
     this.userActivities.delete(userId);
+    this.activityObservedAt.delete(userId);
+    this.activityWs.delete(userId);
   }
 
   setUserShowActivity(userId: string, show: boolean): void {
@@ -425,10 +460,15 @@ class ConnectionManager implements ReplicaSessionHost {
     return this.userStatuses.get(userId) ?? 'offline';
   }
 
-  checkActivityRateLimit(userId: string): boolean {
+  /**
+   * Removing an already-published activity is accepted even inside the normal
+   * update window. Without this exception a pause immediately after a track
+   * change is dropped and the old "listening" state remains on other clients.
+   */
+  checkActivityRateLimit(userId: string, removingPublishedActivities = false): boolean {
     const now = Date.now();
     const last = this.lastActivityUpdate.get(userId) ?? 0;
-    if (now - last < 3000) return false;
+    if (!removingPublishedActivities && now - last < 3000) return false;
     this.lastActivityUpdate.set(userId, now);
     return true;
   }

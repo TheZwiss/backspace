@@ -148,6 +148,20 @@ Migration `0031_personal_stickers` adds only these two tables; message and react
 
 The composite primary key (user_id, sticker_id) makes collection idempotent; one user holds at most 200 rows (`MAX_PERSONAL_STICKERS`, checked by the routes). Removing an entry or deleting its user removes only the association. An asset stays while any collection entry, message or reaction on this instance names it; after that, and once past its grace period, the storage cleanup deletes the row and its file (`cleanupUnusedStickerAssets`). Files live under `UPLOAD_DIR/stickers`, outside the attachment phases and the storage stats.
 
+### game_icon_assets and game_icons
+
+Migration `0036_game_icons` (renumbered from `0032` to follow the migrations other pending work already claims; drizzle applies by journal `when`, so a database that already ran `0032_game_icons` skips it) adds only these two tables; no activity or user column changes (an icon is an `assets.largeImage` URL on a transient activity, see [uploads.md](uploads.md#15-game-icons) and [activity-presence.md](activity-presence.md#game-icons)).
+
+| Table | Column | Type | Notes |
+|-------|--------|------|-------|
+| game_icon_assets | id | text PK NOT NULL | SHA-256 of the encoded WebP bytes |
+| game_icon_assets | created_at | integer NOT NULL | Epoch ms of the latest upload of these bytes; set before the file is written |
+| game_icons | user_id | text NOT NULL | FK → users.id, ON DELETE CASCADE |
+| game_icons | icon_id | text NOT NULL | FK → game_icon_assets.id |
+| game_icons | created_at | integer NOT NULL | Epoch ms |
+
+The composite primary key (user_id, icon_id) makes the upload idempotent; one user holds at most 25,600 rows (`MAX_GAME_ICONS_PER_USER`, checked by the route). Deleting a user removes only their rows: an asset stays (nothing cleans assets up yet, see uploads.md §15).
+
 ### embeds
 | Column | Type | Notes |
 |--------|------|-------|

@@ -72,14 +72,32 @@
     "sendMessage": "Send Message",
     "editRoles": "Edit Roles",
     "viewFull": "View Full Profile",
-    "addFriend": "Add Friend"
+    "addFriend": "Add Friend",
+    "playingNow": "Playing now"
   },
   "activity": {
     "title": "Active Now",
     "quietTitle": "It's quiet for now...",
     "quietDescription": "When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!",
     "online": "Online — {{n}}",
-    "offline": "Offline — {{n}}"
+    "offline": "Offline — {{n}}",
+    "types": {
+      "playing": "Playing a Game",
+      "listening": "Listening to Music",
+      "streaming": "Streaming",
+      "watching": "Watching",
+      "custom": "Custom Status"
+    },
+    "players": {
+      "cloudmusic": "NetEase Cloud Music",
+      "qqmusic": "QQ Music",
+      "kugou": "KuGou",
+      "kuwo": "Kuwo",
+      "spotify": "Spotify",
+      "applemusic": "Apple Music",
+      "yandexmusic": "Yandex Music"
+    },
+    "openTrack": "Open Track"
   },
   "instanceNotConnected": "Not connected to {{host}}. Connect to it again and retry."
 }

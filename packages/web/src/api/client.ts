@@ -1,4 +1,5 @@
 import type { PersonalSticker } from '@backspace/shared/src/stickers';
+import type { GameIconUpload } from '@backspace/shared/src/gameIcons';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   NotificationSetting,
@@ -447,6 +448,10 @@ export class BackspaceApiClient {
     remove: (id: string) => Promise<{ success: boolean }>;
   };
 
+  gameIcons: {
+    upload: (data: { image: string }) => Promise<GameIconUpload>;
+  };
+
   constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     /** Send a request and return the successful response; a failure throws. */
     async function send(
@@ -535,6 +540,10 @@ export class BackspaceApiClient {
       collect: ({ id, token, name }) => request('POST', `/stickers/${encodeURIComponent(id)}/collect`, { token, name }),
       rename: (id, name) => request('PATCH', `/stickers/${encodeURIComponent(id)}`, { name }),
       remove: (id) => request('DELETE', `/stickers/${encodeURIComponent(id)}`),
+    };
+
+    this.gameIcons = {
+      upload: (data) => request('POST', '/game-icons', data),
     };
 
     this.auth = {

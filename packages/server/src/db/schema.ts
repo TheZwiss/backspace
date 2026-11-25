@@ -807,3 +807,19 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+// Game icon assets: content-addressed WebP the desktop client extracted from
+// the player's own machine and uploaded so an activity can carry an icon URL
+// the uploader's own instance hosts. No third-party CDN is ever contacted.
+export const gameIconAssets = sqliteTable('game_icon_assets', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at').notNull(),
+});
+
+// The per-uploader rows the quota counts; the asset file is shared across
+// uploaders when two machines extracted the very same bytes.
+export const gameIcons = sqliteTable('game_icons', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  iconId: text('icon_id').notNull().references(() => gameIconAssets.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({ pk: primaryKey({ columns: [table.userId, table.iconId] }) }));

@@ -133,6 +133,32 @@ contextBridge.exposeInMainWorld('backspace', {
     return () => { ipcRenderer.removeListener('activity-detected', handler); };
   },
   getCurrentActivity: () => ipcRenderer.invoke('get-current-activity'),
+  onActivitiesDetected: (callback: (activities: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, activities: unknown) => callback(activities);
+    ipcRenderer.on('activities-detected', handler);
+    return () => { ipcRenderer.removeListener('activities-detected', handler); };
+  },
+  getCurrentActivities: () => ipcRenderer.invoke('get-current-activities'),
+  listKnownGames: (): Promise<string[]> => ipcRenderer.invoke('list-known-games'),
+  // Programs the player can tie their game to, and the tie itself
+  listRunningPrograms: (): Promise<Array<{ label: string; process: string }>> => ipcRenderer.invoke('list-running-programs'),
+  getUnknownWinePrograms: (): Promise<Array<{ label: string; process: string }>> => ipcRenderer.invoke('get-unknown-wine-programs'),
+  setManualGameBindings: (bindings: Array<{ name: string; process: string }>): Promise<void> => ipcRenderer.invoke('set-manual-game-bindings', bindings),
+  setManualGameBinding: (binding: { name: string; process: string } | null): Promise<void> => ipcRenderer.invoke('set-manual-game-binding', binding),
+  // Locally extracted game icon (Steam library cache, .desktop entries,
+  // AppImage/GOG directories), base64; the renderer uploads it to the
+  // user's instance so the activity can carry an instance-hosted icon URL.
+  getGameIcon: (name: string): Promise<{ data: string; mime: string } | null> =>
+    ipcRenderer.invoke('get-game-icon', name),
+  getActivitySettings: () => ipcRenderer.invoke('get-activity-settings'),
+  setActivitySettings: (settings: { enablePreemption?: boolean }) =>
+    ipcRenderer.invoke('set-activity-settings', settings),
+  getMediaSetupHint: () => ipcRenderer.invoke('get-media-setup-hint'),
+  onMediaSetupHint: (callback: (hint: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, hint: unknown) => callback(hint);
+    ipcRenderer.on('media-setup-hint', handler);
+    return () => { ipcRenderer.removeListener('media-setup-hint', handler); };
+  },
 
   // Keybind support
   getKeybindPortalStatus: () => ipcRenderer.invoke('keybind-portal-status'),
