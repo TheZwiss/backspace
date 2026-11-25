@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
@@ -42,7 +42,14 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
   // each tile multiplied full PeerConnection scans by the number of streams.
   const streamStats = useTrackStats(shouldCollectStreamStats);
 
-  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(visibleTiles.length);
+  const { cols, tileWidth, tileHeight, ref: layoutRef } = useGridLayout(visibleTiles.length);
+  // `useGridLayout` exposes a callback ref; keep the element too so the empty-state
+  // reset can fall back to focusing the grid container.
+  const gridElementRef = useRef<HTMLElement | null>(null);
+  const gridRef = useCallback((el: HTMLElement | null) => {
+    gridElementRef.current = el;
+    layoutRef(el);
+  }, [layoutRef]);
 
   // Reset strip visibility when focus target or fullscreen mode changes:
   // entering fullscreen defaults to hiding the strip for an unobstructed view;
@@ -122,7 +129,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
               if (toggle) {
                 toggle.focus();
               } else {
-                requestAnimationFrame(() => gridRef.current?.focus());
+                requestAnimationFrame(() => gridElementRef.current?.focus());
               }
             }}
             className="px-3.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-interactive-hover text-txt-primary text-xs font-medium transition-colors"
