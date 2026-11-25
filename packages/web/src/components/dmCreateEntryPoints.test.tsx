@@ -66,6 +66,7 @@ vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   api: {
     dm: { create: vi.fn(), createGroup: vi.fn(), addMember: vi.fn(), list: vi.fn() },
+    bots: { list: vi.fn() },
     social: { search: vi.fn() },
     users: { get: vi.fn() },
     uploads: { url: (k: string) => `/uploads/${k}` },
@@ -147,6 +148,8 @@ beforeEach(() => {
   vi.mocked(api.social.search).mockReset();
   vi.mocked(api.users.get).mockReset();
   vi.mocked(api.users.get).mockResolvedValue(bobOnHome);
+  vi.mocked(api.bots.list).mockReset();
+  vi.mocked(api.bots.list).mockResolvedValue({ bots: [] });
   currentPath = '';
   // The conversation is shown from REMOTE's copy; home's copy is not known yet.
   useSpaceStore.getState().populateFromReady(REMOTE, [], [], [copyDm(bobDmRemote)]);
@@ -383,7 +386,11 @@ describe('the add-member modal asks the user\'s home when the session is signed 
 
   const remoteCreateGroup = vi.fn();
   const remoteAddMember = vi.fn();
-  const remoteApi = { dm: { createGroup: remoteCreateGroup, addMember: remoteAddMember } } as unknown as BackspaceApiClient;
+  const remoteApi = {
+    dm: { createGroup: remoteCreateGroup, addMember: remoteAddMember },
+    // The modal also lists the user's bots on their home.
+    bots: { list: vi.fn().mockResolvedValue({ bots: [] }) },
+  } as unknown as BackspaceApiClient;
 
   beforeEach(() => {
     auth.state.user = { id: 'erin-page', username: 'erin@remote.example', homeInstance: 'remote.example', homeUserId: 'erin-true' };

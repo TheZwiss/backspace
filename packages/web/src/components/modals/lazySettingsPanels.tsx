@@ -50,6 +50,8 @@ export const KeybindsPanel = lazyPanel(() => import('./settingsPanels/KeybindsPa
 export const DesktopPanel = lazyPanel(() => import('./settingsPanels/DesktopPanel'), (m) => m.DesktopPanel);
 export const DesktopDownloadPanel = lazyPanel(() => import('./settingsPanels/DesktopDownloadPanel'), (m) => m.DesktopDownloadPanel);
 export const InstancePanel = lazyPanel(() => import('./settingsPanels/InstancePanel'), (m) => m.InstancePanel);
+export const BotsPanel = lazyPanel(() => import('./settingsPanels/BotsPanel'), (m) => m.BotsPanel);
+export const DeveloperPanel = lazyPanel(() => import('./settingsPanels/DeveloperPanel'), (m) => m.DeveloperPanel);
 
 export const GeneralPanel = lazyPanel(() => import('./instanceSettingsPanels/GeneralPanel'), (m) => m.GeneralPanel);
 export const RegistrationPanel = lazyPanel(() => import('./instanceSettingsPanels/RegistrationPanel'), (m) => m.RegistrationPanel);

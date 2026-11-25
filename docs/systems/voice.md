@@ -330,14 +330,21 @@ Three independent muting mechanisms:
 - In-memory: `spaceMutedUsers` / `spaceDeafenedUsers` sets (`"spaceId:userId"` keys)
 - On voice_join: restrictions loaded from DB into memory
 - Broadcasts `voice_space_muted` / `voice_space_deafened` to all space members
+- **A bot seat is moderated per channel.** A bot sits in several channels at once, so a mute or deafen sent with `channelId` of one of its seats is stored per channel in `bot_seat_restrictions` (`channel_id`, `bot_id`, `restriction_type`), not in `voice_restrictions`. It is announced with `botSeat: true`, re-announced when the bot takes that seat again, listed in `space_voice_state` / `ready` as `spaceVoiceStates["spaceId:botId:channelId"]`, and shown like a person's moderator mute, in that channel only (`isVoiceFlagIn`, `utils/permissionMute.ts`). The rows go when the bot leaves the space or the channel is deleted. `voice_disconnect` with `channelId` takes the bot out of that seat only; bots are not moved. As for a person, the flag is honoured by the bot's client, not enforced at LiveKit.
 
 ### 3. Permission Mute (automatic, ephemeral)
 - Triggered when user loses SPEAK permission (role update)
 - `checkVoicePermissions(spaceId)` re-evaluates all users in space voice
 - NOT persisted — derived from role permissions on demand
 - Broadcasts `voice_permission_muted`
+- **A bot seat (`bot_voice_join`) is judged per channel.** A bot sits in several channels of a space at once and SPEAK is computed per channel, so its flag is kept per seat (`botSeatPermissionMuted`, key `roomId:botId`), not per space. The event then carries `channelId`; `space_voice_state` / `ready` list it as `spaceVoiceStates["spaceId:botId:channelId"]`. A bot muted in one channel is not muted in its others; leaving the muted seat sends `muted: false` for that channel, and the space-wide flags of the bot are cleared only when its last seat in the space ends. The web client checks both keys through `isPermissionMutedIn` (`utils/permissionMute.ts`). A moderator's mute and deafen of a bot seat: section 2.
 
 **Effective state:** `effectiveMuted = isMuted || spaceMuted || permissionMuted`
+
+### 4. Listener-local mute and volume ("Mute User", the volume slider)
+- Local to the listener, never sent to the server. `voiceStore.participantMutes` / `participantVolumes`, persisted.
+- A person is keyed by user id: muted once, muted wherever you meet them.
+- A bot can sit in several channels at once and each seat plays its own audio, so a bot is keyed per seat, `userId@channelId` (`utils/voiceLocalKeys.ts`, `voiceSeatKey`). Muting or turning down a bot in one channel leaves its other seats alone. Reads accept both keys, so a mute stored under the plain id before this existed still holds; unmuting a bot lifts both. Bot detection reads the open space's roster, then the voice participant's cached user.
 
 ### Move & Disconnect
 - `voice_move`: Requires MOVE_MEMBERS. Same space only. Preserves voice status.

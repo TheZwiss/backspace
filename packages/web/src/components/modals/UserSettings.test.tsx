@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { InstanceInfoResponse, User } from '@backspace/shared';
 
 // ── Fixtures and store mocks ────────────────────────────────────────────────
@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => {
       modalData: {} as Record<string, unknown>,
       isMobile: false,
       closeModal: vi.fn(),
+      addToast: vi.fn(),
     },
     auth: { user, logout: vi.fn() },
     // useInstanceUpdateBadge reads these three; no update is pending, so no dot.
@@ -96,7 +97,11 @@ vi.mock('../../stores/updateStore', () => ({
 }));
 
 vi.mock('../../api/client', () => ({
-  api: { instance: { info: () => Promise.resolve(mocks.instanceInfo) } },
+  api: {
+    instance: { info: () => Promise.resolve(mocks.instanceInfo) },
+    // The server answers with the stored value, which the switch then shows.
+    users: { update: (data: { developerMode?: boolean }) => Promise.resolve({ developerMode: data.developerMode }) },
+  },
 }));
 
 // Every sibling panel is stubbed, so this test renders only the modal chrome and
@@ -108,8 +113,10 @@ vi.mock('./settingsPanels/PrivacyPanel', () => ({ PrivacyPanel: () => <p>Privacy
 vi.mock('./settingsPanels/ConnectionsPanel', () => ({ ConnectionsPanel: () => <p>ConnectionsPanel stub</p> }));
 vi.mock('./settingsPanels/KeybindsPanel', () => ({ KeybindsPanel: () => <p>KeybindsPanel stub</p> }));
 vi.mock('./settingsPanels/InstancePanel', () => ({ InstancePanel: () => <p>InstancePanel stub</p> }));
+vi.mock('./settingsPanels/BotsPanel', () => ({ BotsPanel: () => <p>BotsPanel stub</p> }));
 
 import { UserSettingsModal } from './UserSettings';
+import { useDeveloperModeStore } from '../../stores/developerModeStore';
 
 /** The preload bridge whose presence is what `isElectron()` reads. */
 function installDesktopHost() {
@@ -236,5 +243,66 @@ describe('UserSettingsModal deep links (#330)', () => {
     mocks.ui.modalData = { tab: 'nonsense' };
     await openSettings();
     expect(await screen.findByText('AccountPanel stub')).toBeInTheDocument();
+  });
+});
+
+describe('UserSettingsModal Developer Mode', () => {
+  beforeEach(() => {
+    useDeveloperModeStore.getState().reset();
+  });
+
+  afterEach(() => {
+    // Unmount first: resetting the store under a mounted modal re-renders it outside act().
+    cleanup();
+    mocks.ui.modalData = {};
+    useDeveloperModeStore.getState().reset();
+  });
+
+  it('lists Developer for everyone and hides Bots while the mode is off', async () => {
+    await openSettings();
+    expect(screen.getByRole('button', { name: 'Developer' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bots' })).not.toBeInTheDocument();
+  });
+
+  it('shows Bots once the mode is on, and keeps the tab the user is on', async () => {
+    await openSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Developer' }));
+
+    const toggle = await screen.findByRole('switch', { name: 'Developer Mode' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+
+    expect(await screen.findByRole('button', { name: 'Bots' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Developer Mode' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByText('AccountPanel stub')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bots' }));
+    expect(await screen.findByText('BotsPanel stub')).toBeInTheDocument();
+  });
+
+  it('opens the Bots tab a caller names while the mode is on', async () => {
+    useDeveloperModeStore.getState().setEnabled(true);
+    mocks.ui.modalData = { tab: 'bots' };
+    await openSettings();
+    expect(await screen.findByText('BotsPanel stub')).toBeInTheDocument();
+  });
+
+  it('falls back to Account for the Bots tab while the mode is off', async () => {
+    mocks.ui.modalData = { tab: 'bots' };
+    await openSettings();
+    expect(await screen.findByText('AccountPanel stub')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bots' })).not.toBeInTheDocument();
+  });
+
+  it('moves to Developer when the mode goes off under an open Bots tab', async () => {
+    useDeveloperModeStore.getState().setEnabled(true);
+    mocks.ui.modalData = { tab: 'bots' };
+    await openSettings();
+    expect(await screen.findByText('BotsPanel stub')).toBeInTheDocument();
+
+    act(() => { useDeveloperModeStore.getState().setEnabled(false); });
+
+    expect(await screen.findByRole('switch', { name: 'Developer Mode' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bots' })).not.toBeInTheDocument();
   });
 });

@@ -58,7 +58,7 @@ export function registerAttachRoutes(app: FastifyInstance): void {
 
       // 2. Sign every downstream response with the peer's shared secret so the
       // caller can trust the identity (or the fail-closed verdict) it carries.
-      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply =>
+      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string; isBot?: boolean }): FastifyReply =>
         sendSignedJson(reply, payload, peer.hmacSecret);
 
       // 3. Validate the token shape (64 hex chars, as minted by attach-proof).
@@ -104,7 +104,12 @@ export function registerAttachRoutes(app: FastifyInstance): void {
 
       // The handle, which the caller names the re-attached account after: a
       // detached account homed here signs in as `<handle>@<former home>`.
-      return sendSigned({ valid: true, homeUserId: homeUser.id, username: relayHandleOf(homeUser) ?? homeUser.username });
+      return sendSigned({
+        valid: true,
+        homeUserId: homeUser.id,
+        username: relayHandleOf(homeUser) ?? homeUser.username,
+        ...(homeUser.isBot === 1 ? { isBot: true } : {}),
+      });
     },
   );
 

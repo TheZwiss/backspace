@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { eq, or, and, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { forgetReplicaProjection } from '../ws/replicaPresence.js';
+import { deleteAllManagedBotRoles } from './botRoles.js';
 
 export interface DeletionBroadcastTargets {
   /** Space IDs the user is a member of (for member_left broadcasts) */
@@ -105,6 +106,14 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
   const user = db.select().from(schema.users).where(eq(schema.users.id, uid)).get();
   if (!user) return [];
 
+  // Bots die with their owner: otherwise their tokens stay valid and their sockets stay open.
+  const ownedBots = db.select({ id: schema.users.id }).from(schema.users)
+    .where(and(
+      eq(schema.users.botOwnerId, uid),
+      eq(schema.users.isBot, 1),
+      eq(schema.users.isDeleted, 0),
+    )).all();
+
   const filesToDelete: string[] = [];
   if (user.avatar) filesToDelete.push(user.avatar);
   if (user.banner) filesToDelete.push(user.banner);
@@ -157,6 +166,15 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
     tx.delete(schema.userFederationCredentials)
       .where(eq(schema.userFederationCredentials.userId, uid))
       .run();
+
+    // A bot's access tokens (hash only) go with the account too.
+    tx.delete(schema.botTokens)
+      .where(eq(schema.botTokens.botId, uid))
+      .run();
+
+    // A bot's slash commands go with the account (the tombstone keeps the users
+    // row, so the ON DELETE CASCADE never fires).
+    tx.delete(schema.botCommands).where(eq(schema.botCommands.botId, uid)).run();
 
     // Conditional deletes for tables that may reference userId
     try { tx.delete(schema.bans).where(eq(schema.bans.userId, uid)).run(); } catch { /* table may not exist */ }
@@ -270,6 +288,7 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       avatar: null,
       banner: null,
       bio: null,
+      botActivity: null,
       customStatus: null,
       accentColor: null,
       avatarColor: null,
@@ -282,6 +301,39 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
   });
   // The tombstone shows 'offline' for good; a replicated row's projection goes with it.
   forgetReplicaProjection(uid);
+
+  // A bot's managed roles go with it (utils/botRoles.ts); the spaces reload their roles.
+  if (user.isBot === 1) {
+    const roleSpaces = deleteAllManagedBotRoles(uid);
+    if (roleSpaces.length > 0) {
+      // Lazy import: ws/handler imports the DB layer, a static import would be a cycle.
+      void import('../ws/handler.js').then(({ connectionManager }) => {
+        for (const spaceId of roleSpaces) connectionManager.announceSpaceAccessChange(spaceId, []);
+      }).catch(() => { /* best effort: the next load shows the roles as they are */ });
+    }
+  }
+
+  // After the commit: tombstoneUser opens its own transaction, so it cannot be nested.
+  for (const bot of ownedBots) {
+    // Origins first: the bot's tombstone deletes its federation credentials.
+    const botOrigins = db.select({ origin: schema.userFederationCredentials.origin })
+      .from(schema.userFederationCredentials)
+      .where(eq(schema.userFederationCredentials.userId, bot.id))
+      .all()
+      .map(r => r.origin);
+    filesToDelete.push(...tombstoneUser(bot.id, options));
+    if (botOrigins.length > 0) {
+      // Dynamic import: the federation utils import this module (cycle).
+      const mode = options?.purgeContent === false ? 'soft' : 'full';
+      void import('./botRevocationQueue.js')
+        .then(({ revokeBotWithRetry }) => revokeBotWithRetry(bot.id, botOrigins, mode))
+        .catch(() => { /* a failed round is queued by revokeBotWithRetry; nobody to report to */ });
+    }
+    // Lazy import: ws/handler imports the DB layer, a static import would be a cycle.
+    void import('../ws/handler.js').then(({ connectionManager }) => {
+      connectionManager.forceDisconnectUser(bot.id);
+    }).catch(() => { /* best effort */ });
+  }
 
   return filesToDelete;
 }

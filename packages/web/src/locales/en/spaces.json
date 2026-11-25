@@ -366,7 +366,24 @@
       "kickFailed": "Failed to kick member",
       "banFailed": "Failed to ban member",
       "rolesAboveYou": "Roles at or above your highest role are locked.",
-      "rolesUnheld": "Roles with permissions you do not have cannot be given."
+      "rolesUnheld": "Roles with permissions you do not have cannot be given.",
+      "rolesManagedByBot": "A bot's own role stays with the bot.",
+      "botInvite": {
+        "warning": "The bot becomes a member of this server and receives the messages and events of every channel its permissions allow. Only add bots you trust.",
+        "owner": "Owner: @{{owner}}",
+        "button": "Add Bot",
+        "title": "Add a Bot",
+        "searchPlaceholder": "Search bots by name...",
+        "searching": "Searching...",
+        "noResults": "No bots found",
+        "add": "Add",
+        "adding": "Adding...",
+        "permissionsTitle": "Permissions for {{name}}",
+        "permissionsIntro": "The bot asks for these permissions. They go into a role named after the bot; untick any you do not want to give.",
+        "permissionsUnheld": "Permissions you do not have yourself cannot be given.",
+        "permissionsNone": "Nothing ticked: the bot joins without a role.",
+        "back": "Back"
+      }
     }
   },
   "bans": {
@@ -393,6 +410,7 @@
     "backToList": "Back to roles",
     "created": "Role created. Customize it below.",
     "aboveYou": "This role ranks at or above your highest role. You can view it but not change it.",
+    "managedByBot": "This role belongs to a bot. It goes when the bot leaves the space and cannot be given to anyone else or deleted. Its permissions can be changed.",
     "reorder": {
       "handle": "Move {{name}}",
       "handleHint": "Drag, or use the up and down arrow keys",

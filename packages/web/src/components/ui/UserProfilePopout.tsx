@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { BotBadge } from './BotBadge';
 import { ProfileBio } from './ProfileBio';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
@@ -191,7 +192,10 @@ export function UserProfilePopout({ user: propUser, origin, onClose, anchor, pla
         {/* Name & info */}
         <div>
           <ProfileSpaceNickname member={member} />
-          <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[16px] font-semibold leading-tight">{displayName}</span>
+            {user.isBot && <BotBadge />}
+          </div>
           <div className="text-[13px] text-txt-tertiary">
             <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />
           </div>

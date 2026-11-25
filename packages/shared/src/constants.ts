@@ -87,7 +87,31 @@ export const GROUP_DM_NAME_MIN_LENGTH = 1;
 export const GROUP_DM_ICON_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
 
+export const MAX_BOTS_PER_USER = 10;
+/** Access tokens one bot may hold at once; each can be revoked on its own. */
+export const MAX_BOT_TOKENS_PER_BOT = 5;
+/** Longest owner label of a bot token. */
+export const BOT_TOKEN_NAME_MAX_LENGTH = 32;
+/**
+ * WebSocket close code for a bot socket refused because another socket with the
+ * same credential is open: a bot runs as one process for all of its channels.
+ */
+export const BOT_TOKEN_IN_USE_CLOSE_CODE = 4409;
+export const BOT_NAME_SUFFIX = '_bot';
+export const BOT_NAME_MIN_LENGTH = 5;
+export const BOT_NAME_MAX_LENGTH = 32;
+/**
+ * The kinds of status an owner can set for a bot in Settings > Bots. A subset of
+ * `ActivityType`: `streaming` needs a live URL, which a stored status has not.
+ */
+export const BOT_ACTIVITY_TYPES = ['custom', 'playing', 'listening', 'watching'] as const;
+/** Longest value of a string option of a slash command, and the largest `maxLength` a bot may set. */
+export const COMMAND_STRING_OPTION_MAX = 2000;
+
 // ─── Account Constants ───────────────────────────────────────────────────────
+
+/** Longest profile bio ("About me", a bot's "About"), in characters after trim. */
+export const PROFILE_BIO_MAX_LENGTH = 190;
 
 /**
  * The fewest characters a password may have. The server refuses a shorter one

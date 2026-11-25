@@ -114,7 +114,8 @@
     "addCount_other": "Adicionar {{count}} amigos",
     "adding": "Adicionando…",
     "noOtherMember": "Não foi possível identificar o outro membro desta conversa.",
-    "failed": "Falha ao adicionar membros"
+    "failed": "Falha ao adicionar membros",
+    "yourBots": "Seus bots"
   },
   "groupSettings": {
     "title": "Configurações do grupo",

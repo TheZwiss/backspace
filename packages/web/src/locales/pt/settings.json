@@ -130,7 +130,9 @@
       "connections": "Conexões",
       "keybinds": "Atalhos",
       "desktop": "Desktop",
-      "instance": "Instância"
+      "instance": "Instância",
+      "bots": "Contas de bot",
+      "developer": "Desenvolvedor"
     },
     "logOut": "Sair",
     "backToMenu": "Voltar ao menu de configurações"
@@ -430,5 +432,106 @@
     },
     "version": "Versão {{version}}",
     "allReleases": "Todas as versões no GitHub"
+  },
+  "bots": {
+    "title": "Contas de bot",
+    "description": "Um bot é uma conta controlada por um programa por meio de um token. Crie um, copie o token e conecte seu programa. Os bots respondem em mensagens diretas.",
+    "create": {
+      "sectionTitle": "Criar um bot",
+      "nameLabel": "Nome de usuário do bot",
+      "submit": "Criar bot",
+      "hint": "De {{min}} a {{max}} caracteres: letras minúsculas, números e sublinhados. Você pode criar até {{limit}} bots."
+    },
+    "list": {
+      "sectionTitle": "Seus bots",
+      "empty": "Você ainda não tem bots.",
+      "createdOn": "Criado em {{date}}"
+    },
+    "token": {
+      "title": "Token de {{name}}",
+      "warning": "Copie o token agora. Ele é exibido só uma vez, e quem o tiver controla o bot.",
+      "copy": "Copiar token",
+      "copied": "Copiado",
+      "dismiss": "Já salvei"
+    },
+    "tokens": {
+      "title": "Tokens de acesso",
+      "loading": "Carregando tokens",
+      "legacy": "Este bot ainda usa o token antigo de longa duração. Crie um token para migrar: o antigo deixa de funcionar assim que você o criar.",
+      "empty": "Este bot não tem tokens.",
+      "unnamed": "Token sem nome",
+      "createdOn": "Criado em {{date}}",
+      "neverUsed": "nunca usado",
+      "lastUsed": "usado {{time}}",
+      "revoke": "Revogar",
+      "confirmRevoke": "Confirmar revogação",
+      "nameLabel": "Rótulo do token",
+      "namePlaceholder": "Rótulo (opcional)",
+      "create": "Criar token",
+      "limitHint": "Até {{max}} tokens por bot. Revogar um token desconecta o bot; os demais tokens continuam funcionando."
+    },
+    "actions": {
+      "regenerate": "Redefinir todos os tokens",
+      "delete": "Excluir",
+      "confirmDelete": "Confirmar exclusão",
+      "cancel": "Cancelar",
+      "edit": "Editar",
+      "save": "Salvar",
+      "addToServer": "Adicionar a um espaço",
+      "tokens": "Tokens"
+    },
+    "edit": {
+      "nameLabel": "Nome de exibição",
+      "hint": "O nome de usuário @{{username}} não pode ser alterado. Até {{max}} caracteres.",
+      "bioLabel": "Sobre",
+      "bioPlaceholder": "O que o bot faz, seus comandos, onde obter ajuda",
+      "bioCounter": "{{used}}/{{max}}"
+    },
+    "status": {
+      "label": "Status",
+      "none": "Sem status",
+      "textLabel": "Texto do status",
+      "placeholder": "O que o bot mostra ao lado do nome",
+      "hint": "Mostrado enquanto o bot está conectado. O código do bot pode substituí-lo até a próxima conexão.",
+      "types": {
+        "custom": "Personalizado",
+        "playing": "Jogando",
+        "listening": "Ouvindo",
+        "watching": "Assistindo"
+      },
+      "display": {
+        "custom": "{{name}}",
+        "playing": "Jogando {{name}}",
+        "listening": "Ouvindo {{name}}",
+        "watching": "Assistindo {{name}}"
+      }
+    },
+    "permissions": {
+      "label": "Permissões que o bot pede",
+      "hint": "Quem adiciona o bot a um espaço as vê marcadas e pode desmarcar qualquer uma. Elas vão para um cargo com o nome do bot. Mudá-las depois não altera cargos já criados."
+    },
+    "avatar": {
+      "change": "Alterar avatar",
+      "remove": "Remover avatar",
+      "cropTitle": "Recortar avatar do bot",
+      "uploadFailed": "Falha ao enviar o avatar",
+      "notImage": "Escolha um arquivo de imagem"
+    },
+    "spaces": {
+      "title": "Adicionar a um espaço",
+      "loading": "Carregando espaços",
+      "empty": "Você ainda não gerencia nenhum espaço. Adicionar um bot exige permissão para gerenciar o espaço.",
+      "add": "Adicionar",
+      "added": "Adicionado",
+      "remove": "Remover"
+    }
+  },
+  "developer": {
+    "title": "Desenvolvedor",
+    "mode": {
+      "label": "Modo de desenvolvedor",
+      "description": "Mostra ferramentas de desenvolvedor, como a aba Bots, nas configurações. Desativar apenas as oculta; seus bots continuam funcionando.",
+      "saveFailed": "Não foi possível salvar a configuração. Tente novamente."
+    }
   }
 }

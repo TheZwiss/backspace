@@ -1,3 +1,4 @@
+import type { ChatCommandsResponse, CreateInteractionRequest, CreateInteractionResponse } from '@backspace/shared';
 import type { PersonalSticker } from '@backspace/shared/src/stickers';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
@@ -49,6 +50,7 @@ import type {
   OrphanedFile,
   CleanupResult,
   AdminUserListResponse,
+  AdminBlockedBot,
   AdminUser,
   AdminResetPasswordResponse,
   InstanceUpdateStatus,
@@ -84,6 +86,17 @@ import type {
   ReattachResponse,
   TelemetryPayload,
   TelemetryStatus,
+  BotSearchResult,
+  BotSummary,
+  CreateBotRequest,
+  UpdateBotRequest,
+  UpdateBotResponse,
+  CreateBotResponse,
+  RegenerateBotTokenResponse,
+  BotTokensResponse,
+  CreateBotTokenRequest,
+  CreateBotTokenResponse,
+  BotSpacesResponse,
 } from '@backspace/shared';
 import { MESSAGE_PAGING_AFTER, MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
@@ -410,6 +423,27 @@ export class BackspaceApiClient {
     markAllPeeringNotificationsRead: () => Promise<{ success: boolean; count: number }>;
   };
 
+  readonly commands: {
+    forChat: (target: { channelId?: string; dmChannelId?: string }) => Promise<ChatCommandsResponse>;
+    invoke: (body: CreateInteractionRequest) => Promise<CreateInteractionResponse>;
+  };
+
+  readonly bots: {
+    list: () => Promise<{ bots: BotSummary[] }>;
+    search: (q: string) => Promise<{ bots: BotSearchResult[] }>;
+    create: (data: CreateBotRequest) => Promise<CreateBotResponse>;
+    regenerateToken: (id: string) => Promise<RegenerateBotTokenResponse>;
+    listTokens: (id: string) => Promise<BotTokensResponse>;
+    createToken: (id: string, data: CreateBotTokenRequest) => Promise<CreateBotTokenResponse>;
+    revokeToken: (id: string, tokenId: string) => Promise<{ success: boolean }>;
+    update: (id: string, data: UpdateBotRequest) => Promise<UpdateBotResponse>;
+    spaces: (id: string) => Promise<BotSpacesResponse>;
+    /** `permissions`: the grant out of the bot's requested permissions; omitted, the server grants every requested bit the caller holds. */
+    addToSpace: (id: string, spaceId: string, permissions?: string) => Promise<{ success: boolean }>;
+    removeFromSpace: (id: string, spaceId: string) => Promise<{ success: boolean }>;
+    delete: (id: string) => Promise<{ success: boolean }>;
+  };
+
   readonly invites: {
     list: (status?: 'active' | 'archived') => Promise<{ invites: InviteLinkSummary[] }>;
     create: (body: CreateInviteRequest) => Promise<InviteLinkSummary>;
@@ -430,7 +464,9 @@ export class BackspaceApiClient {
     listInstances: () => Promise<{ instances: string[] }>;
     setUserRole: (userId: string, isAdmin: boolean) => Promise<AdminUser>;
     resetUserPassword: (userId: string) => Promise<AdminResetPasswordResponse>;
-    deleteUser: (userId: string) => Promise<{ success: boolean }>;
+    deleteUser: (userId: string, opts?: { blockBot?: boolean }) => Promise<{ success: boolean }>;
+    listBlockedBots: () => Promise<{ bots: AdminBlockedBot[] }>;
+    unblockBot: (homeInstance: string, homeUserId: string) => Promise<{ success: boolean }>;
     updateStatus: (refresh?: boolean) => Promise<InstanceUpdateStatus>;
     telemetry: {
       get: () => Promise<TelemetryStatus>;
@@ -931,6 +967,31 @@ export class BackspaceApiClient {
         ),
     };
 
+    this.commands = {
+      forChat: (target: { channelId?: string; dmChannelId?: string }) => {
+        const params = new URLSearchParams();
+        if (target.channelId) params.set('channelId', target.channelId);
+        if (target.dmChannelId) params.set('dmChannelId', target.dmChannelId);
+        return request<ChatCommandsResponse>('GET', `/commands?${params.toString()}`);
+      },
+      invoke: (body: CreateInteractionRequest) => request<CreateInteractionResponse>('POST', '/interactions', body),
+    };
+
+    this.bots = {
+      list: () => request<{ bots: BotSummary[] }>('GET', '/bots'),
+      search: (q: string) => request<{ bots: BotSearchResult[] }>('GET', `/bots/search?q=${encodeURIComponent(q)}`),
+      create: (data: CreateBotRequest) => request<CreateBotResponse>('POST', '/bots', data),
+      regenerateToken: (id: string) => request<RegenerateBotTokenResponse>('POST', `/bots/${id}/token`),
+      listTokens: (id: string) => request<BotTokensResponse>('GET', `/bots/${id}/tokens`),
+      createToken: (id: string, data: CreateBotTokenRequest) => request<CreateBotTokenResponse>('POST', `/bots/${id}/tokens`, data),
+      revokeToken: (id: string, tokenId: string) => request<{ success: boolean }>('DELETE', `/bots/${id}/tokens/${tokenId}`),
+      update: (id: string, data: UpdateBotRequest) => request<UpdateBotResponse>('PATCH', `/bots/${id}`, data),
+      spaces: (id: string) => request<BotSpacesResponse>('GET', `/bots/${id}/spaces`),
+      addToSpace: (id: string, spaceId: string, permissions?: string) => request<{ success: boolean }>('POST', `/bots/${id}/spaces`, permissions === undefined ? { spaceId } : { spaceId, permissions }),
+      removeFromSpace: (id: string, spaceId: string) => request<{ success: boolean }>('DELETE', `/bots/${id}/spaces/${spaceId}`),
+      delete: (id: string) => request<{ success: boolean }>('DELETE', `/bots/${id}`),
+    };
+
     this.invites = {
       list: (status: 'active' | 'archived' = 'active') =>
         request<{ invites: InviteLinkSummary[] }>('GET', `/admin/invites?status=${status}`),
@@ -974,8 +1035,11 @@ export class BackspaceApiClient {
         request<AdminUser>('PATCH', `/admin/users/${userId}/role`, { isAdmin }),
       resetUserPassword: (userId) =>
         request<AdminResetPasswordResponse>('POST', `/admin/users/${userId}/reset-password`),
-      deleteUser: (userId) =>
-        request<{ success: boolean }>('DELETE', `/admin/users/${userId}`),
+      deleteUser: (userId, opts) =>
+        request<{ success: boolean }>('DELETE', `/admin/users/${userId}${opts?.blockBot ? '?blockBot=1' : ''}`),
+      listBlockedBots: () => request<{ bots: AdminBlockedBot[] }>('GET', '/admin/blocked-bots'),
+      unblockBot: (homeInstance, homeUserId) =>
+        request<{ success: boolean }>('DELETE', `/admin/blocked-bots/${encodeURIComponent(homeInstance)}/${encodeURIComponent(homeUserId)}`),
       // `refresh` bypasses the server's six-hour cache for an explicit
       // "Check again" click. It cannot bypass BACKSPACE_UPDATE_CHECK.
       updateStatus: (refresh = false) =>

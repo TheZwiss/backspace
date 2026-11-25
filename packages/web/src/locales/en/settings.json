@@ -130,7 +130,9 @@
       "connections": "Connections",
       "keybinds": "Keybinds",
       "desktop": "Desktop",
-      "instance": "Instance"
+      "instance": "Instance",
+      "bots": "Bots",
+      "developer": "Developer"
     },
     "logOut": "Log Out",
     "backToMenu": "Back to settings menu"
@@ -429,5 +431,106 @@
     },
     "version": "Version {{version}}",
     "allReleases": "All releases on GitHub"
+  },
+  "bots": {
+    "title": "Bots",
+    "description": "A bot is an account that a program controls with a token. Create one, copy its token and connect your program. Bots answer in direct messages.",
+    "create": {
+      "sectionTitle": "Create a bot",
+      "nameLabel": "Bot username",
+      "submit": "Create bot",
+      "hint": "{{min}} to {{max}} characters: lowercase letters, numbers and underscores. You can create up to {{limit}} bots."
+    },
+    "list": {
+      "sectionTitle": "Your bots",
+      "empty": "You have no bots yet.",
+      "createdOn": "Created {{date}}"
+    },
+    "token": {
+      "title": "Token for {{name}}",
+      "warning": "Copy the token now. It is shown only once, and anyone who has it controls the bot.",
+      "copy": "Copy token",
+      "copied": "Copied",
+      "dismiss": "I have saved it"
+    },
+    "tokens": {
+      "title": "Access tokens",
+      "loading": "Loading tokens",
+      "legacy": "This bot still runs on its old long-lived token. Create a token to switch: the old one stops working the moment you do.",
+      "empty": "This bot has no tokens.",
+      "unnamed": "Unnamed token",
+      "createdOn": "Created {{date}}",
+      "neverUsed": "never used",
+      "lastUsed": "last used {{time}}",
+      "revoke": "Revoke",
+      "confirmRevoke": "Confirm revoke",
+      "nameLabel": "Token label",
+      "namePlaceholder": "Label (optional)",
+      "create": "Create token",
+      "limitHint": "Up to {{max}} tokens per bot. Revoking a token disconnects the bot; the other tokens keep working."
+    },
+    "actions": {
+      "regenerate": "Reset all tokens",
+      "delete": "Delete",
+      "confirmDelete": "Confirm delete",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "save": "Save",
+      "addToServer": "Add to server",
+      "tokens": "Tokens"
+    },
+    "edit": {
+      "nameLabel": "Display name",
+      "hint": "The username @{{username}} cannot be changed. Up to {{max}} characters.",
+      "bioLabel": "About",
+      "bioPlaceholder": "What the bot does, its commands, where to get help",
+      "bioCounter": "{{used}}/{{max}}"
+    },
+    "status": {
+      "label": "Status",
+      "none": "No status",
+      "textLabel": "Status text",
+      "placeholder": "What the bot shows next to its name",
+      "hint": "Shown while the bot is connected. The bot's code can replace it until it next connects.",
+      "types": {
+        "custom": "Custom",
+        "playing": "Playing",
+        "listening": "Listening to",
+        "watching": "Watching"
+      },
+      "display": {
+        "custom": "{{name}}",
+        "playing": "Playing {{name}}",
+        "listening": "Listening to {{name}}",
+        "watching": "Watching {{name}}"
+      }
+    },
+    "permissions": {
+      "label": "Permissions the bot asks for",
+      "hint": "A manager adding the bot to a space sees these ticked and can untick any. They go into a role named after the bot. Changing them later does not touch roles already created."
+    },
+    "avatar": {
+      "change": "Change avatar",
+      "remove": "Remove avatar",
+      "cropTitle": "Crop bot avatar",
+      "uploadFailed": "Failed to upload the avatar",
+      "notImage": "Choose an image file"
+    },
+    "spaces": {
+      "title": "Add to a space",
+      "loading": "Loading spaces",
+      "empty": "You manage no spaces yet. Adding a bot needs permission to manage the space.",
+      "add": "Add",
+      "added": "Added",
+      "remove": "Remove"
+    }
+  },
+  "developer": {
+    "title": "Developer",
+    "mode": {
+      "label": "Developer Mode",
+      "description": "Show developer tools, such as the Bots tab, in settings. Turning it off only hides them; your bots keep running.",
+      "saveFailed": "Could not save the setting. Try again."
+    }
   }
 }

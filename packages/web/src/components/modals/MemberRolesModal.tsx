@@ -20,12 +20,13 @@ import { userDisplayName } from '../../utils/identity';
 import { useSpaceOrigin } from '../../hooks/useSpaceOrigin';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
+import { isBotManagedRole, isListedForMember } from '../../utils/botRoles';
 import { withSavedRole } from '../../utils/roleOrder';
 
 const ALL_PERMISSION_DEFS = PERMISSION_GROUPS.flatMap((group) => group.perms);
 
 /** Why a membership checkbox is locked: the role ranks too high, or it carries bits the viewer lacks. */
-type RoleLock = 'rank' | 'bits';
+type RoleLock = 'managed' | 'rank' | 'bits';
 
 /**
  * A staged change to one role's permissions: the bits, and the stored value
@@ -130,7 +131,8 @@ function MemberRolesBody({
   const spaceApi = getApiForOrigin(space._instanceOrigin ?? '');
 
   // Same ordering as the roles tab: by position desc, @everyone always last.
-  const sortedRoles = [...roles].sort((a, b) => {
+  // Another bot's managed role is not listed; a bot's own one is shown, locked.
+  const sortedRoles = roles.filter((role) => isListedForMember(role, member.userId)).sort((a, b) => {
     const aIsEveryone = a.id === spaceId;
     const bIsEveryone = b.id === spaceId;
     if (aIsEveryone) return 1;
@@ -190,13 +192,15 @@ function MemberRolesBody({
   const roleLocks = new Map<string, RoleLock>();
   for (const role of roles) {
     if (role.id === spaceId) continue;
-    if (!viewerCanManageRoleAt(space, members, role.position)) roleLocks.set(role.id, 'rank');
+    if (isBotManagedRole(role)) roleLocks.set(role.id, 'managed');
+    else if (!viewerCanManageRoleAt(space, members, role.position)) roleLocks.set(role.id, 'rank');
     else if (!serverRoleIds.has(role.id) && !viewerHoldsEveryBit(held, stringToPermissions(role.permissions))) {
       roleLocks.set(role.id, 'bits');
     }
   }
-  const lockKinds = (['rank', 'bits'] as const).filter((kind) => [...roleLocks.values()].includes(kind));
+  const lockKinds = (['managed', 'rank', 'bits'] as const).filter((kind) => [...roleLocks.values()].includes(kind));
   const lockReason: Record<RoleLock, string> = {
+    managed: t('spaces:settings.members.rolesManagedByBot'),
     rank: t('spaces:settings.members.rolesAboveYou'),
     bits: t('spaces:settings.members.rolesUnheld'),
   };

@@ -8,6 +8,8 @@ import { VoiceUserRow } from './VoiceUserRow';
 import { useTranslation } from 'react-i18next';
 import { useFormatters } from '../../i18n/formatters';
 import { useSharedSecondBeat } from '../../hooks/useSharedSecondBeat';
+import { isPermissionMutedIn, isVoiceFlagIn } from '../../utils/permissionMute';
+import { isLocallyMutedIn, setLocalMute } from '../../utils/voiceLocalKeys';
 
 const EMPTY_VOICE_USERS: string[] = [];
 
@@ -125,8 +127,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
         type: 'checkbox',
         label: 'Mute User',
         subscribe: useVoiceStore.subscribe,
-        getChecked: () => useVoiceStore.getState().participantMutes.get(userId) ?? false,
-        onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
+        getChecked: () => isLocallyMutedIn(useVoiceStore.getState().participantMutes, userId, channelId),
+        onChange: (checked) => setLocalMute(userId, channelId, checked),
       });
 
       items.push({ key: 'vol-sep', type: 'separator' });
@@ -135,7 +137,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
       items.push({
         key: 'volume',
         type: 'custom',
-        render: () => React.createElement(VolumeSliderItem, { userId }),
+        render: () => React.createElement(VolumeSliderItem, { userId, channelId }),
       });
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
@@ -221,9 +223,9 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const hasCamera = participant?.isCameraOn ?? wsStatus?.isCameraOn ?? false;
             const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
             const spaceId = channelToSpaceMap.get(channelId);
-            const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
-            const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
-            const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
+            const isSpaceMuted = isVoiceFlagIn(spaceMutedUserIds, spaceId, userId, channelId);
+            const isSpaceDeafened = isVoiceFlagIn(spaceDeafenedUserIds, spaceId, userId, channelId);
+            const isPermissionMuted = isPermissionMutedIn(permissionMutedUserIds, spaceId, userId, channelId);
             const participantConnectionQuality = participant?.isLocal
               ? localConnectionQuality
               : participant
@@ -259,6 +261,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   displayName={displayName}
                   avatar={avatar}
                   avatarColor={avatarColor ?? undefined}
+                  isBot={member?.user.isBot === true}
                   isMuted={isMuted}
                   isDeafened={isParticipantDeafened}
                   isCameraOn={hasCamera}
@@ -267,7 +270,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   isServerMuted={isSpaceMuted}
                   isServerDeafened={isSpaceDeafened}
                   isPermissionMuted={isPermissionMuted}
-                  isLocallyMuted={userId !== myIdHere && (participantMutes.get(userId) ?? false)}
+                  isLocallyMuted={userId !== myIdHere && isLocallyMutedIn(participantMutes, userId, channelId)}
                   isSpeaking={speakingUserIds.has(userId)}
                   connectionWarning={connectionWarning}
                 />

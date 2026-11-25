@@ -16,7 +16,7 @@ export interface PeerForAttach {
 export async function verifyAttachProofWithPeer(
   peer: PeerForAttach,
   token: string,
-): Promise<{ valid: true; homeUserId: string; username: string } | { valid: false }> {
+): Promise<{ valid: true; homeUserId: string; username: string; isBot: boolean } | { valid: false }> {
   const body = JSON.stringify({ token });
   const headers = buildFederationHeaders(body, peer.hmacSecret, getOurOrigin());
 
@@ -51,9 +51,9 @@ export async function verifyAttachProofWithPeer(
   }
 
   try {
-    const parsed = JSON.parse(text) as { valid?: boolean; homeUserId?: string; username?: string };
+    const parsed = JSON.parse(text) as { valid?: boolean; homeUserId?: string; username?: string; isBot?: boolean };
     if (parsed.valid === true && typeof parsed.homeUserId === 'string' && typeof parsed.username === 'string') {
-      return { valid: true, homeUserId: parsed.homeUserId, username: parsed.username };
+      return { valid: true, homeUserId: parsed.homeUserId, username: parsed.username, isBot: parsed.isBot === true };
     }
   } catch {
     // fall through

@@ -366,7 +366,24 @@
       "kickFailed": "Mitglied konnte nicht entfernt werden",
       "banFailed": "Mitglied konnte nicht gesperrt werden",
       "rolesAboveYou": "Rollen auf oder über deiner höchsten Rolle sind gesperrt.",
-      "rolesUnheld": "Rollen mit Berechtigungen, die du nicht hast, kannst du nicht vergeben."
+      "rolesUnheld": "Rollen mit Berechtigungen, die du nicht hast, kannst du nicht vergeben.",
+      "rolesManagedByBot": "Die eigene Rolle eines Bots bleibt beim Bot.",
+      "botInvite": {
+        "warning": "Der Bot wird Mitglied dieses Servers und erhält die Nachrichten und Ereignisse aller Kanäle, die seine Berechtigungen erlauben. Füge nur Bots hinzu, denen du vertraust.",
+        "owner": "Besitzer: @{{owner}}",
+        "button": "Bot hinzufügen",
+        "title": "Bot hinzufügen",
+        "searchPlaceholder": "Bots nach Namen suchen...",
+        "searching": "Suche...",
+        "noResults": "Keine Bots gefunden",
+        "add": "Hinzufügen",
+        "adding": "Wird hinzugefügt...",
+        "permissionsTitle": "Berechtigungen für {{name}}",
+        "permissionsIntro": "Der Bot fordert diese Berechtigungen an. Sie landen in einer Rolle mit dem Namen des Bots; wähle ab, was du nicht geben willst.",
+        "permissionsUnheld": "Berechtigungen, die du selbst nicht hast, kannst du nicht vergeben.",
+        "permissionsNone": "Nichts angehakt: Der Bot tritt ohne Rolle bei.",
+        "back": "Zurück"
+      }
     }
   },
   "bans": {
@@ -393,6 +410,7 @@
     "backToList": "Zurück zu den Rollen",
     "created": "Rolle erstellt. Passe sie unten an.",
     "aboveYou": "Diese Rolle steht auf oder über deiner höchsten Rolle. Du kannst sie ansehen, aber nicht ändern.",
+    "managedByBot": "Diese Rolle gehört zu einem Bot. Sie verschwindet, wenn der Bot den Space verlässt, und kann weder vergeben noch gelöscht werden. Ihre Berechtigungen lassen sich ändern.",
     "reorder": {
       "handle": "{{name}} verschieben",
       "handleHint": "Ziehen oder mit den Pfeiltasten nach oben und unten verschieben",

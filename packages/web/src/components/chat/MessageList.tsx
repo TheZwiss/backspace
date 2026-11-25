@@ -25,10 +25,12 @@ import { useDmViewer } from '../../hooks/useDmViewer';
 import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { describeError } from '../../i18n/errors';
-import type { MessageWithUser } from '@backspace/shared';
+import type { EphemeralReply, MessageWithUser } from '@backspace/shared';
 import { SystemMessage } from './SystemMessage';
 import { ChannelSystemMessage } from './ChannelSystemMessage';
 import { MessageJumpContext } from './messageJumpContext';
+import { EphemeralReplyRow } from './EphemeralReplyRow';
+import { useEphemeralReplies } from '../../stores/ephemeralReplyStore';
 import {
   BOTTOM_ANCHOR,
   firstUnreadMessageId,
@@ -570,6 +572,22 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
     });
     return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
   }, [messages, pendingBubbles, messagesById, channelId, myRow, isDm]);
+
+  // Bot answers only this person sees: not rows of the channel, so they stay
+  // out of the list above (anchors, unread, paging) and are drawn after the
+  // last row they are not older than (-1: before every row). Viewing an older
+  // window, one newer than its last row is not drawn: it belongs further on.
+  const ephemeralReplies = useEphemeralReplies(channelId);
+  const ephemeralAfter = useMemo(() => {
+    const byRow = new Map<number, EphemeralReply[]>();
+    for (const reply of ephemeralReplies) {
+      let at = interleavedMessages.length - 1;
+      while (at >= 0 && interleavedMessages[at]!.createdAt > reply.createdAt) at--;
+      if (isDetached && at === interleavedMessages.length - 1) continue;
+      byRow.set(at, [...(byRow.get(at) ?? []), reply]);
+    }
+    return byRow;
+  }, [ephemeralReplies, interleavedMessages, isDetached]);
 
   // Load on open, and again when a listing names a channel that was unknown,
   // which ends its `waiting` state.
@@ -1134,11 +1152,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
           className="pt-4"
           style={{ paddingBottom: 'var(--composer-clearance, 80px)' }}
         >
+          {ephemeralAfter.get(-1)?.map((reply) => <EphemeralReplyRow key={reply.id} reply={reply} chatId={channelId} />)}
           {interleavedMessages.map((msg, i) => {
             const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
             const dateLabel = showDate ? formatDateDivider(msg.createdAt) : null;
-            const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
+            // A bot's answer drawn between two rows starts a new group after it.
+            const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg) || ephemeralAfter.has(i - 1);
             const isUnreadStart = unreadMarker?.channelId === channelId && unreadMarker.messageId === msg.id;
 
             // Walk back to find the nearest non-pending neighbor for "Mark Unread".
@@ -1185,6 +1205,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpHandled }: Messa
                     previousMessageId={realPrevId}
                   />
                 )}
+                {ephemeralAfter.get(i)?.map((reply) => <EphemeralReplyRow key={reply.id} reply={reply} chatId={channelId} />)}
               </React.Fragment>
             );
           })}

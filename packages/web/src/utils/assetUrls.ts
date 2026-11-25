@@ -16,6 +16,17 @@ export function resolveAssetUrl(filename: string | null | undefined, origin: str
 }
 
 /**
+ * The loadable URL of an upload that lives on `origin` ('' is home): an absolute
+ * URL passes through, a bare or `/api/uploads/` filename is resolved against the
+ * API of that origin. Null when there is no file.
+ */
+export function uploadUrlOn(filename: string | null | undefined, origin: string): string | null {
+  if (!filename) return null;
+  if (filename.startsWith('http')) return filename;
+  return getApiForOrigin(origin).uploads.url(stripUploadPrefix(filename));
+}
+
+/**
  * Rewrite the avatar field on a user-like object for remote origins.
  * Mutates in-place for efficiency (called on arrays of members/messages).
  */

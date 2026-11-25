@@ -12,6 +12,7 @@ import {
   ownRowAt,
   isMine,
   selfIdentityOf,
+  profileFieldsOf,
 } from './identity';
 
 describe('normalizeOriginToHost', () => {
@@ -260,5 +261,23 @@ describe('spaceMemberName', () => {
     expect(spaceMemberName({ nickname: 'Pilot' }, user)).toBe('Pilot');
     expect(spaceMemberName({ nickname: null }, user)).toBe('kai');
     expect(spaceMemberName(null, { displayName: 'Kai', username: 'kai' })).toBe('Kai');
+  });
+});
+
+describe('profileFieldsOf', () => {
+  const base = {
+    displayName: 'Radio', avatar: null, banner: null, accentColor: null, avatarColor: null,
+    bio: null, customStatus: null, status: 'online' as const,
+  };
+
+  it("carries the bot flag of the home's row to the person's other rows", () => {
+    const stale = { id: 'r1', ...base, displayName: 'old' };
+    expect({ ...stale, ...profileFieldsOf({ ...base, isBot: true }) }.isBot).toBe(true);
+  });
+
+  it('never clears a bot flag a row already has', () => {
+    const known = { id: 'r1', ...base, isBot: true };
+    expect({ ...known, ...profileFieldsOf(base) }.isBot).toBe(true);
+    expect({ ...known, ...profileFieldsOf({ ...base, isBot: false }) }.isBot).toBe(true);
   });
 });

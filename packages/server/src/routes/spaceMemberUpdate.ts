@@ -30,44 +30,61 @@ interface MemberUpdateContext {
   reply: FastifyReply;
 }
 
-function validateRoleUpdate(context: MemberUpdateContext, roleIds: unknown): roleIds is string[] {
+/**
+ * Checks a whole role set for a member. Answers the set to store, or null
+ * after sending a refusal. A bot's managed role is not part of what the set
+ * controls: it stays on its bot whether the set names it or not, and naming
+ * it for anyone else is refused (bots.md, "Permissions on invite").
+ */
+function validateRoleUpdate(context: MemberUpdateContext, roleIds: unknown): string[] | null {
   const { spaceId, actorId, targetId, ownerId, reply } = context;
   if (!hasPermission(actorId, spaceId, PermissionBits.MANAGE_ROLES)) {
     sendError(reply, 403, 'missing_permission', { permission: 'MANAGE_ROLES' });
-    return false;
+    return null;
   }
   if (targetId === actorId) {
     sendError(reply, 400, 'cannot_change_own_roles');
-    return false;
+    return null;
   }
   if (targetId === ownerId) {
     sendError(reply, 403, 'space_owner_only');
-    return false;
+    return null;
   }
   if (!Array.isArray(roleIds) || roleIds.some((id) => typeof id !== 'string') || new Set(roleIds).size !== roleIds.length) {
     sendError(reply, 400, 'role_ids_invalid');
-    return false;
+    return null;
   }
   const db = getDb();
   const spaceRoles = db.select().from(schema.roles).where(eq(schema.roles.spaceId, spaceId)).all();
   const spaceRolePositions = new Map(spaceRoles.map(r => [r.id, r.position ?? 0]));
+  const managedBotOf = new Map(spaceRoles.flatMap(r => (r.managedBotId ? [[r.id, r.managedBotId] as const] : [])));
   for (const roleId of roleIds) {
     if (!spaceRolePositions.has(roleId)) {
       sendError(reply, 400, 'role_not_in_space', { roleId });
-      return false;
+      return null;
     }
     if (roleId === spaceId) {
       sendError(reply, 400, 'everyone_role_not_assignable');
-      return false;
+      return null;
+    }
+    const managedBot = managedBotOf.get(roleId);
+    if (managedBot !== undefined && managedBot !== targetId) {
+      sendError(reply, 400, 'role_managed_by_bot');
+      return null;
     }
   }
+  // The target's own managed role is kept, named or not.
+  const roleSet = [...new Set([
+    ...roleIds,
+    ...[...managedBotOf].filter(([, botId]) => botId === targetId).map(([roleId]) => roleId),
+  ])];
 
   // Role hierarchy: the member must rank below the actor, and every role
   // this request adds or removes must sit below the actor's top role.
   const actorStanding = getHierarchyStanding(spaceId, actorId);
   if (!canActOnMember(actorStanding, getHierarchyStanding(spaceId, targetId))) {
     sendError(reply, 403, 'role_hierarchy');
-    return false;
+    return null;
   }
   const currentRoleIds = new Set(
     db.select({ roleId: schema.memberRoles.roleId })
@@ -76,26 +93,26 @@ function validateRoleUpdate(context: MemberUpdateContext, roleIds: unknown): rol
       .all()
       .map(r => r.roleId),
   );
-  const requestedRoleIds = new Set(roleIds);
+  const requestedRoleIds = new Set(roleSet);
   const changedRoleIds = [
-    ...roleIds.filter(r => !currentRoleIds.has(r)),
+    ...roleSet.filter(r => !currentRoleIds.has(r)),
     ...[...currentRoleIds].filter(r => !requestedRoleIds.has(r)),
   ];
   for (const roleId of changedRoleIds) {
     if (!canManageRoleAt(actorStanding, spaceRolePositions.get(roleId) ?? 0)) {
       sendError(reply, 403, 'role_hierarchy');
-      return false;
+      return null;
     }
   }
   // Held-bits rule: a role this request adds must carry only bits the actor holds.
-  for (const roleId of roleIds.filter(r => !currentRoleIds.has(r))) {
+  for (const roleId of roleSet.filter(r => !currentRoleIds.has(r))) {
     const refusal = roleGrantRefusal(spaceId, actorId, spaceRoles.find(r => r.id === roleId)?.permissions ?? null);
     if (refusal) {
       sendError(reply, 403, refusal);
-      return false;
+      return null;
     }
   }
-  return true;
+  return roleSet;
 }
 
 /**
@@ -147,8 +164,9 @@ function validateMemberPatch(context: MemberUpdateContext, patch: UpdateMemberRe
   }
   const write: MemberWrite = {};
   if (roleIds !== undefined) {
-    if (!validateRoleUpdate(context, roleIds)) return null;
-    write.roleIds = roleIds;
+    const roleSet = validateRoleUpdate(context, roleIds);
+    if (!roleSet) return null;
+    write.roleIds = roleSet;
   }
   if (nickname !== undefined) {
     const stored = validateNicknameUpdate(context, nickname);

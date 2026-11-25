@@ -10,7 +10,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 
 1. Client connects to `/ws`
 2. Client sends `{ type: 'auth', token: '<jwt>', client?: 'web' | 'desktop' | 'mobile' }` within 10 seconds. `client` is optional; a missing or unrecognised value is read as `web`. The wire type is the `auth` variant of `ClientEvent` in `packages/shared/src/types.ts`, where the field is typed `ClientKind`
-3. Server validates token (rejects deleted users, tokens issued before `passwordChangedAt`)
+3. Server validates token (rejects deleted users, tokens issued before `passwordChangedAt`). A bot account holds one open socket per credential: a second one is answered `error` with `code: 'bot_token_in_use'` and closed with code 4409 ([bots.md](bots.md), "One process per token")
 4. Server responds with `ready` event containing full client state
 5. Server sets the user's live status to their chosen status (`users.chosen_status` for an account that owns its choice, native or detached; for a replicated user the home instance's last projection, or `online` if there is none) and carries it in the `ready` payload's `user.status`, broadcasts `presence_update` to friends + DM co-members + space co-members (via `collectProfileBroadcastTargetIds`); for native users, also queues a S2S `presence_update` relay to all active peers
 6. Heartbeat: server pings every 30s (RFC 6455 ping frames), dead connections detected after ~65s
@@ -67,10 +67,12 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### Voice Moderation
 | type | fields | permission |
 |------|--------|------------|
-| `voice_space_mute` | userId, muted | MUTE_MEMBERS |
-| `voice_space_deafen` | userId, deafened | DEAFEN_MEMBERS |
+| `voice_space_mute` | userId, muted, channelId? | MUTE_MEMBERS |
+| `voice_space_deafen` | userId, deafened, channelId? | DEAFEN_MEMBERS |
 | `voice_move` | userId, targetChannelId | MOVE_MEMBERS |
-| `voice_disconnect` | userId | DISCONNECT_MEMBERS |
+| `voice_disconnect` | userId, channelId? | DISCONNECT_MEMBERS |
+
+`channelId` names one seat of a bot (`bot_voice_join`): mute, deafen and disconnect then act on that channel's seat only, with the bit checked in that channel (bots.md, 5c). Without it, or for a person, they act on the target's one voice room as before.
 
 All four also need the actor to outrank the target (permissions.md, "Role hierarchy"); a refusal is an `error` with `code: 'role_hierarchy'`.
 
@@ -385,9 +387,9 @@ takes the client out of it (`teardownDmCall`).
 | `voice_state_update` | channelId, userId, action: join/leave, channelElapsedSeconds? | space |
 | `voice_status_update` | userId, channelId, isMuted, isDeafened, isCameraOn, isScreenSharing | room |
 | `space_voice_state` | spaceId, voiceStates, voiceChannelElapsedSeconds, voiceUserStates, spaceVoiceStates | the joining user, or a member whose access changed. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session, after `space_access_changed` (see below), and to each member who can see a voice channel after an override on it or its category changed or it moved to another category (spaces.md, "Channel/Category Permission Overrides"). |
-| `voice_space_muted` | userId, channelId, spaceId, muted | space |
-| `voice_space_deafened` | userId, channelId, spaceId, deafened | space |
-| `voice_permission_muted` | userId, spaceId, muted | space |
+| `voice_space_muted` | userId, channelId, spaceId, muted, botSeat? | space (`botSeat: true`: the mute is that bot seat's only; snapshots key it `spaceId:botId:channelId`) |
+| `voice_space_deafened` | userId, channelId, spaceId, deafened, botSeat? | space (`botSeat: true`: as above) |
+| `voice_permission_muted` | userId, spaceId, channelId?, muted | space (`channelId` only for a bot seat: the mute is that channel's alone) |
 | `voice_moved` | userId, oldChannelId, newChannelId | user (target) |
 | `voice_disconnected` | userId, channelId, reason? | user (target) |
 reason: `'displaced'` (new tab) | `'session_closed'`
@@ -472,3 +474,15 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 The `ready` payload is the **only** carrier of voice presence at connect time. When a user joins a space *mid-session* (invite, public join, or join-request approval) without reloading, they would otherwise see empty voice channels until a refresh, because `member_joined` carries no voice state and `GET /api/spaces/:id` (the channel-sidebar hydrator) has none either.
 
 To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — calls `pushSpaceVoiceState(userId, spaceId)`, which builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the user has no connection, or the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.
+
+---
+
+## Bots
+
+A bot authenticates like any client (`{ type: 'auth', token }`, the token is the bot's JWT) and receives the same events as any member of the same chats; the server does not filter the ordinary events (no rule by mention or by kind of chat). See [bots.md](bots.md) for what a bot author needs (self-events, mentions, reconnecting).
+
+**Client to server, bots only:** `bot_voice_join { channelId }` and `bot_voice_leave { channelId }` seat a bot in a space voice channel and take it out again without touching its other seats (up to 25); the room is told with the ordinary `voice_state_update`. See [bots.md](bots.md), section 5c.
+
+**Server to a bot:** `interaction_created { interaction: { id, command, subcommand?, options, resolved?, user, channelId?, spaceId?, dmChannelId?, expiresAt } }` when a person invokes one of the bot's slash commands; only the invoked bot's sockets receive it. See [bots.md](bots.md), section 5b.
+
+**Server to the invoker of a slash command:** `interaction_ephemeral { reply: { id, interactionId, command, user, content, createdAt, channelId?, spaceId?, dmChannelId? } }` when the bot answers with `ephemeral: true`; only the invoker's sockets on this instance receive it, nothing is stored, and the client shows it in that chat until a reload or a dismiss. See [bots.md](bots.md), "Answering".

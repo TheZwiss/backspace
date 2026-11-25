@@ -7,7 +7,7 @@ import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/au
 import { connectionManager } from '../ws/handler.js';
 import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, FederationCredentialRequest, FederationCredentialResponse, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
 import { AVATAR_COLORS, isChosenUserStatus, type ChosenUserStatus } from '@backspace/shared';
-import { PASSWORD_MIN_LENGTH } from '@backspace/shared/src/constants.js';
+import { PASSWORD_MIN_LENGTH, PROFILE_BIO_MAX_LENGTH } from '@backspace/shared/src/constants.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { applyChosenStatus } from '../ws/presence.js';
 import { presenceUpdateFor } from '../ws/presenceEvent.js';
@@ -20,6 +20,7 @@ import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
 import { buildFederationHeaders, getOurOrigin, normalizeOriginForCompare, canonicalizeHomeInstance } from '../utils/federationAuth.js';
 import { extractDomain } from './federation.js';
+import { hasPendingBotRevocation } from '../utils/botRevocationQueue.js';
 import path from 'path';
 
 /**
@@ -218,7 +219,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt, discoverable, showActivity } = request.body;
+    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt, discoverable, showActivity, developerMode } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -240,6 +241,15 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       const hasDurableField = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
       if (hasDurableField) {
         return sendError(reply, 403, 'profile_managed_by_home');
+      }
+    }
+
+    // A bot's profile belongs to its owner (PATCH /api/bots/:id). Its own token
+    // must not rename it around the `_bot` suffix rule.
+    if (preUpdateUser.isBot === 1) {
+      const touchesProfile = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
+      if (touchesProfile) {
+        return sendError(reply, 403, 'bot_profile_owner_only');
       }
     }
 
@@ -318,8 +328,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     if (bio !== undefined) {
       if (bio && typeof bio === 'string') {
         const trimmed = bio.trim();
-        if (trimmed.length > 190) {
-          return sendError(reply, 400, 'bio_too_long', { max: 190 });
+        if (trimmed.length > PROFILE_BIO_MAX_LENGTH) {
+          return sendError(reply, 400, 'bio_too_long', { max: PROFILE_BIO_MAX_LENGTH });
         }
         updateData.bio = trimmed || null;
       } else {
@@ -461,6 +471,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       (updateData as Record<string, unknown>).showActivity = showActivity ? 1 : 0;
     }
 
+    if (developerMode !== undefined) {
+      if (typeof developerMode !== 'boolean') {
+        return sendError(reply, 400, 'validation_failed', { field: 'developerMode', reason: 'must be a boolean' });
+      }
+      (updateData as Record<string, unknown>).developerMode = developerMode ? 1 : 0;
+    }
+
     if (Object.keys(updateData).length === 0 && chosenStatus === undefined) {
       return sendError(reply, 400, 'no_fields_to_update');
     }
@@ -536,6 +553,12 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const sanitized = sanitizeUser(updatedUser, true);
+
+    // Developer Mode is private to the account: only its own sockets hear of it,
+    // so another device switches the Bots tab without a reload. Never relayed.
+    if (developerMode !== undefined && !hasProfileChange) {
+      connectionManager.sendToUser(sanitized.id, { type: 'user_updated' as const, user: sanitized });
+    }
 
     // Broadcast user_updated for profile field changes
     if (hasProfileChange) {
@@ -743,6 +766,12 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
     if (user.homeInstance && user.federationHomeOrphaned !== 1) {
       return sendError(reply, 409, 'federation_credential_home_only');
+    }
+    // A revoke of this bot is still waiting for that instance (it was away): the
+    // old account there would block a new registration, and the late revoke would
+    // take the new one down. See botRevocationQueue.ts.
+    if (user.isBot === 1 && hasPendingBotRevocation(user.id, target)) {
+      return sendError(reply, 409, 'bot_revocation_pending');
     }
 
     const now = Date.now();

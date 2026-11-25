@@ -7,6 +7,7 @@ import { handleClientEvent } from './events.js';
 import { recordSocketAddress } from './socketAddress.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import { idsHiddenFromEveryone } from '@backspace/shared/src/permissions.js';
+import { BOT_TOKEN_IN_USE_CLOSE_CODE } from '@backspace/shared/src/constants.js';
 import type {
   User,
   Space,
@@ -38,6 +39,8 @@ import { utcDay } from '../telemetry/day.js';
 import { memberRolesView, rolesForViewer } from '../utils/permissionDataView.js';
 import { canCountUnread, readyUnreadCounts, unreadCountFollowUp } from './channelUnreadCounts.js';
 import { userWrittenMessages } from '../db/userWrittenMessages.js';
+import { isBotTokenString, isRetiredLegacyBotJwt, verifyBotToken } from '../utils/botTokens.js';
+import { botActivityAsLive, parseStoredBotActivity } from '../utils/botActivity.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
@@ -127,6 +130,23 @@ class ConnectionManager implements ReplicaSessionHost {
   private connections: Map<string, Set<WebSocket>> = new Map();
   // userId → Set of space IDs the user belongs to
   private userSpaces: Map<string, Set<string>> = new Map();
+  /**
+   * Voice rooms a BOT sits in. A bot may be in many voice channels at once, one
+   * instance per channel, so it is kept apart from `userToRoom` (one room per
+   * user, the rule every human session lives by). Members of these rooms are in
+   * `room.participants` like anyone else, so everything that reads occupancy
+   * (the ready payload, voice_state_update) already sees them.
+   */
+  private botRooms: Map<string, Set<string>> = new Map();
+  /**
+   * One live socket per bot credential: a `bsb_` token is held as `token:<id>`,
+   * a JWT login of a bot account (its pre-`bsb_` token, or a bot's federated
+   * account here) as `account:<userId>`. A bot runs as one process that serves
+   * all of its channels; a second process with the same credential is refused
+   * instead of splitting the bot's events and seats between the two.
+   */
+  private botSessions: Map<string, WebSocket> = new Map();
+  private wsBotSession: Map<WebSocket, string> = new Map();
   // ws → userId (reverse lookup)
   private wsToUser: Map<WebSocket, string> = new Map();
   // Unified voice room tracking (replaces voiceStates + activeCalls)
@@ -159,6 +179,13 @@ class ConnectionManager implements ReplicaSessionHost {
   private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // Permission-muted users (SPEAK permission revoked while in voice)
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  /**
+   * Permission mute of a bot SEAT (`bot_voice_join`), keyed `roomId:botId`. A bot
+   * sits in several channels at once and SPEAK is computed per channel, so the
+   * per-space flag above cannot hold it: muted in one channel must not mean
+   * muted in the others. A person (one room at a time) keeps the per-space flag.
+   */
+  private botSeatPermissionMuted: Set<string> = new Set();
   // The specific WebSocket that initiated voice_join / DM call for this user.
   // When THIS socket closes, voice cleanup enters the reconnect grace period.
   private voiceWs: Map<string, WebSocket> = new Map();
@@ -186,7 +213,29 @@ class ConnectionManager implements ReplicaSessionHost {
     this.cancelDisconnect(userId);
   }
 
+  /**
+   * Holds the bot credential `key` for this socket. False while another socket
+   * that is still open holds it; a holder that is closing or closed is replaced.
+   */
+  claimBotSession(key: string, ws: WebSocket): boolean {
+    const held = this.botSessions.get(key);
+    if (held && held !== ws && held.readyState === 1 /* WebSocket.OPEN */) return false;
+    if (held && held !== ws) this.wsBotSession.delete(held);
+    this.botSessions.set(key, ws);
+    this.wsBotSession.set(ws, key);
+    return true;
+  }
+
+  /** Lets go of the bot credential this socket held, if any. */
+  releaseBotSession(ws: WebSocket): void {
+    const key = this.wsBotSession.get(ws);
+    if (key === undefined) return;
+    this.wsBotSession.delete(ws);
+    if (this.botSessions.get(key) === ws) this.botSessions.delete(key);
+  }
+
   removeConnection(ws: WebSocket): string | undefined {
+    this.releaseBotSession(ws);
     const userId = this.wsToUser.get(ws);
     if (!userId) return undefined;
 
@@ -326,6 +375,8 @@ class ConnectionManager implements ReplicaSessionHost {
     if (this.isUserOnline(userId)) return;
 
     console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
+    // A bot that dropped leaves every voice channel it sat in (humans have the reconnect grace).
+    this.botLeaveRooms(userId);
 
     // A replicated row returns to its home's projection, or to 'offline' when
     // none is known (ws/replicaPresence.ts). The home owns its status, so
@@ -435,6 +486,14 @@ class ConnectionManager implements ReplicaSessionHost {
 
   setUserSpaces(userId: string, spaceIds: string[]): void {
     this.userSpaces.set(userId, new Set(spaceIds));
+  }
+
+  /** Stops delivering a space's events to a user who is no longer a member. */
+  removeUserSpace(userId: string, spaceId: string): void {
+    // A bot removed or banned from a space must leave its voice channels too. This
+    // goes first: the bot is still a recipient of the space, so it hears itself leave.
+    this.botLeaveRooms(userId, spaceId);
+    this.userSpaces.get(userId)?.delete(spaceId);
   }
 
   addUserSpace(userId: string, spaceId: string): void {
@@ -577,6 +636,25 @@ class ConnectionManager implements ReplicaSessionHost {
       if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
       spaceVoiceStates[key] = existing;
     }
+    // A moderator's mute / deafen of a bot seat — persisted per channel
+    // (`bot_seat_restrictions`), keyed `spaceId:botId:channelId` like the
+    // seat's permission mute below.
+    const seatRestrictions = db.select({
+      channelId: schema.botSeatRestrictions.channelId,
+      botId: schema.botSeatRestrictions.botId,
+      restrictionType: schema.botSeatRestrictions.restrictionType,
+    })
+      .from(schema.botSeatRestrictions)
+      .innerJoin(schema.channels, eq(schema.botSeatRestrictions.channelId, schema.channels.id))
+      .where(eq(schema.channels.spaceId, spaceId))
+      .all();
+    for (const r of seatRestrictions) {
+      const seatKey = `${spaceId}:${r.botId}:${r.channelId}`;
+      const existing = spaceVoiceStates[seatKey] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+      if (r.restrictionType === 'mute') existing.spaceMuted = true;
+      if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
+      spaceVoiceStates[seatKey] = existing;
+    }
     // Permission-mute — ephemeral, derived from in-memory state for every
     // participant currently in this space's voice rooms (mirrors buildReadyPayload).
     for (const [, room] of this.voiceRooms) {
@@ -584,6 +662,16 @@ class ConnectionManager implements ReplicaSessionHost {
       const meta = room.metadata as SpaceRoomMeta;
       if (meta.spaceId !== spaceId) continue;
       for (const participantId of room.participants) {
+        if (this.isBotSeat(participantId, room.roomId)) {
+          // A bot seat is muted per channel: key `spaceId:botId:channelId`.
+          if (this.isBotSeatPermissionMuted(room.roomId, participantId)) {
+            const seatKey = `${spaceId}:${participantId}:${room.roomId}`;
+            const existing = spaceVoiceStates[seatKey] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+            existing.permissionMuted = true;
+            spaceVoiceStates[seatKey] = existing;
+          }
+          continue;
+        }
         if (this.isPermissionMuted(spaceId, participantId)) {
           const key = `${spaceId}:${participantId}`;
           const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
@@ -1215,11 +1303,108 @@ class ConnectionManager implements ReplicaSessionHost {
     return this.permissionMutedUsers.has(`${spaceId}:${userId}`);
   }
 
+  /** Whether the bot holds a `bot_voice_join` seat in this room. */
+  isBotSeat(botId: string, roomId: string): boolean {
+    return this.botRooms.get(botId)?.has(roomId) ?? false;
+  }
+
+  setBotSeatPermissionMuted(roomId: string, botId: string, muted: boolean): void {
+    const key = `${roomId}:${botId}`;
+    if (muted) this.botSeatPermissionMuted.add(key);
+    else this.botSeatPermissionMuted.delete(key);
+  }
+
+  isBotSeatPermissionMuted(roomId: string, botId: string): boolean {
+    return this.botSeatPermissionMuted.has(`${roomId}:${botId}`);
+  }
+
   getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
     return this.voiceUserStates;
   }
 
   // ─── Broadcasting ─────────────────────────────────────────────────────────
+
+  /** The voice rooms a bot is in through `bot_voice_join` (its `voice_join` seat is not listed). */
+  getBotRoomIds(botId: string): string[] {
+    return [...(this.botRooms.get(botId) ?? [])];
+  }
+
+  /**
+   * Seats a bot in a space voice room (created on demand). False when it is
+   * already there. Caller checked the channel, the bot's membership and CONNECT.
+   */
+  botJoinRoom(botId: string, roomId: string, spaceId: string): boolean {
+    const rooms = this.botRooms.get(botId) ?? new Set<string>();
+    if (rooms.has(roomId)) return false;
+    // A seat taken with the ordinary `voice_join` is already a seat here. Holding
+    // both would announce the join twice and leave `userToRoom` pointing at a
+    // room the bot has left.
+    if (this.userToRoom.get(botId) === roomId) return false;
+    this.createRoom(roomId, 'space', { type: 'space', spaceId });
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return false;
+    room.participants.add(botId);
+    rooms.add(roomId);
+    this.botRooms.set(botId, rooms);
+    return true;
+  }
+
+  private botHasSeatInSpace(botId: string, spaceId: string): boolean {
+    for (const roomId of this.botRooms.get(botId) ?? []) {
+      const meta = this.voiceRooms.get(roomId)?.metadata as SpaceRoomMeta | undefined;
+      if (meta?.spaceId === spaceId) return true;
+    }
+    return false;
+  }
+
+  /** Takes a bot out of one voice room. Returns the room, or null when it was not in it. */
+  botLeaveRoom(botId: string, roomId: string): VoiceRoom | null {
+    const rooms = this.botRooms.get(botId);
+    if (!rooms || !rooms.delete(roomId)) return null;
+    if (rooms.size === 0) this.botRooms.delete(botId);
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+    room.participants.delete(botId);
+    if (room.roomType === 'space') {
+      const spaceId = (room.metadata as SpaceRoomMeta).spaceId;
+      if (this.botSeatPermissionMuted.delete(`${roomId}:${botId}`)) {
+        this.sendToSpace(spaceId, { type: 'voice_permission_muted', userId: botId, spaceId, channelId: roomId, muted: false });
+      }
+      // Space-wide flags belong to the bot's other seats in this space too.
+      if (!this.botHasSeatInSpace(botId, spaceId)) this.clearSpaceVoiceState(spaceId, botId);
+    }
+    // Lazy-created space rooms disappear with their last participant.
+    if (room.participants.size === 0 && room.roomType === 'space') this.voiceRooms.delete(roomId);
+    return room;
+  }
+
+  /**
+   * Takes a bot out of every voice room, or only those of one space, and tells
+   * the rest of each space. Used when the bot disconnects, is removed or banned.
+   */
+  botLeaveRooms(botId: string, onlySpaceId?: string): void {
+    for (const roomId of this.getBotRoomIds(botId)) {
+      const meta = this.voiceRooms.get(roomId)?.metadata as SpaceRoomMeta | undefined;
+      if (onlySpaceId !== undefined && meta?.spaceId !== onlySpaceId) continue;
+      const room = this.botLeaveRoom(botId, roomId);
+      if (!room) continue;
+      this.sendToSpace((room.metadata as SpaceRoomMeta).spaceId, {
+        type: 'voice_state_update',
+        channelId: roomId,
+        userId: botId,
+        action: 'leave',
+      });
+    }
+    if (!this.botRooms.has(botId)) this.clearVoiceUserStatus(botId);
+  }
+
+  /** Whether the user has at least one open socket (a bot with none cannot be handed a command). */
+  hasLiveConnection(userId: string): boolean {
+    for (const ws of this.getUserConnections(userId)) {
+      if (ws.readyState === 1) return true;
+    }
+    return false;
+  }
 
   /**
    * Send to a specific user (all their connections). An event that moves one
@@ -1350,6 +1535,9 @@ class ConnectionManager implements ReplicaSessionHost {
       clearTimeout(timeout);
       this.pendingOfflineTimeouts.delete(userId);
     }
+
+    // A bot may sit in several voice rooms
+    this.botLeaveRooms(userId);
 
     // Leave the voice room they are in. This is a leave like any other: a
     // DM call it empties ends, and the end reaches the peers. A call hosted
@@ -1512,6 +1700,28 @@ class WsRateLimiter {
     }
     return false;
   }
+}
+
+/**
+ * When a bot account's socket authenticates: if the account shows activities
+ * and has no live ones yet (no other session of it reported any), its stored
+ * status (`users.bot_activity`, the home's copy on a host) becomes its live
+ * activity. Returns the seeded list, or null when nothing was seeded. Does not
+ * broadcast: the connect path announces the presence with these activities.
+ * A bot's own `activity_update` replaces the seed until its next connection.
+ */
+export function seedStoredBotActivity(row: {
+  id: string;
+  isBot: number;
+  showActivity: number;
+  botActivity: string | null;
+}): Activity[] | null {
+  if (row.isBot !== 1 || row.showActivity === 0) return null;
+  if (connectionManager.getUserActivities(row.id).length > 0) return null;
+  const live = botActivityAsLive(parseStoredBotActivity(row.botActivity));
+  if (live.length === 0) return null;
+  connectionManager.setUserActivities(row.id, live);
+  return live;
 }
 
 /** The `ready` payload for `userId`: everything a client needs to start, sent once per connection. */
@@ -2052,7 +2262,22 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
         }
 
         try {
-          const payload = verifyJwt(parsed.token);
+          // A bot token is checked against its stored hash; anything else is a JWT.
+          let payload: { userId: string; username: string; iat?: number };
+          let botTokenId: string | null = null;
+          if (isBotTokenString(parsed.token)) {
+            const resolved = verifyBotToken(parsed.token);
+            if (resolved === 'deleted') {
+              ws.send(JSON.stringify({ type: 'error', message: 'This account has been deleted' }));
+              ws.close();
+              return;
+            }
+            if (resolved === 'invalid') throw new Error('Invalid bot token');
+            payload = { userId: resolved.userId, username: resolved.username };
+            botTokenId = resolved.tokenId;
+          } else {
+            payload = verifyJwt(parsed.token);
+          }
           userId = payload.userId;
           username = payload.username;
 
@@ -2064,11 +2289,31 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
             ws.close();
             return;
           }
+          // A bot's old 10-year JWT stops working once it holds a `bsb_` token.
+          if (payload.iat !== undefined && isRetiredLegacyBotJwt(userRow)) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Token has been revoked' }));
+            ws.close();
+            return;
+          }
           // Token revocation: reject tokens issued before last password change
           if (userRow.passwordChangedAt && payload.iat) {
             if (payload.iat < Math.floor(userRow.passwordChangedAt / 1000)) {
               ws.send(JSON.stringify({ type: 'error', message: 'Token has been revoked' }));
               ws.close();
+              return;
+            }
+          }
+
+          // One process per bot credential: a second socket is refused while the first is open.
+          if (userRow.isBot === 1) {
+            const sessionKey = botTokenId !== null ? `token:${botTokenId}` : `account:${userRow.id}`;
+            if (!connectionManager.claimBotSession(sessionKey, ws)) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'This bot token is already connected from another process',
+                code: 'bot_token_in_use',
+              }));
+              ws.close(BOT_TOKEN_IN_USE_CLOSE_CODE, 'bot_token_in_use');
               return;
             }
           }
@@ -2084,6 +2329,10 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
 
           // Add connection
           connectionManager.addConnection(userId, ws);
+
+          // A bot shows its stored status while connected, unless another of its
+          // sessions already reported an activity (its code may have set one).
+          const seededActivities = seedStoredBotActivity(userRow);
 
           // Captured for the pong closure: `userId` is a mutable outer binding, so
           // its narrowing to a string does not survive into the callback.
@@ -2107,7 +2356,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           }));
 
           // Broadcast the connect status to friends + DM co-members + space co-members.
-          const connectPayload = presenceUpdateFor(userId, connectStatus);
+          const connectPayload = presenceUpdateFor(userId, connectStatus, seededActivities ?? undefined);
           const connectTargets = collectProfileBroadcastTargetIds(userId);
           for (const uid of connectTargets) connectionManager.sendToUser(uid, connectPayload);
 

@@ -3,6 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { useAudioTrackPlayer } from '../../hooks/useAudioTrackPlayer';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
+import { isLocallyMutedIn, localVolumeIn } from '../../utils/voiceLocalKeys';
 
 /**
  * Manages a Web Audio pipeline for a single audio track.
@@ -95,8 +96,8 @@ export function GlobalAudioRenderer() {
   return (
     <>
       {remoteParticipants.map((p: ParticipantInfo) => {
-        const micVolume = participantVolumes.get(p.userId) ?? 100;
-        const isMicMuted = participantMutes.get(p.userId) ?? false;
+        const micVolume = localVolumeIn(participantVolumes, p.userId, currentVoiceChannelId);
+        const isMicMuted = isLocallyMutedIn(participantMutes, p.userId, currentVoiceChannelId);
         const streamVol = streamVolumes.get(p.userId) ?? 100;
         const isStreamMuted = streamMutes.get(p.userId) ?? false;
 

@@ -10,6 +10,8 @@ export const AVATAR_COLORS = ['mint', 'sky', 'lavender', 'coral', 'rose', 'teal'
 export type AvatarColor = (typeof AVATAR_COLORS)[number];
 
 export interface User {
+  /** Bot account (no password login). Optional: older servers and relay stubs omit it. */
+  isBot?: boolean;
   id: string;
   username: string;
   displayName: string | null;
@@ -29,6 +31,8 @@ export interface User {
   homeUserId: string | null;
   replicatedInstances: ReplicatedInstance[];
   showActivity?: boolean;
+  /** Self-view only: Developer Mode is on, which shows the Bots tab in settings. Stored with the account, so every device agrees. */
+  developerMode?: boolean;
   /** Self-view only: this federated account's home instance was reset/lost — it now operates as a sovereign local account (detach spec). */
   federationHomeOrphaned?: boolean;
   /**
@@ -258,6 +262,12 @@ export interface Role {
   permissions?: string; // BigInt decimal string (bitwise)
   isEveryone?: boolean; // UI hint: true when role.id === space.id
   createdAt: number;
+  /**
+   * A bot's managed role: the bot it was created for when added to the space.
+   * Only that bot holds it; it cannot be deleted or given to anyone else.
+   * Absent on every other role.
+   */
+  managedBotId?: string;
 }
 
 // ─── Folder Types ───────────────────────────────────────────────────────────
@@ -714,10 +724,10 @@ export type ClientEvent =
   | { type: 'dm_call_reject'; dmChannelId: string | null; federatedCallId?: string | null }
   | { type: 'dm_call_end'; dmChannelId: string | null; federatedCallId?: string | null }
   | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
-  | { type: 'voice_space_mute'; userId: string; muted: boolean }
-  | { type: 'voice_space_deafen'; userId: string; deafened: boolean }
+  | { type: 'voice_space_mute'; userId: string; muted: boolean; /** For a bot seat: the channel whose seat is meant. */ channelId?: string }
+  | { type: 'voice_space_deafen'; userId: string; deafened: boolean; /** For a bot seat: the channel whose seat is meant. */ channelId?: string }
   | { type: 'voice_move'; userId: string; targetChannelId: string }
-  | { type: 'voice_disconnect'; userId: string }
+  | { type: 'voice_disconnect'; userId: string; /** For a bot seat: the channel to take the bot out of. */ channelId?: string }
   | { type: 'activity_update'; activities: Activity[] }
   | { type: 'ping' };
 
@@ -739,6 +749,8 @@ export type ServerEvent =
   | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceChannelElapsedSeconds?: Record<string, number>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; supportsPoke?: boolean; unreadCounts?: Record<string, number>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]>; userActivityIdentities?: Record<string, PresenceIdentity>; rejectedPeerOrigins?: string[]; awaitingApprovalPeerOrigins?: string[]; activePeerOrigins?: string[]; pendingApprovalCount?: number }
   | { type: 'channel_unread_count'; counts: Record<string, number> }
   | { type: 'message_created'; message: MessageWithUser }
+  | { type: 'interaction_created'; interaction: BotInteraction }
+  | { type: 'interaction_ephemeral'; reply: EphemeralReply }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
@@ -786,9 +798,9 @@ export type ServerEvent =
   | { type: 'join_request_received'; request: JoinRequest }
   | { type: 'join_request_accepted'; request: JoinRequest; space: SpaceWithChannelsAndMembers }
   | { type: 'join_request_declined'; request: JoinRequest }
-  | { type: 'voice_space_muted'; userId: string; channelId: string; spaceId: string; muted: boolean }
-  | { type: 'voice_space_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
-  | { type: 'voice_permission_muted'; userId: string; spaceId: string; muted: boolean }
+  | { type: 'voice_space_muted'; userId: string; channelId: string; spaceId: string; muted: boolean; /** The restriction is this bot seat's (`channelId`) only. */ botSeat?: boolean }
+  | { type: 'voice_space_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean; /** The restriction is this bot seat's (`channelId`) only. */ botSeat?: boolean }
+  | { type: 'voice_permission_muted'; userId: string; spaceId: string; /** Set for a bot seat: the mute is that channel's only. */ channelId?: string; muted: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
   | { type: 'voice_disconnected'; userId: string; channelId: string; reason?: 'displaced' | 'session_closed' | 'rejected' }
   | { type: 'user_updated'; user: User }
@@ -850,6 +862,8 @@ export interface RegisterRequest {
   homeInstance?: string;
   homeUserId?: string;
   inviteToken?: string;
+  /** Cross-instance bots: one-time attach-proof minted by the bot's home instance. */
+  botProof?: string;
 }
 
 export interface LoginRequest {
@@ -911,6 +925,7 @@ export interface UpdateUserRequest {
   profileUpdatedAt?: number;
   discoverable?: boolean;
   showActivity?: boolean;
+  developerMode?: boolean;
 }
 
 export interface UpdateMemberRequest {
@@ -1060,6 +1075,7 @@ export interface Friend {
   addedAt: number;
   homeUserId: string | null;
   homeInstance: string | null;
+  isBot?: boolean;
 }
 
 export interface DiscoverUser {
@@ -1078,6 +1094,7 @@ export interface DiscoverUser {
   mutualFriendCount: number;
   mutualSpaceCount: number;
   relationship: 'none' | 'friends' | 'outbound_pending' | 'inbound_pending';
+  isBot?: boolean;
   requestId?: string;
 }
 
@@ -1369,6 +1386,7 @@ export interface CleanupResult {
 // ─── Admin User Management Types ──────────────────────────────────────────
 
 export interface AdminUser {
+  isBot: boolean;
   id: string;
   username: string;
   displayName: string | null;
@@ -1386,6 +1404,20 @@ export interface AdminUserListResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/**
+ * A bot of another instance this instance refuses to register again: the
+ * admin deleted its account here with "block". Keyed by the bot's home domain
+ * and its id there, which a bot proof carries.
+ */
+export interface AdminBlockedBot {
+  homeInstance: string;
+  homeUserId: string;
+  /** The bot's username here when it was blocked (`name@home`). */
+  username: string;
+  blockedBy: string | null;
+  createdAt: number;
 }
 
 export interface AdminResetPasswordResponse {
@@ -1578,6 +1610,12 @@ export interface FederationRelayProfileSnapshot {
    * '!deleted:<id>' usernames are never shipped (dead-incarnation spec §3.3).
    */
   deleted?: boolean | null;
+  /**
+   * The user is a bot account of the instance that built this snapshot. Only
+   * the home sends it, about its own users; a receiver takes it only when the
+   * sender is the row's home instance, and never clears the flag.
+   */
+  isBot?: boolean | null;
 }
 
 export interface FederationProfileUpdatePayload {
@@ -1596,6 +1634,13 @@ export interface FederationProfileUpdatePayload {
   accentColor: string | null;
   avatarColor: string | null;
   bio: string | null;
+  /**
+   * A bot's stored status (bots only, from homes that know it; null = none).
+   * Absent means the home did not say, and the receiver keeps what it stores.
+   */
+  botActivity?: BotActivity | null;
+  /** A bot's requested space permissions (decimal bitmask; bots only, same rules as `botActivity`). */
+  botRequestedPermissions?: string | null;
 }
 
 /**
@@ -1805,6 +1850,12 @@ export interface FederationUserLookupProfile {
   // applied like a `profile_update`. Absent from older homes.
   profileUpdatedAt?: number | null;
   accentColor?: string | null;
+  /** A bot account of the answering home (sent only when true, by homes that know bots). */
+  isBot?: boolean | null;
+  /** A bot's stored status, as `FederationProfileUpdatePayload.botActivity`. */
+  botActivity?: BotActivity | null;
+  /** A bot's requested space permissions, as `FederationProfileUpdatePayload.botRequestedPermissions`. */
+  botRequestedPermissions?: string | null;
 }
 
 export type FederationUserLookupResponse =
@@ -2087,6 +2138,325 @@ export interface TelemetryStatus {
    * after a yes, and after a no again from the next minor release on.
    */
   askDue: boolean;
+}
+
+/** A bot status kind the owner can store (`BOT_ACTIVITY_TYPES`). */
+export type BotActivityType = 'custom' | 'playing' | 'listening' | 'watching';
+
+/**
+ * The status an owner stores for a bot. Shown as the bot's live activity while
+ * it is connected; the bot's own `activity_update` replaces it until the bot's
+ * next connection. `name` is 1–128 characters after trim.
+ */
+export interface BotActivity {
+  type: BotActivityType;
+  name: string;
+}
+
+export interface BotSummary {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarColor: string | null;
+  avatar: string | null;
+  /** "About": the bot's profile bio. */
+  bio: string | null;
+  /** The stored status, or null for none. */
+  activity: BotActivity | null;
+  /**
+   * The space permissions the bot asks for, a permission bitmask as a decimal
+   * string ('0' for none). A manager adding the bot grants any subset of it.
+   */
+  requestedPermissions: string;
+  createdAt: number;
+}
+
+/** One access token of a bot, as the owner lists it. The secret is never listed. */
+export interface BotTokenSummary {
+  id: string;
+  /** The owner's label, or null. */
+  name: string | null;
+  createdAt: number;
+  /** Updated at most once a minute; null while never used. */
+  lastUsedAt: number | null;
+}
+
+export interface BotTokensResponse {
+  tokens: BotTokenSummary[];
+  /** True while the bot still runs on its old 10-year token and holds no new one. */
+  legacy: boolean;
+}
+
+export interface CreateBotTokenRequest {
+  /** Optional label, 1-32 characters after trim. */
+  name?: string;
+}
+
+/** `token` is the only time the secret is shown. */
+export interface CreateBotTokenResponse extends BotTokenSummary {
+  token: string;
+}
+
+/** A bot as the invite search lists it: the owner is named so a manager sees whose code they invite. */
+export interface BotSearchResult extends BotSummary {
+  /** The owner's username; null when the owner is deleted or not discoverable. */
+  ownerUsername: string | null;
+}
+
+export interface UpdateBotRequest {
+  /** 1–32 characters after trim. The login (username, ends with `_bot`) is immutable. */
+  displayName?: string;
+  /** Bare filename from an upload, or null to clear. */
+  avatar?: string | null;
+  /** Up to `PROFILE_BIO_MAX_LENGTH` characters after trim; null or blank clears. */
+  bio?: string | null;
+  /** The stored status; null clears. Takes effect at once while the bot is connected. */
+  activity?: BotActivity | null;
+  /** Requested space permissions: a canonical decimal bitmask of defined bits; '0' for none. */
+  requestedPermissions?: string;
+}
+
+/** POST /api/bots/:id/spaces. */
+export interface AddBotToSpaceRequest {
+  spaceId: string;
+  /**
+   * The permissions the manager grants, a decimal bitmask within the bot's
+   * requested permissions and the manager's own. Omitted: every requested bit
+   * the manager holds. '0' or nothing to grant: no role is created.
+   */
+  permissions?: string;
+}
+
+export interface UpdateBotResponse {
+  bot: BotSummary;
+}
+
+export interface BotSpaceOption {
+  id: string;
+  name: string;
+  icon: string | null;
+  /** Whether the bot is already a member. */
+  botIsMember: boolean;
+}
+
+export interface BotSpacesResponse {
+  spaces: BotSpaceOption[];
+}
+
+export interface CreateBotRequest {
+  name: string;
+}
+
+export interface CreateBotResponse {
+  bot: BotSummary;
+  /** Shown once; never stored in readable form. */
+  token: string;
+}
+
+export interface RegenerateBotTokenResponse {
+  token: string;
+}
+
+/**
+ * The value types of a slash command option. `user`, `channel` and `role` take
+ * an id; the bot also gets the named object in `BotInteraction.resolved`.
+ */
+export type BotCommandValueType = 'string' | 'integer' | 'number' | 'boolean' | 'user' | 'channel' | 'role';
+
+/**
+ * The types of a command's options: a value type, or a step of a command's
+ * path. A `subcommand` holds value options of its own; a `subcommand_group`
+ * holds subcommands. A command, or a group, lists either steps or values,
+ * never both, so a path is at most two words (`/music queue add`).
+ */
+export type BotCommandOptionType = BotCommandValueType | 'subcommand' | 'subcommand_group';
+
+export interface BotCommandChoice {
+  name: string;
+  value: string | number;
+}
+
+export interface BotCommandOption {
+  name: string;
+  description: string;
+  type: BotCommandOptionType;
+  required: boolean;
+  /**
+   * Static choices (string, integer and number options only), at most 25. The
+   * message box offers them by name; any other value of the option's type is
+   * accepted too, unless `strictChoices` is set.
+   */
+  choices?: BotCommandChoice[];
+  /** With `choices`: only a listed value is accepted. */
+  strictChoices?: boolean;
+  /** Integer and number options without choices: the smallest and largest value accepted. */
+  minValue?: number;
+  maxValue?: number;
+  /** String options without choices: the shortest and longest value accepted (0 to 2000, default 1 to 2000). */
+  minLength?: number;
+  maxLength?: number;
+  /** Channel options: the channel types accepted; absent means every type. */
+  channelTypes?: ChannelType[];
+  /**
+   * A `subcommand`'s value options, or a `subcommand_group`'s subcommands.
+   * Absent on value options; a subcommand without options has none.
+   */
+  options?: BotCommandOption[];
+  /**
+   * Subcommands and groups only: permissions needed, on top of the command's
+   * own, to see and use this step (canonical decimal mask). Absent for none.
+   */
+  requiredPermissions?: string;
+}
+
+/**
+ * Permissions a bot asks of the people who use a command or a step of it: a
+ * canonical decimal mask (`"2048"`) or a list of permission names
+ * (`["MANAGE_MESSAGES"]`). The server stores and hands back the mask.
+ */
+export type BotCommandPermissionsDefinition = string | string[];
+
+/** An option as a bot registers it: `required` may be left out (false); subcommands never have it. */
+export type BotCommandOptionDefinition = Omit<BotCommandOption, 'required' | 'options' | 'requiredPermissions'> & {
+  required?: boolean;
+  options?: BotCommandOptionDefinition[];
+  requiredPermissions?: BotCommandPermissionsDefinition;
+};
+
+/** What a bot sends when registering a command. */
+export interface BotCommandDefinition {
+  name: string;
+  description: string;
+  options?: BotCommandOptionDefinition[];
+  /**
+   * Permissions a person needs in the channel to see and use the command;
+   * such a command is hidden from and refused in direct messages.
+   */
+  requiredPermissions?: BotCommandPermissionsDefinition;
+}
+
+export interface BotCommand {
+  id: string;
+  botId: string;
+  name: string;
+  description: string;
+  options: BotCommandOption[];
+  /** The permissions needed to see and use the command (canonical decimal mask); absent for none. */
+  requiredPermissions?: string;
+  updatedAt: number;
+}
+
+export interface SetBotCommandsRequest {
+  commands: BotCommandDefinition[];
+}
+
+export interface BotCommandsResponse {
+  commands: BotCommand[];
+}
+
+export type BotInteractionOptionValue = string | number | boolean;
+
+/** A channel named by a `channel` option, as the bot receives it. */
+export interface BotResolvedChannel {
+  id: string;
+  spaceId: string;
+  name: string;
+  type: ChannelType;
+}
+
+/**
+ * The objects the `user`, `channel` and `role` options of an interaction name,
+ * keyed by id; only the kinds the interaction uses are present.
+ */
+export interface BotInteractionResolved {
+  users?: Record<string, User>;
+  channels?: Record<string, BotResolvedChannel>;
+  /** Display fields only: a role's permission bits are not handed out. */
+  roles?: Record<string, Role>;
+}
+
+/** The event a bot receives when a user invokes one of its slash commands. */
+export interface BotInteraction {
+  id: string;
+  command: string;
+  /**
+   * For a command with subcommands: the path invoked, a subcommand
+   * (`["play"]`) or a group and its subcommand (`["queue", "add"]`).
+   * `options` are that subcommand's. Absent for a command without subcommands.
+   */
+  subcommand?: string[];
+  options: Record<string, BotInteractionOptionValue>;
+  /** Objects named by `user`, `channel` and `role` options; absent when there are none. */
+  resolved?: BotInteractionResolved;
+  user: User;
+  /** Set for a space channel. */
+  channelId?: string;
+  spaceId?: string;
+  /** Set for a direct or group DM. */
+  dmChannelId?: string;
+  expiresAt: number;
+}
+
+export interface CreateInteractionRequest {
+  botId: string;
+  command: string;
+  /** Required for a command with subcommands, refused for one without: the path to a subcommand. */
+  subcommand?: string[];
+  options?: Record<string, BotInteractionOptionValue>;
+  /** Exactly one of channelId and dmChannelId. */
+  channelId?: string;
+  dmChannelId?: string;
+}
+
+export interface CreateInteractionResponse {
+  id: string;
+  expiresAt: number;
+}
+
+export interface RespondToInteractionRequest {
+  content?: string;
+  attachments?: string[];
+  /**
+   * Shown only to the person who invoked the command, and not stored: text
+   * only (no attachments), gone when they reload or dismiss it.
+   */
+  ephemeral?: boolean;
+}
+
+/**
+ * A bot's answer to a slash command that only the person who invoked it sees
+ * (`ephemeral: true`). It is never stored: it reaches that person's open
+ * sessions as `interaction_ephemeral` and lives in their client until they
+ * reload or dismiss it.
+ */
+export interface EphemeralReply {
+  /** Unique per reply; not a message id. */
+  id: string;
+  interactionId: string;
+  /** The name of the command it answers. */
+  command: string;
+  /** The bot. */
+  user: User;
+  content: string;
+  createdAt: number;
+  /** The chat it was invoked in: a space channel, or a direct or group DM. */
+  channelId?: string;
+  spaceId?: string;
+  dmChannelId?: string;
+}
+
+export interface BotCommandListing extends BotCommand {
+  bot: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatar: string | null;
+    avatarColor: string | null;
+  };
+}
+
+export interface ChatCommandsResponse {
+  commands: BotCommandListing[];
 }
 
 export type { DmSystemEvent } from './dmSystemEvents.js';

@@ -397,7 +397,8 @@
       "oldest": "最早加入优先",
       "nameDesc": "名称降序 (Z-A)",
       "deleted": "已注销",
-      "clear": "清除筛选"
+      "clear": "清除筛选",
+      "bot": "机器人"
     },
     "badge": {
       "admin": "管理员",
@@ -434,7 +435,15 @@
     "deleteDialog": {
       "title": "删除用户",
       "description": "确定永久删除 <strong>{{username}}</strong> 吗？这将把他们从所有空间、私信和好友列表中移除。此操作无法撤销。",
-      "confirm": "删除用户"
+      "confirm": "删除用户",
+      "blockBot": "禁止此机器人再次注册",
+      "blockBotHint": "当其主实例恢复后，该机器人无法在此创建账号。可在用户列表下方解除封禁。"
+    },
+    "blockedBots": {
+      "title": "已封禁的机器人",
+      "description": "被禁止在此注册的其他实例的机器人。解除封禁后可再次加入。",
+      "blockedAt": "封禁于 {{date}}",
+      "unblock": "解除封禁"
     }
   },
   "mobile": {

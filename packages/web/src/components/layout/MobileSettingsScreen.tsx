@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useDeveloperModeStore } from '../../stores/developerModeStore';
 import { api } from '../../api/client';
 import {
   AccountPanel,
@@ -12,6 +13,8 @@ import {
   KeybindsPanel,
   DesktopPanel,
   DesktopDownloadPanel,
+  BotsPanel,
+  DeveloperPanel,
   SettingsPanelSuspense,
 } from '../modals/lazySettingsPanels';
 import { MobileScreenHeader } from './MobileScreenHeader';
@@ -30,7 +33,9 @@ type PanelTitleKey =
   | 'settings:nav.tabs.privacy'
   | 'settings:nav.tabs.connections'
   | 'settings:nav.tabs.keybinds'
-  | 'settings:nav.tabs.desktop';
+  | 'settings:nav.tabs.desktop'
+  | 'settings:nav.tabs.developer'
+  | 'settings:nav.tabs.bots';
 
 /**
  * Every panel this screen can open directly: its header title and its body. The
@@ -50,6 +55,8 @@ const panelConfig: Record<
   privacy: { titleKey: 'settings:nav.tabs.privacy', body: () => <PrivacyPanel /> },
   connections: { titleKey: 'settings:nav.tabs.connections', body: () => <ConnectionsPanel /> },
   keybinds: { titleKey: 'settings:nav.tabs.keybinds', body: () => <KeybindsPanel /> },
+  developer: { titleKey: 'settings:nav.tabs.developer', body: () => <DeveloperPanel /> },
+  bots: { titleKey: 'settings:nav.tabs.bots', body: () => <BotsPanel /> },
   desktop: {
     titleKey: 'settings:nav.tabs.desktop',
     body: (instanceVersion) =>
@@ -98,12 +105,23 @@ const sectionIcons: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a9 9 0 01-9 9m0 0a9 9 0 01-9-9" />
     </svg>
   ),
+  developer: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+    </svg>
+  ),
+  bots: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+    </svg>
+  ),
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
   const { t } = useTranslation(['mobile', 'settings', 'common']);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
+  const developerMode = useDeveloperModeStore((s) => s.enabled);
   const updateBadge = useInstanceUpdateBadge();
 
   // The browser's Desktop panel builds its download links from the instance
@@ -126,6 +144,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
     const panel = panelConfig[initialPanel];
     if (!panel) return null;
     if (initialPanel === 'instance' && !isAdmin) return null;
+    if (initialPanel === 'bots' && !developerMode) return null;
 
     return (
       <div className="flex flex-col h-full bg-surface-base">
@@ -153,6 +172,8 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
     { id: 'connections', label: t('settings:nav.tabs.connections') },
     ...(isElectron() ? [{ id: 'keybinds', label: t('settings:nav.tabs.keybinds') }] : []),
     { id: 'desktop', label: t('settings:nav.tabs.desktop') },
+    { id: 'developer', label: t('settings:nav.tabs.developer') },
+    ...(developerMode ? [{ id: 'bots', label: t('settings:nav.tabs.bots') }] : []),
     ...(isAdmin ? [{ id: 'instance', label: t('settings:nav.tabs.instance'), dot: updateBadge }] : []),
   ];
 

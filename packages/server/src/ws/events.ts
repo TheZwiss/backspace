@@ -14,9 +14,8 @@ import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutb
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
 import { callRelayActor, fanOutCallEvent, relayCallEvent, userRelayIdentity, type CallRelayEventType } from '../utils/callFanout.js';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
-import { applyChosenStatus } from './presence.js';
-import { presenceUpdateFor, validateActivities } from './presenceEvent.js';
+import { applyChosenStatus, publishActivities } from './presence.js';
+import { validateActivities } from './presenceEvent.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import { appendMutationLog, dmMessageFederationRef, dmMessageMutationTarget, queueOutboxEvent, queueDmRelay, queueDmMessageDeleteRelay, getGroupDmTargetOrigins, sendCallRelay, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
@@ -45,8 +44,25 @@ export function checkVoicePermissions(spaceId: string): void {
     for (const userId of room.participants) {
       const perms = computePermissions(userId, spaceId, roomId);
       const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
-      const wasMuted = connectionManager.isPermissionMuted(spaceId, userId);
       const shouldMute = !canSpeak;
+
+      // A bot seat is judged per channel: another seat of the same bot, in a
+      // channel where it may speak, must not change this one.
+      if (connectionManager.isBotSeat(userId, roomId)) {
+        if (shouldMute !== connectionManager.isBotSeatPermissionMuted(roomId, userId)) {
+          connectionManager.setBotSeatPermissionMuted(roomId, userId, shouldMute);
+          connectionManager.sendToSpace(spaceId, {
+            type: 'voice_permission_muted',
+            userId,
+            spaceId,
+            channelId: roomId,
+            muted: shouldMute,
+          });
+        }
+        continue;
+      }
+
+      const wasMuted = connectionManager.isPermissionMuted(spaceId, userId);
 
       if (shouldMute !== wasMuted) {
         connectionManager.setPermissionMuted(spaceId, userId, shouldMute);
@@ -170,6 +186,12 @@ export function handleClientEvent(
       break;
     case 'voice_leave':
       handleVoiceLeave(userId);
+      break;
+    case 'bot_voice_join':
+      handleBotVoiceJoin(event, userId);
+      break;
+    case 'bot_voice_leave':
+      handleBotVoiceLeave(event, userId);
       break;
     case 'dm_message_create':
       handleDmMessageCreate(event, userId, ws);
@@ -491,18 +513,7 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
     return;
   }
 
-  connectionManager.setUserActivities(userId, activities);
-  const status = connectionManager.getUserStatus(userId);
-
-  const payload = presenceUpdateFor(userId, status, activities);
-  const targets = collectProfileBroadcastTargetIds(userId);
-  for (const uid of targets) connectionManager.sendToUser(uid, payload);
-  connectionManager.sendToUser(userId, payload);
-
-  // S2S: broadcast to peers (activities + current status); see queueOutboxEvent.
-  void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
-    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(activity) failed', e); }
-  });
+  publishActivities(userId, activities);
 }
 
 // ─── Voice Handlers (Unified Room API) ─────────────────────────────────────
@@ -522,6 +533,157 @@ function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): vo
       console.error('[federation] sendFederatedCallEnd (last participant left) error:', err),
     );
   }
+}
+
+/** Voice channels one bot may sit in at the same time. */
+export const MAX_BOT_VOICE_ROOMS = 25;
+
+function isBotAccount(userId: string): boolean {
+  return getDb().select({ isBot: schema.users.isBot })
+    .from(schema.users).where(eq(schema.users.id, userId)).get()?.isBot === 1;
+}
+
+/**
+ * A bot takes a seat in a voice channel without leaving the others: one
+ * instance per channel. Same checks as `voice_join` (channel, membership,
+ * CONNECT); the audio itself is the bot's own LiveKit connection per room, with
+ * a token from `POST /api/livekit/token { channelId }`.
+ */
+function handleBotVoiceJoin(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId;
+  if (typeof channelId !== 'string' || channelId.length === 0) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
+    return;
+  }
+  if (!isBotAccount(userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Only bots can join several voice channels', code: 'bot_account_required' });
+    return;
+  }
+  const channel = getDb().select({ spaceId: schema.channels.spaceId, type: schema.channels.type })
+    .from(schema.channels).where(eq(schema.channels.id, channelId)).get();
+  if (!channel) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
+    return;
+  }
+  if (channel.type !== 'voice') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target channel is not a voice channel' });
+    return;
+  }
+  const spaceId = channel.spaceId;
+  if (!isMember(spaceId, userId) || !hasPermission(userId, spaceId, PermissionBits.CONNECT, channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing CONNECT permission' });
+    return;
+  }
+  if (connectionManager.getBotRoomIds(userId).length >= MAX_BOT_VOICE_ROOMS
+      && !connectionManager.getBotRoomIds(userId).includes(channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `A bot can be in at most ${MAX_BOT_VOICE_ROOMS} voice channels` });
+    return;
+  }
+  if (!connectionManager.botJoinRoom(userId, channelId, spaceId)) return; // already there
+
+  const room = connectionManager.getRoom(channelId);
+  connectionManager.sendToRoom(channelId, {
+    type: 'voice_state_update',
+    channelId,
+    userId,
+    action: 'join',
+    channelElapsedSeconds: room ? getVoiceRoomElapsedSeconds(room) : undefined,
+  });
+
+  // A bot has no SPEAK-less listener mode of its own: a role without SPEAK mutes it like anyone.
+  const perms = computePermissions(userId, spaceId, channelId);
+  const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+  // Kept per seat: muted here says nothing about the bot's other channels.
+  connectionManager.setBotSeatPermissionMuted(channelId, userId, !canSpeak);
+  if (!canSpeak) {
+    connectionManager.sendToSpace(spaceId, { type: 'voice_permission_muted', userId, spaceId, channelId, muted: true });
+  }
+
+  // A moderator's mute or deafen of this seat outlives the seat: it is back on rejoin.
+  for (const type of botSeatRestrictionTypes(channelId, userId)) {
+    connectionManager.sendToSpace(spaceId, type === 'mute'
+      ? { type: 'voice_space_muted', userId, channelId, spaceId, muted: true, botSeat: true }
+      : { type: 'voice_space_deafened', userId, channelId, spaceId, deafened: true, botSeat: true });
+  }
+}
+
+/** The restrictions a moderator put on the bot's seat in this channel. */
+function botSeatRestrictionTypes(channelId: string, botId: string): Array<'mute' | 'deafen'> {
+  return getDb().select({ type: schema.botSeatRestrictions.restrictionType })
+    .from(schema.botSeatRestrictions)
+    .where(and(eq(schema.botSeatRestrictions.channelId, channelId), eq(schema.botSeatRestrictions.botId, botId)))
+    .all()
+    .map(r => r.type)
+    .filter((t): t is 'mute' | 'deafen' => t === 'mute' || t === 'deafen');
+}
+
+/**
+ * A moderator's mute or deafen of one bot seat. A bot sits in several voice
+ * channels at once, so the restriction is the channel's only (kept in
+ * `bot_seat_restrictions`, per channel) and is announced with `botSeat: true`;
+ * the bot's seats elsewhere keep their own state. Same checks as for a person:
+ * the bit in that channel and the role hierarchy. Like a person's, it is a
+ * flag the bot's client is told to honour, not a cut at the media server.
+ */
+function restrictBotSeat(actorId: string, botId: string, channelId: string, type: 'mute' | 'deafen', on: boolean): void {
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) {
+    connectionManager.sendToUser(actorId, { type: 'error', message: 'Channel not found' });
+    return;
+  }
+  const bit = type === 'mute' ? PermissionBits.MUTE_MEMBERS : PermissionBits.DEAFEN_MEMBERS;
+  if (!hasPermission(actorId, spaceId, bit, channelId)) {
+    connectionManager.sendToUser(actorId, {
+      type: 'error',
+      message: type === 'mute' ? 'Missing MUTE_MEMBERS permission' : 'Missing DEAFEN_MEMBERS permission',
+    });
+    return;
+  }
+  if (actorId === botId) {
+    connectionManager.sendToUser(actorId, { type: 'error', message: type === 'mute' ? 'Cannot space-mute yourself' : 'Cannot space-deafen yourself' });
+    return;
+  }
+  if (refusedByRoleHierarchy(spaceId, actorId, botId)) return;
+
+  const db = getDb();
+  if (on) {
+    db.insert(schema.botSeatRestrictions).values({
+      channelId,
+      botId,
+      restrictionType: type,
+      moderatorId: actorId,
+      createdAt: Date.now(),
+    }).onConflictDoNothing().run();
+  } else {
+    db.delete(schema.botSeatRestrictions).where(and(
+      eq(schema.botSeatRestrictions.channelId, channelId),
+      eq(schema.botSeatRestrictions.botId, botId),
+      eq(schema.botSeatRestrictions.restrictionType, type),
+    )).run();
+  }
+
+  connectionManager.sendToSpace(spaceId, type === 'mute'
+    ? { type: 'voice_space_muted', userId: botId, channelId, spaceId, muted: on, botSeat: true }
+    : { type: 'voice_space_deafened', userId: botId, channelId, spaceId, deafened: on, botSeat: true });
+}
+
+/** The channel a moderation event names, when it names one: the seat of a bot there. */
+function botSeatTarget(event: Record<string, unknown>, targetUserId: string): string | null {
+  const channelId = event.channelId;
+  if (typeof channelId !== 'string' || channelId.length === 0) return null;
+  return connectionManager.isBotSeat(targetUserId, channelId) ? channelId : null;
+}
+
+function handleBotVoiceLeave(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId;
+  if (typeof channelId !== 'string' || channelId.length === 0) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
+    return;
+  }
+  const room = connectionManager.botLeaveRoom(userId, channelId);
+  if (!room) return; // not in that channel
+  broadcastRoomLeave(channelId, room, userId);
+  if (connectionManager.getBotRoomIds(userId).length === 0) connectionManager.clearVoiceUserStatus(userId);
 }
 
 /**
@@ -562,6 +724,11 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: Web
     rejectVoiceJoin(userId, channelId);
     return;
   }
+
+  // A bot that already sits in this channel through `bot_voice_join` keeps that
+  // seat; a second, person-style seat in the same room would be announced twice
+  // and outlive the first one's `bot_voice_leave`.
+  if (connectionManager.getBotRoomIds(userId).includes(channelId)) return;
 
   // ── Device switch guardrail ──
   // If this user already has a voice session on a different socket,
@@ -1057,25 +1224,27 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string, w
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
 
-function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
-  const messageId = event.messageId as string;
-  const emoji = event.emoji as string;
+export type ReactionOutcome =
+  | { ok: true; changed: boolean }
+  | { ok: false; reason: 'message_not_found' | 'missing_permission' | 'read_only' };
 
-  if (!messageId || !emoji) return;
-
+/**
+ * Adds a reaction for `userId` to a space or DM message, found by id. Shared by
+ * the WS `reaction_add` event and the REST route, so both check the same things
+ * and reach the same audience. A reaction that already exists is `changed: false`.
+ */
+export function applyReactionAdd(messageId: string, emoji: string, userId: string): ReactionOutcome {
   const db = getDb();
 
   // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
     const spaceId = getChannelSpaceId(message.channelId);
-    if (!spaceId || !isMember(spaceId, userId)) return;
+    if (!spaceId || !isMember(spaceId, userId)) return { ok: false, reason: 'message_not_found' };
 
     if (!hasPermission(userId, spaceId, PermissionBits.ADD_REACTIONS, message.channelId)) {
-      connectionManager.sendToUser(userId, { type: 'error', message: 'Missing ADD_REACTIONS permission' });
-      return;
+      return { ok: false, reason: 'missing_permission' };
     }
-
     const reactionId = generateSnowflake();
     const now = Date.now();
     // The unique index on (message_id, user_id, emoji) keeps one reaction per
@@ -1087,7 +1256,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       emoji,
       createdAt: now,
     }).onConflictDoNothing().run();
-    if (inserted.changes === 0) return;
+    if (inserted.changes === 0) return { ok: true, changed: false };
 
     // Include user object so remote clients can use isSelf() for identity resolution
     const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
@@ -1098,17 +1267,17 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       messageId,
       reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
     });
-    return;
+    return { ok: true, changed: true };
   }
 
   // Fall through to DM message. A federated account reacts here like anyone
   // else: it is a member of the DM on this instance, and the relay carries its
   // home identity back to its home instance.
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
-  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'message_not_found' };
   // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
   // reaction mutations — the relay would fan out to all peers via undefined origins.
-  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'read_only' };
 
   const reactionId = generateSnowflake();
   const now = Date.now();
@@ -1122,7 +1291,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     emoji,
     createdAt: now,
   }).onConflictDoNothing().run();
-  if (inserted.changes === 0) return;
+  if (inserted.changes === 0) return { ok: true, changed: false };
 
   // Include user object so remote clients can use isSelf() for identity resolution
   const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
@@ -1156,21 +1325,18 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       createdAt: now,
     },
   }), reactionAddTargetOrigins);
+  return { ok: true, changed: true };
 }
 
-function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
-  const messageId = event.messageId as string;
-  const emoji = event.emoji as string;
-
-  if (!messageId || !emoji) return;
-
+/** Removes `userId`'s own reaction. Shared by the WS `reaction_remove` event and the REST route. */
+export function applyReactionRemove(messageId: string, emoji: string, userId: string): ReactionOutcome {
   const db = getDb();
 
   // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
     const spaceId = getChannelSpaceId(message.channelId);
-    if (!spaceId || !isMember(spaceId, userId)) return;
+    if (!spaceId || !isMember(spaceId, userId)) return { ok: false, reason: 'message_not_found' };
 
     const result = db.delete(schema.reactions)
       .where(and(
@@ -1188,17 +1354,13 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
         emoji,
       });
     }
-    return;
+    return { ok: true, changed: result.changes > 0 };
   }
 
-  // Fall through to DM message. A federated account reacts here like anyone
-  // else: it is a member of the DM on this instance, and the relay carries its
-  // home identity back to its home instance.
+  // Fall through to DM message (same rules as applyReactionAdd).
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
-  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
-  // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
-  // reaction mutations — the relay would fan out to all peers via undefined origins.
-  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'message_not_found' };
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return { ok: false, reason: 'read_only' };
 
   const result = db.delete(schema.dmReactions)
     .where(and(
@@ -1243,6 +1405,28 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       reactionRemoveTargetOrigins,
     );
   }
+  return { ok: true, changed: result.changes > 0 };
+}
+
+function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  const outcome = applyReactionAdd(messageId, emoji, userId);
+  if (!outcome.ok && outcome.reason === 'missing_permission') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing ADD_REACTIONS permission' });
+  }
+}
+
+function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  applyReactionRemove(messageId, emoji, userId);
 }
 
 // ─── Read State Handler ────────────────────────────────────────────────────
@@ -2249,6 +2433,13 @@ function handleVoiceSpaceMute(event: Record<string, unknown>, userId: string): v
     return;
   }
 
+  // A bot seat named by its channel is muted in that channel only.
+  const seatChannelId = botSeatTarget(event, targetUserId);
+  if (seatChannelId) {
+    restrictBotSeat(userId, targetUserId, seatChannelId, 'mute', muted);
+    return;
+  }
+
   // Find the target user's current room
   const targetRoom = connectionManager.getUserRoom(targetUserId);
   if (!targetRoom || targetRoom.room.roomType !== 'space') {
@@ -2308,6 +2499,13 @@ function handleVoiceSpaceDeafen(event: Record<string, unknown>, userId: string):
 
   if (!targetUserId || typeof targetUserId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'userId is required' });
+    return;
+  }
+
+  // A bot seat named by its channel is deafened in that channel only.
+  const seatChannelId = botSeatTarget(event, targetUserId);
+  if (seatChannelId) {
+    restrictBotSeat(userId, targetUserId, seatChannelId, 'deafen', deafened);
     return;
   }
 
@@ -2460,6 +2658,26 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
   }
 }
 
+/** A moderator takes a bot out of one voice channel; its other seats stay. */
+function disconnectBotSeat(actorId: string, botId: string, channelId: string): void {
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) {
+    connectionManager.sendToUser(actorId, { type: 'error', message: 'Channel not found' });
+    return;
+  }
+  if (!hasPermission(actorId, spaceId, PermissionBits.DISCONNECT_MEMBERS, channelId)) {
+    connectionManager.sendToUser(actorId, { type: 'error', message: 'Missing DISCONNECT_MEMBERS permission' });
+    return;
+  }
+  if (refusedByRoleHierarchy(spaceId, actorId, botId)) return;
+
+  const room = connectionManager.botLeaveRoom(botId, channelId);
+  if (!room) return;
+  broadcastRoomLeave(channelId, room, botId);
+  if (connectionManager.getBotRoomIds(botId).length === 0) connectionManager.clearVoiceUserStatus(botId);
+  connectionManager.sendToUser(botId, { type: 'voice_disconnected', userId: botId, channelId });
+}
+
 function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): void {
   const targetUserId = event.userId as string;
 
@@ -2470,6 +2688,13 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
 
   if (targetUserId === userId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot disconnect yourself' });
+    return;
+  }
+
+  // A bot seat named by its channel: take the bot out of that channel only.
+  const seatChannelId = botSeatTarget(event, targetUserId);
+  if (seatChannelId) {
+    disconnectBotSeat(userId, targetUserId, seatChannelId);
     return;
   }
 

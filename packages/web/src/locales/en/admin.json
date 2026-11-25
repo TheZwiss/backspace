@@ -411,7 +411,8 @@
       "oldest": "Oldest first",
       "nameDesc": "Name Z-A",
       "deleted": "Deleted",
-      "clear": "Clear filters"
+      "clear": "Clear filters",
+      "bot": "Bots"
     },
     "badge": {
       "admin": "Admin",
@@ -449,7 +450,15 @@
     "deleteDialog": {
       "title": "Delete User",
       "description": "Permanently delete <strong>{{username}}</strong>? This will remove them from all spaces, DMs, and friends lists. This cannot be undone.",
-      "confirm": "Delete User"
+      "confirm": "Delete User",
+      "blockBot": "Do not let this bot register again",
+      "blockBotHint": "When its home instance comes back, the bot cannot create an account here. You can unblock it below the user list."
+    },
+    "blockedBots": {
+      "title": "Blocked bots",
+      "description": "Bots of other instances that cannot register here. Unblock one to let it in again.",
+      "blockedAt": "Blocked {{date}}",
+      "unblock": "Unblock"
     }
   },
   "mobile": {

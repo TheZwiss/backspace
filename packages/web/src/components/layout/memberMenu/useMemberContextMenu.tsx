@@ -11,6 +11,7 @@ import { changeMemberRole, getCurrentMember, isRoleWritePending, subscribeMember
 import { friendshipMenuItems, runMemberAction, sendMemberMessage } from './memberSocialActions';
 import { MemberNicknameDialog } from './MemberNicknameDialog';
 import { MemberRemovalDialog } from './MemberRemovalDialog';
+import { isBotManagedRole } from '../../../utils/botRoles';
 import { spaceMemberName, userDisplayName } from '../../../utils/identity';
 
 type MemberDialog = {
@@ -28,7 +29,8 @@ function roleMenuItems(target: MemberTarget): ContextMenuCheckbox[] {
   const { spaces, members, roles } = useSpaceStore.getState();
   const space = spaces.find((item) => item.id === target.spaceId);
   // Mirror the upstream hierarchy gate; the server still authorizes every write.
-  return roles.filter(r => r.spaceId === target.spaceId && r.id !== target.spaceId && space && viewerCanManageRoleAt(space, members, r.position)).sort((a, b) => b.position - a.position).map(role => ({
+  // A bot's managed role stays with its bot and is not offered.
+  return roles.filter(r => r.spaceId === target.spaceId && r.id !== target.spaceId && !isBotManagedRole(r) && space && viewerCanManageRoleAt(space, members, r.position)).sort((a, b) => b.position - a.position).map(role => ({
     type: 'checkbox', key: role.id, label: role.name,
     subscribe: subscribeMemberRoles,
     getChecked: () => !!getCurrentMember(target)?.roles?.some(r => r.id === role.id),

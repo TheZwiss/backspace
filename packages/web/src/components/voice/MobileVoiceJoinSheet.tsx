@@ -6,6 +6,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useDragToClose } from '../../hooks/useDragToClose';
 import { VoiceUserRow } from './VoiceUserRow';
+import { isPermissionMutedIn, isVoiceFlagIn } from '../../utils/permissionMute';
 
 /**
  * Permission state for the in-sheet camera preview. Mirrors the smaller
@@ -550,9 +551,9 @@ export function MobileVoiceJoinSheet({
                 const isDeafened = wsStatus?.isDeafened ?? false;
                 const isCameraOn = wsStatus?.isCameraOn ?? false;
                 const isScreenSharing = wsStatus?.isScreenSharing ?? false;
-                const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
-                const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
-                const isPermMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
+                const isSpaceMuted = isVoiceFlagIn(spaceMutedUserIds, spaceId, userId, channelId);
+                const isSpaceDeafened = isVoiceFlagIn(spaceDeafenedUserIds, spaceId, userId, channelId);
+                const isPermMuted = isPermissionMutedIn(permissionMutedUserIds, spaceId, userId, channelId);
 
                 return (
                   <div key={userId} className="py-1.5 rounded-lg">
@@ -561,6 +562,7 @@ export function MobileVoiceJoinSheet({
                       displayName={displayName}
                       avatar={avatar}
                       avatarColor={avatarColor ?? undefined}
+                      isBot={member?.user.isBot === true}
                       isMuted={isMuted}
                       isDeafened={isDeafened}
                       isCameraOn={isCameraOn}

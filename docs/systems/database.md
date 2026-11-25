@@ -33,6 +33,9 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | profileUpdatedAt | integer | | Epoch ms |
 | passwordChangedAt | integer | | Token revocation: tokens before this rejected |
 | showActivity | integer NOT NULL | 1 | Rich presence visibility |
+| developerMode | integer NOT NULL | 0 | Developer Mode (shows the Bots tab in settings); self-view only, never relayed to peers. Migration `0033_developer_mode.sql` |
+| botRequestedPermissions | text | | Bots only: requested space permissions, canonical decimal mask; on a host's federated account the home's copy. Migration `0039_bot_permissions.sql`, see [bots.md](bots.md) |
+| botActivity | text | | Bots only: the stored status, JSON `{ type, name }`; on a host's federated account the home's copy (`profile_update`). Migration `0038_bot_activity.sql`, see [bots.md](bots.md) |
 | federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
 | federationHealPending | integer | 0 | Instance-epoch self-healing: set when a replicated identity is flagged for re-heal after a peer reset |
 | federationHomeOrphaned | integer | 0 | Instance-epoch self-healing: **1 = DETACHED / sovereign local account** (its home instance was reset/lost), not "frozen." **Set** to 1 by `quarantineOrphanedAccounts` on every real account from a reset home incarnation (flag-only detach — no rename, no login block). **Read** by: the login flow (self-heal path permanently disabled for detached rows; local-password login still works — `auth.md` §4), `users.ts` (unlocks local profile edit + local change-password), the S2S binding guards (`findFederatedUser` tier-2, `profile_update`, identity-delete all exclude detached rows — `federation.md`), and the `GET /api/federation/reset-events` admin surface. Cleared by `tombstoneUser` (deletion) and by re-attach. Detach spec §3/§4. Since #310 a detached row is homed here: `home_instance`/`home_user_id` are NULL and its former identity is in the two columns below |
@@ -273,6 +276,7 @@ PK: (userId, friendId)
 | position | integer | 0 | Hierarchy rank: @everyone 0, other roles distinct from 1 up, higher is more senior (permissions.md, "Role hierarchy") |
 | permissions | text | | Bigint decimal string |
 | createdAt | integer NOT NULL | | |
+| managedBotId | text | | Set on a bot's managed role: the bot it belongs to (no FK). Unique with spaceId (`idx_roles_managed_bot`). Migration `0039_bot_permissions.sql`, see [bots.md](bots.md), "Permissions on invite" |
 
 ### member_roles
 PK: (spaceId, userId, roleId)
@@ -718,3 +722,29 @@ Per-remote credential this user's client presents when registering or logging in
 **Lifecycle:** created get-or-create with `onConflictDoNothing` + re-read (first-writer-wins — a racing write never replaces a stored secret). Deleted by `tombstoneUser` (explicitly: a tombstone keeps the `users` row, so the CASCADE never fires and live credentials would otherwise outlive the account) and by `POST /api/users/@me/federation-identity/delete` in `soft`/`full` mode. **Not** deleted in `leave` mode — the remote account survives and keeps authenticating with the secret.
 
 **Migration note:** `0011` is a bare `CREATE TABLE`. It reads and rewrites nothing, so it is forward-safe on a populated database and idempotent on re-run. Restoring a **pre-**`0011` backup into a **post-**`0011` deployment works — `migrate()` re-applies `0011` on boot — but any credential rows written after the snapshot are lost, and the client will mint fresh secrets for those origins. Recovery is automatic while a remote token is still valid (`provisioned_at` comes back NULL, so `ensureRemoteCredential` rotates the remote onto the new secret); otherwise the user re-authenticates through the per-instance login form once. See `deployment.md`.
+
+## Bot accounts (`users`)
+
+Migration `0032_bots.sql` adds `users.is_bot` (INTEGER NOT NULL DEFAULT 0) and `users.bot_owner_id` (TEXT, owner's user id, NULL for humans and for a bot's federated account on another instance). A bot's `password_hash` is `'!bot'`. See [bots.md](bots.md).
+
+## Bot tokens (`bot_tokens`)
+
+Migration `0035_bot_tokens.sql`. One row per access token of a bot: `id` (16 hex, the public half of `bsb_<id>.<secret>`), `bot_id` (FK to `users`, cascade), `token_hash` (SHA-256 of the secret), `name` (owner's label, nullable), `created_at`, `last_used_at` (written at most once a minute); index `idx_bot_tokens_bot_id`. Up to 5 per bot. See [bots.md](bots.md), section 1.
+
+## Bot seat restrictions (`bot_seat_restrictions`)
+
+Migration `0036_bot_seat_restrictions.sql`. A moderator's mute or deafen of one bot seat. Primary key `(channel_id, bot_id, restriction_type)`; `channel_id` → `channels` (cascade), `bot_id` → `users` (cascade), `moderator_id` → `users`, `created_at`; index on `bot_id`. A person's restrictions stay per space in `voice_restrictions`. Rows are deleted on unmute/undeafen, when the bot leaves the space (`removeUserFromSpace`) and with the channel. See [voice.md](voice.md), section 2.
+
+## Blocked bots (`blocked_bots`)
+
+Migration `0037_blocked_bots.sql`. Bots of other instances the admin deleted with "block": registration with their bot proof answers `403 bot_blocked`. Primary key `(home_instance, home_user_id)` (`home_instance` is the home's domain as `extractDomain(...).toLowerCase()` gives it), `username` (`name@home` at the time of the block), `blocked_by` → `users` (nullable), `created_at`. No foreign key to the deleted account: the block outlives it. Rows are deleted only by "Unblock". See [bots.md](bots.md), section 7.
+
+## Bot revocation queue (`bot_revocations`)
+
+Migration `0034_bot_revocations.sql`. A revoke of a bot's federated account that an instance has not accepted yet. Primary key `(bot_id, origin)`, no foreign keys (a bot's tombstone must not delete it). Columns: `mode` (`soft` | `full`), `attempts`, `last_error`, `created_at`, `next_attempt_at` (index `idx_bot_revocations_next_attempt_at`). Rows are deleted on success, on a final refusal and after 7 days. See [bots.md](bots.md), "Revocation retries".
+
+## Slash command tables
+
+The same migration adds the two tables of the slash commands. `bot_commands`: `id` (PK), `bot_id` (FK to `users`, cascade), `name`, `description`, `options` (JSON array, default `'[]'`), `updated_at`; unique index on `(bot_id, name)`. `interactions`: `id` (random 32-hex string, PK), `bot_id` and `user_id` (FKs to `users`, cascade), `channel_id` / `dm_channel_id` (exactly one is set), `command`, `options` (JSON object of the parsed values), `created_at`, `expires_at`, `responses` (default 0); index on `expires_at`. A spent interaction is dropped by the first invocation that comes a day after it expired. A bot's `bot_commands` rows are deleted when the bot is tombstoned.
+
+Migration `0040_command_permissions.sql` adds `bot_commands.required_permissions` (text, nullable): the permissions a person needs in the invoking channel to see and use the command, canonical decimal mask; null for none. Subcommands and groups keep their own `requiredPermissions` inside `options`. See [bots.md](bots.md), "Required permissions".

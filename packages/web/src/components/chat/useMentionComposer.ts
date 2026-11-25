@@ -9,6 +9,7 @@ import {
 } from '../../utils/channelUser';
 import { spaceMemberName } from '../../utils/identity';
 import { composerMentions, mentionInsertion, type ComposerMentions } from './composerMentions';
+import { placeCaret } from './placeCaret';
 
 interface MentionState {
   query: string;
@@ -78,14 +79,7 @@ export function useMentionComposer({ channelId, draftText, textareaRef }: Option
       setMentionState(null);
 
       // Restore cursor position after React re-renders
-      const newCursorPos = modelFor(newContent).toDisplay(before.length + insertion.length);
-      requestAnimationFrame(() => {
-        if (textarea) {
-          textarea.focus();
-          textarea.selectionStart = newCursorPos;
-          textarea.selectionEnd = newCursorPos;
-        }
-      });
+      placeCaret(textareaRef, modelFor(newContent).toDisplay(before.length + insertion.length), true);
     },
     [mentionState, draftText, setDraft, channelId, mentionModel, modelFor, textareaRef],
   );
@@ -133,8 +127,7 @@ export function useMentionComposer({ channelId, draftText, textareaRef }: Option
     // edit leaves the caret alone, so the keyboard's own state is not reset,
     // and a running IME composition is never interrupted.
     if (shown.text !== e.target.value && !(e.nativeEvent as InputEvent).isComposing) {
-      const caret = shown.toDisplay(wireCursor);
-      requestAnimationFrame(() => textareaRef.current?.setSelectionRange(caret, caret));
+      placeCaret(textareaRef, shown.toDisplay(wireCursor));
     }
     setDraft(channelId, value);
 

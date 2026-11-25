@@ -425,7 +425,8 @@
       "oldest": "Mais antigos primeiro",
       "nameDesc": "Nome Z-A",
       "deleted": "Excluído",
-      "clear": "Limpar filtros"
+      "clear": "Limpar filtros",
+      "bot": "Robôs"
     },
     "badge": {
       "admin": "Administrador",
@@ -464,7 +465,15 @@
     "deleteDialog": {
       "title": "Excluir usuário",
       "description": "Excluir permanentemente <strong>{{username}}</strong>? Isso removerá a pessoa de todos os espaços, DMs e listas de amigos. Isso não pode ser desfeito.",
-      "confirm": "Excluir usuário"
+      "confirm": "Excluir usuário",
+      "blockBot": "Não permitir que este bot se registre novamente",
+      "blockBotHint": "Quando a instância de origem voltar, o bot não poderá criar uma conta aqui. Você pode desbloqueá-lo abaixo da lista de usuários."
+    },
+    "blockedBots": {
+      "title": "Bots bloqueados",
+      "description": "Bots de outras instâncias que não podem se registrar aqui. Desbloqueie um bot para permiti-lo novamente.",
+      "blockedAt": "Bloqueado em {{date}}",
+      "unblock": "Desbloquear"
     }
   },
   "mobile": {

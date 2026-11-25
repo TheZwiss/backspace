@@ -957,6 +957,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // The caller's own bots take no friendship: an owner adds their bot like an existing member.
+    for (const targetUser of targetUsers) {
+      if (targetUser.isBot === 1 && targetUser.botOwnerId === request.userId) exemptUserIds.add(targetUser.id);
+    }
+
     // Validate all target users are friends with the caller (exempt existing DM members)
     for (const targetUser of targetUsers) {
       if (exemptUserIds.has(targetUser.id)) continue;
@@ -1497,7 +1502,8 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ),
     ).get();
 
-    if (!friendship) {
+    const isOwnBot = targetUser.isBot === 1 && targetUser.botOwnerId === request.userId;
+    if (!friendship && !isOwnBot) {
       return sendError(reply, 403, 'not_a_friend');
     }
 

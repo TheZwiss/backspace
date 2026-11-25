@@ -354,6 +354,10 @@ When an instance updates to this version:
 
 ---
 
+### A bot's managed role
+
+A role with `managed_bot_id` set belongs to one bot (bots.md, "Permissions on invite"). The hierarchy and the held-bits rule apply to it like to any role, and it grants its bits like any role. On top of them it is never given to another member, never taken from its bot (a role set saved for the bot keeps it), and never deleted through the roles route (`400 role_managed_by_bot`); it goes when the bot leaves the space.
+
 ## Lower roles held by senior members
 
 The role hierarchy decides who may **change** a role, not who the change

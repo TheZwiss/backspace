@@ -293,9 +293,14 @@ export function ownRowAt<T extends IdentityFields>(session: T, origin: string, r
 // ─── Applying a user_updated row ─────────────────────────────────────────────
 
 /** The fields of a user row that describe the person rather than the row. */
-export type ProfileFields = Pick<User, 'displayName' | 'avatar' | 'banner' | 'accentColor' | 'avatarColor' | 'bio' | 'customStatus' | 'status'>;
+export type ProfileFields = Pick<User, 'displayName' | 'avatar' | 'banner' | 'accentColor' | 'avatarColor' | 'bio' | 'customStatus' | 'status' | 'isBot'>;
 
-/** The profile fields of `user`, for a row of the same person that is not `user` itself. */
+/**
+ * The profile fields of `user`, for a row of the same person that is not `user`
+ * itself. Being a bot belongs to the person: the home's row carries it to the
+ * person's rows on other instances, which may not know it yet. It is only ever
+ * set, never cleared, as on the servers (a row without the field says nothing).
+ */
 export function profileFieldsOf(user: ProfileFields): ProfileFields {
   return {
     displayName: user.displayName,
@@ -306,6 +311,7 @@ export function profileFieldsOf(user: ProfileFields): ProfileFields {
     bio: user.bio,
     customStatus: user.customStatus,
     status: user.status,
+    ...(user.isBot === true ? { isBot: true } : {}),
   };
 }
 

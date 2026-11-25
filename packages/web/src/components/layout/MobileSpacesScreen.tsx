@@ -27,6 +27,8 @@ import { getSpaceChannelLocation } from '../../hooks/useNotificationSettings';
 import { ChannelMutedIndicator } from '../notifications/ChannelMutedIndicator';
 import { NotificationSettingsModal, type NotificationSettingsModalTarget } from '../notifications/NotificationSettingsModal';
 import { describeCodedError } from '../../i18n/errors';
+import { isPermissionMutedIn, isVoiceFlagIn } from '../../utils/permissionMute';
+import { isLocallyMutedIn, setLocalMute } from '../../utils/voiceLocalKeys';
 
 export function MobileSpacesScreen() {
   const { t } = useTranslation(['spaces', 'common']);
@@ -571,8 +573,8 @@ export function MobileSpacesScreen() {
         type: 'checkbox',
         label: t('spaces:mobile.muteUser'),
         subscribe: useVoiceStore.subscribe,
-        getChecked: () => useVoiceStore.getState().participantMutes.get(userId) ?? false,
-        onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
+        getChecked: () => isLocallyMutedIn(useVoiceStore.getState().participantMutes, userId, channelId),
+        onChange: (checked) => setLocalMute(userId, channelId, checked),
       });
 
       items.push({ key: 'vol-sep', type: 'separator' });
@@ -580,7 +582,7 @@ export function MobileSpacesScreen() {
       items.push({
         key: 'volume',
         type: 'custom',
-        render: () => React.createElement(VolumeSliderItem, { userId }),
+        render: () => React.createElement(VolumeSliderItem, { userId, channelId }),
       });
 
       openContextMenu({ x: e.clientX, y: e.clientY }, items);
@@ -638,9 +640,9 @@ export function MobileSpacesScreen() {
               const isDeafened = wsStatus?.isDeafened ?? false;
               const hasCamera = wsStatus?.isCameraOn ?? false;
               const isScreenSharing = wsStatus?.isScreenSharing ?? false;
-              const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
-              const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
-              const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
+              const isSpaceMuted = isVoiceFlagIn(spaceMutedUserIds, spaceId, userId, channel.id);
+              const isSpaceDeafened = isVoiceFlagIn(spaceDeafenedUserIds, spaceId, userId, channel.id);
+              const isPermissionMuted = isPermissionMutedIn(permissionMutedUserIds, spaceId, userId, channel.id);
 
               return (
                 <div
@@ -655,6 +657,7 @@ export function MobileSpacesScreen() {
                     displayName={displayName}
                     avatar={avatar}
                     avatarColor={avatarColor ?? undefined}
+                    isBot={member?.user.isBot === true}
                     isMuted={isMuted}
                     isDeafened={isDeafened}
                     isCameraOn={hasCamera}
@@ -662,7 +665,7 @@ export function MobileSpacesScreen() {
                     isServerMuted={isSpaceMuted}
                     isServerDeafened={isSpaceDeafened}
                     isPermissionMuted={isPermissionMuted}
-                    isLocallyMuted={userId !== user?.id && (participantMutes.get(userId) ?? false)}
+                    isLocallyMuted={userId !== user?.id && isLocallyMutedIn(participantMutes, userId, channel.id)}
                     isSpeaking={speakingUserIds.has(userId)}
                     size="compact"
                   />

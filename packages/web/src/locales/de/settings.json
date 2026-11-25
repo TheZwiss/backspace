@@ -130,7 +130,9 @@
       "connections": "Verbindungen",
       "keybinds": "Tastenkürzel",
       "desktop": "Desktop",
-      "instance": "Instanz"
+      "instance": "Instanz",
+      "bots": "Bot-Konten",
+      "developer": "Entwickler"
     },
     "logOut": "Abmelden",
     "backToMenu": "Zurück zum Einstellungsmenü"
@@ -429,5 +431,106 @@
     },
     "version": "Version {{version}}",
     "allReleases": "Alle Versionen auf GitHub"
+  },
+  "bots": {
+    "title": "Bot-Konten",
+    "description": "Ein Bot ist ein Konto, das ein Programm mit einem Token steuert. Erstelle einen Bot, kopiere sein Token und verbinde dein Programm. Bots antworten in Direktnachrichten.",
+    "create": {
+      "sectionTitle": "Bot erstellen",
+      "nameLabel": "Benutzername des Bots",
+      "submit": "Bot erstellen",
+      "hint": "{{min}} bis {{max}} Zeichen: Kleinbuchstaben, Zahlen und Unterstriche. Du kannst bis zu {{limit}} Bots erstellen."
+    },
+    "list": {
+      "sectionTitle": "Deine Bots",
+      "empty": "Du hast noch keine Bots.",
+      "createdOn": "Erstellt am {{date}}"
+    },
+    "token": {
+      "title": "Token für {{name}}",
+      "warning": "Kopiere das Token jetzt. Es wird nur einmal angezeigt, und wer es besitzt, steuert den Bot.",
+      "copy": "Token kopieren",
+      "copied": "Kopiert",
+      "dismiss": "Ich habe es gespeichert"
+    },
+    "tokens": {
+      "title": "Zugriffstokens",
+      "loading": "Tokens werden geladen",
+      "legacy": "Dieser Bot läuft noch mit seinem alten, langlebigen Token. Erstelle ein Token, um umzustellen: Das alte funktioniert dann sofort nicht mehr.",
+      "empty": "Dieser Bot hat keine Tokens.",
+      "unnamed": "Token ohne Namen",
+      "createdOn": "Erstellt am {{date}}",
+      "neverUsed": "nie verwendet",
+      "lastUsed": "zuletzt verwendet {{time}}",
+      "revoke": "Widerrufen",
+      "confirmRevoke": "Widerruf bestätigen",
+      "nameLabel": "Token-Bezeichnung",
+      "namePlaceholder": "Bezeichnung (optional)",
+      "create": "Token erstellen",
+      "limitHint": "Bis zu {{max}} Tokens pro Bot. Das Widerrufen eines Tokens trennt den Bot; die übrigen Tokens funktionieren weiter."
+    },
+    "actions": {
+      "regenerate": "Alle Tokens zurücksetzen",
+      "delete": "Löschen",
+      "confirmDelete": "Löschen bestätigen",
+      "cancel": "Abbrechen",
+      "edit": "Bearbeiten",
+      "save": "Speichern",
+      "addToServer": "Zum Server hinzufügen",
+      "tokens": "Tokens"
+    },
+    "edit": {
+      "nameLabel": "Anzeigename",
+      "hint": "Der Benutzername @{{username}} kann nicht geändert werden. Bis zu {{max}} Zeichen.",
+      "bioLabel": "Über den Bot",
+      "bioPlaceholder": "Was der Bot tut, seine Befehle, wo es Hilfe gibt",
+      "bioCounter": "{{used}}/{{max}}"
+    },
+    "status": {
+      "label": "Status",
+      "none": "Kein Status",
+      "textLabel": "Statustext",
+      "placeholder": "Was der Bot neben seinem Namen zeigt",
+      "hint": "Wird angezeigt, solange der Bot verbunden ist. Der Code des Bots kann ihn bis zur nächsten Verbindung ersetzen.",
+      "types": {
+        "custom": "Eigener Text",
+        "playing": "Spielt",
+        "listening": "Hört",
+        "watching": "Schaut"
+      },
+      "display": {
+        "custom": "{{name}}",
+        "playing": "Spielt {{name}}",
+        "listening": "Hört {{name}}",
+        "watching": "Schaut {{name}}"
+      }
+    },
+    "permissions": {
+      "label": "Berechtigungen, die der Bot anfordert",
+      "hint": "Wer den Bot zu einem Space hinzufügt, sieht sie angehakt und kann jede abwählen. Sie landen in einer Rolle mit dem Namen des Bots. Spätere Änderungen betreffen bereits erstellte Rollen nicht."
+    },
+    "avatar": {
+      "change": "Avatar ändern",
+      "remove": "Avatar entfernen",
+      "cropTitle": "Bot-Avatar zuschneiden",
+      "uploadFailed": "Avatar konnte nicht hochgeladen werden",
+      "notImage": "Wähle eine Bilddatei"
+    },
+    "spaces": {
+      "title": "Zu einem Space hinzufügen",
+      "loading": "Spaces werden geladen",
+      "empty": "Du verwaltest noch keine Spaces. Zum Hinzufügen eines Bots brauchst du die Berechtigung zum Verwalten des Spaces.",
+      "add": "Hinzufügen",
+      "added": "Hinzugefügt",
+      "remove": "Entfernen"
+    }
+  },
+  "developer": {
+    "title": "Entwickler",
+    "mode": {
+      "label": "Entwicklermodus",
+      "description": "Zeigt Entwicklerwerkzeuge, etwa den Tab „Bots“, in den Einstellungen an. Beim Ausschalten werden sie nur ausgeblendet; deine Bots laufen weiter.",
+      "saveFailed": "Die Einstellung konnte nicht gespeichert werden. Versuche es erneut."
+    }
   }
 }

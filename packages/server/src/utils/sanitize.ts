@@ -17,13 +17,14 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect, isSelf = fal
       customStatus: null,
       isAdmin: false,
       isDeleted: true,
+      isBot: false,
       discoverable: false,
       profileUpdatedAt: 0,
       createdAt: row.createdAt,
       homeInstance: null,
       homeUserId: null,
       replicatedInstances: [],
-      ...(isSelf ? { showActivity: false } : {}),
+      ...(isSelf ? { showActivity: false, developerMode: false } : {}),
     };
   }
 
@@ -48,6 +49,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect, isSelf = fal
     status: (row.status ?? 'offline') as User['status'],
     customStatus: row.customStatus,
     isAdmin: row.isAdmin === 1,
+    isBot: row.isBot === 1,
     discoverable: row.discoverable !== 0,
     profileUpdatedAt: row.profileUpdatedAt ?? 0,
     createdAt: row.createdAt,
@@ -57,6 +59,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect, isSelf = fal
     ...(isSelf
       ? {
           showActivity: row.showActivity !== 0,
+          developerMode: row.developerMode === 1,
           federationHomeOrphaned: row.federationHomeOrphaned === 1,
           detachedHomeInstance: row.detachedHomeInstance ?? null,
         }
