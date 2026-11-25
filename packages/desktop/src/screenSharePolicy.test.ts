@@ -5,6 +5,7 @@ import {
   screenEnumerationDecision,
   PENDING_SCREEN_SELECTION_TTL_MS,
   SCREEN_SOURCES_CACHE_MS,
+  SYSTEM_PICKER_SOURCE,
 } from './screenSharePolicy';
 
 describe('screenSharePickerMode', () => {
@@ -66,5 +67,12 @@ describe('screenEnumerationDecision', () => {
   it('enumerates again once the cache window has passed', () => {
     expect(screenEnumerationDecision({ ...base, lastEnumeratedAt: 10_000 - SCREEN_SOURCES_CACHE_MS }))
       .toBe('enumerate');
+  });
+});
+
+describe('SYSTEM_PICKER_SOURCE', () => {
+  it("is Chromium's whole-desktop screen id, so no pre-chosen surface is implied", () => {
+    expect(SYSTEM_PICKER_SOURCE.id).toBe('screen:-1:0');
+    expect(SYSTEM_PICKER_SOURCE.id).toMatch(/^screen:-?\d+:\d+$/);
   });
 });

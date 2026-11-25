@@ -54,6 +54,7 @@ import { migrateUserData } from './userDataMigration';
 import { isNavigationAllowed } from './navigationPolicy';
 import { NotificationRetainer } from './notificationRetention';
 import {
+  SYSTEM_PICKER_SOURCE,
   screenSharePickerMode,
   isPendingSelectionFresh,
   screenEnumerationDecision,
@@ -1334,6 +1335,22 @@ if (!gotTheLock) {
           console.log('[Main:ScreenShare] Using preselected source:', pending.sourceId, 'audio:', pending.shareAudio);
           callback({ video: selected, ...(pending.shareAudio ? { audio: 'loopback' } : {}) });
           return;
+        }
+
+        // System picker (Wayland portal): enumerating here opens the portal, and
+        // starting the capture from what it returned opens it again. Hand
+        // Chromium the placeholder instead so the capture start asks exactly
+        // once; cancelling there rejects getDisplayMedia() in the renderer.
+        // Default audio off for the same reason as below: no preference, no capture.
+        if (currentPickerMode() === 'system') {
+          const shareAudio = lastSystemPickerShareAudio ?? false;
+          try {
+            console.log('[Main:ScreenShare] System picker: deferring the choice to the capture start, audio:', shareAudio);
+            callback({ video: SYSTEM_PICKER_SOURCE as unknown as Electron.DesktopCapturerSource, ...(shareAudio ? { audio: 'loopback' } : {}) });
+            return;
+          } catch (err) {
+            console.warn('[Main:ScreenShare] Placeholder source rejected, enumerating instead:', err);
+          }
         }
 
         const sources = await enumerateScreenSources();

@@ -827,9 +827,9 @@ None of this substitutes for trusting the instance you connect to; it bounds wha
 `get-screen-share-picker-mode` returns `'system'` on Linux when `XDG_SESSION_TYPE=wayland` (or `WAYLAND_DISPLAY` is set and the session is not X11), `'app'` everywhere else (`screenSharePickerMode()` in `screenSharePolicy.ts`, unit-tested there alongside the preselection TTL and the enumeration gate). This reads the session type, which is a guess: under XWayland the capture stack behaves like X11 while the session still reports `wayland`. A wrong guess costs one extra click — the click falls through to the prompted flow, which both sides already support. Under Wayland, `desktopCapturer.getSources()` itself opens the compositor's screencast portal and returns only what the user chose there, so:
 
 1. The renderer never enumerates up front (that would prompt on every open); it shows a "Choose" card and sends `screen-share-audio-preference` with the loopback choice
-2. The card's click calls `getDisplayMedia()` → handler enumerates → portal dialog → one source back
-3. Handler sees `'system'` mode and exactly one source and calls `callback({ video: source, audio: 'loopback'? })` directly, no `screen-share-sources` round trip
-4. Zero sources means the portal was cancelled → request denied → renderer shows "No screen was chosen"
+2. The card's click calls `getDisplayMedia()` → the handler does **not** enumerate: `desktopCapturer.getSources()` opens the portal for the listing, and starting a capture from the source it returned opens it a second time (the user had to choose twice). It answers with `SYSTEM_PICKER_SOURCE` (`screen:-1:0`, Chromium's whole-desktop id) and the capture start opens the portal once
+3. Audio loopback follows `screen-share-audio-preference` (off when none was sent)
+4. Cancelling the portal rejects `getDisplayMedia()` in the renderer → "No screen was chosen". If Electron rejects the placeholder, the handler falls back to the old enumerate-then-answer path
 
 There is no persistent grant: the portal asks per share by design, and one screen or window per share is inherent. The AppImage packaging is unrelated.
 

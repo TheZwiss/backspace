@@ -32,6 +32,17 @@ export function screenSharePickerMode(
   return 'app';
 }
 
+/**
+ * What the display-media handler hands Chromium on a system-picker session
+ * instead of a listed source. `desktopCapturer.getSources()` opens the portal
+ * for the listing, and starting the capture from the source it returned opens
+ * the portal a second time, so the user had to choose twice. Chromium's own
+ * "whole desktop" id (`kFullDesktopScreenId`, -1) carries no pre-chosen
+ * surface: the capture start is what asks, and it asks once, for a screen or a
+ * window alike.
+ */
+export const SYSTEM_PICKER_SOURCE = { id: 'screen:-1:0', name: 'System picker' } as const;
+
 export interface PendingScreenSelection {
   sourceId: string;
   shareAudio: boolean;
