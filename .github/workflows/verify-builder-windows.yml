@@ -1,0 +1,60 @@
+name: Verify Windows builder dependency upgrade
+on:
+  push:
+    branches: [codex/fastify5-linux-check]
+    paths: ['.github/workflows/verify-builder-windows.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 0f177e0ebaac99fecf0a04258c989f3e51d99c20
+          path: baseline
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 02742ffaf72927b5a5061552cab237e106a5280f
+          path: candidate
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: candidate/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+      - name: Package both revisions for Windows
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($revision in 'baseline', 'candidate') {
+            Push-Location $revision
+            pnpm install --frozen-lockfile --ignore-scripts
+            pnpm build:shared
+            pnpm --filter '@backspace/desktop' build:ts
+            pnpm --dir packages/desktop exec electron-builder --win dir --x64 --arm64 --publish never
+            Pop-Location
+          }
+      - name: Compare archives, native paths, and Electron fuses
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          foreach ($arch in 'win-unpacked', 'win-arm64-unpacked') {
+            $left = (Resolve-Path "./baseline/packages/desktop/dist-electron/$arch/resources").Path
+            $right = (Resolve-Path "./candidate/packages/desktop/dist-electron/$arch/resources").Path
+            $oldHash = (Get-FileHash "$left/app.asar").Hash
+            $newHash = (Get-FileHash "$right/app.asar").Hash
+            if ($oldHash -ne $newHash) { throw "Changed application archive for $arch" }
+            $oldPaths = Get-ChildItem "$left/app.asar.unpacked" -Recurse -File | ForEach-Object { $_.FullName.Substring($left.Length) }
+            $newPaths = Get-ChildItem "$right/app.asar.unpacked" -Recurse -File | ForEach-Object { $_.FullName.Substring($right.Length) }
+            if (Compare-Object $oldPaths $newPaths) { throw "Changed unpacked file paths for $arch" }
+            $artifact = (Resolve-Path "./candidate/packages/desktop/dist-electron/$arch/Backspace.exe").Path
+            $fuses = pnpm --dir candidate/packages/desktop exec electron-fuses read --app $artifact | Out-String
+            if ($fuses -notmatch 'RunAsNode is Disabled' -or $fuses -notmatch 'EnableNodeCliInspectArguments is Disabled' -or $fuses -notmatch 'OnlyLoadAppFromAsar is Enabled') { throw "Unexpected fuse state for $arch" }
+            Write-Output "$arch archive, unpacked paths, and fuse checks passed"
+          }
