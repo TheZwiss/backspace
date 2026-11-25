@@ -271,8 +271,8 @@ if [[ "$ASSUME_YES" != true ]]; then
   fi
   echo ""
   echo "This will snapshot the database, fetch the newest image, and restart"
-  echo "the $SERVICE service. Other containers are left alone. Clients reconnect"
-  echo "on their own."
+  echo "the $SERVICE service. Bundled Caddy is recreated if it needs to move"
+  echo "to the new application bridge. Clients reconnect on their own."
   read -rp "Continue? [y/N] " yn
   [[ "${yn,,}" == "y" ]] || { echo "Aborted. Nothing was changed."; exit 0; }
 fi
@@ -297,6 +297,22 @@ else
   warn "Could not fast-forward this checkout, most likely because it has diverged."
   warn "Nothing was rewritten. Resolve it by hand later if you want the newest"
   warn "compose files and scripts. The image update below still applies."
+fi
+
+# The first upgrade to the fixed-address bridge moves the app and bundled
+# Caddy together. Routine updates still name only Backspace.
+restart_services=("$SERVICE")
+compose_services="$($COMPOSE config --services)"
+if contains_line "$compose_services" caddy; then
+  caddy_id="$($COMPOSE ps -q caddy)"
+  if [[ -n "$caddy_id" ]]; then
+    project="$($DOCKER inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$CONTAINER")"
+    caddy_networks="$($DOCKER inspect --format '{{range $name, $network := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$caddy_id")"
+    compose_networks="$($COMPOSE config --networks)"
+    if contains_line "$compose_networks" app && ! contains_line "$caddy_networks" "${project}_app"; then
+      restart_services+=(caddy)
+    fi
+  fi
 fi
 
 # ── Phase 3: Back up ────────────────────────────────────────
@@ -351,11 +367,16 @@ NEW_IMAGE_ID="$($DOCKER image inspect --format '{{.Id}}' "$TARGET_REF" 2>/dev/nu
 # ── Phase 5: Skip a no-op ───────────────────────────────────
 # Restarting a chat server for nothing drops everyone in a voice call.
 
+same_image=false
 if [[ -n "$NEW_IMAGE_ID" && "$NEW_IMAGE_ID" == "$ROLLBACK_IMAGE_ID" ]]; then
-  echo ""
-  success "Already running the newest image. Nothing to restart."
-  info "Version ${CURRENT_VERSION:-unknown} is current for $TARGET_REF."
-  exit 0
+  same_image=true
+  if (( ${#restart_services[@]} == 1 )); then
+    echo ""
+    success "Already running the newest image. Nothing to restart."
+    info "Version ${CURRENT_VERSION:-unknown} is current for $TARGET_REF."
+    exit 0
+  fi
+  info "The image is current. Applying the bundled proxy network change."
 fi
 
 # ── Phase 6 and 7: Restart, then wait for healthy ───────────
@@ -387,10 +408,10 @@ roll_back() {
   if ! $DOCKER tag "${ROLLBACK_IMAGE_ID#sha256:}" "$TARGET_REF"; then
     error "Could not re-tag the previous image. Roll back by hand:"
     error "  $DOCKER tag ${ROLLBACK_IMAGE_ID#sha256:} $TARGET_REF"
-    error "  $COMPOSE up -d $SERVICE"
+    error "  $COMPOSE up -d ${restart_services[*]}"
     return 1
   fi
-  if ! $COMPOSE up -d "$SERVICE"; then
+  if ! $COMPOSE up -d "${restart_services[@]}"; then
     error "Could not restart the previous image. Check: $COMPOSE logs $SERVICE"
     return 1
   fi
@@ -412,7 +433,7 @@ step "Restarting $SERVICE"
 
 # The service is named explicitly and --remove-orphans is never passed, so
 # co-hosted containers in this project are not recreated or reaped.
-if ! $COMPOSE up -d "$SERVICE"; then
+if ! $COMPOSE up -d "${restart_services[@]}"; then
   error "The restart failed."
   roll_back || true
   exit 1
@@ -455,6 +476,8 @@ elif [[ -z "$NEW_VERSION" ]]; then
   error "The container is healthy but did not report a version."
   roll_back || true
   exit 1
+elif [[ "$same_image" == true && "$NEW_VERSION" == "$CURRENT_VERSION" ]]; then
+  success "Applied the bundled proxy network change on version $NEW_VERSION"
 elif [[ "$NEW_VERSION" == "$CURRENT_VERSION" ]]; then
   error "The container came up healthy but still reports version $CURRENT_VERSION."
   error "The new image did not take effect."

@@ -845,7 +845,10 @@ describe('client routes: a homeUserId + homeInstance pair reaches the user it na
   async function call(method: string, pathname: string, token: string, body?: unknown): Promise<Response> {
     return fetch(`${B.origin}${pathname}`, {
       method,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   }

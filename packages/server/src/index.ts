@@ -49,12 +49,7 @@ import { MESSAGE_PAGING_HEADER } from '@backspace/shared';
 
 async function main(): Promise<void> {
   const app = Fastify({
-    // A count of trusted hops, not `true`. `request.ip` is the address the
-    // nearest proxy appended rather than the left-most thing in
-    // `X-Forwarded-For`, so a client cannot pick the address its rate limits
-    // are counted under. `TRUSTED_PROXY_HOPS` in config.ts carries what the
-    // number means and when an operator changes it.
-    trustProxy: config.trustedProxyHops,
+    trustProxy: config.trustProxy,
     logger: {
       level: 'info',
     },
@@ -169,7 +164,7 @@ async function main(): Promise<void> {
     // fall back here anyway. Stated plainly instead, because the consequence is
     // an operator's to know: everyone behind one NAT, VPN exit or corporate
     // proxy shares one 200-per-minute budget. Which address that is comes from
-    // `config.trustedProxyHops`, which is what keeps a client from choosing
+    // `config.trustProxy`, which is what keeps a client from choosing
     // its own. See docs/systems/api.md, "Rate limiting".
     keyGenerator: (request: FastifyRequest) => request.ip,
     // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when

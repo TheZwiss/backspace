@@ -71,15 +71,6 @@ updates:
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
 
-      # Fastify core and its plugins move together or not at all. The 11.x
-      # plugin lines target Fastify 5; on Fastify 4 the server stops booting.
-      # Unblock: one PR that takes fastify 4 -> 5 and every @fastify/* plugin
-      # in the same commit, with the federation and security-header suites green.
-      - dependency-name: fastify
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@fastify/*"
-        update-types: ["version-update:semver-major"]
-
       # @types/node tracks the RUNTIME, not npm's latest. Node 22 is the
       # lowest supported runtime (`engines: node >=22.12`, CI's baseline leg),
       # so types describing a newer Node let code typecheck clean and fail at

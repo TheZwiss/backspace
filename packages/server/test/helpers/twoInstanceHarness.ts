@@ -221,6 +221,7 @@ async function spawnOnPort(port: number, opts: SpawnInstanceOptions): Promise<Sp
   const env: Record<string, string> = {
     ...process.env,
     NODE_ENV: 'test',
+    TRUSTED_PROXY_HOPS: '0',
     ENABLE_TEST_ROUTES: '1',
     PORT: String(port),
     HOST: '127.0.0.1',

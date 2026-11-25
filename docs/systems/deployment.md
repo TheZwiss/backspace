@@ -51,20 +51,52 @@ One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` au
 | `proxy` | already taken | base **+** `docker-compose.proxy.yml`: `backspace` on `127.0.0.1:APP_PORT`, no Caddy | operator's reverse proxy | ✅ if operator proxies `/livekit` and opens media ports |
 | `tunnel` | already taken | same overlay as `proxy` | tunnel provider (Cloudflare, Tailscale…) | ❌ WebRTC/UDP can't traverse a tunnel |
 
-**The overlay (`docker-compose.proxy.yml`).** Layered on top of the base file it (1) publishes `backspace` on `127.0.0.1:${APP_PORT:-8080}:${PORT:-3000}` — loopback only, so nothing is exposed on a public interface — and (2) parks `caddy` in an inert profile (`_proxy_mode_no_caddy`) that is never activated, so Caddy does not start. The base file is unchanged, so All-in-One (`docker-compose.yml` alone) behaves exactly as before.
+**The overlay (`docker-compose.proxy.yml`).** Layered on top of the base file it (1) publishes `backspace` on `127.0.0.1:${APP_PORT:-8080}:${PORT:-3000}` — loopback only, so nothing is exposed on a public interface — and (2) parks `caddy` in an inert profile (`_proxy_mode_no_caddy`) that is never activated, so Caddy does not start. It also removes the bundled Caddy address from the proxy allowlist default.
 
 **`COMPOSE_FILE` wiring.** In proxy/tunnel mode install.sh writes `COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml` into `.env`. Docker Compose reads `COMPOSE_FILE` from `.env`, so **every** later `docker compose …` command in the directory transparently uses both files — the operator (and the update commands) never need `-f` flags. All-in-One leaves `COMPOSE_FILE` unset (defaults to `docker-compose.yml`).
 
-**Server proxy-awareness.** The server sets Fastify `trustProxy` to a count of trusted hops (`TRUSTED_PROXY_HOPS`, default 1, see below), so it trusts `X-Forwarded-*` from the fronting proxy/tunnel but not from anything beyond it. `getOurOrigin()` returns `https://${DOMAIN}` (federation/public identity) whenever `DOMAIN` is set and `PUBLIC_ORIGIN` is unset — correct in all three modes, since the public URL is `https://DOMAIN` regardless of which layer terminates TLS. No `PUBLIC_ORIGIN` is needed for a normal proxy/tunnel deployment.
+**Server proxy-awareness.** Backspace accepts a proxy hop only when its IP matches
+`TRUSTED_PROXY_ADDRESSES` (comma-separated IP addresses or CIDRs) and the hop
+is inside `TRUSTED_PROXY_HOPS` (0–4, default 1). Missing or malformed addresses
+stop startup while forwarding is enabled. See [web-security.md](web-security.md)
+section 9 for how Fastify derives the rate-limit key. Federation advertises
+`PUBLIC_ORIGIN` when set, otherwise `https://${DOMAIN}`, independently of the
+proxy settings.
 
-**The trusted hop count (`TRUSTED_PROXY_HOPS`).** `trustProxy` is not `true`; it is a count of the proxies in front of the app that are trusted to have written `X-Forwarded-For`. It is set in `.env` like every other deployment fact, defaults to **1**, and is read and validated in `packages/server/src/config.ts`; `install.sh` writes the line into a generated `.env`, commented out at the default, and preserves an explicit value across re-runs. A set value that is not a non-negative integer stops the server at boot rather than quietly becoming 1, and so does anything above 4 (a CDN in front of your own proxy in front of a tunnel is 3, so a larger number is a typo, and a typo like 11 would trust the whole forwarded chain again). A blank line reads as unset and gives you the default. What the refusal actually says, and why the ceiling is 4, is in [web-security.md](web-security.md) section 9. `docker-compose.yml` passes `.env` to the container wholesale (`env_file`), so setting it there is all it takes. `request.ip` is therefore the address the nearest proxy appended, not the left-most thing in the header, so a client cannot choose the address its rate limits are counted under. Every rate limit in the app keys on that address (see [api.md](api.md), "Rate limiting"), as does the unauthenticated federation peer-accept limiter, and it is what the request log records.
-
-One is correct for all three modes as shipped: the bundled Caddy, an operator's reverse proxy and a tunnel daemon are each one hop. Two deployments need a different number, and the app cannot detect either of them for itself:
-
-- **A CDN in front of your own reverse proxy** is two hops. Left at 1, the app sees the CDN's address and everyone behind it shares a rate-limit bucket. Set `TRUSTED_PROXY_HOPS=2` **if your inner proxy appends to `X-Forwarded-For`**, which nginx configured with the snippet above does. If the inner proxy is the bundled Caddy, the number on its own does nothing: Caddy discards the CDN's entry unless its `trusted_proxies` names the CDN, so the app is handed the CDN's address whatever the count. Configure `trusted_proxies` in the Caddyfile first, then set 2. See [web-security.md](web-security.md) section 9.
-- **No proxy at all**, the app exposed directly on its port, is zero hops. Left at 1, the app believes an `X-Forwarded-For` header a client sends, because from inside the process one proxy and one lying client look the same. Set `TRUSTED_PROXY_HOPS=0`, which ignores the header and uses the socket address.
-
-Too low costs a shared bucket; too high hands the key back to the client. **Your proxy config needs no change for this:** appending to `X-Forwarded-For` (nginx's `$proxy_add_x_forwarded_for`, which the snippet this installer prints uses) is exactly what the hop count expects, and Caddy's overwrite is fine too. An evaded rate limit was never an authentication bypass, since every route still authenticates and authorizes; what it cost was the brake on brute force and flooding. See [web-security.md](web-security.md) section 9.
+- **Bundled Caddy.** Compose creates an `app` bridge and configures Caddy with
+  the exact address `10.253.243.2`. The app trusts that address automatically.
+  If its subnet conflicts with your routes or a Docker network, set
+  `APP_NETWORK_SUBNET`, `APP_NETWORK_DYNAMIC_RANGE`, and `CADDY_PROXY_IP`
+  together in `.env`. Pick a fixed address in the subnet outside the dynamic
+  range and away from the gateway. The dynamic range leaves Caddy's address
+  available when Backspace starts first. For an upgrade, run
+  `docker compose up -d` for the stack so Backspace and Caddy both attach to the
+  new bridge. The database, uploads and Caddy volumes keep their existing
+  mounts. When changing the new bridge's IPAM later, recreate the bridge
+  with `docker compose down` then `docker compose up -d`, keeping the volumes.
+- **External proxy or tunnel.** Set `TRUSTED_PROXY_ADDRESSES` in `.env` before
+  upgrading or starting the proxy overlay. The loopback address in the upstream
+  URL is the destination on the host side. To identify the immediate peer,
+  start the backend with `TRUSTED_PROXY_HOPS=0` while keeping the public edge
+  closed. Send a private request through your real proxy to `/api/health` and
+  read `req.remoteAddress` from `docker compose logs backspace`. With forwarding
+  disabled this is the TCP connection source. The address can be a Docker
+  gateway or shim. Trust it only
+  if connections with that source can come solely from infrastructure you
+  trust to write these headers. If another workload can connect with the same
+  address, attach the proxy to the application network with a fixed,
+  dedicated source IP instead and allowlist that IP. The same peer check applies
+  to a reverse proxy in front of a native Backspace process.
+- **CDN before a reverse proxy.** With an appending inner proxy, add the CDN's
+  published proxy ranges alongside the immediate peer and set
+  `TRUSTED_PROXY_HOPS=2`. For bundled Caddy, include its exact address in the
+  explicit list and configure Caddy's `trusted_proxies` for the CDN so it
+  preserves the required addresses. Keep the list current with the CDN.
+- **Direct server.** Set `TRUSTED_PROXY_HOPS=0`; the app uses the TCP peer
+  address and ignores forwarding headers. The direct DAST instance sets this
+  explicitly. `pnpm dev` defaults to direct access when no proxy is configured.
+  The Docker health check contacts the app
+  over loopback without sending any forwarded headers.
 
 **Custom public port.** When the public port is not 443, it goes into `DOMAIN` itself (`DOMAIN=chat.example.com:1443`). `DOMAIN` is the host clients type, and everything the instance advertises (`getOurOrigin()`, invite links, the generated `LIVEKIT_URL`) is built from it, so the port propagates with no second variable. Only `proxy` mode supports it: install.sh rejects a port in `allinone` (Caddy needs 80/443 for issuance; `docker-compose.yml` publishes only those) and in `tunnel` (the provider's edge answers on 443). The installer splits `DOMAIN_HOST` / `DOMAIN_PORT` for the DNS check and the printed snippets (`listen <port> ssl`, `server_name <host>`). The proxy must pass the `Host` header through unchanged: the nginx snippets use `$http_host`, because `$host` strips the port. The server itself never builds a URL from the request host (the tus `Location` is relative for exactly this reason, see uploads.md), so a proxy that mangles `Host` can only break what it terminates. Federation with a port in `DOMAIN` is not supported (see Known Limitations).
 
@@ -162,7 +194,7 @@ not representative of Linux behaviour).
 
 `Caddyfile` reads `{$DOMAIN}` from the container environment (injected by Compose from `.env`) and:
 - Strips a `/livekit/*` prefix and reverse-proxies LiveKit signaling to `host.docker.internal:7880` (LiveKit runs in host networking).
-- Reverse-proxies everything else — API, WebSocket, and the static frontend — to `backspace:3000` over Docker's internal network.
+- Reverse-proxies everything else — API, WebSocket, and the static frontend — to `backspace:3000` over the application bridge.
 
 Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the persisted ACME state lives in the `caddy-data` / `caddy-config` named volumes.
 
@@ -225,11 +257,11 @@ Sequence:
 4. **Refresh the checkout, tolerantly.** No `.git` (an rsync-deployed host) says so and carries on. A dirty tree or a diverged branch refuses to pull, says why, and carries on. Local edits are never clobbered, and the image update still applies.
 5. **Back up.** Calls `./backup.sh`. **The one step whose failure is fatal**, because everything after it is only safe to attempt because it happened.
 6. **Fetch.** `docker compose pull backspace`, or `docker compose build backspace` on a from-source install, chosen from `BACKSPACE_INSTALL_CHANNEL` and falling back to inferring it from the image reference.
-7. **Skip a no-op.** If the fetched image ID equals the recorded one, report and exit 0 without restarting. Restarting a chat server for nothing disconnects everyone in a voice call.
-8. **Restart.** `docker compose up -d backspace`. **The service is named explicitly and `--remove-orphans` is never passed.** Compose actively suggests that flag on hosts running other containers in the same project, and following it would delete them. Both live instances run co-hosted services behind the same Caddy, so this is a real deletion, not a hypothetical one.
+7. **Skip a no-op.** If the fetched image ID equals the recorded one and Caddy needs no bridge migration, report and exit 0 without restarting. Restarting a chat server for nothing disconnects everyone in a voice call.
+8. **Restart.** `docker compose up -d backspace`. If bundled Caddy is running on the old bridge, the updater also names `caddy` so the two services move together. **The services are named explicitly and `--remove-orphans` is never passed.** Compose actively suggests that flag on hosts running other containers in the same project, and following it would delete them. Both live instances run co-hosted services behind the same Caddy, so this is a real deletion, not a hypothetical one.
 9. **Health gate.** Polls `docker inspect` for `healthy`, up to 180s. The compose healthcheck is `interval: 30s, retries: 5, start_period: 30s`, so anything under roughly 120s would produce false failures. On timeout it prints the container state, the last health-probe output, and the tail of the logs.
 10. **Verify the version moved.** Reads `/api/instance/info` through the container and compares against the pre-update value. A container that comes up healthy while still running the old code is a failed update, and this is the only check that catches it.
-11. **Roll back on failure.** Re-tags the recorded image ID to the target reference, `up -d backspace`, waits for healthy, and reports both the failure and the restored version. It then warns that the local tag now points at the previous image and should be restored with `docker compose pull backspace` once the problem is fixed.
+11. **Roll back on failure.** Re-tags the recorded image ID to the target reference, recreates the selected services, waits for healthy, and reports both the failure and the restored version. It then warns that the local tag now points at the previous image and should be restored with `docker compose pull backspace` once the problem is fixed.
 
 `--check` is read-only. It reports the running version and the install channel, then looks up the latest release tag from the GitHub API with `curl` or `wget` and compares. It touches no Docker state and degrades to a plain statement of the running version when neither tool is available.
 

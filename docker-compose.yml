@@ -35,6 +35,8 @@ services:
       - NODE_ENV=production
       - DB_PATH=/app/data/backspace.db
       - UPLOAD_DIR=/app/data/uploads
+      # The overlay removes the bundled address default when Caddy is disabled.
+      - "TRUSTED_PROXY_ADDRESSES=${TRUSTED_PROXY_ADDRESSES:-${CADDY_PROXY_IP:-10.253.243.2}}"
       # Fail fast with a clear message if the secret is missing/empty, instead of
       # letting the container boot-crash on every `restart: unless-stopped` cycle
       # (a silent loop that only shows up in `docker compose logs backspace`).
@@ -42,7 +44,7 @@ services:
       # bites the manual `cp .env.example .env && docker compose up` path.
       - "JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env - generate one with: openssl rand -hex 32}"
     networks:
-      - internal
+      - app
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:' + (process.env.PORT || 3000) + '/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
@@ -67,7 +69,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     networks:
-      - internal
+      app:
+        ipv4_address: ${CADDY_PROXY_IP:-10.253.243.2}
+      # Preserve access to co-hosted services behind an operator's Caddyfile.
+      internal:
     depends_on:
       backspace:
         condition: service_healthy
@@ -88,6 +93,14 @@ services:
 networks:
   internal:
     driver: bridge
+  # Keep the original bridge available to Caddy for co-hosted services.
+  # The dynamic pool on the new app bridge leaves the fixed address free.
+  app:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${APP_NETWORK_SUBNET:-10.253.243.0/24}
+          ip_range: ${APP_NETWORK_DYNAMIC_RANGE:-10.253.243.128/25}
 
 volumes:
   caddy-data:
