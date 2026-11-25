@@ -189,9 +189,9 @@ try {
     await eventually('prompt gone',()=>owner.evaluate("!document.body.innerText.includes('Understood.')"));
   }
   await watchDrag(owner);
-  const pill = await owner.point("document.querySelector('textarea')");
-  const history = {x:pill.x,y:pill.y-160};
-  const historyScreen = await appCoordinates(owner,history);
+  let pill = await owner.point("document.querySelector('textarea')");
+  let history = {x:pill.x,y:pill.y-160};
+  let historyScreen = await appCoordinates(owner,history);
 
   await begin(names[0],historyScreen);
   await eventually('real file drag enters history',()=>visible(owner));
@@ -205,14 +205,26 @@ try {
   assert.ok(!escapeTrace.some(event=>event.type==='drop'),'Escape dispatched a drop');
   assert.ok(!await owner.evaluate("document.body.innerText.includes('native-cancel.txt')"),'cancelled file was staged');
 
-  // Reload between independently measured cases. This does not count as passing
-  // the Escape assertion above and allows the rest of the evidence to be gathered.
-  await owner.send('Page.reload');
-  await eventually('owner returned after reload',()=>owner.evaluate("Boolean(document.querySelector('textarea'))"));
-  await watchDrag(owner);
+  // Preserve the verified live page when it recovered from cancellation.
+  if (!nativeEscapePassed) {
+    await owner.send('Page.reload');
+    await eventually('owner returned after reload',()=>owner.evaluate("Boolean(document.querySelector('textarea'))"));
+    await watchDrag(owner);
+  } else {
+    await owner.evaluate('window.qaDrags.length = 0');
+  }
 
+  pill = await owner.point("document.querySelector('textarea')");
+  history = {x:pill.x,y:pill.y-160};
+  historyScreen = await appCoordinates(owner,history);
   await begin(names[0],historyScreen);
-  await eventually('second real file drag enters',()=>visible(owner));
+  try {
+    await eventually('second real file drag enters',()=>visible(owner));
+  } catch (error) {
+    console.log('Second native drag events', JSON.stringify(await dragLog(owner)));
+    console.log('GTK drag lifecycle', await readFile(root+'/gtk.log','utf8'));
+    throw error;
+  }
   await pointer(outside);
   await eventually('leaving application removes overlay',async()=>!await visible(owner));
   await control('mouseup','1');
