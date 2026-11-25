@@ -46,7 +46,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { AudioManager } from '../../audio/AudioManager';
+import { AudioManager, attachFirstGestureAudioUnlock } from '../../audio/AudioManager';
 import { isAppSystemAudioSource, userDevicesSignature } from '../../utils/systemAudioSource';
 
 export function AppLayout() {
@@ -54,28 +54,13 @@ export function AppLayout() {
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
-  // Global first-gesture handler: unlock AudioContext autoplay once on the first
-  // user interaction so later WebSocket-driven cues (incoming calls, message
-  // notifications) are allowed to play. Because no audio session is held,
-  // AudioManager immediately schedules idle auto-suspend (~1.5s) and releases
-  // the OS audio device / DAC instead of keeping it open.
-  useEffect(() => {
-    const unlock = () => {
-      AudioManager.getInstance().resumeContext().then(() => {
-        window.removeEventListener('click', unlock);
-        window.removeEventListener('keydown', unlock);
-        window.removeEventListener('touchstart', unlock);
-      });
-    };
-    window.addEventListener('click', unlock);
-    window.addEventListener('keydown', unlock);
-    window.addEventListener('touchstart', unlock);
-    return () => {
-      window.removeEventListener('click', unlock);
-      window.removeEventListener('keydown', unlock);
-      window.removeEventListener('touchstart', unlock);
-    };
-  }, []);
+  // Global first-gesture handler: unlock AudioContext autoplay on the first
+  // usable user interaction (including touch release `touchend`) so later
+  // WebSocket-driven cues (incoming calls, message notifications) can play.
+  // Listeners stay attached until a gesture actually unlocks the context;
+  // because no audio session is held, AudioManager then auto-suspends (~1.5s)
+  // and releases the OS audio device / DAC instead of keeping it open.
+  useEffect(() => attachFirstGestureAudioUnlock(window), []);
 
   // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
   // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback

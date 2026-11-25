@@ -45,6 +45,8 @@ export class AudioManager {
   private idleSuspendTimer: ReturnType<typeof setTimeout> | null = null;
   private visibilityListenerAttached = false;
   private interruptedWhileActive = false;
+  private resumeInFlight: Promise<void> | null = null;
+  private resumeGeneration = 0;
 
   // Cached `getUserMedia` denial. After a NotAllowedError, subsequent
   // `setInputDevice` calls (e.g. `useLiveKit.syncMic` racing the user's
@@ -280,45 +282,69 @@ export class AudioManager {
     this.listeners.forEach(cb => cb());
   }
 
-  async resumeContext() {
+  async resumeContext(): Promise<void> {
     this.clearIdleSuspendTimer();
     if (!this.ctx) this.initContext();
     if (!this.ctx) return;
+    if (this.resumeInFlight) return this.resumeInFlight;
 
-    // WebKit on iOS can transition 'interrupted' → 'running' on foreground return
-    // while leaving the Web Audio output pipeline silent until bounced through
-    // suspend() → resume().
-    if (this.interruptedWhileActive && this.ctx.state === 'running') {
-      this.interruptedWhileActive = false;
-      try {
-        await this.ctx.suspend();
-      } catch {
-        // Best-effort bounce; proceed to resume
+    const myGen = ++this.resumeGeneration;
+    let timedOut = false;
+
+    const runRecovery = async (): Promise<void> => {
+      if (!this.ctx) return;
+
+      // WebKit on iOS can transition 'interrupted' → 'running' on foreground return
+      // while leaving the Web Audio output pipeline silent until bounced through
+      // suspend() → resume(). Keep `interruptedWhileActive` set until both the
+      // bounce and the subsequent resume succeed without timing out.
+      const needsBounce = this.interruptedWhileActive && this.ctx.state === 'running';
+      if (needsBounce) {
+        try {
+          await this.ctx.suspend();
+        } catch (err) {
+          console.error('[AudioManager] Failed to bounce interrupted context:', err);
+          return;
+        }
+        if (timedOut || myGen !== this.resumeGeneration || !this.ctx) return;
       }
-    }
 
-    if (this.ctx && (this.ctx.state === 'suspended' || this.isContextInterrupted())) {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      try {
-        // Bound resume() so a stuck iOS 'interrupted' context or autoplay-blocked
-        // call can never hang voice joins or one-shot cues indefinitely.
-        await Promise.race([
-          this.ctx.resume(),
-          new Promise<void>((resolve) => {
-            timeoutId = setTimeout(resolve, AudioManager.RESUME_TIMEOUT_MS);
-          }),
-        ]);
-        if (this.ctx?.state === 'running') {
+      if (this.ctx.state === 'suspended' || this.isContextInterrupted()) {
+        try {
+          await this.ctx.resume();
+        } catch (err) {
+          console.error('[AudioManager] Failed to resume context:', err);
+          return;
+        }
+        if (timedOut || myGen !== this.resumeGeneration || !this.ctx) return;
+        if (this.ctx.state === 'running') {
           this.interruptedWhileActive = false;
           console.log('[AudioManager] AudioContext resumed.');
         }
-      } catch (err) {
-        console.error('[AudioManager] Failed to resume context:', err);
-      } finally {
-        if (timeoutId !== null) clearTimeout(timeoutId);
       }
-    }
-    this.scheduleIdleSuspendIfUnused();
+    };
+
+    // Bound the full recovery (both any suspend() bounce and resume()) so a stuck
+    // iOS context or autoplay-blocked call can never hang voice joins or cues.
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const bounded = Promise.race([
+      runRecovery(),
+      new Promise<void>((resolve) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, AudioManager.RESUME_TIMEOUT_MS);
+      }),
+    ]).finally(() => {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (this.resumeInFlight === bounded) {
+        this.resumeInFlight = null;
+      }
+      this.scheduleIdleSuspendIfUnused();
+    });
+
+    this.resumeInFlight = bounded;
+    return bounded;
   }
 
   async loadSound(name: string): Promise<AudioBuffer | null> {
@@ -820,4 +846,38 @@ export class AudioManager {
   getContext(): AudioContext | null {
     return this.ctx;
   }
+}
+
+const FIRST_GESTURE_UNLOCK_EVENTS = ['click', 'keydown', 'touchstart', 'touchend'] as const;
+
+/**
+ * Installs one-time first-gesture listeners to unlock AudioContext autoplay on
+ * the first usable user interaction (including touch release `touchend`, since
+ * `touchstart` can precede usable activation on mobile). Listeners stay attached
+ * if `resumeContext()` leaves the context suspended (rejection or timeout) and
+ * are removed only once a gesture actually brings the context to `'running'`.
+ */
+export function attachFirstGestureAudioUnlock(
+  target: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+  audioManager: Pick<AudioManager, 'resumeContext' | 'isContextRunning'> = AudioManager.getInstance(),
+): () => void {
+  let detached = false;
+  const detach = () => {
+    if (detached) return;
+    detached = true;
+    for (const evt of FIRST_GESTURE_UNLOCK_EVENTS) {
+      target.removeEventListener(evt, unlock);
+    }
+  };
+  const unlock = () => {
+    void audioManager.resumeContext().then(() => {
+      if (!detached && audioManager.isContextRunning()) {
+        detach();
+      }
+    });
+  };
+  for (const evt of FIRST_GESTURE_UNLOCK_EVENTS) {
+    target.addEventListener(evt, unlock);
+  }
+  return detach;
 }

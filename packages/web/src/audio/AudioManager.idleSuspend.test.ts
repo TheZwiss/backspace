@@ -4,7 +4,7 @@ vi.mock('@sapphi-red/web-noise-suppressor', () => ({
   RnnoiseWorkletNode: class {},
   loadRnnoise: vi.fn(),
 }));
-import { AudioManager } from './AudioManager';
+import { AudioManager, attachFirstGestureAudioUnlock } from './AudioManager';
 
 interface MockOscillator {
   frequency: { value: number };
@@ -331,5 +331,87 @@ describe('AudioManager idle suspension and keep-alive lifecycle', () => {
     expect(mockCtx.resume).toHaveBeenCalledTimes(1);
     expect(mockCtx.state).toBe('running');
     release();
+  });
+
+  it('bounds interrupted->running suspend bounce, coalesces overlapping calls, and preserves recovery state for retry', async () => {
+    const release = am.acquireAudioSession();
+    am.ensureContext();
+
+    // Enter iOS 'interrupted' while active, then WebKit flips state back to 'running' silently
+    (mockCtx as unknown as { state: string }).state = 'interrupted';
+    mockCtx.onstatechange?.();
+    mockCtx.state = 'running';
+
+    // First attempt: suspend() hangs forever; overlapping calls share the same bounded recovery
+    mockCtx.suspend.mockReturnValueOnce(new Promise(() => {}));
+    let firstDone = false;
+    let secondDone = false;
+    const p1 = am.resumeContext().then(() => { firstDone = true; });
+    const p2 = am.resumeContext().then(() => { secondDone = true; });
+
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(firstDone).toBe(false);
+    expect(secondDone).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.all([p1, p2]);
+    expect(firstDone).toBe(true);
+    expect(secondDone).toBe(true);
+    expect(mockCtx.resume).not.toHaveBeenCalled();
+
+    // Subsequent retry: recovery state was preserved, so suspend()->resume() now succeeds
+    await am.resumeContext();
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(2);
+    expect(mockCtx.resume).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('running');
+
+    // Once recovered, a further resumeContext() does not bounce again
+    await am.resumeContext();
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(2);
+    expect(mockCtx.resume).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it('keeps first-gesture unlock listeners after a failed attempt until touchend unlocks, then plays async cues after idle suspend', async () => {
+    // Initialize context suspended to simulate strict browser autoplay lock
+    am.ensureContext();
+    mockCtx.state = 'suspended';
+
+    const detach = attachFirstGestureAudioUnlock(window, am);
+
+    // 1st attempt (touchstart): rejected by autoplay policy — context stays suspended, listeners stay attached
+    mockCtx.resume.mockRejectedValueOnce(new Error('NotAllowedError'));
+    window.dispatchEvent(new Event('touchstart'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockCtx.resume).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('suspended');
+
+    // 2nd attempt (touchend): succeeds and unlocks the context, detaching listeners
+    window.dispatchEvent(new Event('touchend'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockCtx.resume).toHaveBeenCalledTimes(2);
+    expect(mockCtx.state).toBe('running');
+
+    // Further clicks no longer re-trigger the detached first-gesture listener
+    window.dispatchEvent(new Event('click'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockCtx.resume).toHaveBeenCalledTimes(2);
+
+    // With no voice session held, AudioContext auto-suspends after idle delay
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(1);
+    expect(mockCtx.state).toBe('suspended');
+
+    // Later asynchronous cue (incoming call / message notification) resumes and plays cleanly
+    const src = await am.playSound('message');
+    expect(src).not.toBeNull();
+    expect(mockCtx.resume).toHaveBeenCalledTimes(3);
+    expect(mockCtx.state).toBe('running');
+
+    mockCtx.bufferSources[0].onended?.();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(mockCtx.suspend).toHaveBeenCalledTimes(2);
+    detach();
   });
 });
