@@ -139,6 +139,12 @@
       "serverError": "Senden fehlgeschlagen (Serverfehler)"
     }
   },
+  "inviteFriend": {
+    "title": "{{name}} zu einem Space einladen",
+    "intro": "Wähle einen deiner Spaces, um eine Einladung zu senden.",
+    "noSpaces": "Du bist noch in keinem Space",
+    "contextMenu": "Zu Space einladen"
+  },
   "join": {
     "title": "Einem Space beitreten",
     "discoverIntro": "Entdecke Spaces, denen du beitreten kannst, oder sieh dir alle unter „Entdecken“ an.",

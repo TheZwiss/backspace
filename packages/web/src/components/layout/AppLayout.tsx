@@ -14,6 +14,7 @@ import { JoinSpaceModal } from '../modals/JoinSpace';
 import { CreateChannelModal } from '../modals/CreateChannel';
 import { CreateCategoryModal } from '../modals/CreateCategory';
 import { InviteModal } from '../modals/InviteModal';
+import { InviteFriendModal } from '../modals/InviteFriendModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { SpaceSettingsModal } from '../modals/SpaceSettings';
 import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
@@ -416,6 +417,7 @@ export function AppLayout() {
         <CreateChannelModal />
         <CreateCategoryModal />
         <InviteModal />
+        <InviteFriendModal />
         {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
         <SpaceSettingsModal />
         <ChannelSettingsModal />
@@ -468,6 +470,7 @@ export function AppLayout() {
       <CreateChannelModal />
       <CreateCategoryModal />
       <InviteModal />
+      <InviteFriendModal />
       <UserSettingsModal />
       <SpaceSettingsModal />
       <ChannelSettingsModal />

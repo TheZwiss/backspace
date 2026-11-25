@@ -1,27 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useSelfIdentity } from '../../stores/authStore';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
-import { HttpError } from '../../api/client';
-import { getFriendsHomeOrigin } from '../../stores/instanceStore';
-import { getApiForOrigin } from '../../utils/crossStoreResolvers';
-import { isMine, parseFederatedUsername, personRequest, userKey } from '../../utils/identity';
+import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { describeError } from '../../i18n/errors';
 import { spaceInviteUrl } from '../../utils/inviteParser';
-import type { MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
+import { sendSpaceInvite, type SpaceInviteSendStatus } from '../../utils/spaceInvite';
+import type { MemberWithUser, User } from '@backspace/shared';
 
-type SendStatus =
-  | { kind: 'pending' }
-  | { kind: 'success' }
-  | { kind: 'failure'; reason: string };
-
-type InviteT = TFunction<['spaces', 'common']>;
+type SendStatus = SpaceInviteSendStatus;
 
 /**
  * The person a friend row names (`userKey`). Friends come from every
@@ -30,61 +22,6 @@ type InviteT = TFunction<['spaces', 'common']>;
  */
 function friendKey(friend: TaggedFriend): string {
   return userKey(friend, friend._instanceOrigin);
-}
-
-/**
- * How the instance at `to` is told who the invite is for: the friend's id
- * there when they are native to it, else their home identity
- * (`personRequest`). Null for a legacy stub another instance issued, which
- * cannot be named to `to`.
- */
-function inviteTarget(friend: TaggedFriend, to: string): SpaceInviteRequest['target'] | null {
-  const request = personRequest(friend, friend._instanceOrigin, to);
-  if (request.origin !== to) return null;
-  const { userId, homeUserId, homeInstance } = request.target;
-  if (homeUserId && homeInstance) return { homeUserId, homeInstance };
-  return userId ? { userId } : null;
-}
-
-/**
- * The space's instance as the instance at `to` reads it. `''` on the wire
- * means the receiving server's own space, so it is sent only when the space
- * is on `to`; a space on the page's own instance (`spaceOrigin` `''`) is
- * named by the page's origin when the invite goes elsewhere.
- */
-function spaceOriginFor(spaceOrigin: string, to: string): string {
-  if (spaceOrigin === to) return '';
-  return spaceOrigin || window.location.origin;
-}
-
-/**
- * Row-sized copy for each way a space invite can fail. Keyed on the server's
- * error code; the two message checks below cover a failed fetch and the
- * client-side "upstream" marker, which never carry a code.
- */
-function reasonForError(error: unknown, t: InviteT): string {
-  if (error instanceof HttpError) {
-    switch (error.code) {
-      case 'invite_invalid': return t('spaces:invite.failure.inviteInvalid');
-      case 'not_a_friend': return t('spaces:invite.failure.notAFriend');
-      case 'user_not_found': return t('spaces:invite.failure.userNotFound');
-      case 'already_member': return t('spaces:invite.failure.alreadyMember');
-      case 'cannot_invite_self': return t('spaces:invite.failure.cannotInviteSelf');
-      case 'invalid_body': return t('spaces:invite.failure.invalidBody');
-      case 'invalid_target': return t('spaces:invite.failure.invalidTarget');
-      default:
-        break;
-    }
-  }
-  if (error instanceof Error) {
-    if (error.message === 'upstream') {
-      return t('spaces:invite.failure.upstream');
-    }
-    if (/network|fetch|failed to fetch/i.test(error.message)) {
-      return t('spaces:invite.failure.unreachable');
-    }
-  }
-  return t('spaces:invite.failure.serverError');
 }
 
 function InviteResultFriendRow({
@@ -304,36 +241,14 @@ export function InviteModal() {
       return next;
     });
 
-    // Invites go to the user's home (`getFriendsHomeOrigin`), whose friend
-    // list they are checked against and whose copy of each 1-on-1 the user
-    // reads; on a session signed in to another instance that is a secondary
-    // connection, not the page's own instance.
-    const home = getFriendsHomeOrigin();
-    const homeApi = getApiForOrigin(home);
-    const spaceInstanceOrigin = spaceOriginFor(instanceOrigin, home);
-    const calls = targets.map(async (friend) => {
-      const target = inviteTarget(friend, home);
-      if (!target) {
-        return {
-          friend,
-          status: { kind: 'failure' as const, reason: t('spaces:invite.failure.invalidTarget') },
-        };
-      }
-      try {
-        await homeApi.dm.spaceInvite({
-          target,
-          spaceId: currentSpace.id,
-          spaceInstanceOrigin,
-          inviteCode,
-        });
-        return { friend, status: { kind: 'success' as const } };
-      } catch (err) {
-        return {
-          friend,
-          status: { kind: 'failure' as const, reason: reasonForError(err, t) },
-        };
-      }
-    });
+    const calls = targets.map(async (friend) => ({
+      friend,
+      status: await sendSpaceInvite(
+        friend,
+        { spaceId: currentSpace.id, instanceOrigin, inviteCode },
+        t,
+      ),
+    }));
 
     const settled = await Promise.allSettled(calls);
     setResults((prev) => {

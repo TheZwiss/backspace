@@ -138,6 +138,12 @@
       "serverError": "无法发送（服务器错误）"
     }
   },
+  "inviteFriend": {
+    "title": "邀请 {{name}} 加入空间",
+    "intro": "选择一个你的空间来发送邀请。",
+    "noSpaces": "你还没有加入任何空间",
+    "contextMenu": "邀请加入空间"
+  },
   "join": {
     "title": "加入空间",
     "discoverIntro": "发现可加入的空间，或在“探索”中浏览全部空间。",

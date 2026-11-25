@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Channel } from '@backspace/shared';
+import type { Channel, DmChannel } from '@backspace/shared';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -21,7 +21,7 @@ import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } fro
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
-import { DmListItem } from './DmListItem';
+import { DmListItem, type DmInviteCounterpart } from './DmListItem';
 import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useAudioDevices } from '../../hooks/useAudioDevices';
@@ -387,11 +387,26 @@ export function ChannelSidebar() {
     openContextMenu({ x: e.clientX, y: e.clientY }, items);
   }, [canManageChannels, canCreateInvite, openModal, openContextMenu, t]);
 
-  const handleDmContextMenu = useCallback((e: React.MouseEvent, dmId: string) => {
+  const handleDmContextMenu = useCallback((e: React.MouseEvent, dm: DmChannel, counterpart: DmInviteCounterpart | null) => {
     e.preventDefault();
     e.stopPropagation();
-    openContextMenu({ x: e.clientX, y: e.clientY }, [
-      {
+    const items: ContextMenuItem[] = [];
+    if (counterpart) {
+      const friend = { ...counterpart.user, _instanceOrigin: counterpart.origin };
+      items.push({
+        key: 'invite-to-server',
+        type: 'action',
+        label: t('spaces:inviteFriend.contextMenu'),
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15 8c1.66 0 2.99-1.34 2.99-3S16.66 2 15 2s-3 1.34-3 3 1.34 3 3 3zm-6 0c1.66 0 2.99-1.34 2.99-3S10.66 2 9 2 6 3.34 6 5s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V16h8.5v-2.5c0-.85.33-2.34 2.37-3.47C12.5 10.02 10.73 10 9 10zm11 1h-2V9h-2v2h-2v2h2v2h2v-2h2v-2z" />
+          </svg>
+        ),
+        onClick: () => openModal('inviteFriend', { friend }),
+      });
+    }
+    if (dm.ownerId) {
+      items.push({
         key: 'leave-group',
         type: 'action',
         label: t('spaces:sidebar.dmList.leaveGroup'),
@@ -402,11 +417,13 @@ export function ChannelSidebar() {
           </svg>
         ),
         onClick: () => {
-          setLeaveGroupDmId(dmId);
+          setLeaveGroupDmId(dm.id);
         },
-      },
-    ]);
-  }, [openContextMenu, t]);
+      });
+    }
+    if (items.length === 0) return;
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  }, [openContextMenu, openModal, t]);
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);

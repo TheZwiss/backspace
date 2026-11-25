@@ -9,6 +9,7 @@ import type { TFunction } from 'i18next';
 import { describeError } from '../../i18n/errors';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { useFederationStore } from '../../stores/federationStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
@@ -908,12 +909,32 @@ function TabButton({ children, active, onClick }: { children: React.ReactNode, a
 }
 
 function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove: () => void, onDm: () => void }) {
-  const { t } = useTranslation(['social', 'common']);
+  const { t } = useTranslation(['social', 'common', 'spaces']);
+  const openContextMenu = useContextMenuStore((s) => s.open);
+  const openModal = useUIStore((s) => s.openModal);
   const canonical = useCanonicalUserView(friend as unknown as User, friend._instanceOrigin);
   const instanceLabel = friend._instanceOrigin ? (() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })() : '';
   const friendDisplayName = userDisplayName(canonical);
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openContextMenu({ x: e.clientX, y: e.clientY }, [
+      {
+        key: 'invite-to-server',
+        type: 'action',
+        label: t('spaces:inviteFriend.contextMenu'),
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15 8c1.66 0 2.99-1.34 2.99-3S16.66 2 15 2s-3 1.34-3 3 1.34 3 3 3zm-6 0c1.66 0 2.99-1.34 2.99-3S10.66 2 9 2 6 3.34 6 5s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V16h8.5v-2.5c0-.85.33-2.34 2.37-3.47C12.5 10.02 10.73 10 9 10zm11 1h-2V9h-2v2h-2v2h2v2h2v-2h2v-2z" />
+          </svg>
+        ),
+        onClick: () => openModal('inviteFriend', { friend }),
+      },
+    ]);
+  };
   return (
-    <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+    <div
+      onContextMenu={handleContextMenu}
+      className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
         <Avatar src={canonical.avatar} name={friendDisplayName} size={32} status={canonical.status} userId={canonical.homeUserId ?? canonical.id} avatarColor={canonical.avatarColor} />
         <div className="flex flex-col leading-tight">
