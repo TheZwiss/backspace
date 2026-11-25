@@ -109,6 +109,10 @@ async function browser(name, username, url) {
 async function watchDrag(page) {
   await page.evaluate(`void (() => {
     window.qaDrags = [];
+    window.qaDragErrors = [];
+    window.addEventListener('unhandledrejection', event => {
+      window.qaDragErrors.push(String(event.reason));
+    });
     for (const type of ['dragenter','dragover','dragleave','drop','dragend']) {
       window.addEventListener(type, event => {
         const row = {
@@ -231,11 +235,24 @@ try {
   console.log('Native window leave passed');
 
   for (const [name, point] of [[names[1],history],[names[2],pill]]) {
-    await begin(name, await appCoordinates(owner,point));
-    await eventually('overlay before '+name,()=>visible(owner));
-    await control('mouseup','1');
-    await eventually(name+' staged',()=>owner.evaluate(`document.body.innerText.includes(${JSON.stringify(name)})`));
-    assert.equal(await visible(owner),false);
+    const target = await appCoordinates(owner,point);
+    const before = (await dragLog(owner)).length;
+    await begin(name,target);
+    try {
+      await eventually('overlay before '+name,()=>visible(owner));
+      await pointer({x:target.x+3,y:target.y});
+      await eventually('native target accepts '+name,async()=>
+        (await dragLog(owner)).slice(before).some(event=>event.type==='dragover'&&event.prevented));
+      await delay(150);
+      await control('mouseup','1');
+      await eventually(name+' staged',()=>owner.evaluate(`document.body.innerText.includes(${JSON.stringify(name)})`));
+      assert.equal(await visible(owner),false);
+    } catch (error) {
+      console.log('Native drop trace', name, JSON.stringify((await dragLog(owner)).slice(before)));
+      console.log('Page drag errors', await owner.evaluate('window.qaDragErrors'));
+      console.log('GTK drag lifecycle', await readFile(root+'/gtk.log','utf8'));
+      throw error;
+    }
   }
   const drops = (await dragLog(owner)).filter(event=>event.type==='drop');
   assert.deepEqual(drops.map(event=>event.fileNames),[[names[1]],[names[2]]]);

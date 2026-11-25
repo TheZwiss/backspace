@@ -16,7 +16,9 @@ targets = [Gtk.TargetEntry.new("text/uri-list", 0, 0)]
 button.drag_source_set(Gdk.ModifierType.BUTTON1_MASK, targets, Gdk.DragAction.COPY)
 
 def provide_uri(_widget, _context, data, _info, _timestamp):
-    data.set_uris([Path(selection.read_text().strip()).resolve(strict=True).as_uri()])
+    file = Path(selection.read_text().strip()).resolve(strict=True)
+    print('native drag-data-get ' + file.name, flush=True)
+    data.set_uris([file.as_uri()])
 
 button.connect("drag-data-get", provide_uri)
 button.connect("drag-begin", lambda *_args: print("native drag-begin", flush=True))
