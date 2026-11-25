@@ -35,6 +35,7 @@ import {
   FederationPanel,
   StreamingPanel,
   StoragePanel,
+  TranslationAdminPanel,
   UsersPanel,
   SettingsPanelSuspense,
 } from '../modals/lazySettingsPanels';
@@ -111,6 +112,12 @@ export const mobileScreenMap: Readonly<Record<string, (params?: Record<string, s
     <div className="flex flex-col h-full bg-surface-base">
       <MobileScreenHeader title={i18n.t('settings:instance.tabs.storage')} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><SettingsPanelSuspense><StoragePanel /></SettingsPanelSuspense></div>
+    </div>
+  ),
+  'settings-instance-translation': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title={i18n.t('settings:instance.tabs.translation')} rightActions={<TransferIndicator />} />
+      <div className="flex-1 overflow-y-auto p-4"><SettingsPanelSuspense><TranslationAdminPanel /></SettingsPanelSuspense></div>
     </div>
   ),
   'settings-instance-updates': () => (

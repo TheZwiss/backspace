@@ -1,0 +1,61 @@
+{
+  "translate": "翻译消息",
+  "translating": "翻译中…",
+  "translated": "已翻译",
+  "retry": "重试",
+  "skippedNotText": "此消息没有可翻译的文本。",
+  "expandTranslation": "展开译文",
+  "collapseTranslation": "收起译文",
+  "viewOriginal": "查看原文",
+  "viewTranslation": "查看译文",
+  "targetLanguage": "目标语言",
+  "showOriginal": "同时显示原文",
+  "showOriginalHelp": "在原消息下方显示译文，而不是直接替换原文。",
+  "consentModal": {
+    "title": "翻译消息",
+    "disclosure": "开始翻译前，请确认允许此实例将所选消息文本发送至 {{provider}}（{{host}}）。",
+    "minimalData": "仅发送目标语言与脱敏后的消息正文，绝不包含发送者、频道、空间或聊天历史记录。",
+    "revokeAnytime": "您可随时在“用户设置 → 隐私”中撤回授权或清除翻译缓存。",
+    "confirm": "允许并翻译"
+  },
+  "privacySection": {
+    "title": "消息翻译",
+    "consentLabel": "允许在此实例上使用消息翻译",
+    "consentDescription": "当您在此处手动翻译单条消息时，消息文本将发送至 {{provider}}（{{host}}）。",
+    "cacheHint": "您请求的翻译结果会按账号在此实例上加密存储。",
+    "clearCache": "清除翻译缓存",
+    "cacheCleared": "已清除翻译缓存"
+  },
+  "admin": {
+    "title": "消息翻译",
+    "description": "为此实例配置单一服务端 AI 翻译提供商（默认关闭）。仅当用户主动点击单条消息翻译并确认告知后才会发送该消息文本。",
+    "enableLabel": "启用消息翻译",
+    "enableDescription": "允许此实例成员按需翻译单条消息。",
+    "providerLabel": "提供商显示名称",
+    "protocol": "API 协议",
+    "protocols": {
+      "openaiChat": "OpenAI（聊天补全接口）",
+      "openaiResponses": "OpenAI（Responses 接口）",
+      "anthropic": "Anthropic（Messages 接口）",
+      "gemini": "Google Gemini（生成内容接口）"
+    },
+    "baseUrl": "HTTPS API 基础地址",
+    "baseUrlHelp": "必须为公网 HTTPS 接口地址（禁止内网、回环及链路本地地址）。",
+    "apiKey": "API 密钥",
+    "keyStoredPlaceholder": "服务端已加密保存密钥 — 留空则保持不变",
+    "keyRequiredPlaceholder": "输入提供商 API 密钥",
+    "model": "模型 ID",
+    "modelPlaceholder": "例如 gpt-4o-mini",
+    "fetchModels": "获取模型列表",
+    "fetchingModels": "获取中…",
+    "testConnection": "测试连接",
+    "testing": "测试中…",
+    "testPassed": "连接成功（{{ms}} ms）— {{sample}}",
+    "clearCache": "清除实例缓存",
+    "cacheCleared": "已清除实例翻译缓存",
+    "removeProvider": "移除提供商",
+    "removed": "已移除翻译提供商",
+    "save": "保存配置",
+    "saved": "翻译配置已保存"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "translate": "Traduzir mensagem",
+  "translating": "Traduzindo…",
+  "translated": "Traduzido",
+  "retry": "Tentar novamente",
+  "skippedNotText": "Nenhum texto traduzível encontrado nesta mensagem.",
+  "expandTranslation": "Mostrar tradução",
+  "collapseTranslation": "Ocultar tradução",
+  "viewOriginal": "Mostrar original",
+  "viewTranslation": "Mostrar tradução",
+  "targetLanguage": "Idioma de destino",
+  "showOriginal": "Manter mensagem original visível",
+  "showOriginalHelp": "Exibir o texto traduzido abaixo da mensagem original em vez de substituí-la.",
+  "consentModal": {
+    "title": "Traduzir mensagem",
+    "disclosure": "Antes de traduzir, confirme que esta instância pode enviar o texto da mensagem selecionada para {{provider}} ({{host}}).",
+    "minimalData": "Apenas o idioma de destino e o texto mascarado são enviados. Autor, canal, espaço e histórico nunca são incluídos.",
+    "revokeAnytime": "Você pode revogar o consentimento ou limpar traduções em cache a qualquer momento em Configurações do Usuário → Privacidade.",
+    "confirm": "Permitir e traduzir"
+  },
+  "privacySection": {
+    "title": "Tradução de mensagens",
+    "consentLabel": "Permitir tradução de mensagens nesta instância",
+    "consentDescription": "Quando você traduz uma mensagem aqui, o texto é enviado para {{provider}} ({{host}}).",
+    "cacheHint": "As traduções solicitadas são criptografadas por conta nesta instância.",
+    "clearCache": "Limpar traduções em cache",
+    "cacheCleared": "Traduções em cache removidas"
+  },
+  "admin": {
+    "title": "Tradução de mensagens",
+    "description": "Configure um único provedor de tradução por IA no servidor para esta instância. Desativado por padrão. Os usuários só enviam uma mensagem quando solicitam explicitamente e aceitam o aviso.",
+    "enableLabel": "Ativar tradução de mensagens",
+    "enableDescription": "Permitir que membros desta instância traduzam mensagens individuais sob demanda.",
+    "providerLabel": "Nome de exibição do provedor",
+    "protocol": "Protocolo da API",
+    "protocols": {
+      "openaiChat": "OpenAI (API de Chat Completions)",
+      "openaiResponses": "OpenAI (API de Responses)",
+      "anthropic": "Anthropic (API de Messages)",
+      "gemini": "Google Gemini (API GenerateContent)"
+    },
+    "baseUrl": "URL base HTTPS da API",
+    "baseUrlHelp": "Deve ser um endpoint HTTPS público (hosts privados, loopback e link-local são bloqueados).",
+    "apiKey": "Chave de API",
+    "keyStoredPlaceholder": "Chave criptografada salva no servidor — deixe em branco para manter",
+    "keyRequiredPlaceholder": "Insira a chave de API do provedor",
+    "model": "ID do modelo",
+    "modelPlaceholder": "ex.: gpt-4o-mini",
+    "fetchModels": "Carregar modelos",
+    "fetchingModels": "Carregando…",
+    "testConnection": "Testar conexão",
+    "testing": "Testando…",
+    "testPassed": "Conectado ({{ms}} ms) — {{sample}}",
+    "clearCache": "Limpar cache da instância",
+    "cacheCleared": "Cache de tradução da instância limpo",
+    "removeProvider": "Remover provedor",
+    "removed": "Provedor de tradução removido",
+    "save": "Salvar provedor",
+    "saved": "Configurações de tradução salvas"
+  }
+}

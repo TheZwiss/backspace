@@ -13,8 +13,9 @@ import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 import { UpdatesPanel } from '../instanceSettingsPanels/UpdatesPanel';
 import { TelemetryPanel } from '../instanceSettingsPanels/TelemetryPanel';
+import { TranslationAdminPanel } from '../instanceSettingsPanels/TranslationAdminPanel';
 
-type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users' | 'updates' | 'telemetry';
+type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'translation' | 'users' | 'updates' | 'telemetry';
 
 export function InstancePanel() {
   const { t } = useTranslation(['settings']);
@@ -35,6 +36,7 @@ export function InstancePanel() {
     { id: 'federation', label: t('settings:instance.tabs.federation'), badgeCount: approvalCount },
     { id: 'streaming', label: t('settings:instance.tabs.streaming') },
     { id: 'storage', label: t('settings:instance.tabs.storage') },
+    { id: 'translation', label: t('settings:instance.tabs.translation') },
     { id: 'users', label: t('settings:instance.tabs.users') },
     { id: 'updates', label: t('settings:instance.tabs.updates'), badgeDot: updateBadge },
     {
@@ -72,6 +74,7 @@ export function InstancePanel() {
       {subTab === 'federation' && <FederationPanel onApprovalCountChange={setApprovalCount} />}
       {subTab === 'streaming' && <StreamingPanel />}
       {subTab === 'storage' && <StoragePanel />}
+      {subTab === 'translation' && <TranslationAdminPanel />}
       {subTab === 'users' && <UsersPanel />}
       {subTab === 'updates' && <UpdatesPanel />}
       {subTab === 'telemetry' && <TelemetryPanel />}

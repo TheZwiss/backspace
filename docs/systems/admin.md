@@ -846,3 +846,4 @@ Manages: user list with search/filter/sort/pagination, admin promotion/demotion,
 - **Permissions:** [permissions.md](permissions.md) -- Admin flag is separate from RBAC; `isAdmin` is a user-level column, not a permission bit
 - **Telemetry:** [telemetry.md](telemetry.md) -- The opt-in daily usage report: payload, opt-in state model, reporter, receiver, retention
 - **Space directory:** [directory.md](directory.md) -- The opt-in public directory: the admin toggle and status line, the per-space switch, the pinger, the hub
+- **Message translation:** [translation.md](translation.md) -- Single instance-configured AI translation provider (`TranslationAdminPanel.tsx`), server-side encrypted API key, connection diagnostics, and cache management

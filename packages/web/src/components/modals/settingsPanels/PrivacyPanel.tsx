@@ -4,6 +4,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useActivityStore } from '../../../stores/activityStore';
 import { api } from '../../../api/client';
 import { Toggle } from '../../ui/Toggle';
+import { UserTranslationPrivacySection } from '../../../features/translation/UserTranslationPrivacySection';
 
 export function PrivacyPanel() {
   const { t } = useTranslation(['settings', 'common']);
@@ -81,6 +82,8 @@ export function PrivacyPanel() {
           </div>
         </div>
       </div>
+
+      <UserTranslationPrivacySection />
     </div>
   );
 }
