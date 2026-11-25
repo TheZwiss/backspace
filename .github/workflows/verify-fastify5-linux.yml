@@ -28,27 +28,54 @@ jobs:
           format: sarif
           output: trivy-image.sarif
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           exit-code: '1'
-      - name: Create a fixture image with a synthetic package record
+      - name: Create images with synthetic package records
         run: |
-          fixture=$(mktemp -d)
-          printf '%s\n' '{"name":"lodash","version":"4.17.20"}' > "$fixture/package.json"
-          cat > "$fixture/Dockerfile" <<'DOCKERFILE'
-          FROM backspace:scan
-          COPY package.json /gate-fixture/node_modules/lodash/package.json
-          DOCKERFILE
-          docker build -t backspace:scan-fixture "$fixture"
+          make_fixture() {
+            name="$1"
+            version="$2"
+            fixture=$(mktemp -d)
+            printf '{"name":"%s","version":"%s"}\n' "$name" "$version" > "$fixture/package.json"
+            printf 'FROM backspace:scan\nCOPY package.json /gate-fixture/node_modules/%s/package.json\n' "$name" > "$fixture/Dockerfile"
+            docker build -t "backspace:scan-$name" "$fixture"
+          }
+          make_fixture lodash 4.17.20
+          make_fixture glob 11.1.0
+      - name: Confirm the moderate fixture has a fixable finding
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: backspace:scan-glob
+          ignore-unfixed: true
+          format: json
+          output: trivy-moderate.json
+          severity: MEDIUM
+      - name: Verify the moderate finding was detected
+        run: jq -e 'any(.Results[].Vulnerabilities[]?; .PkgName == "glob" and .InstalledVersion == "11.1.0" and .Severity == "MEDIUM" and (.FixedVersion | length > 0))' trivy-moderate.json
+      - name: Check that the release gate accepts the moderate fixture
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: backspace:scan-glob
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-glob.sarif
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: '1'
       - name: Check that the same scan rejects the fixture
         id: fixture
         continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
-          image-ref: backspace:scan-fixture
+          image-ref: backspace:scan-lodash
           ignore-unfixed: true
           format: sarif
           output: trivy-fixture.sarif
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           exit-code: '1'
       - name: Verify the expected fixture failure
         env:
