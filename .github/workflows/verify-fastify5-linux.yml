@@ -19,18 +19,40 @@ jobs:
           persist-credentials: false
       - name: Build the amd64 release candidate locally
         run: docker build --platform linux/amd64 --build-arg BACKSPACE_COMMIT=0d408ae -t backspace:scan .
-      - name: Scan for fixable high and critical findings
+      - name: Run the exact release image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: backspace:scan
           ignore-unfixed: true
-          format: json
-          output: trivy-image.json
+          format: sarif
+          output: trivy-image.sarif
           severity: HIGH,CRITICAL
-      - name: Report the release gate baseline
+          exit-code: '1'
+      - name: Create a fixture image with a synthetic package record
         run: |
-          jq -e '.ArtifactType == "container_image" and (.Results | type == "array")' trivy-image.json
-          jq -r '[.Results[] | .Vulnerabilities[]?] |
-            "Fixable HIGH/CRITICAL findings: \(length)",
-            (.[] | [.VulnerabilityID, .PkgName, .InstalledVersion, .FixedVersion, .Severity] | @tsv)' trivy-image.json
+          fixture=$(mktemp -d)
+          printf '%s\n' '{"name":"lodash","version":"4.17.20"}' > "$fixture/package.json"
+          cat > "$fixture/Dockerfile" <<'DOCKERFILE'
+          FROM backspace:scan
+          COPY package.json /gate-fixture/node_modules/lodash/package.json
+          DOCKERFILE
+          docker build -t backspace:scan-fixture "$fixture"
+      - name: Check that the same scan rejects the fixture
+        id: fixture
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: backspace:scan-fixture
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-fixture.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - name: Verify the expected fixture failure
+        env:
+          SCAN_OUTCOME: ${{ steps.fixture.outcome }}
+        run: |
+          test "$SCAN_OUTCOME" = failure
+          jq -e 'any(.runs[].results[]; .ruleId == "CVE-2021-23337")' trivy-fixture.sarif
