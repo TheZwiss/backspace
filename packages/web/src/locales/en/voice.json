@@ -37,7 +37,9 @@
     "backToGrid": "Back to grid view",
     "gridButton": "Grid",
     "showMembers": "Show Members",
-    "hideMembers": "Hide Members"
+    "hideMembers": "Hide Members",
+    "noVideoParticipants": "No participants with video right now",
+    "showAllParticipants": "Show all participants"
   },
   "connectionInfo": {
     "title": "Connection Info",
@@ -194,6 +196,8 @@
     "shareScreen": "Share Screen",
     "shareOptions": "Screen Share Options",
     "toggleChat": "Toggle Chat",
+    "hideNonVideo": "Hide Non-Video Participants",
+    "showNonVideo": "Show Non-Video Participants",
     "exitFullscreen": "Exit Fullscreen (Esc)",
     "fullscreen": "Fullscreen",
     "disconnect": "Disconnect",

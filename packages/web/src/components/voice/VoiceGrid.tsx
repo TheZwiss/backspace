@@ -20,9 +20,20 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
+  const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
+  const hideNonVideoParticipants = useVoiceStore((s) => s.hideNonVideoParticipants);
+  const setHideNonVideoParticipants = useVoiceStore((s) => s.setHideNonVideoParticipants);
   const [stripHidden, setStripHidden] = useState(fullscreen);
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
+  const visibleTiles = useMemo(() => {
+    if (!hideNonVideoParticipants) return tiles;
+    return tiles.filter(
+      (tile) =>
+        tile.kind === 'stream' ||
+        (tile.participant.isCameraOn && !unwatchedCameras.has(tile.participant.userId)),
+    );
+  }, [tiles, hideNonVideoParticipants, unwatchedCameras]);
   const shouldCollectStreamStats = tiles.some((tile) =>
     tile.kind === 'stream'
     && (tile.participant.isLocal || watchingStreams.has(tile.participant.userId)),
@@ -31,7 +42,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
   // each tile multiplied full PeerConnection scans by the number of streams.
   const streamStats = useTrackStats(shouldCollectStreamStats);
 
-  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length);
+  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(visibleTiles.length);
 
   // Reset strip visibility when focus target or fullscreen mode changes:
   // entering fullscreen defaults to hiding the strip for an unobstructed view;
@@ -81,8 +92,27 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
     );
   }
 
+  if (visibleTiles.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <p className="text-txt-tertiary text-sm">
+            {t('voice:grid.noVideoParticipants')}
+          </p>
+          <button
+            type="button"
+            onClick={() => setHideNonVideoParticipants(false)}
+            className="px-3.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-interactive-hover text-txt-primary text-xs font-medium transition-colors"
+          >
+            {t('voice:grid.showAllParticipants')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const focusedTile = focusedParticipantId
-    ? tiles.find((t) => t.key === focusedParticipantId)
+    ? visibleTiles.find((t) => t.key === focusedParticipantId)
     : null;
 
   // Render a single tile polymorphically
@@ -106,7 +136,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
 
   // Focus mode: one large tile + bottom strip
   if (focusedTile) {
-    const otherTiles = tiles.filter((t) => t.key !== focusedParticipantId);
+    const otherTiles = visibleTiles.filter((t) => t.key !== focusedParticipantId);
     const fullscreenChromeFade = chromeRevealed
       ? 'opacity-100'
       : 'opacity-0 pointer-events-none focus-within:opacity-100 focus-within:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(any-pointer:coarse)]:opacity-100 [@media(any-pointer:coarse)]:pointer-events-auto';
@@ -131,7 +161,6 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
         <span>{stripHidden ? t('voice:grid.showMembers') : t('voice:grid.hideMembers')}</span>
       </button>
     );
-
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
@@ -225,7 +254,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
           alignContent: 'center',
         }}
       >
-        {tiles.map((t) => (
+        {visibleTiles.map((t) => (
           <div
             key={t.key}
             onClick={() => setFocusedParticipant(t.key)}

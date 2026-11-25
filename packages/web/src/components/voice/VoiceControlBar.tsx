@@ -25,6 +25,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
+  const hideNonVideoParticipants = useVoiceStore((s) => s.hideNonVideoParticipants);
+  const toggleHideNonVideoParticipants = useVoiceStore((s) => s.toggleHideNonVideoParticipants);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
@@ -210,6 +212,24 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
+          </svg>
+        </button>
+
+        {/* Hide Non-Video Participants Toggle */}
+        <button
+          onClick={toggleHideNonVideoParticipants}
+          aria-pressed={hideNonVideoParticipants}
+          className={hideNonVideoParticipants
+            ? `${btnBase} bg-surface-channel text-txt-primary`
+            : btnDefault
+          }
+          title={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            {hideNonVideoParticipants && (
+              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            )}
           </svg>
         </button>
 
