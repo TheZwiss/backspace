@@ -3,6 +3,7 @@ import { useComposerMention } from './useComposerMention';
 import { MentionTextarea } from './MentionTextarea';
 import { layoutRect } from '../../platform/interfaceScale';
 import React, { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useIsDmChannel, getChannelOrigin, useSpaceStore } from '../../stores/spaceStore';
@@ -11,6 +12,8 @@ import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { StagedTransferTiles } from './StagedTransferTiles';
+import { ChatDropOverlay } from './ChatDropOverlay';
+import { useFileDropZone } from '../../hooks/useFileDropZone';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -429,9 +432,11 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
   };
 
-  const handleDrop = (e: React.DragEvent): void => {
-    e.preventDefault();
-    const items = e.dataTransfer.items;
+  // Called from the region's native `drop` (useFileDropZone), which already
+  // prevented the default. Everything that needs the DataTransfer is read
+  // synchronously here: it is empty once the event has finished dispatching.
+  const handleDrop = (dataTransfer: DataTransfer): void => {
+    const items = dataTransfer.items;
     const useDndHandles = supportsDnDHandles();
 
     if (useDndHandles && items && items.length > 0) {
@@ -467,14 +472,10 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     }
 
     // Fallback: plain Files list (Firefox/Safari)
-    const droppedFiles = Array.from(e.dataTransfer.files);
+    const droppedFiles = Array.from(dataTransfer.files);
     for (const file of droppedFiles) {
       void enqueueFile({ file });
     }
-  };
-
-  const handleDragOver = (e: React.DragEvent): void => {
-    e.preventDefault();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
@@ -725,6 +726,18 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
     setComposerEl(node);
   }, []);
 
+  // The whole chat region (the composer's parent: header, messages and composer)
+  // accepts dropped files, not just the input pill. An event on the pill bubbles
+  // to the region, so the pill carries no drop handlers of its own.
+  const dropRegion = composerEl?.parentElement ?? null;
+  const fileDragActive = useFileDropZone(dropRegion, {
+    enabled: canSendMessages && canAttachFiles,
+    onDrop: (dataTransfer) => {
+      handleDrop(dataTransfer);
+      textareaRef.current?.focus();
+    },
+  });
+
   if (!canSendMessages) {
     return (
       <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
@@ -740,6 +753,8 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
   }
 
   return (
+    <>
+    {fileDragActive && dropRegion && createPortal(<ChatDropOverlay />, dropRegion)}
     <div
       ref={setComposerRef}
       data-pip-obstacle="bottom"
@@ -782,8 +797,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
       )}
       <div
         className={`relative ${chatReplyTo ? 'rounded-b-lg' : ''} overflow-visible`}
-        onDrop={canAttachFiles ? handleDrop : undefined}
-        onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
         {/* Mention autocomplete popover */}
         {mentionState && mentionMatches.length > 0 && (
@@ -924,5 +937,6 @@ export function MessageInput({ channelId, channelName, placeholder }: MessageInp
         </div>
       </div>
     </div>
+    </>
   );
 }

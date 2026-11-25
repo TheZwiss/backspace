@@ -520,6 +520,14 @@ Three stores with strict separation of concerns:
 | `composerStore` | `packages/web/src/stores/composerStore.ts` | Per-channel staged transfer IDs + draft text + replyTo. Replaces `MessageInput` component-local state. Persists via `composerStore@v1`. |
 | `pendingMessageStore` | `packages/web/src/stores/pendingMessageStore.ts` | Composed-but-not-yet-sent attachment-bearing bubbles, keyed by `clientId`. Persists via `pendingMessageStore@v1`. Text-only messages are out of scope -- they keep the existing `chatStore.sendMessage` `temp_*` optimistic path. |
 
+### Attaching Files to the Composer
+
+Three entry points feed `MessageInput.enqueueFile` (eager `startUpload`, then `composerStore.attach`): the attach button, paste of an image, and drag-and-drop.
+
+**Drop zone.** The drop target is the whole chat region, not the input pill: the composer's parent element (the channel or DM column, the voice-channel chat panel), found as `composerEl.parentElement`, the same element that already receives `--composer-clearance`. `hooks/useFileDropZone.ts` attaches native `dragenter`/`dragover`/`dragleave`/`drop` listeners to it and returns whether a file drag is over it. Only drags whose `dataTransfer.types` contain `Files` count, so selected text and in-app drags (channel reordering, voice user moves) neither show the overlay nor are consumed. While one is over the region, `ChatDropOverlay` is portaled into that element: a `.drop-scrim` (blur plus tint, `z-[140]`, above the composer at `z-[110]`) with a dashed frame and a `.glass-bubble` label (`chat:composer.dropTitle` / `dropHint`). The overlay takes no pointer events, and enter/leave are counted, so crossing child elements does not flicker. The overlay stays up for as long as the drag is over the region, however still the pointer is (`dragover` is not repeated on every platform, so nothing expires on a timer); it goes on `dragleave` of the region, on `drop`, or on a window `dragend`/`drop` for a drag that ends elsewhere.
+
+The zone is enabled only when the user may send and attach (`SEND_MESSAGES` and `ATTACH_FILES`, always in DMs); otherwise no listener is attached and the browser's default drop behaviour is unchanged. The pill carries no drop handlers of its own: an event on it bubbles to the region, and a second handler would attach every file twice. The drop handler reads `DataTransfer.items` synchronously (Chromium upgrades them to `FileSystemFileHandle` for resume-across-reload; other browsers fall back to `files`), then focuses the textarea. Dropped folders are not filtered out: they take the same path as before this change.
+
 ### Optimistic Bubble Lifecycle
 
 1. User attaches a file -> `transferStore.startUpload` (eager, fires before Send) -> the new transferId joins `composerStore[channelId].stagedTransferIds`.

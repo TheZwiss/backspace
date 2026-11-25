@@ -75,6 +75,8 @@
     "cancelReply": "Antwort abbrechen",
     "removeAttachment": "Anhang entfernen",
     "attachFile": "Datei anhängen",
+    "dropTitle": "Datei hochladen",
+    "dropHint": "Zum Anhängen loslassen",
     "uploading": "Wird hochgeladen…",
     "uploadingLabel": "Wird hochgeladen",
     "failedCount_one": "{{count}} fehlgeschlagen",
