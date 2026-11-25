@@ -253,7 +253,10 @@ describe('Federated Sticker Store', () => {
     expect(storeRes.json().items.length).toBe(1);
   });
 
-  it('implements soft delete lifecycle without deleting physical assets', async () => {
+  it('cleans up unreferenced assets immediately on pack delete while keeping referenced assets', async () => {
+    sqlite.prepare("INSERT INTO spaces (id, name, owner_id, created_at) VALUES ('s1', 'Space', 'alice', 1)").run();
+    sqlite.prepare("INSERT INTO channels (id, space_id, name, type, position, created_at) VALUES ('c1', 's1', 'general', 'text', 0, 1)").run();
+
     const createRes = await app.inject({
       method: 'POST',
       url: '/api/sticker-packs',
@@ -261,17 +264,30 @@ describe('Federated Sticker Store', () => {
       payload: { name: 'To Be Deleted' },
     });
     const pack = createRes.json();
+    expect(pack.qualifiedId).toBe(`https://chat.test/api/sticker-packs/${pack.id}`);
 
-    const img = await makeTestImage('green');
-    const itemRes = await app.inject({
+    const imgKept = await makeTestImage('green');
+    const keptRes = await app.inject({
       method: 'POST',
       url: `/api/sticker-packs/${pack.id}/items`,
       headers: { authorization: 'alice' },
-      payload: { name: 'Green Sticker', image: img },
+      payload: { name: 'Kept In History', image: imgKept },
     });
-    const item = itemRes.json();
+    const keptItem = keptRes.json();
 
-    // Delete pack
+    const imgOnlyPack = await makeTestImage('red');
+    const unrefRes = await app.inject({
+      method: 'POST',
+      url: `/api/sticker-packs/${pack.id}/items`,
+      headers: { authorization: 'alice' },
+      payload: { name: 'Unreferenced Sticker', image: imgOnlyPack },
+    });
+    const unrefItem = unrefRes.json();
+
+    // Reference `keptItem` in a channel message before deleting the pack.
+    sqlite.prepare("INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ('m1', 'c1', 'alice', ?, 1)")
+      .run(keptItem.token);
+
     const delRes = await app.inject({
       method: 'DELETE',
       url: `/api/sticker-packs/${pack.id}`,
@@ -279,19 +295,26 @@ describe('Federated Sticker Store', () => {
     });
     expect(delRes.statusCode).toBe(200);
 
-    // Pack is no longer in store
+    // Pack stops serving immediately.
     const storeRes = await app.inject({
       method: 'GET',
       url: `/api/sticker-store/packs/${pack.id}`,
     });
     expect(storeRes.statusCode).toBe(404);
 
-    // But the asset file still exists and can be served for history!
-    const assetRes = await app.inject({
+    // Unreferenced pack asset is removed immediately.
+    const unrefAssetRes = await app.inject({
       method: 'GET',
-      url: `/api/stickers/assets/${item.assetId}.webp`,
+      url: `/api/stickers/assets/${unrefItem.assetId}.webp`,
     });
-    expect(assetRes.statusCode).toBe(200);
+    expect(unrefAssetRes.statusCode).toBe(404);
+
+    // Referenced asset stays intact for message history.
+    const keptAssetRes = await app.inject({
+      method: 'GET',
+      url: `/api/stickers/assets/${keptItem.assetId}.webp`,
+    });
+    expect(keptAssetRes.statusCode).toBe(200);
   });
 
   it('serves S2S federation pack listing and details', async () => {
@@ -359,9 +382,8 @@ describe('Federated Sticker Store', () => {
     expect(pol?.policy).toBe('block');
   });
 
-  it('syncs remote sticker pack, downloads and verifies content-addressed assets', async () => {
+  it('requires explicit peer allow and local admin approval before serving a synced remote pack', async () => {
     const peerOrigin = 'https://peer.test';
-    // Register active peer
     db.insert(schema.schema.federationPeers).values({
       id: 'peer-1',
       origin: peerOrigin,
@@ -370,7 +392,26 @@ describe('Federated Sticker Store', () => {
       createdAt: 1,
     }).run();
 
-    const testBuf = await sharp({ create: { width: 8, height: 8, channels: 4, background: 'orange' } }).png().toBuffer();
+    // Default policy is block until explicitly allowed.
+    const peersDefaultRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/federation/stickers/peers',
+      headers: { authorization: 'admin' },
+    });
+    expect(peersDefaultRes.json()[0].policy).toBe('block');
+    await expect(syncRemotePack({ peerOrigin, packId: 'rem-pack-1' }))
+      .rejects.toThrow('sticker_peer_blocked');
+
+    // Admin explicitly allows the peer.
+    const allowRes = await app.inject({
+      method: 'PUT',
+      url: `/api/admin/federation/stickers/peers/${encodeURIComponent(peerOrigin)}/policy`,
+      headers: { authorization: 'admin' },
+      payload: { policy: 'allow' },
+    });
+    expect(allowRes.statusCode).toBe(200);
+
+    const testBuf = await sharp({ create: { width: 8, height: 8, channels: 4, background: 'orange' } }).webp().toBuffer();
     const { createHash } = await import('node:crypto');
     const assetId = createHash('sha256').update(testBuf).digest('hex');
 
@@ -379,6 +420,8 @@ describe('Federated Sticker Store', () => {
       if (url.includes('/api/federation/stickers/packs/get')) {
         return new Response(JSON.stringify({
           id: 'rem-pack-1',
+          origin: peerOrigin,
+          qualifiedId: `${peerOrigin}/api/sticker-packs/rem-pack-1`,
           name: 'Remote Orange Pack',
           description: 'From peer',
           creatorName: 'remote_user',
@@ -397,16 +440,26 @@ describe('Federated Sticker Store', () => {
       const syncResult = await syncRemotePack({ peerOrigin, packId: 'rem-pack-1' });
       expect(syncResult.packId).toBe('rem-pack-1');
       expect(syncResult.itemCount).toBe(1);
+      expect(syncResult.status).toBe('pending_review');
 
-      // Verify replica pack is stored locally
-      const replica = db.select().from(schema.schema.stickerPacks)
-        .where(eq(schema.schema.stickerPacks.id, syncResult.replicaId)).get();
-      expect(replica).toBeDefined();
-      expect(replica?.originType).toBe('replica');
-      expect(replica?.sourceInstance).toBe(peerOrigin);
-      expect(replica?.status).toBe('active');
+      // Replica enters pending_review and is NOT publicly served before local approval.
+      const beforeApproveStore = await app.inject({ method: 'GET', url: '/api/sticker-store/packs' });
+      expect(beforeApproveStore.json()).toEqual([]);
 
-      // Verify asset exists locally in sticker_assets
+      // Admin approves the replica locally.
+      const approveRes = await app.inject({
+        method: 'POST',
+        url: `/api/admin/sticker-packs/${syncResult.replicaId}/approve`,
+        headers: { authorization: 'admin' },
+      });
+      expect(approveRes.statusCode).toBe(200);
+
+      const afterApproveStore = await app.inject({ method: 'GET', url: '/api/sticker-store/packs' });
+      expect(afterApproveStore.json()).toHaveLength(1);
+      expect(afterApproveStore.json()[0].qualifiedId).toBe(`${peerOrigin}/api/sticker-packs/rem-pack-1`);
+      expect(afterApproveStore.json()[0].sourceInstance).toBe(peerOrigin);
+      expect(afterApproveStore.json()[0].sourcePackId).toBe('rem-pack-1');
+
       const asset = db.select().from(schema.schema.stickerAssets)
         .where(eq(schema.schema.stickerAssets.id, assetId)).get();
       expect(asset).toBeDefined();
@@ -424,6 +477,13 @@ describe('Federated Sticker Store', () => {
       status: 'active',
       createdAt: 1,
     }).onConflictDoNothing().run();
+
+    await app.inject({
+      method: 'PUT',
+      url: `/api/admin/federation/stickers/peers/${encodeURIComponent(peerOrigin)}/policy`,
+      headers: { authorization: 'admin' },
+      payload: { policy: 'allow' },
+    });
 
     const fakeAssetId = 'a'.repeat(64);
     const tamperedBuf = Buffer.from('not matching bytes');

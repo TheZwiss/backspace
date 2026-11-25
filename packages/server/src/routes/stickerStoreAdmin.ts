@@ -1,36 +1,64 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne, or } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { sendError } from '../utils/httpErrors.js';
 import { buildFederationHeaders, getOurOrigin } from '../utils/federationAuth.js';
 import { federationFetch } from '../utils/federationFetch.js';
-import { syncRemotePack } from '../utils/stickerSync.js';
+import { cleanupUnreferencedStickerAssets } from '../utils/stickerAssets.js';
+import {
+  isStickerPeerAllowed,
+  purgeStickerPacksAssetsAndData,
+  reconcileAllStickerPeers,
+  reconcilePeerStickerPacks,
+  syncRemotePack,
+} from '../utils/stickerSync.js';
 import type { StickerPackStatus } from '@backspace/shared/src/stickers.js';
-import { formatCoverUrl } from './stickerStore.js';
+import { formatCoverUrl, resolvePackOriginIdentity } from './stickerStore.js';
 
 export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<void> {
   // ─── Admin Moderation & Federation Management ────────────────────────────
 
   /**
-   * Admin: List sticker packs waiting for review.
+   * Admin: List sticker packs (local or replicated) with a version waiting for review.
    */
   app.get('/api/admin/sticker-packs/reviews', {
     preHandler: [authenticate, requireAdmin],
   }, async () => {
     const db = getDb();
-    const packs = db.select().from(schema.stickerPacks)
-      .where(eq(schema.stickerPacks.status, 'pending_review'))
-      .orderBy(desc(schema.stickerPacks.updatedAt))
-      .all();
+    const pendingVersionPackIds = db.select({ packId: schema.stickerPackVersions.packId })
+      .from(schema.stickerPackVersions)
+      .where(eq(schema.stickerPackVersions.status, 'pending_review'))
+      .all()
+      .map(r => r.packId);
+
+    const packs = pendingVersionPackIds.length > 0
+      ? db.select().from(schema.stickerPacks)
+          .where(and(
+            or(
+              eq(schema.stickerPacks.status, 'pending_review'),
+              inArray(schema.stickerPacks.id, pendingVersionPackIds),
+            ),
+            ne(schema.stickerPacks.status, 'deleted'),
+            ne(schema.stickerPacks.status, 'blocked'),
+          ))
+          .orderBy(desc(schema.stickerPacks.updatedAt))
+          .all()
+      : db.select().from(schema.stickerPacks)
+          .where(eq(schema.stickerPacks.status, 'pending_review'))
+          .orderBy(desc(schema.stickerPacks.updatedAt))
+          .all();
 
     return packs.map(pack => {
+      const identity = resolvePackOriginIdentity(pack);
       const version = db.select().from(schema.stickerPackVersions)
         .where(and(
           eq(schema.stickerPackVersions.packId, pack.id),
           eq(schema.stickerPackVersions.status, 'pending_review'),
-        )).get();
+        ))
+        .orderBy(desc(schema.stickerPackVersions.version))
+        .get();
 
       const items = version ? db.select().from(schema.stickerPackItems)
         .where(and(
@@ -40,17 +68,18 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
 
       return {
         id: pack.id,
-        name: pack.name,
-        description: pack.description,
+        qualifiedId: identity.qualifiedId,
+        name: version?.name ?? pack.name,
+        description: version?.description ?? pack.description,
         creatorId: pack.creatorId,
         creatorName: pack.creatorName,
-        coverAssetId: pack.coverAssetId,
-        coverUrl: formatCoverUrl(pack.coverAssetId),
+        coverAssetId: version?.coverAssetId ?? pack.coverAssetId,
+        coverUrl: formatCoverUrl(version?.coverAssetId ?? pack.coverAssetId),
         originType: pack.originType as 'source' | 'replica',
-        sourceInstance: pack.sourceInstance,
-        sourcePackId: pack.sourcePackId,
-        currentVersion: pack.currentVersion,
-        status: pack.status as StickerPackStatus,
+        sourceInstance: identity.sourceInstance,
+        sourcePackId: identity.sourcePackId,
+        currentVersion: version?.version ?? pack.currentVersion,
+        status: 'pending_review' as StickerPackStatus,
         itemCount: items.length,
         createdAt: pack.createdAt,
         updatedAt: pack.updatedAt,
@@ -59,7 +88,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Approve a sticker pack and its pending version.
+   * Admin: Approve a sticker pack (local or replicated) and its pending version.
    */
   app.post<{ Params: { id: string } }>('/api/admin/sticker-packs/:id/approve', {
     preHandler: [authenticate, requireAdmin],
@@ -67,21 +96,28 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
     const db = getDb();
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack) {
+    if (!pack || pack.status === 'deleted') {
       return sendError(reply, 404, 'sticker_pack_not_found');
+    }
+    if (pack.originType === 'replica' && (!pack.sourceInstance || !isStickerPeerAllowed(pack.sourceInstance))) {
+      return sendError(reply, 403, 'sticker_peer_blocked');
     }
 
     const pendingVersion = db.select().from(schema.stickerPackVersions)
       .where(and(
         eq(schema.stickerPackVersions.packId, pack.id),
         eq(schema.stickerPackVersions.status, 'pending_review'),
-      )).get();
+      ))
+      .orderBy(desc(schema.stickerPackVersions.version))
+      .get();
 
     const now = Date.now();
 
     if (pendingVersion) {
       db.update(schema.stickerPackVersions).set({
         status: 'approved',
+        reviewedBy: request.userId,
+        reviewedAt: now,
       }).where(eq(schema.stickerPackVersions.id, pendingVersion.id)).run();
 
       db.update(schema.stickerPacks).set({
@@ -108,7 +144,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Reject a sticker pack and its pending version.
+   * Admin: Reject a sticker pack or its pending version.
    */
   app.post<{ Params: { id: string }; Body?: { reviewNotes?: string } }>('/api/admin/sticker-packs/:id/reject', {
     preHandler: [authenticate, requireAdmin],
@@ -116,7 +152,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
     const db = getDb();
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack) {
+    if (!pack || pack.status === 'deleted') {
       return sendError(reply, 404, 'sticker_pack_not_found');
     }
 
@@ -127,23 +163,47 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
       .where(and(
         eq(schema.stickerPackVersions.packId, pack.id),
         eq(schema.stickerPackVersions.status, 'pending_review'),
-      )).get();
+      ))
+      .orderBy(desc(schema.stickerPackVersions.version))
+      .get();
 
+    const replicaRejectedAssetIds: string[] = [];
     if (pendingVersion) {
-      db.update(schema.stickerPackVersions).set({
-        status: 'rejected',
-      }).where(eq(schema.stickerPackVersions.id, pendingVersion.id)).run();
+      if (pack.originType === 'replica') {
+        if (pendingVersion.coverAssetId) replicaRejectedAssetIds.push(pendingVersion.coverAssetId);
+        for (const item of db.select({ assetId: schema.stickerPackItems.assetId })
+          .from(schema.stickerPackItems)
+          .where(eq(schema.stickerPackItems.versionId, pendingVersion.id))
+          .all()) {
+          replicaRejectedAssetIds.push(item.assetId);
+        }
+        db.delete(schema.stickerPackItems).where(eq(schema.stickerPackItems.versionId, pendingVersion.id)).run();
+        db.delete(schema.stickerPackVersions).where(eq(schema.stickerPackVersions.id, pendingVersion.id)).run();
+      } else {
+        db.update(schema.stickerPackVersions).set({
+          status: 'rejected',
+          reviewNotes: notes,
+          reviewedBy: request.userId,
+          reviewedAt: now,
+        }).where(eq(schema.stickerPackVersions.id, pendingVersion.id)).run();
+      }
     }
 
     const nextStatus = pack.currentVersion > 0 && pack.status === 'approved' ? 'approved' : 'rejected';
 
     db.update(schema.stickerPacks).set({
       status: nextStatus,
+      coverAssetId: pack.originType === 'replica' && nextStatus === 'rejected' ? null : pack.coverAssetId,
       reviewNotes: notes,
       reviewedBy: request.userId,
       reviewedAt: now,
       updatedAt: now,
     }).where(eq(schema.stickerPacks.id, pack.id)).run();
+
+    if (replicaRejectedAssetIds.length > 0) {
+      if (pack.coverAssetId) replicaRejectedAssetIds.push(pack.coverAssetId);
+      cleanupUnreferencedStickerAssets(replicaRejectedAssetIds, false);
+    }
 
     return { success: true, status: nextStatus };
   });
@@ -170,6 +230,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
       : rows;
 
     return filtered.map(pack => {
+      const identity = resolvePackOriginIdentity(pack);
       const version = db.select().from(schema.stickerPackVersions)
         .where(and(
           eq(schema.stickerPackVersions.packId, pack.id),
@@ -184,6 +245,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
 
       return {
         id: pack.id,
+        qualifiedId: identity.qualifiedId,
         name: pack.name,
         description: pack.description,
         creatorId: pack.creatorId,
@@ -191,8 +253,8 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
         coverAssetId: pack.coverAssetId,
         coverUrl: formatCoverUrl(pack.coverAssetId),
         originType: pack.originType as 'source' | 'replica',
-        sourceInstance: pack.sourceInstance,
-        sourcePackId: pack.sourcePackId,
+        sourceInstance: identity.sourceInstance,
+        sourcePackId: identity.sourcePackId,
         currentVersion: pack.currentVersion,
         status: pack.status as StickerPackStatus,
         itemCount: items.length,
@@ -203,24 +265,37 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Set a sticker pack's administrative status (e.g. block / disable / active).
+   * Admin: Set a sticker pack's administrative status (`approved`, `blocked`, or `disabled`).
+   * Local block takes effect immediately and cleans up assets with no remaining references.
    */
-  app.post<{ Params: { id: string }; Body: { status: 'approved' | 'blocked' | 'disabled' | 'active' } }>('/api/admin/sticker-packs/:id/status', {
+  app.post<{ Params: { id: string }; Body: { status: 'approved' | 'blocked' | 'disabled' } }>('/api/admin/sticker-packs/:id/status', {
     preHandler: [authenticate, requireAdmin],
   }, async (request, reply) => {
     const db = getDb();
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack) {
+    if (!pack || pack.status === 'deleted') {
       return sendError(reply, 404, 'sticker_pack_not_found');
     }
 
     const { status } = request.body;
-    if (!['approved', 'blocked', 'disabled', 'active'].includes(status)) {
+    if (!['approved', 'blocked', 'disabled'].includes(status)) {
       return sendError(reply, 400, 'validation_failed');
     }
 
+    if (status === 'approved' && pack.originType === 'replica' && (!pack.sourceInstance || !isStickerPeerAllowed(pack.sourceInstance))) {
+      return sendError(reply, 403, 'sticker_peer_blocked');
+    }
+
+    if (status === 'blocked') {
+      purgeStickerPacksAssetsAndData([pack.id], 'blocked');
+      return { success: true, status: 'blocked' };
+    }
+
     const now = Date.now();
+    if (status === 'disabled') {
+      db.delete(schema.userInstalledPacks).where(eq(schema.userInstalledPacks.packId, pack.id)).run();
+    }
     db.update(schema.stickerPacks).set({
       status,
       updatedAt: now,
@@ -230,7 +305,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Get sticker federation peer policies and active peer instances.
+   * Admin: Get sticker federation peer policies (default `'block'` unless explicitly allowed).
    */
   app.get('/api/admin/federation/stickers/peers', {
     preHandler: [authenticate, requireAdmin],
@@ -243,12 +318,15 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
     return peers.map(peer => {
       const pol = policyMap.get(peer.origin);
       const replicas = db.select().from(schema.stickerPacks)
-        .where(eq(schema.stickerPacks.sourceInstance, peer.origin)).all();
+        .where(and(
+          eq(schema.stickerPacks.sourceInstance, peer.origin),
+          ne(schema.stickerPacks.status, 'deleted'),
+        )).all();
 
       return {
         origin: peer.origin,
         instanceName: peer.instanceName,
-        policy: pol?.policy ?? 'allow',
+        policy: (pol?.policy === 'allow' ? 'allow' : 'block') as 'allow' | 'block',
         autoSync: pol ? Boolean(pol.autoSync) : false,
         replicaCount: replicas.length,
       };
@@ -256,16 +334,17 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Set peer sticker policy (allow or block, autoSync).
+   * Admin: Set peer sticker policy (`allow` or `block`, `autoSync`).
+   * Blocking a peer takes effect immediately and cleans up unreferenced replicated assets.
    */
   app.put<{ Params: { peerOrigin: string }; Body: { policy: 'allow' | 'block'; autoSync?: boolean } }>('/api/admin/federation/stickers/peers/:peerOrigin/policy', {
     preHandler: [authenticate, requireAdmin],
   }, async (request, reply) => {
     const db = getDb();
-    const { peerOrigin } = request.params;
+    const peerOrigin = request.params.peerOrigin.trim();
     const { policy, autoSync } = request.body;
 
-    if (!['allow', 'block'].includes(policy)) {
+    if (!peerOrigin || !['allow', 'block'].includes(policy)) {
       return sendError(reply, 400, 'validation_failed');
     }
 
@@ -291,17 +370,23 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
     }
 
     if (policy === 'block') {
-      db.update(schema.stickerPacks).set({
-        status: 'blocked',
-        updatedAt: now,
-      }).where(eq(schema.stickerPacks.sourceInstance, peerOrigin)).run();
+      const replicasToBlock = db.select({ id: schema.stickerPacks.id })
+        .from(schema.stickerPacks)
+        .where(and(
+          eq(schema.stickerPacks.originType, 'replica'),
+          eq(schema.stickerPacks.sourceInstance, peerOrigin),
+          ne(schema.stickerPacks.status, 'deleted'),
+        ))
+        .all()
+        .map(r => r.id);
+      purgeStickerPacksAssetsAndData(replicasToBlock, 'blocked', now);
     }
 
     return { success: true, policy };
   });
 
   /**
-   * Admin: Query available sticker packs from an active remote peer.
+   * Admin: Query available sticker packs from an explicitly allowed active remote peer.
    */
   app.get<{ Querystring: { peerOrigin: string } }>('/api/admin/federation/stickers/remote-packs', {
     preHandler: [authenticate, requireAdmin],
@@ -315,6 +400,9 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
 
     if (!peer || peer.status !== 'active') {
       return sendError(reply, 404, 'not_found');
+    }
+    if (!isStickerPeerAllowed(peer.origin)) {
+      return sendError(reply, 403, 'sticker_peer_blocked');
     }
 
     try {
@@ -346,7 +434,7 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
   });
 
   /**
-   * Admin: Trigger synchronization of a remote pack from an active peer.
+   * Admin: Stage a remote sticker pack from an allowed active peer into local `pending_review`.
    */
   app.post<{ Body: { peerOrigin: string; packId: string } }>('/api/admin/federation/stickers/sync', {
     preHandler: [authenticate, requireAdmin],
@@ -354,15 +442,49 @@ export async function stickerStoreAdminRoutes(app: FastifyInstance): Promise<voi
     const { peerOrigin, packId } = request.body;
     if (!peerOrigin || !packId) return sendError(reply, 400, 'validation_failed');
 
+    const db = getDb();
+    const peer = db.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, peerOrigin)).get();
+    if (!peer || peer.status !== 'active') {
+      return sendError(reply, 404, 'not_found');
+    }
+    if (!isStickerPeerAllowed(peer.origin)) {
+      return sendError(reply, 403, 'sticker_peer_blocked');
+    }
+
     try {
-      const result = await syncRemotePack({ peerOrigin, packId });
+      const result = await syncRemotePack({ peerOrigin: peer.origin, packId });
       return { success: true, ...result };
     } catch (err) {
       const msg = (err as Error).message;
       if (msg === 'sticker_peer_blocked') {
         return sendError(reply, 403, 'sticker_peer_blocked');
       }
+      if (msg === 'sticker_pack_not_found') {
+        return sendError(reply, 404, 'sticker_pack_not_found');
+      }
       return reply.code(502).send({ error: `Sync failed: ${msg}`, statusCode: 502 });
+    }
+  });
+
+  /**
+   * Admin: Reconcile replicated sticker packs against authoritative peers (one peer or all).
+   */
+  app.post<{ Body?: { peerOrigin?: string } }>('/api/admin/federation/stickers/reconcile', {
+    preHandler: [authenticate, requireAdmin],
+  }, async (request, reply) => {
+    const requestedOrigin = request.body?.peerOrigin?.trim();
+    try {
+      if (requestedOrigin) {
+        const peer = getDb().select().from(schema.federationPeers)
+          .where(eq(schema.federationPeers.origin, requestedOrigin)).get();
+        const result = await reconcilePeerStickerPacks(peer ? peer.origin : requestedOrigin);
+        return { success: true, results: [result] };
+      }
+      const results = await reconcileAllStickerPeers();
+      return { success: true, results };
+    } catch (err) {
+      return reply.code(502).send({ error: `Reconcile failed: ${(err as Error).message}`, statusCode: 502 });
     }
   });
 }

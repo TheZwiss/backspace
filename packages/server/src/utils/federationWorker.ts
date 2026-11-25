@@ -27,6 +27,7 @@ import { invokePermanentFailureCallback } from './federationRollback.js';
 import { classifyRejection, isTerminalRejection } from './federationRejections.js';
 import { startPeerSyncWorkers, stopPeerSyncWorkers } from './federationSync.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
+import { reconcileAllStickerPeers } from './stickerSync.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -1301,6 +1302,12 @@ async function processHealthCheckTick(): Promise<void> {
   // or still holds its older row. See docs/systems/federation.md, "Peer state".
   await resolveStaleParkedPeers().catch((err: unknown) => {
     console.error('[federation-worker] parked-peer check failed:', err);
+  });
+
+  // Reconcile replicated sticker packs against authoritative peers so remote pack
+  // removals stop serving locally and release unreferenced assets.
+  await reconcileAllStickerPeers().catch((err: unknown) => {
+    console.error('[federation-worker] sticker pack reconciliation failed:', err);
   });
 }
 

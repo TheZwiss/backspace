@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { inArray, isNotNull, like, lt } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, like, lt, notInArray } from 'drizzle-orm';
 import { stickerIdOf } from '@backspace/shared/src/stickers.js';
 import { config } from '../config.js';
 import { getDb, schema } from '../db/index.js';
@@ -33,12 +33,43 @@ export const STICKER_ASSET_GRACE_MS = 24 * 60 * 60 * 1000;
 /** A temporary file a crashed upload left behind is removed after this long. */
 const STICKER_TEMP_FILE_AGE_MS = 60 * 60 * 1000;
 
+const PURGED_PACK_STATUSES = ['deleted', 'blocked'] as const;
+
 /**
- * Asset ids that something stored on this instance still names: a collection
- * entry, a sticker pack item, a sticker pack cover, a channel or DM message
- * whose content is a sticker token, or a channel or DM reaction that is one.
- * A token from another instance that happens to carry the same hash counts too,
- * which only ever keeps a file.
+ * Collects every asset ID attached to the given sticker packs (covers, version
+ * covers, and version items) before those pack rows are removed or blocked.
+ */
+export function collectPackAssetIds(packIds: string[]): Set<string> {
+  const ids = new Set<string>();
+  if (packIds.length === 0) return ids;
+  const db = getDb();
+
+  for (const row of db.select({ id: schema.stickerPacks.coverAssetId })
+    .from(schema.stickerPacks)
+    .where(and(inArray(schema.stickerPacks.id, packIds), isNotNull(schema.stickerPacks.coverAssetId)))
+    .all()) {
+    if (row.id) ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId })
+    .from(schema.stickerPackVersions)
+    .where(and(inArray(schema.stickerPackVersions.packId, packIds), isNotNull(schema.stickerPackVersions.coverAssetId)))
+    .all()) {
+    if (row.id) ids.add(row.id);
+  }
+  for (const row of db.select({ id: schema.stickerPackItems.assetId })
+    .from(schema.stickerPackItems)
+    .where(inArray(schema.stickerPackItems.packId, packIds))
+    .all()) {
+    ids.add(row.id);
+  }
+  return ids;
+}
+
+/**
+ * Asset ids that something live on this instance still names: a personal
+ * collection entry, a non-deleted/non-blocked sticker pack item or cover, a
+ * channel or DM message whose content is a sticker token, or a channel or DM
+ * reaction that is one.
  */
 export function getReferencedStickerIds(): Set<string> {
   const db = getDb();
@@ -46,15 +77,37 @@ export function getReferencedStickerIds(): Set<string> {
   for (const row of db.select({ id: schema.personalStickers.stickerId }).from(schema.personalStickers).all()) {
     ids.add(row.id);
   }
-  for (const row of db.select({ id: schema.stickerPackItems.assetId }).from(schema.stickerPackItems).all()) {
-    ids.add(row.id);
+
+  const livePackIds = db.select({ id: schema.stickerPacks.id })
+    .from(schema.stickerPacks)
+    .where(notInArray(schema.stickerPacks.status, [...PURGED_PACK_STATUSES]))
+    .all()
+    .map(r => r.id);
+
+  if (livePackIds.length > 0) {
+    for (const row of db.select({ id: schema.stickerPackItems.assetId })
+      .from(schema.stickerPackItems)
+      .where(and(
+        inArray(schema.stickerPackItems.packId, livePackIds),
+        eq(schema.stickerPackItems.status, 'active'),
+      ))
+      .all()) {
+      ids.add(row.id);
+    }
+    for (const row of db.select({ id: schema.stickerPacks.coverAssetId })
+      .from(schema.stickerPacks)
+      .where(and(inArray(schema.stickerPacks.id, livePackIds), isNotNull(schema.stickerPacks.coverAssetId)))
+      .all()) {
+      if (row.id) ids.add(row.id);
+    }
+    for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId })
+      .from(schema.stickerPackVersions)
+      .where(and(inArray(schema.stickerPackVersions.packId, livePackIds), isNotNull(schema.stickerPackVersions.coverAssetId)))
+      .all()) {
+      if (row.id) ids.add(row.id);
+    }
   }
-  for (const row of db.select({ id: schema.stickerPacks.coverAssetId }).from(schema.stickerPacks).where(isNotNull(schema.stickerPacks.coverAssetId)).all()) {
-    if (row.id) ids.add(row.id);
-  }
-  for (const row of db.select({ id: schema.stickerPackVersions.coverAssetId }).from(schema.stickerPackVersions).where(isNotNull(schema.stickerPackVersions.coverAssetId)).all()) {
-    if (row.id) ids.add(row.id);
-  }
+
   const values = [
     ...db.select({ value: schema.messages.content }).from(schema.messages)
       .where(like(schema.messages.content, 'sticker:%')).all(),
@@ -86,28 +139,10 @@ function fileSize(filePath: string): number {
   }
 }
 
-/**
- * Remove the assets nothing on this instance names any more (see
- * `getReferencedStickerIds`) once they are past the grace period, and the
- * temporary files of uploads that never finished.
- *
- * Synchronous from the reference scan to the last unlink, so no upload or
- * collect request runs in between: both write their rows without awaiting.
- *
- * A sticker sent only to a space hosted on another instance is not stored
- * here, so it does not keep its asset: once its sender removes it from their
- * collection and no local message or reaction uses it, that message on the
- * other instance shows a missing image. See docs/systems/uploads.md,
- * "Personal stickers".
- */
-export function cleanupUnusedStickerAssets(dryRun: boolean, now: number = Date.now()): StickerCleanupResult {
+function deleteCandidateAssets(candidates: string[], dryRun: boolean): StickerCleanupResult {
   const db = getDb();
   const result: StickerCleanupResult = { deletedFiles: 0, freedBytes: 0, errors: [] };
-  const referenced = getReferencedStickerIds();
-  const candidates = db.select({ id: schema.stickerAssets.id }).from(schema.stickerAssets)
-    .where(lt(schema.stickerAssets.createdAt, now - STICKER_ASSET_GRACE_MS)).all()
-    .map(row => row.id)
-    .filter(id => !referenced.has(id));
+  const deletableRows: string[] = [];
 
   for (const id of candidates) {
     const filePath = stickerAssetPath(id);
@@ -125,16 +160,55 @@ export function cleanupUnusedStickerAssets(dryRun: boolean, now: number = Date.n
       } catch {
         // Preview file might not exist
       }
+      deletableRows.push(id);
     }
     if (size > 0) result.deletedFiles += 1;
     result.freedBytes += size;
   }
-  if (!dryRun) {
+
+  if (!dryRun && deletableRows.length > 0) {
     // Chunked: SQLite caps the number of bound parameters in one statement.
-    for (let start = 0; start < candidates.length; start += 500) {
-      db.delete(schema.stickerAssets).where(inArray(schema.stickerAssets.id, candidates.slice(start, start + 500))).run();
+    for (let start = 0; start < deletableRows.length; start += 500) {
+      db.delete(schema.stickerAssets)
+        .where(inArray(schema.stickerAssets.id, deletableRows.slice(start, start + 500)))
+        .run();
     }
   }
+
+  return result;
+}
+
+/**
+ * Immediately removes any asset in `candidateIds` that has no remaining live
+ * reference on this instance (personal collection, live sticker pack, message,
+ * or reaction). Used when a pack is removed, locally blocked, or reconciled
+ * after removal at the authoritative peer.
+ */
+export function cleanupUnreferencedStickerAssets(
+  candidateIds: Iterable<string>,
+  dryRun = false,
+): StickerCleanupResult {
+  const uniqueIds = [...new Set(candidateIds)];
+  if (uniqueIds.length === 0) return { deletedFiles: 0, freedBytes: 0, errors: [] };
+  const referenced = getReferencedStickerIds();
+  const unreferenced = uniqueIds.filter(id => !referenced.has(id));
+  return deleteCandidateAssets(unreferenced, dryRun);
+}
+
+/**
+ * Remove the assets nothing on this instance names any more (see
+ * `getReferencedStickerIds`) once they are past the grace period, and the
+ * temporary files of uploads that never finished.
+ */
+export function cleanupUnusedStickerAssets(dryRun: boolean, now: number = Date.now()): StickerCleanupResult {
+  const db = getDb();
+  const referenced = getReferencedStickerIds();
+  const candidates = db.select({ id: schema.stickerAssets.id }).from(schema.stickerAssets)
+    .where(lt(schema.stickerAssets.createdAt, now - STICKER_ASSET_GRACE_MS)).all()
+    .map(row => row.id)
+    .filter(id => !referenced.has(id));
+
+  const result = deleteCandidateAssets(candidates, dryRun);
 
   let names: string[];
   try {

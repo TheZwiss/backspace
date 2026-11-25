@@ -1,17 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { and, eq } from 'drizzle-orm';
+import { qualifyStickerPackId } from '@backspace/shared/src/stickers.js';
 import { getDb, schema } from '../../../db/index.js';
+import { getOurOrigin } from '../../../utils/federationAuth.js';
 import { authenticateS2SPeer } from './s2sAuth.js';
 
 export function registerStickerFederationRoutes(app: FastifyInstance): void {
   /**
-   * S2S: Returns the list of locally created and approved sticker packs eligible for federation.
+   * S2S: Returns the list of locally authored and approved sticker packs eligible for federation.
+   * Replicated packs are never re-published to third peers; only the authoritative origin serves them.
    */
   app.post('/api/federation/stickers/packs/list', { bodyLimit: 4 * 1024 }, async (request, reply) => {
     const auth = authenticateS2SPeer(request, reply);
     if (!auth.ok) return;
 
     const db = getDb();
+    const ourOrigin = getOurOrigin();
     const packs = db.select().from(schema.stickerPacks)
       .where(and(
         eq(schema.stickerPacks.originType, 'source'),
@@ -33,6 +37,8 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
 
       return {
         id: pack.id,
+        origin: ourOrigin,
+        qualifiedId: qualifyStickerPackId(ourOrigin, pack.id),
         name: pack.name,
         description: pack.description,
         creatorName: pack.creatorName,
@@ -48,7 +54,7 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
   });
 
   /**
-   * S2S: Returns the detailed metadata and sticker item list for a specific approved pack.
+   * S2S: Returns detailed metadata and sticker item list for a specific locally approved source pack.
    */
   app.post<{ Body: { packId?: unknown } }>('/api/federation/stickers/packs/get', { bodyLimit: 4 * 1024 }, async (request, reply) => {
     const auth = authenticateS2SPeer(request, reply);
@@ -60,6 +66,7 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
     }
 
     const db = getDb();
+    const ourOrigin = getOurOrigin();
     const pack = db.select().from(schema.stickerPacks)
       .where(and(
         eq(schema.stickerPacks.id, packId),
@@ -85,6 +92,8 @@ export function registerStickerFederationRoutes(app: FastifyInstance): void {
 
     return reply.code(200).send({
       id: pack.id,
+      origin: ourOrigin,
+      qualifiedId: qualifyStickerPackId(ourOrigin, pack.id),
       name: pack.name,
       description: pack.description,
       creatorName: pack.creatorName,

@@ -74,12 +74,13 @@ export type StickerPackStatus =
   | 'approved'
   | 'rejected'
   | 'deleted'
-  | 'active'
   | 'disabled'
   | 'blocked';
 
 export interface StickerPackSummary {
   id: string;
+  /** Canonical origin-qualified pack identity (`<origin>/api/sticker-packs/<sourcePackId>`). */
+  qualifiedId?: string;
   name: string;
   description: string | null;
   creatorId: string | null;
@@ -128,6 +129,40 @@ export interface StickerPeerPolicy {
   updatedAt: number;
 }
 
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
+/**
+ * Formats a canonical origin-qualified sticker pack identity so replicated packs
+ * never lose provenance or collide across peers.
+ */
+export function qualifyStickerPackId(origin: string, sourcePackId: string): string {
+  return `${stripTrailingSlashes(origin)}/api/sticker-packs/${sourcePackId}`;
+}
+
+/**
+ * Parses a canonical origin-qualified sticker pack identity, returning null when malformed.
+ */
+export function parseQualifiedStickerPackId(qualifiedId: string): { origin: string; packId: string } | null {
+  try {
+    const parsed = new URL(qualifiedId);
+    if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+    if (parsed.search || parsed.hash) return null;
+    const prefix = '/api/sticker-packs/';
+    if (!parsed.pathname.startsWith(prefix)) return null;
+    const packId = parsed.pathname.slice(prefix.length);
+    if (!packId || packId.includes('/')) return null;
+    return { origin: parsed.origin, packId };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolves a sticker asset URL to a local origin endpoint if the asset is known or local,
  * otherwise falls back to the canonical token URL.
@@ -135,10 +170,7 @@ export interface StickerPeerPolicy {
 export function resolveStickerAssetUrl(token: string, localOrigin?: string): string | null {
   const assetId = stickerIdOf(token);
   if (assetId && localOrigin) {
-    let origin = localOrigin;
-    while (origin.endsWith('/')) {
-      origin = origin.slice(0, -1);
-    }
+    const origin = stripTrailingSlashes(localOrigin);
     return `${origin}/api/stickers/assets/${assetId}.webp`;
   }
   return stickerUrl(token);

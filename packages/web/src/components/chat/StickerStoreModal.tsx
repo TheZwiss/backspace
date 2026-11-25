@@ -438,12 +438,12 @@ export function StickerStoreModal({ onClose, onPacksChanged }: StickerStoreModal
                             <div className="flex items-center gap-2">
                               <h4 className="text-sm font-semibold text-txt-primary truncate">{pack.name}</h4>
                               <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${
-                                pack.status === 'approved' || pack.status === 'active' ? 'bg-accent-mint/10 text-accent-mint border border-accent-mint/20' :
+                                pack.status === 'approved' ? 'bg-accent-mint/10 text-accent-mint border border-accent-mint/20' :
                                 pack.status === 'pending_review' ? 'bg-accent-amber/10 text-accent-amber border border-accent-amber/20' :
                                 pack.status === 'rejected' ? 'bg-accent-rose/10 text-accent-rose border border-accent-rose/20' :
                                 'bg-surface-input text-txt-tertiary'
                               }`}>
-                                {pack.status === 'approved' || pack.status === 'active' ? t('stickers.approved') :
+                                {pack.status === 'approved' ? t('stickers.approved') :
                                  pack.status === 'pending_review' ? t('stickers.pendingReview') :
                                  pack.status === 'rejected' ? t('stickers.rejected') :
                                  t('stickers.draft')}

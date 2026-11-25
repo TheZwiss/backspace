@@ -446,7 +446,8 @@ export class BackspaceApiClient {
       listPeers: () => Promise<Array<{ origin: string; instanceName: string | null; policy: 'allow' | 'block'; autoSync: boolean; replicaCount: number }>>;
       setPeerPolicy: (peerOrigin: string, policy: 'allow' | 'block', autoSync?: boolean) => Promise<{ success: boolean; policy: string }>;
       getRemotePacks: (peerOrigin: string) => Promise<{ packs: StickerPackSummary[] }>;
-      syncPack: (peerOrigin: string, packId: string) => Promise<{ success: boolean; packId: string; replicaId: string; itemCount: number }>;
+      syncPack: (peerOrigin: string, packId: string) => Promise<{ success: boolean; packId: string; replicaId: string; itemCount: number; status: string }>;
+      reconcile: (peerOrigin?: string) => Promise<{ success: boolean; results: Array<{ peerOrigin: string; removedPackIds: string[]; syncedPackIds: string[]; cleanedFiles: number; freedBytes: number }> }>;
     };
   };
 
@@ -1053,7 +1054,8 @@ export class BackspaceApiClient {
         listPeers: () => request<Array<{ origin: string; instanceName: string | null; policy: 'allow' | 'block'; autoSync: boolean; replicaCount: number }>>('GET', '/admin/federation/stickers/peers'),
         setPeerPolicy: (peerOrigin: string, policy: 'allow' | 'block', autoSync?: boolean) => request<{ success: boolean; policy: string }>('PUT', `/admin/federation/stickers/peers/${encodeURIComponent(peerOrigin)}/policy`, { policy, autoSync }),
         getRemotePacks: (peerOrigin: string) => request<{ packs: StickerPackSummary[] }>('GET', `/admin/federation/stickers/remote-packs?peerOrigin=${encodeURIComponent(peerOrigin)}`),
-        syncPack: (peerOrigin: string, packId: string) => request<{ success: boolean; packId: string; replicaId: string; itemCount: number }>('POST', '/admin/federation/stickers/sync', { peerOrigin, packId }),
+        syncPack: (peerOrigin: string, packId: string) => request<{ success: boolean; packId: string; replicaId: string; itemCount: number; status: string }>('POST', '/admin/federation/stickers/sync', { peerOrigin, packId }),
+        reconcile: (peerOrigin?: string) => request<{ success: boolean; results: Array<{ peerOrigin: string; removedPackIds: string[]; syncedPackIds: string[]; cleanedFiles: number; freedBytes: number }> }>('POST', '/admin/federation/stickers/reconcile', peerOrigin ? { peerOrigin } : {}),
       },
     };
 

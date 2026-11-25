@@ -690,6 +690,49 @@ type PeeringNotificationSummary = {
 **`POST /:id/read`** — sets `readAt = Date.now()` for the calling user's notification (404 / 403 on miss / mismatch).
 **`POST /read-all`** — marks all of the calling user's unread notifications as read; returns `{ success, count }` where `count` is the number of rows updated.
 
+## Stickers & Federated Sticker Store (`routes/stickers.ts`, `routes/stickerStore.ts`, `routes/stickerStoreAdmin.ts`, `routes/federation/handlers/stickerSync.ts`)
+
+Full behavioral contract in [`docs/systems/sticker-store.md`](sticker-store.md) and [`docs/systems/uploads.md` §14](uploads.md#14-personal-stickers).
+
+```
+GET    /stickers                                        (auth)          → PersonalSticker[]
+POST   /stickers                                        (auth)          → PersonalSticker
+POST   /stickers/:id/collect                            (auth)          → PersonalSticker
+PATCH  /stickers/:id                                    (auth)          → PersonalSticker
+DELETE /stickers/:id                                    (auth)          → { success }
+GET    /stickers/assets/:sha256.webp?preview=1          (public)        → image/webp
+
+GET    /sticker-store/packs?q=                          (optional auth) → StickerPackSummary[]
+GET    /sticker-store/packs/:id                         (optional auth) → StickerPackDetail
+POST   /sticker-store/packs/:id/install                 (auth)          → { success }
+DELETE /sticker-store/packs/:id/install                 (auth)          → { success }
+GET    /sticker-store/my-packs                          (auth)          → StickerPackDetail[]
+
+POST   /sticker-packs                                   (auth)          → { id, qualifiedId, sourceInstance, sourcePackId, name, status, currentVersion }
+GET    /sticker-packs/created                           (auth)          → StickerPackSummary[]
+GET    /sticker-packs/:id                               (auth)          → CreatorStickerPackDetail
+POST   /sticker-packs/:id/items                         (auth)          → StickerPackItem
+DELETE /sticker-packs/:id/items/:itemId                 (auth)          → { success }
+PUT    /sticker-packs/:id/items/order                   (auth)          → { success }
+POST   /sticker-packs/:id/submit                        (auth)          → { success, status }
+POST   /sticker-packs/:id/new-version                   (auth)          → { id, newVersion, versionId, status }
+DELETE /sticker-packs/:id                               (auth)          → { success }
+
+GET    /admin/sticker-packs/reviews                     (admin)         → StickerPackSummary[]
+POST   /admin/sticker-packs/:id/approve                 (admin)         → { success, status }
+POST   /admin/sticker-packs/:id/reject                  (admin)         → { success, status }
+GET    /admin/sticker-packs                             (admin)         → StickerPackSummary[]
+POST   /admin/sticker-packs/:id/status                  (admin)         → { success, status }
+GET    /admin/federation/stickers/peers                 (admin)         → StickerPeerSummary[]
+PUT    /admin/federation/stickers/peers/:origin/policy  (admin)         → { success, policy }
+GET    /admin/federation/stickers/remote-packs          (admin)         → { packs }
+POST   /admin/federation/stickers/sync                  (admin)         → { success, packId, replicaId, itemCount, status }
+POST   /admin/federation/stickers/reconcile             (admin)         → { success, results }
+
+POST   /federation/stickers/packs/list                  (S2S HMAC)      → { packs }
+POST   /federation/stickers/packs/get                   (S2S HMAC)      → RemotePackPayload
+```
+
 ## Utilities (`routes/utils.ts`) — auth required
 ```
 GET /utils/metadata  ?url= → { title?, description?, image?, siteName? }

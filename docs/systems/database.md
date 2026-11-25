@@ -718,3 +718,16 @@ Per-remote credential this user's client presents when registering or logging in
 **Lifecycle:** created get-or-create with `onConflictDoNothing` + re-read (first-writer-wins — a racing write never replaces a stored secret). Deleted by `tombstoneUser` (explicitly: a tombstone keeps the `users` row, so the CASCADE never fires and live credentials would otherwise outlive the account) and by `POST /api/users/@me/federation-identity/delete` in `soft`/`full` mode. **Not** deleted in `leave` mode — the remote account survives and keeps authenticating with the secret.
 
 **Migration note:** `0011` is a bare `CREATE TABLE`. It reads and rewrites nothing, so it is forward-safe on a populated database and idempotent on re-run. Restoring a **pre-**`0011` backup into a **post-**`0011` deployment works — `migrate()` re-applies `0011` on boot — but any credential rows written after the snapshot are lost, and the client will mint fresh secrets for those origins. Recovery is automatic while a remote token is still valid (`provisioned_at` comes back NULL, so `ensureRemoteCredential` rotates the remote onto the new secret); otherwise the user re-authenticates through the per-instance login form once. See `deployment.md`.
+
+### Stickers & Federated Sticker Store (`0031`–`0033`)
+
+Full lifecycle, moderation, S2S replication, and cleanup rules: see [`sticker-store.md`](sticker-store.md) and [`uploads.md` §14](uploads.md#14-personal-stickers).
+
+- **`sticker_assets`** (`id` PK SHA-256 hex, `created_at` INTEGER NOT NULL) — Content-addressed WebP sticker registry (`0031`).
+- **`personal_stickers`** (PK `(user_id, sticker_id)`, `name`, `created_at`) — Per-account sticker collection (`0031`).
+- **`sticker_packs`** (`id` PK, `name`, `description`, `creator_id`, `creator_name`, `cover_asset_id`, `origin_type`, `source_instance`, `source_pack_id`, `current_version`, `status`, `review_notes`, `reviewed_by`, `reviewed_at`, `synced_at`, `created_at`, `updated_at`; UNIQUE `(source_instance, source_pack_id)`) — Versioned local and replicated sticker packs (`0032`).
+- **`sticker_pack_versions`** (`id` PK, UNIQUE `(pack_id, version)`, `name`, `description`, `cover_asset_id`, `status`, `review_notes`, `reviewed_by`, `reviewed_at`, `created_at`) — Pack version snapshots (`0032`).
+- **`sticker_pack_items`** (`id` PK, `pack_id`, `version_id`, `asset_id` FK RESTRICT, `name`, `sort_order`, `status`, `created_at`) — Version sticker entries (`0032`).
+- **`user_installed_packs`** (PK `(user_id, pack_id)`, `installed_at`) — User picker installations (`0032`).
+- **`sticker_peer_policies`** (`id` PK, `peer_origin` UNIQUE, `policy` DEFAULT `'block'`, `auto_sync` DEFAULT `0`, `created_at`, `updated_at`) — Explicit per-peer inbound sticker allow/block policy (`0032`).
+- **`instance_settings.max_sticker_size_bytes`** (`INTEGER NULL`) — Optional instance-wide sticker upload byte cap (`0033`).

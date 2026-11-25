@@ -830,7 +830,7 @@ export const stickerPacks = sqliteTable('sticker_packs', {
 }, (table) => ({
   statusIdx: index('idx_sticker_packs_status').on(table.status),
   creatorIdx: index('idx_sticker_packs_creator').on(table.creatorId),
-  sourceIdx: index('idx_sticker_packs_source').on(table.sourceInstance, table.sourcePackId),
+  sourceIdx: uniqueIndex('idx_sticker_packs_source').on(table.sourceInstance, table.sourcePackId),
 }));
 
 export const stickerPackVersions = sqliteTable('sticker_pack_versions', {
@@ -876,7 +876,7 @@ export const userInstalledPacks = sqliteTable('user_installed_packs', {
 export const stickerPeerPolicies = sqliteTable('sticker_peer_policies', {
   id: text('id').primaryKey(),
   peerOrigin: text('peer_origin').notNull().unique(),
-  policy: text('policy').notNull().default('allow'),
+  policy: text('policy').notNull().default('block'),
   autoSync: integer('auto_sync').notNull().default(0),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),

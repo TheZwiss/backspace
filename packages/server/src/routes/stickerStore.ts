@@ -5,6 +5,7 @@ import {
   MAX_STICKER_PACK_DESC_LENGTH,
   MAX_STICKER_PACK_NAME_LENGTH,
   MAX_STICKERS_PER_PACK,
+  qualifyStickerPackId,
   STICKER_ID_PATTERN,
   type StickerPackDetail,
   type StickerPackStatus,
@@ -14,6 +15,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import { sendError } from '../utils/httpErrors.js';
+import { isStickerPeerAllowed, purgeStickerPacksAssetsAndData } from '../utils/stickerSync.js';
 import { encodeSticker, getMaxStickerSizeBytes, saveStickerAsset, StickerImageError, StickerPixelLimitError, tokenFor } from './stickers.js';
 
 import { stickerStoreAdminRoutes } from './stickerStoreAdmin.js';
@@ -21,6 +23,33 @@ import { stickerStoreAdminRoutes } from './stickerStoreAdmin.js';
 export function formatCoverUrl(coverAssetId: string | null): string | null {
   if (!coverAssetId) return null;
   return `${getOurOrigin()}/api/stickers/assets/${coverAssetId}.webp`;
+}
+
+export function resolvePackOriginIdentity(pack: {
+  id: string;
+  originType: string;
+  sourceInstance: string | null;
+  sourcePackId: string | null;
+}): { sourceInstance: string; sourcePackId: string; qualifiedId: string } {
+  const sourceInstance = pack.sourceInstance ?? getOurOrigin();
+  const sourcePackId = pack.sourcePackId ?? pack.id;
+  return {
+    sourceInstance,
+    sourcePackId,
+    qualifiedId: qualifyStickerPackId(sourceInstance, sourcePackId),
+  };
+}
+
+function isPackAvailableLocally(pack: {
+  status: string;
+  originType: string;
+  sourceInstance: string | null;
+}): boolean {
+  if (pack.status !== 'approved') return false;
+  if (pack.originType === 'replica') {
+    return Boolean(pack.sourceInstance && isStickerPeerAllowed(pack.sourceInstance));
+  }
+  return true;
 }
 
 async function tryResolveUserId(request: FastifyRequest): Promise<string | null> {
@@ -48,12 +77,11 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     const userId = await tryResolveUserId(request);
     const search = request.query.q?.trim().toLowerCase();
 
-    const allowedStatuses = ['approved', 'active'];
-    const query = db.select().from(schema.stickerPacks)
-      .where(inArray(schema.stickerPacks.status, allowedStatuses))
-      .orderBy(desc(schema.stickerPacks.updatedAt));
-
-    const rows = query.all();
+    const rows = db.select().from(schema.stickerPacks)
+      .where(eq(schema.stickerPacks.status, 'approved'))
+      .orderBy(desc(schema.stickerPacks.updatedAt))
+      .all()
+      .filter(isPackAvailableLocally);
     const filteredRows = search
       ? rows.filter(r => r.name.toLowerCase().includes(search) || (r.description && r.description.toLowerCase().includes(search)))
       : rows;
@@ -67,6 +95,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const summaries: StickerPackSummary[] = filteredRows.map(pack => {
+      const identity = resolvePackOriginIdentity(pack);
       const version = db.select().from(schema.stickerPackVersions)
         .where(and(
           eq(schema.stickerPackVersions.packId, pack.id),
@@ -81,6 +110,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
 
       return {
         id: pack.id,
+        qualifiedId: identity.qualifiedId,
         name: pack.name,
         description: pack.description,
         creatorId: pack.creatorId,
@@ -88,8 +118,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
         coverAssetId: pack.coverAssetId,
         coverUrl: formatCoverUrl(pack.coverAssetId),
         originType: pack.originType as 'source' | 'replica',
-        sourceInstance: pack.sourceInstance,
-        sourcePackId: pack.sourcePackId,
+        sourceInstance: identity.sourceInstance,
+        sourcePackId: identity.sourcePackId,
         currentVersion: pack.currentVersion,
         status: pack.status as StickerPackStatus,
         itemCount: items.length,
@@ -110,12 +140,15 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     const userId = await tryResolveUserId(request);
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack || pack.status === 'deleted') {
+    if (!pack || pack.status === 'deleted' || pack.status === 'blocked') {
       return sendError(reply, 404, 'sticker_pack_not_found');
     }
 
-    // Non-approved packs can only be viewed by their creator or an admin
-    if (!['approved', 'active'].includes(pack.status)) {
+    // Non-available packs can only be viewed by their creator or an admin (when not blocked/deleted).
+    if (!isPackAvailableLocally(pack)) {
+      if (pack.originType === 'replica' && (!pack.sourceInstance || !isStickerPeerAllowed(pack.sourceInstance))) {
+        return sendError(reply, 404, 'sticker_pack_not_found');
+      }
       if (!userId) return sendError(reply, 404, 'sticker_pack_not_found');
       const caller = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
       if (pack.creatorId !== userId && caller?.isAdmin !== 1) {
@@ -123,7 +156,11 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    let version = (pack.status === 'pending_review' || pack.status === 'rejected')
+    const isAdminViewer = userId
+      ? db.select({ isAdmin: schema.users.isAdmin }).from(schema.users).where(eq(schema.users.id, userId)).get()?.isAdmin === 1
+      : false;
+
+    let version = (pack.status === 'pending_review' || pack.status === 'rejected' || isAdminViewer)
       ? db.select().from(schema.stickerPackVersions)
           .where(and(
             eq(schema.stickerPackVersions.packId, pack.id),
@@ -156,8 +193,10 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       isInstalled = !!installed;
     }
 
+    const identity = resolvePackOriginIdentity(pack);
     const detail: StickerPackDetail = {
       id: pack.id,
+      qualifiedId: identity.qualifiedId,
       name: pack.name,
       description: pack.description,
       creatorId: pack.creatorId,
@@ -165,8 +204,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       coverAssetId: pack.coverAssetId,
       coverUrl: formatCoverUrl(pack.coverAssetId),
       originType: pack.originType as 'source' | 'replica',
-      sourceInstance: pack.sourceInstance,
-      sourcePackId: pack.sourcePackId,
+      sourceInstance: identity.sourceInstance,
+      sourcePackId: identity.sourcePackId,
       currentVersion: pack.currentVersion,
       status: pack.status as StickerPackStatus,
       itemCount: items.length,
@@ -201,7 +240,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
     const pack = db.select().from(schema.stickerPacks).where(eq(schema.stickerPacks.id, request.params.id)).get();
 
-    if (!pack || !['approved', 'active'].includes(pack.status)) {
+    if (!pack || !isPackAvailableLocally(pack)) {
       return sendError(reply, 404, 'sticker_pack_not_found');
     }
 
@@ -243,11 +282,14 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     const packs = db.select().from(schema.stickerPacks)
       .where(and(
         inArray(schema.stickerPacks.id, packIds),
-        inArray(schema.stickerPacks.status, ['approved', 'active']),
-      )).all();
+        eq(schema.stickerPacks.status, 'approved'),
+      ))
+      .all()
+      .filter(isPackAvailableLocally);
 
     const results: StickerPackDetail[] = [];
     for (const pack of packs) {
+      const identity = resolvePackOriginIdentity(pack);
       const version = db.select().from(schema.stickerPackVersions)
         .where(and(
           eq(schema.stickerPackVersions.packId, pack.id),
@@ -262,6 +304,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
 
       results.push({
         id: pack.id,
+        qualifiedId: identity.qualifiedId,
         name: pack.name,
         description: pack.description,
         creatorId: pack.creatorId,
@@ -269,8 +312,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
         coverAssetId: pack.coverAssetId,
         coverUrl: formatCoverUrl(pack.coverAssetId),
         originType: pack.originType as 'source' | 'replica',
-        sourceInstance: pack.sourceInstance,
-        sourcePackId: pack.sourcePackId,
+        sourceInstance: identity.sourceInstance,
+        sourcePackId: identity.sourcePackId,
         currentVersion: pack.currentVersion,
         status: pack.status as StickerPackStatus,
         itemCount: items.length,
@@ -324,6 +367,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     const now = Date.now();
     const db = getDb();
 
+    const ourOrigin = getOurOrigin();
     db.insert(schema.stickerPacks).values({
       id: packId,
       name: trimmedName,
@@ -332,8 +376,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       creatorName: request.username,
       coverAssetId: request.body.coverAssetId || null,
       originType: 'source',
-      sourceInstance: null,
-      sourcePackId: null,
+      sourceInstance: ourOrigin,
+      sourcePackId: packId,
       currentVersion: 1,
       status: 'draft',
       createdAt: now,
@@ -351,7 +395,15 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       createdAt: now,
     }).run();
 
-    return { id: packId, name: trimmedName, status: 'draft', currentVersion: 1 };
+    return {
+      id: packId,
+      qualifiedId: qualifyStickerPackId(ourOrigin, packId),
+      sourceInstance: ourOrigin,
+      sourcePackId: packId,
+      name: trimmedName,
+      status: 'draft',
+      currentVersion: 1,
+    };
   });
 
   /**
@@ -368,6 +420,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       .all();
 
     return packs.filter(p => p.status !== 'deleted').map(pack => {
+      const identity = resolvePackOriginIdentity(pack);
       const version = db.select().from(schema.stickerPackVersions)
         .where(and(
           eq(schema.stickerPackVersions.packId, pack.id),
@@ -382,6 +435,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
 
       return {
         id: pack.id,
+        qualifiedId: identity.qualifiedId,
         name: pack.name,
         description: pack.description,
         creatorId: pack.creatorId,
@@ -389,8 +443,8 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
         coverAssetId: pack.coverAssetId,
         coverUrl: formatCoverUrl(pack.coverAssetId),
         originType: pack.originType as 'source' | 'replica',
-        sourceInstance: pack.sourceInstance,
-        sourcePackId: pack.sourcePackId,
+        sourceInstance: identity.sourceInstance,
+        sourcePackId: identity.sourcePackId,
         currentVersion: pack.currentVersion,
         status: pack.status as StickerPackStatus,
         itemCount: items.length,
@@ -679,8 +733,10 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
     db.update(schema.stickerPackVersions).set({ status: 'pending_review' })
       .where(eq(schema.stickerPackVersions.id, draftVersion.id)).run();
 
+    // Keep an already-approved pack available at its approved version while a newer draft awaits review.
+    const nextPackStatus = pack.status === 'approved' ? 'approved' : 'pending_review';
     db.update(schema.stickerPacks).set({
-      status: 'pending_review',
+      status: nextPackStatus,
       reviewNotes: null,
       updatedAt: now,
     }).where(eq(schema.stickerPacks.id, pack.id)).run();
@@ -767,7 +823,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
-   * Soft delete a sticker pack.
+   * Remove a sticker pack immediately and clean up assets with no remaining references.
    */
   app.delete<{ Params: { id: string } }>('/api/sticker-packs/:id', {
     preHandler: authenticate,
@@ -784,9 +840,7 @@ export async function stickerStoreRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, 403, 'forbidden');
     }
 
-    const now = Date.now();
-    db.update(schema.stickerPacks).set({ status: 'deleted', updatedAt: now })
-      .where(eq(schema.stickerPacks.id, pack.id)).run();
+    purgeStickerPacksAssetsAndData([pack.id], 'deleted');
 
     return { success: true };
   });

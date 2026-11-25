@@ -25,7 +25,7 @@ CREATE INDEX `idx_sticker_packs_status` ON `sticker_packs` (`status`);
 --> statement-breakpoint
 CREATE INDEX `idx_sticker_packs_creator` ON `sticker_packs` (`creator_id`);
 --> statement-breakpoint
-CREATE INDEX `idx_sticker_packs_source` ON `sticker_packs` (`source_instance`, `source_pack_id`);
+CREATE UNIQUE INDEX `idx_sticker_packs_source` ON `sticker_packs` (`source_instance`, `source_pack_id`);
 --> statement-breakpoint
 CREATE TABLE `sticker_pack_versions` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -80,7 +80,7 @@ CREATE INDEX `idx_user_installed_packs_user` ON `user_installed_packs` (`user_id
 CREATE TABLE `sticker_peer_policies` (
 	`id` text PRIMARY KEY NOT NULL,
 	`peer_origin` text NOT NULL,
-	`policy` text DEFAULT 'allow' NOT NULL,
+	`policy` text DEFAULT 'block' NOT NULL,
 	`auto_sync` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
