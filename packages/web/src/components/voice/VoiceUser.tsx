@@ -12,9 +12,11 @@ import type { UserTile } from '../../hooks/useLiveKit';
 interface VoiceUserProps {
   tile: UserTile;
   large?: boolean;
+  edgeToEdge?: boolean;
+  chromeVisible?: boolean;
 }
 
-export function VoiceUser({ tile, large }: VoiceUserProps) {
+export function VoiceUser({ tile, large, edgeToEdge = false, chromeVisible = true }: VoiceUserProps) {
   const { t } = useTranslation(['voice', 'common']);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -144,10 +146,14 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   return (
     <div
       data-context-menu
-      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
-        isSpeaking
-          ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
-          : 'ring-1 ring-white/[0.06] hover:ring-white/10'
+      className={`relative overflow-hidden flex items-center justify-center group transition-all duration-200 ${
+        edgeToEdge
+          ? 'bg-black rounded-none ring-0'
+          : `bg-surface-base rounded-xl ${
+              isSpeaking
+                ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
+                : 'ring-1 ring-white/[0.06] hover:ring-white/10'
+            }`
       } h-full w-full`}
       onContextMenu={handleContextMenu}
     >
@@ -177,7 +183,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         </div>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+      <div className={`absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent transition-opacity duration-300 ease-out ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <span

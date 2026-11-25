@@ -247,7 +247,7 @@ export function MainContent() {
       return (
         <div
           ref={voiceContainerRef}
-          className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen' : ''}`}
+          className={`flex-1 flex flex-col min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen bg-black' : 'bg-surface-base'}`}
         >
           <div
             data-testid="voice-header-overlay"
@@ -278,7 +278,11 @@ export function MainContent() {
 
           <div className="flex-1 flex overflow-hidden min-h-0">
             <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-              <VoiceGrid participants={participants} />
+              <VoiceGrid
+                participants={participants}
+                fullscreen={voiceFullscreen}
+                chromeRevealed={chromeRevealed}
+              />
               <VoiceControlBar revealed={chromeRevealed} />
             </div>
             {voiceChatOpen && !voiceFullscreen && (
@@ -491,7 +495,7 @@ export function MainContent() {
     return (
       <div 
         ref={voiceContainerRef}
-        className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen' : ''}`}
+        className={`flex-1 flex flex-col min-w-0 group/voice relative overflow-hidden ${voiceFullscreen ? 'h-screen bg-black' : 'bg-surface-base'}`}
       >
         <div
           data-testid="voice-header-overlay"
@@ -522,7 +526,11 @@ export function MainContent() {
 
         <div className="flex-1 flex overflow-hidden min-h-0">
           <div className={`flex-1 min-w-0 flex relative ${voiceFullscreen ? '' : 'pb-20'}`}>
-            <VoiceGrid participants={participants} />
+            <VoiceGrid
+              participants={participants}
+              fullscreen={voiceFullscreen}
+              chromeRevealed={chromeRevealed}
+            />
             <VoiceControlBar revealed={chromeRevealed} />
           </div>
           {voiceChatOpen && !voiceFullscreen && (
