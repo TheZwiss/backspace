@@ -67,7 +67,9 @@ cleanup() {
   fi
   docker rm -f "$project-cohost" >/dev/null 2>&1 || true
   SMOKE_IMAGE=$CANDIDATE_IMAGE stack down -v >/dev/null 2>&1 || true
-  rm -rf -- "$fixture"
+  # The application owns the bind-mounted database and upload directories.
+  cd /
+  sudo -n rm -rf -- "$fixture"
 }
 trap cleanup EXIT
 
