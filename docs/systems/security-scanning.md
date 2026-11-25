@@ -2,11 +2,8 @@
 
 Automated, continuous scanning wired into GitHub Actions. This document is the
 reference for what runs, where results go, and the one-time settings a maintainer
-must enable. **Current state: enforcing**, with one documented exception. The
-scanners in `security.yml` fail the job on a finding the tiered policy says must
-block. The published-image scan in `docker-publish.yml` is the exception and is
-still report-only, for the measured reason in "The image scan is the exception"
-below.
+must enable. The tiered policy defines blocking findings. The container release
+workflow scans the built amd64 image before publishing the multi-architecture image.
 
 ## Workflows
 
@@ -17,7 +14,7 @@ below.
 | `.github/workflows/security.yml` | gitleaks (secrets, full history), OSV-Scanner (deps), Trivy config (IaC), Trivy license | PR + push main + weekly | Security tab |
 | `.github/workflows/scorecard.yml` | OpenSSF Scorecard (repo posture) | push main + weekly + on branch-protection change | Security tab + public badge |
 | `.github/workflows/dast.yml` | ZAP baseline against an ephemeral instance (spider + passive, unauthenticated) | push main + weekly + manual + PRs touching its own config | Job summary + artifact (advisory) |
-| `.github/workflows/docker-publish.yml` | Image scan (Trivy) + SBOM + provenance for the published container | tag push / manual | image scan (report-only) + SBOM + provenance |
+| `.github/workflows/docker-publish.yml` | Image scan (Trivy) + SBOM + provenance for the published container | tag push / manual | amd64 image scan gate + SBOM + provenance |
 | `.github/workflows/telemetry-receiver.yml` | Typecheck + Workers test suite for `scripts/telemetry-receiver`, and its deploy to Cloudflare | PR + push main, both path-filtered to the package; deploy on manual dispatch only | job status; a published Worker |
 | `.github/workflows/pr-triage.yml` | Fork PR triage: "routine" or "read first" verdict for the CI approval click, plus lockfile and Flatpak source summary | `pull_request_target` on fork PRs + manual | one comment per PR, updated in place |
 
@@ -38,35 +35,21 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
 
 ### How enforcement is actually wired
 
-Turning this on was not a matter of deleting `continue-on-error`. Two things had to
-be true first, and both were measured rather than assumed.
+The Trivy checks set `exit-code: '1'` explicitly. The severity and fix filters
+determine which image findings cause that exit.
 
-**Trivy exits 0 in SARIF mode whatever it finds.** Removing `continue-on-error`
-alone would have looked like enforcement while enforcing nothing. The config and
-license jobs carry `exit-code: '1'` plus `severity: 'HIGH,CRITICAL'`; the exit code
-is what blocks, and the severity filter is what keeps it aligned with the tiered
-policy above.
+OSV exits with an error for any active finding. Apply the tiered policy alongside
+the job result when reviewing a merge. The historical OSV deferrals were removed
+after the affected dependency paths were patched. The merged Fastify upgrade
+retains two Moderate advisory IDs across three lockfile entries. Any future
+deferral must name the affected advisory and carry an expiry.
 
-**All thirteen remaining OSV findings are fixable**, and five are HIGH, so a plain
-flip would have turned `main` red and blocked every pull request. `osv-scanner.toml`
-resolves that as a **ratchet rather than a waiver**: it lists exactly the backlog
-that existed at flip time, one entry per finding, each with the reason and the
-version that fixes it. Anything not in that file fails the job, so a newly
-introduced vulnerability blocks while the documented backlog stays visible.
+### Container release gate
 
-Every entry carries `ignoreUntil = 2026-12-01`. **A waiver with no expiry is how a
-backlog becomes permanent.** When that date passes these findings come back and
-block, which forces the upgrade decision instead of letting it rot. That is
-deliberate, and it means `main` can go red on that date if nobody has acted. The
-fix is to do the upgrades, not to push the date.
-
-### The image scan is the exception
-
-`docker-publish.yml`'s Trivy image scan stays report-only, but the backlog behind
-that decision is now mostly gone. The findings the scan reports are not the ones
-the dependency pass covers: Trivy inspects the image's real `node_modules` and its
-installed OS and Node packages, while OSV reads the lockfile, so the two see
-different things.
+Trivy scans the amd64 image before the registry push and fails the workflow if
+it detects a fixable HIGH or CRITICAL issue. The SARIF upload runs after the
+scan even on failure. Trivy inspects installed OS and library packages in the
+image. OSV inspects the workspace lockfile.
 
 **Measured 2026-09-03 against an image built from `main`: 20 fixable
 HIGH/CRITICAL.** Seventeen of them had nothing to do with the application. They
@@ -88,9 +71,8 @@ ever invoked. The `Dockerfile` now removes both from that stage (the `deps` and
 The three results in that baseline came from Fastify 4.29.1
 (CVE-2026-25223), `@fastify/static` 7.0.4 (CVE-2026-15074), and
 `find-my-way` 8.2.2 (CVE-2026-47219). The Fastify 5 migration updated all
-three. Keep the image job report-only until a fresh image scan confirms the
-remaining count. If it is zero, add `exit-code: '1'` and drop
-`continue-on-error` from the Trivy step in `docker-publish.yml`.
+three. The 25 November 2026 amd64 scan measured zero fixable HIGH or CRITICAL
+findings after the migration. [Scan evidence](https://github.com/TheZwiss/backspace/actions/runs/45530722734)
 
 ## Dynamic scanning (DAST)
 
@@ -273,10 +255,8 @@ Three plausible ways of measuring give a wrong answer.
   no analysis is recorded against a branch ref, and `refs/pull/N/merge` reports only
   findings that fall on the changed lines, so a clean PR run means "nothing on this
   diff" rather than "nothing in the repository".
-- **A green scanner check is not always a measurement.** Where a scan step still
-  carries `continue-on-error: true`, the check passing means the analysis ran and
-  the SARIF uploaded, nothing more. Since the enforcement flip in PR #77 that
-  applies only to the container image scan in `docker-publish.yml`.
+- **The image gate uses severity and fix filters.** Run a separate scan with
+  broader filters to measure advisory or unfixed findings.
 - **`trivy config .` reports more locally than in CI.** Run locally after an install
   it walks `node_modules` and reports DS-0001, DS-0017 and DS-0026 against a
   Dockerfile vendored inside `@surma/rollup-plugin-off-main-thread`. The CI job
@@ -661,9 +641,8 @@ Two cases from the first pass are worth keeping in mind:
   does not support the macOS and Windows legs of the build matrix.
 - Least-privilege `permissions:` per workflow/job.
 - SBOM + SLSA provenance are attached to the published container image at push
-  (`.github/workflows/docker-publish.yml`), alongside a report-only Trivy scan
-  of the amd64 image (the arm64 image ships unscanned; enforcement is turned
-  on in a later plan).
+  (`.github/workflows/docker-publish.yml`). Trivy gates the amd64 build before
+  either architecture is published. The gate covers amd64 only.
 - `cloudflare/wrangler-action` is pinned at `9acf94ac` (v3.15.0), the head of
   the v3 line, in `telemetry-receiver.yml`. It is used twice in the same job and
   both uses carry the same pin. It is the only action in the repository that
