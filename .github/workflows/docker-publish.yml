@@ -105,11 +105,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Keep this report-only until the image is re-measured after the
-      # Fastify 5 migration. See docs/systems/security-scanning.md.
-      - name: Trivy image scan (report-only)
+      # Gate the publish on fixable high and critical findings in the amd64 image.
+      - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        continue-on-error: true # report-only: see the note above, not an oversight
         with:
           scan-type: image
           image-ref: backspace:scan
@@ -117,10 +115,12 @@ jobs:
           format: sarif
           output: trivy-image.sarif
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          exit-code: '1'
 
       - name: Upload Trivy image SARIF
         if: always()
-        continue-on-error: true # a scanner/SARIF-emit flake must never skip the publish below
+        continue-on-error: true # SARIF upload is best-effort
         uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         with:
           sarif_file: trivy-image.sarif
