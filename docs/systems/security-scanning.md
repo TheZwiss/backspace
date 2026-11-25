@@ -35,8 +35,9 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
 
 ### How enforcement is actually wired
 
-The Trivy checks set `exit-code: '1'` explicitly. The severity and fix filters
-determine which image findings cause that exit.
+The Trivy checks set `exit-code: '1'` explicitly. The image job also sets
+`limit-severities-for-sarif: true` so the action applies the severity filter
+when generating SARIF.
 
 OSV exits with an error for any active finding. Apply the tiered policy alongside
 the job result when reviewing a merge. The historical OSV deferrals were removed
@@ -47,9 +48,9 @@ deferral must name the affected advisory and carry an expiry.
 ### Container release gate
 
 Trivy scans the amd64 image before the registry push and fails the workflow if
-it detects a fixable HIGH or CRITICAL issue. The SARIF upload runs after the
-scan even on failure. Trivy inspects installed OS and library packages in the
-image. OSV inspects the workspace lockfile.
+it detects a fixable HIGH or CRITICAL package finding or an embedded secret at
+either severity. The SARIF upload runs after the scan even on failure. Trivy
+inspects the built image. OSV inspects the workspace lockfile.
 
 **Measured 2026-09-03 against an image built from `main`: 20 fixable
 HIGH/CRITICAL.** Seventeen of them had nothing to do with the application. They
