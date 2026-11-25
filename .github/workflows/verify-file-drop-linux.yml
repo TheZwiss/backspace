@@ -1,0 +1,45 @@
+name: Verify native Linux file drag
+on:
+  push:
+    branches: [codex/fastify5-linux-check]
+    paths:
+      - '.github/workflows/verify-file-drop-linux.yml'
+      - 'scripts/qa-file-drop/**'
+permissions:
+  contents: read
+jobs:
+  native-drop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: QuddyMusic/backspace
+          ref: de9902d147ec08d94bab3c72a665d0f00fc9966a
+          path: candidate
+          persist-credentials: false
+      - name: Verify the inspected contribution head
+        working-directory: candidate
+        run: test "$(git rev-parse HEAD)" = de9902d147ec08d94bab3c72a665d0f00fc9966a
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: candidate/package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.3'
+      - name: Install native drag tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends xvfb xdotool python3-gi gir1.2-gtk-3.0
+          command -v google-chrome
+      - name: Install the inspected workspace
+        working-directory: candidate
+        run: pnpm install --frozen-lockfile
+      - name: Drive native file drops and cancellation
+        run: bash scripts/qa-file-drop/run.sh "$PWD/candidate" "$(command -v google-chrome)"
