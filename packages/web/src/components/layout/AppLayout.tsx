@@ -46,7 +46,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { AudioManager } from '../../audio/AudioManager';
+import { AudioManager, attachFirstGestureAudioUnlock } from '../../audio/AudioManager';
 import { isAppSystemAudioSource, userDevicesSignature } from '../../utils/systemAudioSource';
 
 export function AppLayout() {
@@ -54,24 +54,13 @@ export function AppLayout() {
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
-  // Global interaction handler to resume AudioContext
-  useEffect(() => {
-    const resume = () => {
-      AudioManager.getInstance().resumeContext().then(() => {
-        window.removeEventListener('click', resume);
-        window.removeEventListener('keydown', resume);
-        window.removeEventListener('touchstart', resume);
-      });
-    };
-    window.addEventListener('click', resume);
-    window.addEventListener('keydown', resume);
-    window.addEventListener('touchstart', resume);
-    return () => {
-      window.removeEventListener('click', resume);
-      window.removeEventListener('keydown', resume);
-      window.removeEventListener('touchstart', resume);
-    };
-  }, []);
+  // Global first-gesture handler: unlock AudioContext autoplay on the first
+  // usable user interaction (including touch release `touchend`) so later
+  // WebSocket-driven cues (incoming calls, message notifications) can play.
+  // Listeners stay attached until a gesture actually unlocks the context;
+  // because no audio session is held, AudioManager then auto-suspends (~1.5s)
+  // and releases the OS audio device / DAC instead of keeping it open.
+  useEffect(() => attachFirstGestureAudioUnlock(window), []);
 
   // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
   // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback

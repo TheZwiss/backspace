@@ -55,6 +55,21 @@ let _activeRoom: Room | null = null;
 const _republishTrackers = new WeakMap<Room, StreamRepublishTracker>();
 /** The shares each room's viewer may watch again after a full reconnect (`StreamResumeMemory`). */
 const _resumeMemories = new WeakMap<Room, StreamResumeMemory>();
+/**
+ * Audio session lease owned by each live `Room`. Keyed by room so a late
+ * `Disconnected` event or teardown on an old room can only release its own
+ * lease and never consume the lease of a pending or replacement connection.
+ */
+const _roomAudioLeases = new WeakMap<Room, () => void>();
+
+function releaseRoomAudioLease(room: Room | null): void {
+  if (!room) return;
+  const release = _roomAudioLeases.get(room);
+  if (release) {
+    _roomAudioLeases.delete(room);
+    release();
+  }
+}
 
 /** Forget a room's per-sharer stream state: the room is being left. */
 function clearRoomStreamState(room: Room): void {
@@ -334,6 +349,16 @@ export function useLiveKit() {
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
 
   const lastMicGenRef = useRef(0);
+  // Holds the audio session lease of an in-flight `connect()` until ownership
+  // transfers to the newly created `Room` in `_roomAudioLeases`.
+  const pendingAudioLeaseRef = useRef<{ gen: number; release: () => void } | null>(null);
+  const releasePendingAudioLease = useCallback((expectedGen?: number) => {
+    const pending = pendingAudioLeaseRef.current;
+    if (!pending) return;
+    if (expectedGen !== undefined && pending.gen !== expectedGen) return;
+    pendingAudioLeaseRef.current = null;
+    pending.release();
+  }, []);
 
   const updateParticipants = useCallback(() => {
     const r = roomRef.current;
@@ -740,9 +765,19 @@ export function useLiveKit() {
     };
     const gen = ++_connectGeneration;
 
+    // Hold a dedicated audio session lease for this connection attempt. It stays
+    // scoped to `gen` until transferred to `newRoom`, so a late Disconnected
+    // from an older room cannot consume this pending join's lease.
+    releasePendingAudioLease();
+    const joinAudioLease = AudioManager.getInstance().acquireAudioSession();
+    pendingAudioLeaseRef.current = { gen, release: joinAudioLease };
+
     // Ensure AudioContext is created and resumed before tracks arrive
     await AudioManager.getInstance().resumeContext();
-    if (gen !== _connectGeneration) return;
+    if (gen !== _connectGeneration) {
+      releasePendingAudioLease(gen);
+      return;
+    }
 
     // 1. Reset state immediately to reflect "Loading/Switching" in UI
     SpeakingDetector.getInstance().clear();
@@ -769,9 +804,11 @@ export function useLiveKit() {
     
     if (roomToDisconnect) {
       // A channel switch retains pre-armed capture. Ignore the old room's
-      // terminal events before starting asynchronous SDK teardown.
+      // terminal events before starting asynchronous SDK teardown, and release
+      // only the old room's own audio lease.
       roomRef.current = null;
       _activeRoom = null;
+      releaseRoomAudioLease(roomToDisconnect);
       clearRoomStreamState(roomToDisconnect);
       try {
         console.log('[LiveKit] Destroying previous room:', roomToDisconnect.name);
@@ -780,8 +817,12 @@ export function useLiveKit() {
         console.warn('Error disconnecting from previous room:', err);
       }
     }
-    if (gen !== _connectGeneration) return;
+    if (gen !== _connectGeneration) {
+      releasePendingAudioLease(gen);
+      return;
+    }
     
+    let createdRoom: Room | null = null;
     try {
       let token: string;
       let url: string;
@@ -808,11 +849,20 @@ export function useLiveKit() {
         token = resp.token;
         url = resp.url;
       }
-      if (gen !== _connectGeneration) return;
+      if (gen !== _connectGeneration) {
+        releasePendingAudioLease(gen);
+        return;
+      }
       useVoiceStore.setState({ livekitHostOrigin: hostOrigin });
       // Refreshed per join; home's document arrives with every home `ready`.
       if (hostOrigin) void refreshStreamHostLimits(hostOrigin);
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
+      createdRoom = newRoom;
+      // Transfer lease ownership from the pending join to this Room instance.
+      if (pendingAudioLeaseRef.current?.gen === gen) {
+        pendingAudioLeaseRef.current = null;
+      }
+      _roomAudioLeases.set(newRoom, joinAudioLease);
       roomRef.current = newRoom;
       // This room's own tracker. Its handlers use it directly, and act only
       // while the room is current: a replaced room's late events belong to
@@ -1076,6 +1126,14 @@ export function useLiveKit() {
         if (roomRef.current !== newRoom) return;
         republish.clear();
         resume.clear();
+        // Release ONLY this room's own audio lease.
+        releaseRoomAudioLease(newRoom);
+        // If a newer connect() is already in flight (e.g. switching rooms while
+        // awaiting resumeContext()), do NOT bump _connectGeneration or tear down
+        // the incoming connection's pre-armed capture / pending state.
+        const supersededByNewConnect = gen !== _connectGeneration;
+        roomRef.current = null; _activeRoom = null;
+        if (supersededByNewConnect) return;
         // The SDK emits Disconnected before rejecting an initial connect.
         // Keep that attempt current so its catch can report the failure.
         if (!initialConnectPending) _connectGeneration++;
@@ -1084,7 +1142,7 @@ export function useLiveKit() {
         setConnectionState(ConnectionState.Disconnected);
         setIsConnecting(false);
         setConnectedChannelId(null);
-        roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null);
+        setIsConnected(false); setRoom(null);
         // Batch participants + connected into one setState to prevent SoundController
         // from seeing intermediate states (e.g., participants empty but still "connected"
         // → triggers user_leave sound before the disconnect sound).
@@ -1107,7 +1165,11 @@ export function useLiveKit() {
 
       await newRoom.connect(url, token, { autoSubscribe: false });
       initialConnectPending = false;
-      if (gen !== _connectGeneration) { destroyRoom(newRoom); return; }
+      if (gen !== _connectGeneration) {
+        releaseRoomAudioLease(newRoom);
+        destroyRoom(newRoom);
+        return;
+      }
       _activeRoom = newRoom;
       connectedChannelRef.current = storedId;
       setConnectedChannelId(storedId);
@@ -1142,6 +1204,8 @@ export function useLiveKit() {
       
       updateParticipants();
     } catch (err) {
+      releasePendingAudioLease(gen);
+      releaseRoomAudioLease(createdRoom);
       if (gen === _connectGeneration) {
         AudioManager.getInstance().releaseInputStream();
         setConnectionError('connect_failed');
@@ -1150,13 +1214,15 @@ export function useLiveKit() {
       }
     }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived]);
+  }, [updateParticipants, handleDataReceived, releasePendingAudioLease]);
 
   const disconnect = useCallback(async () => {
     const gen = ++_connectGeneration;
     // Release before SDK teardown, even if token fetching has not made a Room
     // yet. A late teardown must never stop a subsequent call's fresh capture.
     AudioManager.getInstance().releaseInputStream();
+    releasePendingAudioLease();
+    releaseRoomAudioLease(roomRef.current || _activeRoom);
     SpeakingDetector.getInstance().clear();
     deactivateHwOverdrive();
     connectedChannelRef.current = null;
@@ -1181,7 +1247,7 @@ export function useLiveKit() {
     useVoiceStore.getState().setVoiceConnectionStatus('disconnected');
     useVoiceStore.getState().setSpeakingParticipants(new Set());
     useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
-  }, []);
+  }, [releasePendingAudioLease]);
 
   const toggleMic = useCallback(async () => { 
     await AudioManager.getInstance().resumeContext();
@@ -1242,15 +1308,17 @@ export function useLiveKit() {
       SpeakingDetector.getInstance().clear();
       deactivateHwOverdrive();
       AudioManager.getInstance().releaseInputStream();
+      releasePendingAudioLease();
       const roomToDestroy = roomRef.current;
       roomRef.current = null;
       _activeRoom = null;
+      releaseRoomAudioLease(roomToDestroy);
       if (roomToDestroy) {
         clearRoomStreamState(roomToDestroy);
         void destroyRoom(roomToDestroy);
       }
     };
-  }, []);
+  }, [releasePendingAudioLease]);
 
 
   return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic };
