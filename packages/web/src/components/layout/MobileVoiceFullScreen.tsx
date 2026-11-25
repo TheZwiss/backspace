@@ -309,6 +309,7 @@ export function MobileVoiceFullScreen() {
         </span>
         <button
           type="button"
+          data-hide-non-video-toggle=""
           onClick={toggleHideNonVideoParticipants}
           aria-pressed={hideNonVideoParticipants}
           aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}

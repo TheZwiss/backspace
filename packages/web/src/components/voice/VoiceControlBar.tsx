@@ -56,8 +56,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
     ? 'opacity-100'
     : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
   const containerClassName = voiceFullscreen
-    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
-    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
+    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 px-2 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
+    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100%-1rem)] opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
 
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
@@ -113,7 +113,7 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
       className={containerClassName}
       {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
     >
-      <div className="pointer-events-auto flex items-center gap-1.5 max-w-[calc(100vw-1rem)] overflow-x-auto no-scrollbar rounded-full px-3 py-2 glass-bubble">
+      <div className="pointer-events-auto flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button
           onClick={handleMute}
@@ -218,6 +218,7 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
         {/* Hide Non-Video Participants Toggle */}
         <button
           type="button"
+          data-hide-non-video-toggle=""
           onClick={toggleHideNonVideoParticipants}
           aria-pressed={hideNonVideoParticipants}
           aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}

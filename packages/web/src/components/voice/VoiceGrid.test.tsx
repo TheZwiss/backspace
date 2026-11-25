@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VoiceGrid } from './VoiceGrid';
+import { VoiceControlBar } from './VoiceControlBar';
 import { useVoiceStore } from '../../stores/voiceStore';
 
 vi.mock('../../audio/AudioManager', () => ({
@@ -189,15 +190,29 @@ describe('VoiceGrid participant strip', () => {
     expect(document.activeElement).toBe(toggleBtn);
   });
 
-  it('shows an empty-state fallback with a button to show all participants when no one has video', async () => {
+  it('shows an empty-state fallback and moves focus to the persistent VoiceControlBar filter toggle on Show all participants', async () => {
     useVoiceStore.setState({ focusedParticipantId: null, hideNonVideoParticipants: true });
-    render(<VoiceGrid participants={[participant('ada', true), participant('bob', false)]} />);
+    render(
+      <div>
+        <VoiceGrid participants={[participant('ada', true), participant('bob', false)]} />
+        <VoiceControlBar revealed />
+      </div>,
+    );
+
+    // Docked control bar container bounds itself to its parent panel width, not 100vw
+    const overlay = screen.getByTestId('voice-control-overlay');
+    expect(overlay.className).toContain('max-w-[calc(100%-1rem)]');
 
     expect(screen.getByText(/no participants with video/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /show all participants/i }));
+    const showAllBtn = screen.getByRole('button', { name: /show all participants/i });
+    showAllBtn.focus();
+    await userEvent.click(showAllBtn);
 
     expect(useVoiceStore.getState().hideNonVideoParticipants).toBe(false);
     expect(screen.getByText('ada')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
+    // Focus handed off from the unmounted empty-state button to the persistent filter toggle
+    const persistentToggle = screen.getByRole('button', { name: /hide non-video/i });
+    expect(document.activeElement).toBe(persistentToggle);
   });
 });

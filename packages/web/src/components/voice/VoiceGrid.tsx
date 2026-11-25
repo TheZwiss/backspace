@@ -113,7 +113,18 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
           </p>
           <button
             type="button"
-            onClick={() => setHideNonVideoParticipants(false)}
+            onClick={() => {
+              setHideNonVideoParticipants(false);
+              // The empty-state button unmounts immediately; move focus to the
+              // persistent filter control (VoiceControlBar or mobile voice header)
+              // or fall back to the grid container so keyboard focus is never lost.
+              const toggle = document.querySelector<HTMLElement>('[data-hide-non-video-toggle]');
+              if (toggle) {
+                toggle.focus();
+              } else {
+                requestAnimationFrame(() => gridRef.current?.focus());
+              }
+            }}
             className="px-3.5 py-1.5 rounded-lg bg-surface-elevated hover:bg-interactive-hover text-txt-primary text-xs font-medium transition-colors"
           >
             {t('voice:grid.showAllParticipants')}
@@ -255,7 +266,7 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
 
   // Default grid mode — container-aware layout via ResizeObserver
   return (
-    <div ref={gridRef} className="flex-1 overflow-hidden min-h-0">
+    <div ref={gridRef} tabIndex={-1} className="flex-1 overflow-hidden min-h-0 outline-none">
       <div
         className="grid h-full w-full"
         style={{
