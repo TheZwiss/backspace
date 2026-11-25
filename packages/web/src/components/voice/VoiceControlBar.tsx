@@ -9,7 +9,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
-const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
+const btnBase = 'w-10 h-10 shrink-0 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
 const btnActive = (color: string) => `${btnBase} bg-${color}/20 text-${color} hover:bg-${color}/30`;
 const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surface-elevated`;
@@ -25,6 +25,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
+  const hideNonVideoParticipants = useVoiceStore((s) => s.hideNonVideoParticipants);
+  const toggleHideNonVideoParticipants = useVoiceStore((s) => s.toggleHideNonVideoParticipants);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
@@ -54,8 +56,8 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
     ? 'opacity-100'
     : 'opacity-0 focus-within:opacity-100 [@media(hover:none)]:opacity-100 [@media(any-pointer:coarse)]:opacity-100';
   const containerClassName = voiceFullscreen
-    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
-    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
+    ? `pointer-events-none absolute inset-x-0 bottom-0 z-20 h-24 px-2 flex items-end justify-center pb-6 transition-opacity duration-300 ease-out ${fullscreenVisibility}`
+    : 'absolute bottom-6 left-1/2 -translate-x-1/2 z-20 max-w-[calc(100%-1rem)] opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out';
 
   const handleMute = React.useCallback(() => {
     handleMuteAction(isSpaceMuted, isSpaceDeafened);
@@ -111,7 +113,7 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
       className={containerClassName}
       {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
     >
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
+      <div className="pointer-events-auto flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button
           onClick={handleMute}
@@ -210,6 +212,27 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
+          </svg>
+        </button>
+
+        {/* Hide Non-Video Participants Toggle */}
+        <button
+          type="button"
+          data-hide-non-video-toggle=""
+          onClick={toggleHideNonVideoParticipants}
+          aria-pressed={hideNonVideoParticipants}
+          aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
+          className={hideNonVideoParticipants
+            ? `${btnBase} bg-surface-channel text-txt-primary`
+            : btnDefault
+          }
+          title={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            {hideNonVideoParticipants && (
+              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            )}
           </svg>
         </button>
 

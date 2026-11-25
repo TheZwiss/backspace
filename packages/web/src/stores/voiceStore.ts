@@ -156,6 +156,9 @@ export interface VoiceState {
   setMessageSoundAllChannels: (allChannels: boolean) => void;
   pipEnabled: boolean;                       // true (default) = floating window shows while browsing other channels
   setPipEnabled: (enabled: boolean) => void;
+  hideNonVideoParticipants: boolean;         // false (default) = show everyone; true = hide tiles without active camera/stream
+  setHideNonVideoParticipants: (hide: boolean) => void;
+  toggleHideNonVideoParticipants: () => void;
   streamAttenuationEnabled: boolean;        // global toggle, default true
   streamAttenuationStrength: number;        // 0-100, default 50
   setStreamVolume: (userId: string, volume: number) => void;
@@ -335,6 +338,9 @@ export const useVoiceStore = create<VoiceState>()(
       setMessageSoundAllChannels: (allChannels) => set({ messageSoundAllChannels: allChannels }),
       pipEnabled: true,
       setPipEnabled: (enabled) => set({ pipEnabled: enabled }),
+      hideNonVideoParticipants: false,
+      setHideNonVideoParticipants: (hide) => set({ hideNonVideoParticipants: hide }),
+      toggleHideNonVideoParticipants: () => set((s) => ({ hideNonVideoParticipants: !s.hideNonVideoParticipants })),
 
       // Stream widget state
       streamVolumes: new Map(),
@@ -951,6 +957,7 @@ export const useVoiceStore = create<VoiceState>()(
         soundEffectVolume: state.soundEffectVolume,
         messageSoundAllChannels: state.messageSoundAllChannels,
         pipEnabled: state.pipEnabled,
+        hideNonVideoParticipants: state.hideNonVideoParticipants,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
         // Per-user preferences (Map → plain object for JSON)
