@@ -1,31 +1,36 @@
-name: Verify Fastify proxy upgrade on Linux
+name: Measure Fastify 5 release image
 on:
   push:
     branches: [codex/fastify5-linux-check]
+    paths: [.github/workflows/verify-fastify5-linux.yml]
 permissions:
   contents: read
 jobs:
-  upgrade:
+  scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          ref: 0d408ae177654e3850cf819076dda2c9f86c9e25
           persist-credentials: false
-      - name: Build legacy and candidate images
+      - name: Build the amd64 release candidate locally
+        run: docker build --platform linux/amd64 --build-arg BACKSPACE_COMMIT=0d408ae -t backspace:scan .
+      - name: Scan for fixable high and critical findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: backspace:scan
+          ignore-unfixed: true
+          format: json
+          output: trivy-image.json
+          severity: HIGH,CRITICAL
+      - name: Report the release gate baseline
         run: |
-          legacy_dir="$RUNNER_TEMP/backspace-fastify4"
-          mkdir -p "$legacy_dir"
-          git archive c832007dea7fff2cc157d71ec19092f250e10653 | tar -x -C "$legacy_dir"
-          docker build --tag backspace:fastify5-legacy "$legacy_dir"
-          docker build --tag backspace:fastify5-smoke .
-          docker pull caddy:2.11.1-alpine
-      - name: Verify the bundled proxy transition
-        env:
-          LEGACY_IMAGE: backspace:fastify5-legacy
-          CANDIDATE_IMAGE: backspace:fastify5-smoke
-        run: bash scripts/verify-fastify5-compose-linux.sh
+          jq -e '.ArtifactType == "container_image" and (.Results | type == "array")' trivy-image.json
+          jq -r '[.Results[] | .Vulnerabilities[]?] |
+            "Fixable HIGH/CRITICAL findings: \(length)",
+            (.[] | [.VulnerabilityID, .PkgName, .InstalledVersion, .FixedVersion, .Severity] | @tsv)' trivy-image.json
