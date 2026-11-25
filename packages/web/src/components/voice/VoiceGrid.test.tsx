@@ -127,8 +127,12 @@ describe('VoiceGrid participant strip', () => {
     expect(document.activeElement).toBe(toggleBtn);
   });
 
-  it('hides participants without active camera or screen share when hideNonVideoParticipants is enabled', () => {
-    useVoiceStore.setState({ focusedParticipantId: null, hideNonVideoParticipants: true });
+  it('hides participants without active camera or screen share and keeps watched screen shares visible', () => {
+    useVoiceStore.setState({
+      focusedParticipantId: null,
+      hideNonVideoParticipants: true,
+      watchingStreams: new Set(['carol']),
+    });
     const liveScreenTrack = { readyState: 'live', addEventListener: vi.fn(), removeEventListener: vi.fn(), getSettings: () => ({}) };
     render(
       <VoiceGrid
@@ -143,6 +147,46 @@ describe('VoiceGrid participant strip', () => {
     expect(screen.getByText('ada')).toBeInTheDocument();
     expect(screen.queryByText('bob')).not.toBeInTheDocument();
     expect(screen.getByText(/carol/i)).toBeInTheDocument();
+  });
+
+  it('clears focus when the focused participant is filtered out and keeps focus on the filter toggle', async () => {
+    useVoiceStore.setState({ focusedParticipantId: 'bob', hideNonVideoParticipants: false });
+    const participants = [
+      participant('ada', true, { isCameraOn: true }),
+      participant('bob', false),
+    ];
+
+    function Harness() {
+      const toggle = useVoiceStore((s) => s.toggleHideNonVideoParticipants);
+      const hidden = useVoiceStore((s) => s.hideNonVideoParticipants);
+      return (
+        <>
+          <button type="button" onClick={toggle} aria-pressed={hidden}>
+            Toggle non-video
+          </button>
+          <VoiceGrid participants={participants} />
+        </>
+      );
+    }
+
+    render(<Harness />);
+    expect(useVoiceStore.getState().focusedParticipantId).toBe('bob');
+
+    const toggleBtn = screen.getByRole('button', { name: /toggle non-video/i });
+    toggleBtn.focus();
+    await userEvent.click(toggleBtn);
+
+    // Bob is filtered out, focus is cleared, and keyboard focus stays on the toggle
+    expect(useVoiceStore.getState().focusedParticipantId).toBeNull();
+    expect(screen.queryByText('bob')).not.toBeInTheDocument();
+    expect(screen.getByText('ada')).toBeInTheDocument();
+    expect(document.activeElement).toBe(toggleBtn);
+
+    // Disabling the filter does not jump back to the previously cleared focus
+    await userEvent.click(toggleBtn);
+    expect(useVoiceStore.getState().focusedParticipantId).toBeNull();
+    expect(screen.getByText('bob')).toBeInTheDocument();
+    expect(document.activeElement).toBe(toggleBtn);
   });
 
   it('shows an empty-state fallback with a button to show all participants when no one has video', async () => {

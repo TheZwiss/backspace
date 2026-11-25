@@ -71,6 +71,18 @@ export function VoiceGrid({ participants, fullscreen = false, chromeRevealed = t
     }
   }, [tiles, focusedParticipantId, setFocusedParticipant]);
 
+  // Clear focus if the focused participant is filtered out by hideNonVideoParticipants
+  // so disabling the filter later does not unexpectedly jump back to an old focus target.
+  useEffect(() => {
+    if (
+      hideNonVideoParticipants &&
+      focusedParticipantId &&
+      !visibleTiles.some((t) => t.key === focusedParticipantId)
+    ) {
+      setFocusedParticipant(null);
+    }
+  }, [hideNonVideoParticipants, focusedParticipantId, visibleTiles, setFocusedParticipant]);
+
   if (tiles.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">

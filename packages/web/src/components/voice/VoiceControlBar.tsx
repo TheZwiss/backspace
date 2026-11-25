@@ -9,7 +9,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
 import { VOICE_CHROME_ATTR } from '../../hooks/usePointerReveal';
 
-const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
+const btnBase = 'w-10 h-10 shrink-0 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
 const btnActive = (color: string) => `${btnBase} bg-${color}/20 text-${color} hover:bg-${color}/30`;
 const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surface-elevated`;
@@ -113,7 +113,7 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
       className={containerClassName}
       {...(voiceFullscreen ? { [VOICE_CHROME_ATTR]: '' } : {})}
     >
-      <div className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
+      <div className="pointer-events-auto flex items-center gap-1.5 max-w-[calc(100vw-1rem)] overflow-x-auto no-scrollbar rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button
           onClick={handleMute}
@@ -217,8 +217,10 @@ export function VoiceControlBar({ revealed = false }: { revealed?: boolean }) {
 
         {/* Hide Non-Video Participants Toggle */}
         <button
+          type="button"
           onClick={toggleHideNonVideoParticipants}
           aria-pressed={hideNonVideoParticipants}
+          aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
           className={hideNonVideoParticipants
             ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault

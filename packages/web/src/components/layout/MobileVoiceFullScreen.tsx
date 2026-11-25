@@ -304,7 +304,7 @@ export function MobileVoiceFullScreen() {
             <p className="text-[11px] text-txt-tertiary truncate">{spaceName}</p>
           )}
         </div>
-        <span className="text-xs text-txt-tertiary">
+        <span className="text-xs text-txt-tertiary shrink-0 whitespace-nowrap">
           {t('voice:mobileCall.connectedCount', { count: participants.length })}
         </span>
         <button
@@ -313,7 +313,7 @@ export function MobileVoiceFullScreen() {
           aria-pressed={hideNonVideoParticipants}
           aria-label={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
           title={hideNonVideoParticipants ? t('voice:controls.showNonVideo') : t('voice:controls.hideNonVideo')}
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+          className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center transition-colors ${
             hideNonVideoParticipants
               ? 'bg-surface-elevated text-txt-primary'
               : 'text-txt-secondary hover:text-txt-primary'
