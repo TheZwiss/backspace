@@ -48,20 +48,25 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/chat.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.12.0/docs/screenshots/chat.webp</image>
       <caption>Text channels with replies, reactions, and typing indicators</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/voice-video-grid.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.12.0/docs/screenshots/voice-video-grid.webp</image>
       <caption>Voice and video calls with screen sharing</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.11.0/docs/screenshots/user-discovery.webp</image>
+      <image>https://raw.githubusercontent.com/TheZwiss/backspace/v1.12.0/docs/screenshots/user-discovery.webp</image>
       <caption>Discover users across federated instances</caption>
     </screenshot>
   </screenshots>
 
   <releases>
+    <release version="1.12.0" date="2026-11-25">
+      <description>
+        <p>Drop files anywhere in a chat, save stickers straight from reactions, and mention someone from their message. Focused fullscreen now gives cameras and screen shares the full view while keeping call controls accessible.</p>
+      </description>
+    </release>
     <release version="1.11.0" date="2026-10-12">
       <description>
         <p>Everyone now has a personal sticker collection: upload your own images, send them in channels and direct messages, and react with them. Members can poke each other in a channel, and a space owner can give the owner group in the member list its own title. On Linux, a screen share with system audio no longer carries the voices Backspace plays.</p>
