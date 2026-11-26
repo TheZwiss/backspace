@@ -252,6 +252,16 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   directory_unreachable: 'The directory could not be reached',
   directory_private_space: 'A private space cannot be listed in the directory',
   directory_requires_discovery: 'Turn on space discovery before enabling the directory',
+
+  // Message translation
+  translation_disabled: 'Message translation is not enabled on this instance',
+  translation_consent_required: 'Confirm provider data transfer before translating messages',
+  translation_provider_invalid: 'Invalid translation provider configuration',
+  translation_unsafe_endpoint: 'Translation provider URL must be a public HTTPS endpoint',
+  translation_text_too_long: 'Selected message exceeds the {{max}}-character translation limit',
+  translation_provider_failed: 'The translation provider failed to process the request',
+  translation_protected_content: 'Translation failed because protected links, code or mentions were altered',
+  translation_storage_error: 'Translation storage or encryption failed',
 };
 
 function fillPlaceholders(text: string, details: ErrorDetails | undefined): string {

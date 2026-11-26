@@ -40,6 +40,8 @@ import { useTransferStore } from '../../stores/transferStore';
 import { useMessageJump } from './messageJumpContext';
 import { ReactionPill } from './ReactionPill';
 import { memberNameColor } from '../../utils/memberGroups';
+import { TranslationText } from '../../features/translation/TranslationText';
+import { useMessageTranslation } from '../../features/translation/useMessageTranslation';
 
 interface MessageProps {
   message: MessageWithUser | PendingMessageView;
@@ -312,6 +314,15 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     ? (message.content?.trim() ?? null)
     : imageEmbedSourceUrl;
 
+  const translation = useMessageTranslation({
+    origin: messageOrigin,
+    channelId: isDmMessage ? undefined : message.channelId,
+    dmChannelId: isDmMessage ? dmChannelId : undefined,
+    messageId: message.id,
+    text: message.content ?? '',
+    enabled: !pending && !isEditing && !isSticker && !isGifOnly && !imageEmbedSourceUrl,
+  });
+
   const closeReactionPicker = useCallback(() => setReactionPicker(null), []);
 
   const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
@@ -389,6 +400,15 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         setReactionPicker('row');
       },
       onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
+      onTranslate: translation.translate,
+      translationStatus: translation.canTranslate
+        ? {
+            isTranslated: translation.isTranslated,
+            showOriginal: translation.showOriginal,
+            isCollapsed: translation.isCollapsed,
+            toggleCollapse: translation.toggleCollapse,
+          }
+        : undefined,
     });
 
     if (items.length === 0) return;
@@ -655,10 +675,17 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
               <>
                 {message.content && (
                   <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
-                    {isSticker
-                      ? <StickerMessage token={message.content} />
-                      : <MarkdownRenderer content={message.content} channelId={mentionChannelId} />}
-                    {message.editedAt && (
+                    {isSticker ? (
+                      <StickerMessage token={message.content} />
+                    ) : (
+                      <TranslationText translation={translation}>
+                        <MarkdownRenderer content={message.content} channelId={mentionChannelId} />
+                        {message.editedAt && (
+                          <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
+                        )}
+                      </TranslationText>
+                    )}
+                    {isSticker && message.editedAt && (
                       <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">{t('chat:message.edited')}</span>
                     )}
                   </div>

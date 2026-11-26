@@ -1,0 +1,61 @@
+{
+  "translate": "Nachricht übersetzen",
+  "translating": "Wird übersetzt…",
+  "translated": "Übersetzt",
+  "retry": "Erneut versuchen",
+  "skippedNotText": "Keine übersetzbaren Textinhalte in dieser Nachricht gefunden.",
+  "expandTranslation": "Übersetzung anzeigen",
+  "collapseTranslation": "Übersetzung ausblenden",
+  "viewOriginal": "Original anzeigen",
+  "viewTranslation": "Übersetzung anzeigen",
+  "targetLanguage": "Zielsprache",
+  "showOriginal": "Originalnachricht sichtbar lassen",
+  "showOriginalHelp": "Übersetzten Text unter der Originalnachricht anzeigen statt sie zu ersetzen.",
+  "consentModal": {
+    "title": "Nachricht übersetzen",
+    "disclosure": "Bitte bestätige vor der ersten Übersetzung, dass diese Instanz den ausgewählten Nachrichtentext an {{provider}} ({{host}}) senden darf.",
+    "minimalData": "Es werden nur die Zielsprache und der maskierte Nachrichtentext gesendet. Autor, Kanal, Space und Verlauf werden niemals übertragen.",
+    "revokeAnytime": "Du kannst deine Zustimmung jederzeit unter Benutzereinstellungen → Privatsphäre widerrufen oder den Cache leeren.",
+    "confirm": "Erlauben & übersetzen"
+  },
+  "privacySection": {
+    "title": "Nachrichtenübersetzung",
+    "consentLabel": "Nachrichtenübersetzung auf dieser Instanz erlauben",
+    "consentDescription": "Wenn du hier eine Nachricht übersetzt, wird ihr Text an {{provider}} ({{host}}) gesendet.",
+    "cacheHint": "Angeforderte Übersetzungen werden auf dieser Instanz pro Konto verschlüsselt gespeichert.",
+    "clearCache": "Gespeicherte Übersetzungen löschen",
+    "cacheCleared": "Gespeicherte Übersetzungen gelöscht"
+  },
+  "admin": {
+    "title": "Nachrichtenübersetzung",
+    "description": "Konfiguriere einen serverseitigen KI-Übersetzungsanbieter für diese Instanz. Standardmäßig deaktiviert. Nachrichten werden nur auf ausdrückliche Aktion und nach Zustimmung gesendet.",
+    "enableLabel": "Nachrichtenübersetzung aktivieren",
+    "enableDescription": "Mitgliedern auf dieser Instanz erlauben, einzelne Nachrichten bei Bedarf zu übersetzen.",
+    "providerLabel": "Anzeigename des Anbieters",
+    "protocol": "API-Protokoll",
+    "protocols": {
+      "openaiChat": "OpenAI (Chat-Completions-Schnittstelle)",
+      "openaiResponses": "OpenAI (Responses-Schnittstelle)",
+      "anthropic": "Anthropic (Messages-Schnittstelle)",
+      "gemini": "Google Gemini (GenerateContent-Schnittstelle)"
+    },
+    "baseUrl": "HTTPS-API-Basis-URL",
+    "baseUrlHelp": "Muss ein öffentlicher HTTPS-Endpunkt sein (private, Loopback- und Link-Local-Hosts sind blockiert).",
+    "apiKey": "API-Schlüssel",
+    "keyStoredPlaceholder": "Verschlüsselter Schlüssel gespeichert — leer lassen, um ihn zu behalten",
+    "keyRequiredPlaceholder": "API-Schlüssel des Anbieters eingeben",
+    "model": "Modell-ID",
+    "modelPlaceholder": "z. B. gpt-4o-mini",
+    "fetchModels": "Modelle laden",
+    "fetchingModels": "Wird geladen…",
+    "testConnection": "Verbindung testen",
+    "testing": "Wird getestet…",
+    "testPassed": "Verbunden ({{ms}} ms) — {{sample}}",
+    "clearCache": "Instanz-Cache leeren",
+    "cacheCleared": "Übersetzungs-Cache der Instanz geleert",
+    "removeProvider": "Anbieter entfernen",
+    "removed": "Übersetzungsanbieter entfernt",
+    "save": "Anbieter speichern",
+    "saved": "Übersetzungseinstellungen gespeichert"
+  }
+}

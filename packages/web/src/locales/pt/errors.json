@@ -227,5 +227,13 @@
   "sticker_not_local": "Esta figurinha está guardada em outro servidor, por isso não foi adicionada à sua coleção.",
   "sticker_not_found": "Essa figurinha não existe mais.",
   "sticker_collection_full": "Sua coleção está cheia com {{max}} figurinhas. Remova uma para adicionar outra.",
-  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle."
+  "sticker_name_invalid": "O nome da figurinha pode ter de 1 a {{max}} caracteres em uma linha, com pelo menos um caractere visível e sem caracteres de controle.",
+  "translation_disabled": "A tradução de mensagens está desativada nesta instância.",
+  "translation_consent_required": "Confirme o aviso do provedor de tradução antes de traduzir mensagens.",
+  "translation_provider_invalid": "Verifique as configurações e a chave de API do provedor de tradução.",
+  "translation_unsafe_endpoint": "O endpoint de tradução deve ser um endereço HTTPS público.",
+  "translation_text_too_long": "Mensagens com mais de {{max}} caracteres não podem ser traduzidas.",
+  "translation_provider_failed": "O provedor de tradução não conseguiu concluir a solicitação.",
+  "translation_protected_content": "A tradução foi rejeitada porque o conteúdo protegido foi alterado.",
+  "translation_storage_error": "Não foi possível acessar as configurações ou o cache de tradução."
 }

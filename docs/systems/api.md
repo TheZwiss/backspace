@@ -696,6 +696,22 @@ GET /utils/metadata  ?url= → { title?, description?, image?, siteName? }
 GET /health          (public) → { status: 'ok', timestamp }
 ```
 
+## Message Translation (`routes/translation.ts`) — auth / admin
+```
+GET    /admin/translation          (admin) → AdminTranslationProviderView
+PUT    /admin/translation          (admin) { enabled, providerLabel, protocol, baseUrl, model, apiKey? } → AdminTranslationProviderView
+DELETE /admin/translation          (admin) → { success: true }
+DELETE /admin/translation/cache    (admin) → { cleared: number }
+POST   /admin/translation/models   (admin, 20/min) { protocol, baseUrl, apiKey? } → { models: string[] }
+POST   /admin/translation/test     (admin, 20/min) { protocol, baseUrl, model, apiKey? } → { latencyMs, sample }
+
+GET    /translation/status         (auth) → UserTranslationStatusResponse
+PUT    /translation/preferences    (auth) { consent?, providerFingerprint?, targetLanguage?, showOriginal? } → UserTranslationStatusResponse
+DELETE /translation/cache          (auth) → { cleared: number }
+POST   /translation/translate      (auth, 60/min) { channelId?, dmChannelId?, messageId, targetLanguage?, providerFingerprint } → TranslateMessageResponse
+```
+All responses set `Cache-Control: no-store`. `POST /translation/translate` requires explicit prior consent matching the active `providerFingerprint` (`403 translation_consent_required` otherwise), verifies `VIEW_CHANNEL` + `READ_MESSAGE_HISTORY` (or DM membership) on the authoritative stored message, masks code/URLs/emails/mentions/stickers, and sends only `{ targetLanguage, untrustedText }` over SSRF-validated HTTPS. See [translation.md](translation.md).
+
 ## Security reporting (`routes/cspReport.ts`), public
 ```
 POST /csp-report     (no auth) -> 204

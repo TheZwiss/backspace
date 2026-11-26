@@ -1,0 +1,61 @@
+{
+  "translate": "Translate Message",
+  "translating": "Translating…",
+  "translated": "Translated",
+  "retry": "Retry",
+  "skippedNotText": "No translatable text found in this message.",
+  "expandTranslation": "Show translation",
+  "collapseTranslation": "Hide translation",
+  "viewOriginal": "Show original",
+  "viewTranslation": "Show translation",
+  "targetLanguage": "Target language",
+  "showOriginal": "Keep original message visible",
+  "showOriginalHelp": "Show the translated text below the original message instead of replacing it.",
+  "consentModal": {
+    "title": "Translate Message",
+    "disclosure": "Before translating, confirm that this instance may send the selected message text to {{provider}} ({{host}}).",
+    "minimalData": "Only the target language and masked message text are sent. Author, channel, space, and message history are never included.",
+    "revokeAnytime": "You can withdraw consent or clear your cached translations anytime in User Settings → Privacy.",
+    "confirm": "Allow & Translate"
+  },
+  "privacySection": {
+    "title": "Message Translation",
+    "consentLabel": "Allow message translation on this instance",
+    "consentDescription": "When you translate a message here, its text is sent to {{provider}} ({{host}}).",
+    "cacheHint": "Translations you request are encrypted per account on this instance.",
+    "clearCache": "Clear cached translations",
+    "cacheCleared": "Cached translations cleared"
+  },
+  "admin": {
+    "title": "Message Translation",
+    "description": "Configure one server-side AI translation provider for this instance. Off by default. Users only send a message when they explicitly translate it and accept the provider disclosure.",
+    "enableLabel": "Enable message translation",
+    "enableDescription": "Allow members on this instance to translate individual messages on demand.",
+    "providerLabel": "Provider display name",
+    "protocol": "API protocol",
+    "protocols": {
+      "openaiChat": "OpenAI (Chat Completions API)",
+      "openaiResponses": "OpenAI (Responses API)",
+      "anthropic": "Anthropic (Messages API)",
+      "gemini": "Google Gemini (GenerateContent API)"
+    },
+    "baseUrl": "HTTPS API Base URL",
+    "baseUrlHelp": "Must be a public HTTPS endpoint (private, loopback, and link-local hosts are blocked).",
+    "apiKey": "API Key",
+    "keyStoredPlaceholder": "Encrypted key stored on server — leave blank to keep",
+    "keyRequiredPlaceholder": "Enter provider API key",
+    "model": "Model ID",
+    "modelPlaceholder": "e.g. gpt-4o-mini",
+    "fetchModels": "Load models",
+    "fetchingModels": "Loading…",
+    "testConnection": "Test connection",
+    "testing": "Testing…",
+    "testPassed": "Connected ({{ms}} ms) — {{sample}}",
+    "clearCache": "Clear instance cache",
+    "cacheCleared": "Instance translation cache cleared",
+    "removeProvider": "Remove provider",
+    "removed": "Translation provider removed",
+    "save": "Save Provider",
+    "saved": "Translation settings saved"
+  }
+}

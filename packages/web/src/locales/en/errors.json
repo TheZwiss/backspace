@@ -227,5 +227,13 @@
   "sticker_not_local": "This sticker is stored on another server, so it was not added to your collection.",
   "sticker_not_found": "That sticker no longer exists.",
   "sticker_collection_full": "Your collection is full at {{max}} stickers. Remove one to add another.",
-  "sticker_name_invalid": "Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters."
+  "sticker_name_invalid": "Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.",
+  "translation_disabled": "Message translation is turned off on this instance.",
+  "translation_consent_required": "Confirm the translation provider disclosure before translating messages.",
+  "translation_provider_invalid": "Check the translation provider settings and API key.",
+  "translation_unsafe_endpoint": "The translation endpoint must be a public HTTPS address.",
+  "translation_text_too_long": "Messages longer than {{max}} characters cannot be translated.",
+  "translation_provider_failed": "The translation provider could not complete the request.",
+  "translation_protected_content": "The translation was rejected because placeholders or protected content were altered.",
+  "translation_storage_error": "Translation settings or cache could not be accessed."
 }

@@ -34,6 +34,7 @@ import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
 import { InstanceUpdateToast } from '../ui/InstanceUpdateToast';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
+import { TranslationConsentModal } from '../../features/translation/TranslationConsentModal';
 import { useAuth } from '../../hooks/useAuth';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -425,6 +426,7 @@ export function AppLayout() {
         <GroupDmSettings />
         <UserProfileModal />
         <ConnectAndJoinModal />
+        <TranslationConsentModal />
         {/* MemberRolesModal is desktop-only: it opens from the profile card's
             Edit Roles, and its two-pane layout has no mobile form. */}
         <IncomingCallModal />
@@ -477,6 +479,7 @@ export function AppLayout() {
       <GroupDmSettings />
       <UserProfileModal />
       <ConnectAndJoinModal />
+      <TranslationConsentModal />
       <MemberRolesModal />
       <IncomingCallModal />
       <ImagePreview />

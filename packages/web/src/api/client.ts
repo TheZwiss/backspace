@@ -1,4 +1,13 @@
 import type { PersonalSticker } from '@backspace/shared/src/stickers';
+import type {
+  AdminTranslationProbeInput,
+  AdminTranslationProviderInput,
+  AdminTranslationProviderView,
+  TranslateMessageRequest,
+  TranslateMessageResponse,
+  UpdateTranslationPreferencesRequest,
+  UserTranslationStatusResponse,
+} from '@backspace/shared/src/translation';
 import { isErrorCode, type ErrorCode, type ErrorDetails } from '@backspace/shared/src/errors';
 import type {
   NotificationSetting,
@@ -437,6 +446,21 @@ export class BackspaceApiClient {
       set: (enabled: boolean) => Promise<TelemetryStatus>;
       preview: () => Promise<TelemetryPayload>;
     };
+    translation: {
+      get: () => Promise<AdminTranslationProviderView>;
+      save: (data: AdminTranslationProviderInput) => Promise<AdminTranslationProviderView>;
+      remove: () => Promise<{ success: boolean }>;
+      clearCache: () => Promise<{ cleared: number }>;
+      listModels: (data: AdminTranslationProbeInput) => Promise<{ models: string[] }>;
+      test: (data: AdminTranslationProbeInput) => Promise<{ latencyMs: number; sample: string }>;
+    };
+  };
+
+  readonly translation: {
+    status: () => Promise<UserTranslationStatusResponse>;
+    updatePreferences: (data: UpdateTranslationPreferencesRequest) => Promise<UserTranslationStatusResponse>;
+    clearCache: () => Promise<{ cleared: number }>;
+    translateMessage: (data: TranslateMessageRequest) => Promise<TranslateMessageResponse>;
   };
 
   stickers: {
@@ -988,6 +1012,21 @@ export class BackspaceApiClient {
         set: (enabled) => request<TelemetryStatus>('PUT', '/admin/telemetry', { enabled }),
         preview: () => request<TelemetryPayload>('GET', '/admin/telemetry/preview'),
       },
+      translation: {
+        get: () => request<AdminTranslationProviderView>('GET', '/admin/translation'),
+        save: (data) => request<AdminTranslationProviderView>('PUT', '/admin/translation', data),
+        remove: () => request<{ success: boolean }>('DELETE', '/admin/translation'),
+        clearCache: () => request<{ cleared: number }>('DELETE', '/admin/translation/cache'),
+        listModels: (data) => request<{ models: string[] }>('POST', '/admin/translation/models', data),
+        test: (data) => request<{ latencyMs: number; sample: string }>('POST', '/admin/translation/test', data),
+      },
+    };
+
+    this.translation = {
+      status: () => request<UserTranslationStatusResponse>('GET', '/translation/status'),
+      updatePreferences: (data) => request<UserTranslationStatusResponse>('PUT', '/translation/preferences', data),
+      clearCache: () => request<{ cleared: number }>('DELETE', '/translation/cache'),
+      translateMessage: (data) => request<TranslateMessageResponse>('POST', '/translation/translate', data),
     };
   }
 }

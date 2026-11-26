@@ -281,6 +281,7 @@
       "federation": "Federation",
       "streaming": "Streaming",
       "storage": "Storage",
+      "translation": "Translation",
       "users": "Users",
       "updates": "Updates",
       "telemetry": "Say hi"

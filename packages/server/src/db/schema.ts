@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, blob, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
@@ -807,3 +807,36 @@ export const personalStickers = sqliteTable('personal_stickers', {
   name: text('name').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({ pk: primaryKey({ columns: [table.userId, table.stickerId] }) }));
+
+// Singleton (id = 1) administrator-configured translation provider for this instance.
+// Off by default; API key is AES-256-GCM encrypted at rest and never returned to clients.
+export const aiTranslationProvider = sqliteTable('ai_translation_provider', {
+  id: integer('id').primaryKey(),
+  enabled: integer('enabled').notNull().default(0),
+  providerLabel: text('provider_label').notNull(),
+  protocol: text('protocol').notNull(),
+  baseUrl: text('base_url').notNull(),
+  model: text('model').notNull(),
+  encryptedApiKey: blob('encrypted_api_key', { mode: 'buffer' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const aiTranslationPreferences = sqliteTable('ai_translation_preferences', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  consentedProviderFingerprint: text('consented_provider_fingerprint'),
+  consentedAt: integer('consented_at'),
+  targetLanguage: text('target_language').notNull().default('en'),
+  showOriginal: integer('show_original').notNull().default(1),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const aiTranslationCache = sqliteTable('ai_translation_cache', {
+  instanceId: text('instance_id').notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  resultKey: text('result_key').notNull(),
+  encrypted: blob('encrypted', { mode: 'buffer' }).notNull(),
+  usedAt: integer('used_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.resultKey] }),
+  lruIdx: index('idx_ai_translation_cache_lru').on(table.userId, table.usedAt),
+}));

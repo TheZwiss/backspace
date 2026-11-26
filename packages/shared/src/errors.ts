@@ -275,6 +275,16 @@ export const ERROR_CODES = [
   'sticker_not_found',
   'sticker_collection_full',
   'sticker_name_invalid',
+
+  // Message translation
+  'translation_disabled',
+  'translation_consent_required',
+  'translation_provider_invalid',
+  'translation_unsafe_endpoint',
+  'translation_text_too_long',
+  'translation_provider_failed',
+  'translation_protected_content',
+  'translation_storage_error',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

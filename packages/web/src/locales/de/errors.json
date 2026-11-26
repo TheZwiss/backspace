@@ -227,5 +227,13 @@
   "sticker_not_local": "Dieser Sticker liegt auf einem anderen Server und wurde deshalb nicht zu deiner Sammlung hinzugefügt.",
   "sticker_not_found": "Diesen Sticker gibt es nicht mehr.",
   "sticker_collection_full": "Deine Sammlung ist mit {{max}} Stickern voll. Entferne einen, um einen neuen hinzuzufügen.",
-  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen."
+  "sticker_name_invalid": "Stickernamen dürfen 1 bis {{max}} Zeichen in einer Zeile haben, mindestens ein sichtbares Zeichen und keine Steuerzeichen.",
+  "translation_disabled": "Die Nachrichtenübersetzung ist auf dieser Instanz deaktiviert.",
+  "translation_consent_required": "Bitte bestätige zuerst den Hinweis zum Übersetzungsanbieter.",
+  "translation_provider_invalid": "Überprüfe die Einstellungen und den API-Schlüssel des Übersetzungsanbieters.",
+  "translation_unsafe_endpoint": "Der Übersetzungsendpunkt muss eine öffentliche HTTPS-Adresse sein.",
+  "translation_text_too_long": "Nachrichten mit mehr als {{max}} Zeichen können nicht übersetzt werden.",
+  "translation_provider_failed": "Der Übersetzungsanbieter konnte die Anfrage nicht abschließen.",
+  "translation_protected_content": "Die Übersetzung wurde abgelehnt, da geschützte Platzhalter verändert wurden.",
+  "translation_storage_error": "Auf die Übersetzungseinstellungen oder den Cache konnte nicht zugegriffen werden."
 }

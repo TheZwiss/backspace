@@ -718,3 +718,13 @@ Per-remote credential this user's client presents when registering or logging in
 **Lifecycle:** created get-or-create with `onConflictDoNothing` + re-read (first-writer-wins — a racing write never replaces a stored secret). Deleted by `tombstoneUser` (explicitly: a tombstone keeps the `users` row, so the CASCADE never fires and live credentials would otherwise outlive the account) and by `POST /api/users/@me/federation-identity/delete` in `soft`/`full` mode. **Not** deleted in `leave` mode — the remote account survives and keeps authenticating with the secret.
 
 **Migration note:** `0011` is a bare `CREATE TABLE`. It reads and rewrites nothing, so it is forward-safe on a populated database and idempotent on re-run. Restoring a **pre-**`0011` backup into a **post-**`0011` deployment works — `migrate()` re-applies `0011` on boot — but any credential rows written after the snapshot are lost, and the client will mint fresh secrets for those origins. Recovery is automatic while a remote token is still valid (`provisioned_at` comes back NULL, so `ensureRemoteCredential` rotates the remote onto the new secret); otherwise the user re-authenticates through the per-instance login form once. See `deployment.md`.
+
+---
+
+## Message Translation Tables (0032)
+
+Migration `0032_ai_translation` adds three tables and the `purge_deleted_user_translation` trigger for opt-in single-message translation (see [translation.md](translation.md)):
+
+- **`ai_translation_provider`** (`id INTEGER PK CHECK (id = 1)`): Singleton administrator-configured provider row (`enabled` default `0`, `provider_label`, `protocol`, `base_url`, `model`, `encrypted_api_key BLOB` AES-256-GCM bound to `instance_id`, `updated_at`).
+- **`ai_translation_preferences`** (`user_id TEXT PK FK → users.id CASCADE`): Per-account consent and display settings on this instance (`consented_provider_fingerprint`, `consented_at`, `target_language` default `'en'`, `show_original` default `1`, `updated_at`).
+- **`ai_translation_cache`** (`PRIMARY KEY (user_id, result_key)`, `FK user_id → users.id CASCADE`): Per-account encrypted translation cache (`provider_fingerprint`, `encrypted_value BLOB`, `byte_length`, `created_at`, `accessed_at`), indexed on `(user_id, accessed_at)`. Purged on consent withdrawal, provider endpoint/model change, user soft-delete (`purge_deleted_user_translation` trigger on `users.is_deleted = 1`), or hard delete.

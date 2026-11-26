@@ -460,6 +460,7 @@
       "federation": "Federation",
       "streaming": "Streaming",
       "storage": "Storage",
+      "translation": "Translation",
       "updates": "Updates",
       "users": "Users",
       "telemetry": "Say hi"
