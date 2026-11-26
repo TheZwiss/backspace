@@ -2,7 +2,8 @@ import { isVisibleSingleLine } from './constants.js';
 
 /** Namespaced values reuse message/reaction transport without colliding with native emoji. */
 export const STICKER_PREFIX = 'sticker:';
-export const MAX_STICKER_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_STICKER_BYTES = 5 * 1024 * 1024;
+export const MAX_STICKER_BYTES = DEFAULT_MAX_STICKER_BYTES;
 /** Longest collection name, after trimming. */
 export const MAX_STICKER_NAME_LENGTH = 100;
 /** Most stickers one account keeps in its collection. */
@@ -57,3 +58,141 @@ export function stickerIdOf(value: string): string | null {
   if (!url) return null;
   return /\/api\/stickers\/assets\/([a-f0-9]{64})\.webp$/.exec(url)?.[1] ?? null;
 }
+
+/** Longest sticker pack name. */
+export const MAX_STICKER_PACK_NAME_LENGTH = 100;
+
+/** Longest sticker pack description. */
+export const MAX_STICKER_PACK_DESC_LENGTH = 500;
+/** Maximum number of stickers per sticker pack. */
+export const MAX_STICKERS_PER_PACK = 100;
+
+export type StickerPackOriginType = 'source' | 'replica';
+export type StickerPackStatus =
+  | 'draft'
+  | 'pending_review'
+  | 'approved'
+  | 'rejected'
+  | 'deleted'
+  | 'disabled'
+  | 'blocked';
+
+export interface StickerPackSummary {
+  id: string;
+  /** Canonical origin-qualified pack identity (`<origin>/api/sticker-packs/<sourcePackId>`). */
+  qualifiedId?: string;
+  name: string;
+  description: string | null;
+  creatorId: string | null;
+  creatorName: string | null;
+  coverAssetId: string | null;
+  coverUrl: string | null;
+  originType: StickerPackOriginType;
+  sourceInstance: string | null;
+  sourcePackId: string | null;
+  currentVersion: number;
+  status: StickerPackStatus;
+  itemCount: number;
+  isInstalled?: boolean;
+  reviewNotes?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StickerPackItem {
+  id: string;
+  packId: string;
+  versionId: string;
+  assetId: string;
+  name: string;
+  token: string;
+  sortOrder: number;
+  status: 'active' | 'deleted';
+  createdAt: number;
+}
+
+export interface StickerPackDetail extends StickerPackSummary {
+  reviewNotes: string | null;
+  reviewedBy: string | null;
+  reviewedAt: number | null;
+  items: StickerPackItem[];
+}
+
+export interface StickerPeerPolicy {
+  id: string;
+  peerOrigin: string;
+  policy: 'allow' | 'block';
+  autoSync: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return end === value.length ? value : value.slice(0, end);
+}
+
+/**
+ * Formats a canonical origin-qualified sticker pack identity so replicated packs
+ * never lose provenance or collide across peers.
+ */
+export function qualifyStickerPackId(origin: string, sourcePackId: string): string {
+  return `${stripTrailingSlashes(origin)}/api/sticker-packs/${sourcePackId}`;
+}
+
+/**
+ * Parses a canonical origin-qualified sticker pack identity, returning null when malformed.
+ */
+export function parseQualifiedStickerPackId(qualifiedId: string): { origin: string; packId: string } | null {
+  try {
+    const parsed = new URL(qualifiedId);
+    if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+    if (parsed.search || parsed.hash) return null;
+    const prefix = '/api/sticker-packs/';
+    if (!parsed.pathname.startsWith(prefix)) return null;
+    const packId = parsed.pathname.slice(prefix.length);
+    if (!packId || packId.includes('/')) return null;
+    return { origin: parsed.origin, packId };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves a sticker asset URL to a local origin endpoint if the asset is known or local,
+ * otherwise falls back to the canonical token URL.
+ */
+export function resolveStickerAssetUrl(token: string, localOrigin?: string): string | null {
+  const assetId = stickerIdOf(token);
+  if (assetId && localOrigin) {
+    const origin = stripTrailingSlashes(localOrigin);
+    return `${origin}/api/stickers/assets/${assetId}.webp`;
+  }
+  return stickerUrl(token);
+}
+
+/**
+ * Returns the preview / thumbnail URL for a sticker token or asset URL, appending ?preview=1.
+ */
+export function stickerPreviewUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const url = stickerUrl(value) || (value.startsWith('http') && value.includes('/api/stickers/assets/') ? value : null);
+  if (!url) return null;
+  return `${url}${url.includes('?') ? '&' : '?'}preview=1`;
+}
+
+/**
+ * Resolves a sticker asset preview URL to a local origin endpoint if localOrigin is provided,
+ * otherwise returns the preview URL from the canonical token URL.
+ */
+export function resolveStickerPreviewUrl(token: string, localOrigin?: string): string | null {
+  const url = resolveStickerAssetUrl(token, localOrigin);
+  if (!url) return null;
+  return `${url}${url.includes('?') ? '&' : '?'}preview=1`;
+}
+

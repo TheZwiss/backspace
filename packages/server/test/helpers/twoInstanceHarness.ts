@@ -228,6 +228,7 @@ async function spawnOnPort(port: number, opts: SpawnInstanceOptions): Promise<Sp
     DOMAIN: opts.domain,
     DB_PATH: opts.dbPath,
     STORAGE_PATH: opts.storagePath,
+    UPLOAD_DIR: process.env.UPLOAD_DIR ?? opts.storagePath,
     JWT_SECRET: opts.jwtSecret,
     LIVEKIT_URL: opts.livekit?.url ?? '',
     LIVEKIT_API_KEY: opts.livekit?.apiKey ?? '',

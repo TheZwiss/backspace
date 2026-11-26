@@ -15,6 +15,7 @@ import { registerApprovalRoutes } from './federation/handlers/approvals.js';
 import { registerRelayRoutes } from './federation/handlers/relay.js';
 import { registerLookupRoutes } from './federation/handlers/lookup.js';
 import { registerAttachRoutes } from './federation/handlers/attach.js';
+import { registerStickerFederationRoutes } from './federation/handlers/stickerSync.js';
 
 export { processRelayEvents } from './federation/events/dispatch.js';
 export { processPresenceUpdateEvent } from './federation/events/dmState.js';
@@ -36,4 +37,5 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
   registerRelayRoutes(app);
   registerLookupRoutes(app);
   registerAttachRoutes(app);
+  registerStickerFederationRoutes(app);
 }

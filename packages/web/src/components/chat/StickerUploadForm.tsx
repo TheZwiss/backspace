@@ -5,6 +5,7 @@ import { MAX_STICKER_BATCH, MAX_STICKER_BYTES, MAX_STICKER_NAME_LENGTH, type Per
 import { uploadSticker } from './stickerUpload';
 import { describeError } from '../../i18n/errors';
 import { HttpError } from '../../api/client';
+import { useHomeInstanceInfo } from '../../hooks/useHomeInstanceInfo';
 import { usePickerEscapeClaim } from './pickerEscape';
 
 interface StickerUploadFormProps {
@@ -24,9 +25,9 @@ function stopsBatch(error: unknown): boolean {
 }
 
 /** Pre-validates each file before creating blob URLs to fail fast on invalid format or size. */
-function validateFiles(files: File[]): 'stickers.invalidSize' | 'stickers.invalidType' | null {
+function validateFiles(files: File[], maxBytes: number = MAX_STICKER_BYTES): 'stickers.invalidSize' | 'stickers.invalidType' | null {
   for (const file of files) {
-    if (!file.size || file.size > MAX_STICKER_BYTES) {
+    if (!file.size || file.size > maxBytes) {
       return 'stickers.invalidSize';
     }
     if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
@@ -51,12 +52,13 @@ function createUploadItem(file: File): UploadItem {
  * Supports single and batch sticker uploads.
  * Original files stay local until explicit confirmation; animated previews are never flattened.
  * A batch is sent one image at a time: what the server accepted leaves the
- * form, what it refused stays with its reason. Escape cancels the form,
- * except while a batch is being sent, and only the next Escape closes the
- * picker.
+ * form, what it refused stays with its reason.
  */
 export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUploadFormProps) {
   const { t } = useTranslation('chat');
+  const homeInfo = useHomeInstanceInfo();
+  const maxMb = homeInfo?.maxStickerSizeMb ?? 5;
+  const maxBytes = maxMb * 1024 * 1024;
   const inputRef = useRef<HTMLInputElement>(null);
   const chooseRef = useRef<HTMLButtonElement>(null);
   const selectModeRef = useRef<'replace' | 'append'>('replace');
@@ -111,9 +113,9 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
     if (busy || !files.length) return;
     setDragging(false);
     setError('');
-    const errorKey = validateFiles(files);
+    const errorKey = validateFiles(files, maxBytes);
     if (errorKey) {
-      setError(t(errorKey));
+      setError(t(errorKey, { max: maxMb }));
       return;
     }
     const limit = Math.min(MAX_STICKER_BATCH, capacity);
@@ -163,7 +165,7 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
       if (!active.current) break;
       setProgress({ current: index + 1, total: batch.length });
       try {
-        added.push(await uploadSticker(item.file, item.name.trim()));
+        added.push(await uploadSticker(item.file, item.name.trim(), maxBytes));
         accepted.add(item.id);
       } catch (err) {
         if (stopsBatch(err)) {
@@ -241,7 +243,7 @@ export function StickerUploadForm({ onAdded, onCancel, capacity }: StickerUpload
         />
 
         {items.length === 0 && (
-          <p className="text-center text-[11px] text-txt-tertiary">{t('stickers.limits')}</p>
+          <p className="text-center text-[11px] text-txt-tertiary">{t('stickers.limits', { max: maxMb })}</p>
         )}
 
         {error && (

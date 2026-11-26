@@ -248,8 +248,11 @@
     "uploadLimit": {
       "label": "上传限制",
       "maxFileSize": "单文件大小上限",
+      "maxStickerSize": "单表情大小上限",
       "saved": "上传上限已设置为 {{limit}}",
-      "saveFailed": "更新上传上限失败"
+      "saveFailed": "更新上传上限失败",
+      "stickerSaved": "表情大小上限已设置为 {{limit}}",
+      "stickerSaveFailed": "更新表情大小上限失败"
     },
     "cleanup": {
       "label": "清理",

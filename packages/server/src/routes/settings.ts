@@ -52,6 +52,7 @@ type SettingsUpdate = Record<string, number | string | boolean | null>;
 function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): InstanceAdminSettings {
   const gifKey = row.gifApiKey as string | null;
   const maxUploadBytes = row.maxUploadSizeBytes ?? config.maxUploadSize;
+  const maxStickerBytes = row.maxStickerSizeBytes ?? config.maxStickerSize;
   const directory = readDirectoryState(sqlite);
   return {
     instanceName: row.instanceName ?? 'Backspace',
@@ -61,6 +62,7 @@ function rowToAdminSettings(row: SettingsRow, sqlite: Database.Database): Instan
     gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
     gifEnabled: !!gifKey,
     maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
+    maxStickerSizeMb: Math.round(maxStickerBytes / (1024 * 1024)),
     federationRelayEnabled: row.federationRelayEnabled === 1,
     federationRelayTtlDays: row.federationRelayTtlDays,
     defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
@@ -350,6 +352,15 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         return sendError(reply, 400, 'upload_limit_out_of_range', { min: 1, max: MAX_MB });
       }
       updateData.maxUploadSizeBytes = mb * 1024 * 1024;
+    }
+
+    if (body.maxStickerSizeMb !== undefined) {
+      const mb = Number(body.maxStickerSizeMb);
+      const MAX_MB = Math.floor(Number.MAX_SAFE_INTEGER / (1024 * 1024));
+      if (!Number.isFinite(mb) || !Number.isInteger(mb) || mb < 1 || mb > MAX_MB) {
+        return sendError(reply, 400, 'sticker_limit_out_of_range', { min: 1, max: MAX_MB });
+      }
+      updateData.maxStickerSizeBytes = mb * 1024 * 1024;
     }
 
     if (body.federationRelayEnabled !== undefined) {

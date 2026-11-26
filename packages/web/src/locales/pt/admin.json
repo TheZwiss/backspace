@@ -260,8 +260,11 @@
     "uploadLimit": {
       "label": "Limite de upload",
       "maxFileSize": "Tamanho máximo do arquivo",
+      "maxStickerSize": "Tamanho máximo da figurinha",
       "saved": "Limite de upload definido como {{limit}}",
-      "saveFailed": "Falha ao atualizar o limite de upload"
+      "saveFailed": "Falha ao atualizar o limite de upload",
+      "stickerSaved": "Limite de figurinhas definido como {{limit}}",
+      "stickerSaveFailed": "Falha ao atualizar o limite de figurinhas"
     },
     "cleanup": {
       "label": "Limpeza",

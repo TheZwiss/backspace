@@ -129,6 +129,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   instance_settings_reload_failed: 'Failed to read updated settings',
   instance_name_length: 'Instance name must be {{min}}-{{max}} characters',
   upload_limit_out_of_range: 'maxUploadSizeMb must be a positive integer ({{min}} - {{max}})',
+  sticker_limit_out_of_range: 'maxStickerSizeMb must be a positive integer ({{min}} - {{max}})',
   relay_ttl_out_of_range: 'federationRelayTtlDays must be an integer between {{min}} and {{max}}',
   rotation_interval_out_of_range: 'defaultAutoRotateIntervalDays must be an integer between {{min}} and {{max}}',
   streaming_max_bitrate_out_of_range: 'maxBitrateKbps must be between {{min}} and {{max}}',
@@ -177,10 +178,16 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   join_request_decided: 'This request has already been decided',
   // personal stickers
   sticker_invalid_image: 'Upload a PNG, JPEG, WebP or GIF image of at most {{max}} MB',
+  sticker_pixel_limit_exceeded: 'The image has too many animation frames or its resolution is too high',
   sticker_not_local: 'Only stickers from this instance can be added to a collection',
   sticker_not_found: 'Sticker not found',
   sticker_collection_full: 'A sticker collection holds at most {{max}} stickers',
   sticker_name_invalid: 'Sticker names can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.',
+  // federated sticker store
+  sticker_pack_not_found: 'Sticker pack not found',
+  sticker_pack_invalid_state: 'Sticker pack is not in a valid state for this action',
+  sticker_peer_blocked: 'Sticker synchronization is blocked for this peer',
+  sticker_pack_limit_exceeded: 'Sticker pack has reached the maximum number of stickers',
   // spaces
   space_owner_title_invalid: 'Owner titles can be 1 to {{max}} characters on one line, with at least one visible character and no control characters.',
   member_nickname_invalid: 'Nicknames can be at most {{max}} characters on one line, with at least one visible character and no control characters.',

@@ -41,6 +41,11 @@ export function StoragePanel() {
   const [uploadLimitInput, setUploadLimitInput] = useState<string>('100');
   const [uploadLimitSaving, setUploadLimitSaving] = useState(false);
 
+  // Sticker size limit state
+  const [stickerUnit, setStickerUnit] = useState<UploadUnit>('MB');
+  const [stickerLimitInput, setStickerLimitInput] = useState<string>('5');
+  const [stickerLimitSaving, setStickerLimitSaving] = useState(false);
+
   // Media retention state
   const [mediaAgeDays, setMediaAgeDays] = useState(90);
   const [mediaCleanupResult, setMediaCleanupResult] = useState<CleanupResult | null>(null);
@@ -77,10 +82,19 @@ export function StoragePanel() {
       setUploadUnit(unit);
       setUploadLimitInput(unit === 'GB' ? formatUnitValue(mb / 1024) : String(mb));
     }
+    const stickerMb = instanceSettings?.maxStickerSizeMb;
+    if (typeof stickerMb === 'number' && stickerMb > 0) {
+      const unit: UploadUnit = stickerMb >= 1024 ? 'GB' : 'MB';
+      setStickerUnit(unit);
+      setStickerLimitInput(unit === 'GB' ? formatUnitValue(stickerMb / 1024) : String(stickerMb));
+    }
   }, [instanceSettings]);
 
   const parsedUploadMb = parseDisplayMb(uploadLimitInput, uploadUnit);
   const uploadLimitDirty = parsedUploadMb !== null && parsedUploadMb !== instanceSettings?.maxUploadSizeMb;
+
+  const parsedStickerMb = parseDisplayMb(stickerLimitInput, stickerUnit);
+  const stickerLimitDirty = parsedStickerMb !== null && parsedStickerMb !== instanceSettings?.maxStickerSizeMb;
 
   const handleUploadUnitChange = (next: UploadUnit) => {
     if (next === uploadUnit) return;
@@ -89,6 +103,15 @@ export function StoragePanel() {
       setUploadLimitInput(next === 'GB' ? formatUnitValue(n / 1024) : String(Math.round(n * 1024)));
     }
     setUploadUnit(next);
+  };
+
+  const handleStickerUnitChange = (next: UploadUnit) => {
+    if (next === stickerUnit) return;
+    const n = Number(stickerLimitInput.trim());
+    if (Number.isFinite(n) && n > 0) {
+      setStickerLimitInput(next === 'GB' ? formatUnitValue(n / 1024) : String(Math.round(n * 1024)));
+    }
+    setStickerUnit(next);
   };
 
   const handleUploadLimitSave = async () => {
@@ -102,6 +125,20 @@ export function StoragePanel() {
       addToast(t('admin:storage.uploadLimit.saveFailed'), 'warning');
     } finally {
       setUploadLimitSaving(false);
+    }
+  };
+
+  const handleStickerLimitSave = async () => {
+    if (parsedStickerMb === null) return;
+    const mb = parsedStickerMb;
+    setStickerLimitSaving(true);
+    try {
+      await updateInstanceSettings({ maxStickerSizeMb: mb });
+      addToast(t('admin:storage.uploadLimit.stickerSaved', { limit: f.formatBytes(mb * 1024 * 1024) }), 'success');
+    } catch {
+      addToast(t('admin:storage.uploadLimit.stickerSaveFailed'), 'warning');
+    } finally {
+      setStickerLimitSaving(false);
     }
   };
 
@@ -257,7 +294,7 @@ export function StoragePanel() {
       {/* Upload Limit */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{t('admin:storage.uploadLimit.label')}</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.uploadLimit.maxFileSize')}</label>
             <div className="flex items-center gap-3">
@@ -292,6 +329,43 @@ export function StoragePanel() {
               className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
             >
               {uploadLimitSaving ? t('common:states.saving') : t('common:actions.save')}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 border-t border-white/[0.04]">
+            <label className="text-sm text-txt-secondary whitespace-nowrap">{t('admin:storage.uploadLimit.maxStickerSize')}</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={stickerUnit === 'GB' ? 0.001 : 1}
+                step={stickerUnit === 'GB' ? 0.5 : 1}
+                value={stickerLimitInput}
+                onChange={(e) => setStickerLimitInput(e.target.value)}
+                className="input-standard w-24 px-2 py-1 text-sm text-center"
+              />
+              <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
+                {(['MB', 'GB'] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => handleStickerUnitChange(u)}
+                    className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
+                      stickerUnit === u
+                        ? 'bg-accent-primary text-white'
+                        : 'text-txt-tertiary hover:text-txt-primary'
+                    }`}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={handleStickerLimitSave}
+              disabled={!stickerLimitDirty || stickerLimitSaving || parsedStickerMb === null}
+              className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
+            >
+              {stickerLimitSaving ? t('common:states.saving') : t('common:actions.save')}
             </button>
           </div>
         </div>

@@ -782,6 +782,7 @@ Manages: storage overview, file type breakdown, upload limit, orphan cleanup, me
 - **Stats grid:** 5 cards (total files, referenced, orphaned, unlinked uploads, dangling records) with byte formatting
 - **File type breakdown:** List of categories (image/video/audio/document/other) with file counts and sizes
 - **Upload limit:** Number input (1-5120 MB) with save button, persisted via `updateInstanceSettings({ maxUploadSizeMb })`
+- **Sticker size limit:** Number input (1-50 MB) persisted via `updateInstanceSettings({ maxStickerSizeMb })` (`instance_settings.max_sticker_size_bytes`)
 - **Orphan cleanup:** Two-step (preview dry-run, then live). "Clean Up Now" disabled until preview completes
 - **Media retention:** Age-based cleanup with configurable days input. Same two-step preview/execute pattern.
 - "Refresh Stats" link at bottom re-fetches all stats
@@ -846,3 +847,4 @@ Manages: user list with search/filter/sort/pagination, admin promotion/demotion,
 - **Permissions:** [permissions.md](permissions.md) -- Admin flag is separate from RBAC; `isAdmin` is a user-level column, not a permission bit
 - **Telemetry:** [telemetry.md](telemetry.md) -- The opt-in daily usage report: payload, opt-in state model, reporter, receiver, retention
 - **Space directory:** [directory.md](directory.md) -- The opt-in public directory: the admin toggle and status line, the per-space switch, the pinger, the hub
+- **Sticker store moderation & peer policies:** [sticker-store.md](sticker-store.md) -- Pack approval queue, status overrides, explicit peer allow/block policy, S2S sync, and reconciliation
