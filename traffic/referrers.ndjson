@@ -849,3 +849,13 @@
 {"snapshot_date":"2026-11-25","dimension":"l.meta.ai","title":"","count":3,"uniques":1}
 {"snapshot_date":"2026-11-25","dimension":"yandex.ru","title":"","count":3,"uniques":2}
 {"snapshot_date":"2026-11-25","dimension":"StartPage","title":"","count":1,"uniques":1}
+{"snapshot_date":"2026-11-26","dimension":"Google","title":"","count":61,"uniques":52}
+{"snapshot_date":"2026-11-26","dimension":"github.com","title":"","count":52,"uniques":29}
+{"snapshot_date":"2026-11-26","dimension":"backspacechat.com","title":"","count":24,"uniques":19}
+{"snapshot_date":"2026-11-26","dimension":"chatgpt.com","title":"","count":7,"uniques":2}
+{"snapshot_date":"2026-11-26","dimension":"Bing","title":"","count":4,"uniques":4}
+{"snapshot_date":"2026-11-26","dimension":"alternativeto.net","title":"","count":4,"uniques":3}
+{"snapshot_date":"2026-11-26","dimension":"l.meta.ai","title":"","count":3,"uniques":1}
+{"snapshot_date":"2026-11-26","dimension":"yandex.ru","title":"","count":3,"uniques":2}
+{"snapshot_date":"2026-11-26","dimension":"DuckDuckGo","title":"","count":2,"uniques":2}
+{"snapshot_date":"2026-11-26","dimension":"StartPage","title":"","count":1,"uniques":1}
