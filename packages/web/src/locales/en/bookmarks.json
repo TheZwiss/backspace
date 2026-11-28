@@ -1,0 +1,31 @@
+{
+  "message": {
+    "add": "Bookmark",
+    "remove": "Remove bookmark"
+  },
+  "menu": {
+    "add": "Bookmark message",
+    "remove": "Remove bookmark"
+  },
+  "toast": {
+    "addFailed": "Could not save the bookmark: {{reason}}",
+    "removeFailed": "Could not remove the bookmark: {{reason}}"
+  },
+  "title": "Bookmarks",
+  "list": {
+    "loading": "Loading…",
+    "empty": "No bookmarks yet",
+    "emptyHint": "Bookmark a message from its hover bar or menu to find it here.",
+    "showMore": "Show more",
+    "open": "Open the message from {{name}}",
+    "remove": "Remove bookmark"
+  },
+  "status": {
+    "edited": "The original was edited. This is the saved copy.",
+    "deleted": "The original message was deleted. This is the saved copy.",
+    "unavailable": "The original is no longer available to you. This is the saved copy."
+  },
+  "attachment": {
+    "gone": "file deleted"
+  }
+}

@@ -26,6 +26,7 @@ import { useDiscoverStore } from '../stores/discoverStore';
 import { useFederationStore } from '../stores/federationStore';
 import { notePendingOriginReady } from '../stores/pendingMessageRehydrate';
 import { useNotificationSettingsStore } from '../stores/notificationSettingsStore';
+import { useBookmarkStore } from '../stores/bookmarkStore';
 import { detectClientKind } from '../platform/clientKind';
 import { ConnectionState as LiveKitConnectionState } from 'livekit-client';
 
@@ -314,6 +315,9 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // This instance's notification settings for the spaces it hosts, read
       // by the alert filter (docs/systems/sounds.md).
       void useNotificationSettingsStore.getState().load(origin);
+      // Bookmark events sent while the socket was down were missed: what was
+      // read from this instance is read again on next use.
+      useBookmarkStore.getState().resync(origin);
 
       // The user's own chosen status (utils/selfStatus.ts): take it from this
       // socket when it is the owner's report (the true home, for a session on
@@ -1359,6 +1363,18 @@ function handleEvent(origin: string, event: ServerEvent, readyAlreadyDelivered =
       // Settings live on the instance that hosts the space, so the socket
       // that delivered the change is the origin they belong to.
       useNotificationSettingsStore.getState().apply(origin, event.setting);
+      break;
+    }
+
+    case 'bookmark_added': {
+      // Bookmarks live on the instance that serves the message, so the socket
+      // that delivered the event is the origin the bookmark belongs to.
+      useBookmarkStore.getState().applyAdded(origin, event.bookmark);
+      break;
+    }
+
+    case 'bookmark_removed': {
+      useBookmarkStore.getState().applyRemoved(origin, event.kind, event.channelId, event.messageId);
       break;
     }
 

@@ -22,6 +22,7 @@ import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { GroupDmSettings } from '../modals/GroupDmSettings';
 import { UserProfileModal } from '../modals/UserProfileModal';
+import { BookmarksModal } from '../modals/BookmarksModal';
 import { ConnectAndJoinModal } from '../modals/ConnectAndJoinModal';
 import { MemberRolesModal } from '../modals/MemberRolesModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
@@ -45,6 +46,7 @@ import { initActivityBridge, teardownActivityBridge } from '../../platform/activ
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useJumpNavigation } from '../../hooks/useJumpNavigation';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
 import { isAppSystemAudioSource, userDevicesSignature } from '../../utils/systemAudioSource';
@@ -53,6 +55,7 @@ export function AppLayout() {
   const { t } = useTranslation('common');
   const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
+  useJumpNavigation();
   
   // Global interaction handler to resume AudioContext
   useEffect(() => {
@@ -424,6 +427,7 @@ export function AppLayout() {
         <AddDmMemberModal />
         <GroupDmSettings />
         <UserProfileModal />
+        <BookmarksModal />
         <ConnectAndJoinModal />
         {/* MemberRolesModal is desktop-only: it opens from the profile card's
             Edit Roles, and its two-pane layout has no mobile form. */}
@@ -476,6 +480,7 @@ export function AppLayout() {
       <AddDmMemberModal />
       <GroupDmSettings />
       <UserProfileModal />
+      <BookmarksModal />
       <ConnectAndJoinModal />
       <MemberRolesModal />
       <IncomingCallModal />

@@ -2,6 +2,7 @@ import React from 'react';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
 import type { MessageWithUser } from '@backspace/shared';
 import { buildImageMenuItems } from './imageMenuItems';
+import { BookmarkIcon } from '../ui/BookmarkIcon';
 import { isStickerMessage } from '../../utils/stickerMessages';
 import { useUIStore } from '../../stores/uiStore';
 import { useTransferStore } from '../../stores/transferStore';
@@ -24,6 +25,10 @@ interface MessageMenuParams {
   onReaction: (emoji: string) => void;
   onOpenEmojiPicker: () => void;
   onMarkUnread: (messageId: string) => void;
+  /** False for a message that cannot be bookmarked (a system message, one not sent yet). */
+  canBookmark: boolean;
+  isBookmarked: boolean;
+  onToggleBookmark: () => void;
   imageUrl?: string | null;
   stickerSource?: string | null;
   stickerName?: string;
@@ -52,6 +57,9 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     onReaction,
     onOpenEmojiPicker,
     onMarkUnread,
+    canBookmark,
+    isBookmarked,
+    onToggleBookmark,
     imageUrl,
     sourceUrl,
     videoUrl,
@@ -220,6 +228,17 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
       onMarkUnread(previousMessageId ?? '0');
     },
   });
+
+  // ── Bookmark / remove bookmark ──────────────────────────────────────────
+  if (canBookmark) {
+    items.push({
+      key: 'bookmark',
+      type: 'action',
+      label: i18n.t(isBookmarked ? 'bookmarks:menu.remove' : 'bookmarks:menu.add'),
+      icon: <BookmarkIcon filled={isBookmarked} size={16} />,
+      onClick: onToggleBookmark,
+    });
+  }
 
   items.push({ key: 'unread-sep', type: 'separator' });
 

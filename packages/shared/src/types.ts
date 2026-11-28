@@ -1,4 +1,5 @@
 import type { ErrorCode, ErrorDetails } from './errors.js';
+import type { Bookmark, BookmarkKind } from './bookmarks.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -802,6 +803,13 @@ export type ServerEvent =
   // any of their sessions here). A setting with level null and not muted was
   // cleared. See docs/systems/websocket.md.
   | { type: 'notification_settings_updated'; setting: NotificationSetting }
+  // The user saved a message on this instance (from any of their sessions here).
+  // Sent to the user's own sockets only, never relayed. `bookmark` is the same
+  // object `PUT /api/bookmarks/:kind/:messageId` returns. See docs/systems/websocket.md.
+  | { type: 'bookmark_added'; bookmark: Bookmark }
+  // A bookmark of this instance was removed from the user's list. Idempotent
+  // removals that found nothing send no event.
+  | { type: 'bookmark_removed'; kind: BookmarkKind; channelId: string; messageId: string }
   | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }

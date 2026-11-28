@@ -300,6 +300,8 @@ its next follow-up or the next `ready`; its unread dot shows meanwhile.
 | `space_access_changed` | spaceId | space; one user for an instance admin change |
 | `space_layout_updated` | layout[], folders[], updatedAt? | user |
 | `notification_settings_updated` | setting: NotificationSetting | user (all of their sockets on this instance) |
+| `bookmark_added` | bookmark: Bookmark | user (all of their sockets on this instance) |
+| `bookmark_removed` | kind, channelId, messageId | user (all of their sockets on this instance) |
 
 `notification_settings_updated` follows every successful
 `PATCH /spaces/:spaceId/notification-settings` and
@@ -314,6 +316,14 @@ an old client ignores them. Clients load the full list with `GET /users/@me/noti
 when each instance's `ready` arrives; the `ready` payload itself does not
 carry it. Mixed versions: an old client ignores the event; a new client on an
 old server gets a 404 from the list route, logs it and uses the defaults.
+
+`bookmark_added` follows a `PUT /api/bookmarks/:kind/:messageId` that created
+the bookmark (a repeat that found it sends nothing); its `bookmark` is the
+object the route returns. `bookmark_removed` follows a `DELETE` that removed
+one, and carries the conversation (`kind`, `channelId`) so a client keeps its
+"is bookmarked" set per conversation. Both go to the caller's own sockets on
+the instance that serves the message and are never relayed (bookmarks.md).
+An old client ignores them.
 
 `member_updated` follows every successful `PATCH /spaces/:id/members/:uid`
 (a nickname, a role set or both) and carries the member row the route
