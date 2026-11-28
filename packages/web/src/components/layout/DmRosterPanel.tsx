@@ -4,6 +4,7 @@ import type { User } from '@backspace/shared';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { RightPanelResizeHandle } from './RightPanelResizeHandle';
 import { useSocialStore } from '../../stores/socialStore';
 import { isMine, parseFederatedUsername, userKey } from '../../utils/identity';
 import { useDmViewer } from '../../hooks/useDmViewer';
@@ -15,7 +16,7 @@ import { pointAnchor } from '../../hooks/useFloatingPosition';
 
 /**
  * Right-side roster for group DMs. Mirrors `MemberSidebar`'s layout language
- * (240px column, structural surface, hidden on mobile) so toggling
+ * (shared resizable column, structural surface, hidden on mobile) so toggling
  * `memberListOpen` feels identical across spaces and group DMs.
  *
  * Renders nothing for 1-on-1 DMs and when `memberListOpen` is false. The
@@ -25,6 +26,7 @@ import { pointAnchor } from '../../hooks/useFloatingPosition';
 export function DmRosterPanel() {
   const { t } = useTranslation(['dm', 'common']);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
+  const rightPanelWidth = useUIStore((s) => s.rightPanelWidth);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const addToast = useUIStore((s) => s.addToast);
 
@@ -170,12 +172,16 @@ export function DmRosterPanel() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   // Width / surface mirror `MemberSidebar` so toggling visually swaps a
-  // like-shaped column.
+  // like-shaped column; the width comes from the shared uiStore value and
+  // resizes through the handle on the column's left border.
   return (
     <div
       data-dm-roster-panel
-      className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard"
+      className="relative bg-surface-members flex-shrink-0 hidden desktop:block"
+      style={{ width: rightPanelWidth }}
     >
+      <RightPanelResizeHandle label={t('dm:roster.resizeHandle')} />
+      <div className="h-full overflow-y-auto select-none no-scrollbar border-l border-border-hard">
       <div className="p-3">
         <h3
           data-dm-roster-header
@@ -274,6 +280,7 @@ export function DmRosterPanel() {
         variant="warning"
         loading={submitting}
       />
+      </div>
     </div>
   );
 }

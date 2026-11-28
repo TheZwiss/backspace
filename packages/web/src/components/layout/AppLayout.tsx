@@ -241,6 +241,7 @@ export function AppLayout() {
   const setShowDms = useUIStore((s) => s.setShowDms);
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const leftPanelWidth = useUIStore((s) => s.leftPanelWidth);
   const isMobile = useUIStore((s) => s.isMobile);
   
   const channels = useSpaceStore((s) => s.channels);
@@ -449,9 +450,14 @@ export function AppLayout() {
 
   // ── Desktop layout ──
   return (
-    <div className="h-full flex flex-col desktop:grid desktop:grid-cols-[312px_1fr] desktop:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
+    // The left column (space rail + channel/DM list) is user-resizable via the
+    // handle on its right border; the track reads the stored width here. The
+    // grid-template-columns style is inert below the desktop breakpoint, where
+    // the container is a flex column and the same width is applied inline to
+    // the slide-in wrapper below.
+    <div className="h-full flex flex-col desktop:grid desktop:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden" style={{ gridTemplateColumns: `${leftPanelWidth}px 1fr` }}>
       {/* Space sidebar - always visible on desktop */}
-      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0'} desktop:static desktop:z-auto desktop:w-auto desktop:transform-none`}>
+      <div className={`fixed inset-y-0 left-0 z-40 flex transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0'} desktop:static desktop:z-auto desktop:w-auto desktop:transform-none`} style={{ width: leftPanelWidth }}>
         <SpaceSidebar />
         <ChannelSidebar />
       </div>

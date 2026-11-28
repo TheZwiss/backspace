@@ -1,5 +1,6 @@
 import { OwnerTitleHeading } from './OwnerTitleHeading';
 import { useMemberContextMenu } from './memberMenu/useMemberContextMenu';
+import { RightPanelResizeHandle } from './RightPanelResizeHandle';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -109,6 +110,7 @@ export function MemberSidebar() {
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
+  const rightPanelWidth = useUIStore((s) => s.rightPanelWidth);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
 
@@ -169,7 +171,14 @@ export function MemberSidebar() {
   return (
     <>
     {memberMenu.dialogs}
-    <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
+    {/* Width comes from uiStore: drag the left border (or use arrow keys on
+        the handle) to resize; double-click the handle to reset. */}
+    <div
+      className="relative bg-surface-members flex-shrink-0 hidden desktop:block"
+      style={{ width: rightPanelWidth }}
+    >
+      <RightPanelResizeHandle label={t('spaces:members.resizeHandle')} />
+      <div className="h-full overflow-y-auto select-none no-scrollbar border-l border-border-hard">
       {showMemberSkeleton ? (
         <div className="px-3 pt-4" role="status" aria-label={t('spaces:members.loading')}>
           {/* Role group 1 */}
@@ -216,6 +225,7 @@ export function MemberSidebar() {
         )}
       </div>
       )}
+      </div>
     </div>
     </>
   );

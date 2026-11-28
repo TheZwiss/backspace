@@ -564,6 +564,7 @@
     "dmUnreadMessagesOver99": "Mehr als 99 ungelesene Direktnachrichten"
   },
   "channels": {
+    "resizeHandle": "Breite der Kanalliste ändern",
     "loading": "Kanäle werden geladen",
     "create": "Kanal erstellen",
     "createCategory": "Kategorie erstellen",
@@ -590,6 +591,7 @@
     "titleWithCount_one": "Mitglieder – {{count}}",
     "titleWithCount_other": "Mitglieder – {{count}}",
     "loading": "Mitglieder werden geladen",
+    "resizeHandle": "Breite der Mitgliederliste ändern",
     "groups": {
       "owner": "Besitzer"
     },

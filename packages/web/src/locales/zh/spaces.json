@@ -555,6 +555,7 @@
     "dmUnreadMessagesOver99": "超过 99 条未读私信"
   },
   "channels": {
+    "resizeHandle": "调整频道列表大小",
     "loading": "正在加载频道",
     "create": "创建频道",
     "createCategory": "创建分类",
@@ -580,6 +581,7 @@
   "members": {
     "titleWithCount_other": "成员 — {{count}}",
     "loading": "正在加载成员",
+    "resizeHandle": "调整成员列表大小",
     "groups": {
       "owner": "拥有者"
     },

@@ -79,7 +79,8 @@
     "quietTitle": "Gerade ist es ruhig…",
     "quietDescription": "Sobald deine Freunde etwas unternehmen, etwa ein Spiel spielen oder im Sprachkanal abhängen, siehst du es hier!",
     "online": "Online – {{n}}",
-    "offline": "Offline – {{n}}"
+    "offline": "Offline – {{n}}",
+    "resizeHandle": "Breite der Freundesliste ändern"
   },
   "instanceNotConnected": "Keine Verbindung zu {{host}}. Verbinde dich erneut und versuche es noch einmal."
 }

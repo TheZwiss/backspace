@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
+import { RightPanelResizeHandle } from './RightPanelResizeHandle';
 import { useActivityStore, activitiesFor } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
@@ -68,6 +69,7 @@ export function ActivityPanel() {
   const friends = useSocialStore((s) => s.friends);
   const loadFriends = useSocialStore((s) => s.loadFriends);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
+  const rightPanelWidth = useUIStore((s) => s.rightPanelWidth);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
 
@@ -145,7 +147,12 @@ export function ActivityPanel() {
   };
 
   return (
-    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden desktop:block border-l border-border-hard">
+    <div
+      className="relative bg-surface-channel flex-shrink-0 hidden desktop:block"
+      style={{ width: rightPanelWidth }}
+    >
+      <RightPanelResizeHandle label={t('social:activity.resizeHandle')} />
+      <div className="h-full overflow-y-auto select-none no-scrollbar border-l border-border-hard">
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">{t('social:activity.title')}</h3>
 
@@ -181,6 +188,7 @@ export function ActivityPanel() {
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

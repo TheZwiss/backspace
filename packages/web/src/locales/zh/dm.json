@@ -41,7 +41,8 @@
   },
   "roster": {
     "owner": "群主",
-    "sectionCount": "{{label}} — {{total}}"
+    "sectionCount": "{{label}} — {{total}}",
+    "resizeHandle": "调整成员列表大小"
   },
   "kick": {
     "title": "移出群组",
@@ -77,6 +78,7 @@
     "createFailed": "创建私信失败"
   },
   "list": {
+    "resizeHandle": "调整私信列表大小",
     "title": "消息",
     "empty": "暂无会话。",
     "leaveGroup": "退出群组",

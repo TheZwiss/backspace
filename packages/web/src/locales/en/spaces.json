@@ -564,6 +564,7 @@
     "dmUnreadMessagesOver99": "More than 99 unread direct messages"
   },
   "channels": {
+    "resizeHandle": "Resize channel list",
     "loading": "Loading channels",
     "create": "Create Channel",
     "createCategory": "Create Category",
@@ -590,6 +591,7 @@
     "titleWithCount_one": "Members — {{count}}",
     "titleWithCount_other": "Members — {{count}}",
     "loading": "Loading members",
+    "resizeHandle": "Resize member list",
     "groups": {
       "owner": "Owner"
     },

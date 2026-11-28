@@ -582,6 +582,7 @@
     "dmUnreadMessagesOver99": "Более 99 непрочитанных личных сообщений"
   },
   "channels": {
+    "resizeHandle": "Изменить размер списка каналов",
     "loading": "Загрузка каналов",
     "create": "Создать канал",
     "createCategory": "Создать категорию",
@@ -610,6 +611,7 @@
     "titleWithCount_many": "Участники — {{count}}",
     "titleWithCount_other": "Участники — {{count}}",
     "loading": "Загрузка участников",
+    "resizeHandle": "Изменить размер списка участников",
     "groups": {
       "owner": "Владелец"
     },
